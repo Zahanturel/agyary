@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     func,
     text,
@@ -42,6 +43,11 @@ class WhatsAppMessage(Base):
 
     status: Mapped[str | None] = mapped_column(String(20))  # outbound delivery status
 
+    # Send-worker bookkeeping (outbound rows only): status pending -> sent |
+    # failed, retried with backoff via next_attempt_at until attempts runs out.
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -51,5 +57,10 @@ class WhatsAppMessage(Base):
             "idx_wa_messages_wa_id",
             "wa_message_id",
             postgresql_where=text("wa_message_id IS NOT NULL"),
+        ),
+        Index(
+            "idx_wa_messages_outbox_pending",
+            "next_attempt_at",
+            postgresql_where=text("direction = 'outbound' AND status = 'pending'"),
         ),
     )

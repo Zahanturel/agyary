@@ -49,3 +49,25 @@ async def seeded(db):
         "panthaky_phone": "+919800000001",
         "mobed_phone": "+919800000002",
     }
+
+
+@pytest.fixture
+async def client(db):
+    """httpx client hitting the FastAPI app in-process (no real server, no
+    lifespan - bare ASGITransport never fires startup/shutdown, so the send
+    worker's background tasks never start here). get_db is overridden to
+    the same test-database session used by other fixtures, so route
+    handlers and test assertions share one transaction."""
+    from httpx import ASGITransport, AsyncClient
+
+    from agyary.api.main import app
+    from agyary.core.database import get_db
+
+    async def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()

@@ -35,20 +35,57 @@ ERROR_REPLY = (
 async def handle_message(
     db: AsyncSession, agyary_id: int, phone_number: str, text: str
 ) -> list[OutgoingMessage]:
+    outgoing, _outbox_ids = await _handle_message_impl(db, agyary_id, phone_number, text)
+    return outgoing
+
+
+async def handle_message_with_outbox_ids(
+    db: AsyncSession,
+    agyary_id: int,
+    phone_number: str,
+    text: str,
+    *,
+    inbound_wa_message_id: str | None = None,
+) -> list[tuple[OutgoingMessage, int | None]]:
+    """WhatsApp-webhook variant of handle_message.
+
+    Same routing/persistence as handle_message, but also returns the outbox
+    (WhatsAppMessage) row id alongside each reply, so the webhook route can
+    enqueue exactly those rows for the send worker without reconstructing
+    them by phone/timestamp heuristics. A reply's id is None only when it
+    was never persisted (the in-memory error reply from an unhandled
+    exception) - the webhook route should simply skip enqueuing it, same as
+    today it is neither persisted nor sent anywhere durable.
+    """
+    outgoing, outbox_ids = await _handle_message_impl(
+        db, agyary_id, phone_number, text, inbound_wa_message_id=inbound_wa_message_id
+    )
+    return list(zip(outgoing, outbox_ids))
+
+
+async def _handle_message_impl(
+    db: AsyncSession,
+    agyary_id: int,
+    phone_number: str,
+    text: str,
+    *,
+    inbound_wa_message_id: str | None = None,
+) -> tuple[list[OutgoingMessage], list[int | None]]:
     phone = phone_number.strip()
     text = text.strip()
     if not phone or not text:
-        return []
+        return [], []
 
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
         logger.error("Message for unknown/inactive agyary_id=%s", agyary_id)
-        return []
+        return [], []
 
     inbound_log = WhatsAppMessage(
         agyary_id=agyary.id,
         direction="inbound",
         wa_phone=phone,
+        wa_message_id=inbound_wa_message_id,
         wa_timestamp=datetime.now(UTC),
         message_type="text",
         content={"text": text},
@@ -60,21 +97,27 @@ async def handle_message(
     except Exception:
         logger.exception("Error handling message from %s at agyary %s", phone, agyary_id)
         await db.rollback()
-        return [OutgoingMessage(to=phone, text=ERROR_REPLY)]
+        return [OutgoingMessage(to=phone, text=ERROR_REPLY)], [None]
 
+    now = datetime.now(UTC)
+    outbound_rows = []
     for message in outgoing:
-        db.add(
-            WhatsAppMessage(
-                agyary_id=agyary.id,
-                direction="outbound",
-                wa_phone=message.to,
-                wa_timestamp=datetime.now(UTC),
-                message_type="interactive" if (message.buttons or message.sections) else "text",
-                content=message.as_dict(),
-            )
+        row = WhatsAppMessage(
+            agyary_id=agyary.id,
+            direction="outbound",
+            wa_phone=message.to,
+            wa_timestamp=datetime.now(UTC),
+            message_type="interactive" if (message.buttons or message.sections) else "text",
+            content=message.as_dict(),
+            status="pending",
+            attempts=0,
+            next_attempt_at=now,
         )
+        db.add(row)
+        outbound_rows.append(row)
+    await db.flush()  # assigns .id to each row without ending the transaction
     await db.commit()
-    return outgoing
+    return outgoing, [row.id for row in outbound_rows]
 
 
 async def _route(
