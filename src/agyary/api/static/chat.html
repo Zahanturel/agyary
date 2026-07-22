@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agyary WhatsApp Simulator</title>
+<style>
+  :root {
+    --wa-green: #075e54;
+    --wa-teal: #128c7e;
+    --wa-bubble-out: #d9fdd3;
+    --wa-bubble-in: #ffffff;
+    --wa-bg: #e5ddd5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #f0f2f5;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--wa-green);
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .sub { font-size: 12px; opacity: .85; }
+  header select {
+    border: none; border-radius: 6px; padding: 5px 8px; font-size: 13px;
+  }
+  header button {
+    background: var(--wa-teal); color: #fff; border: none; border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  header button:hover { filter: brightness(1.1); }
+  #panes {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    overflow-x: auto;
+    align-items: stretch;
+  }
+  .pane {
+    flex: 1 1 340px;
+    min-width: 300px;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--wa-bg);
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  }
+  .pane-head {
+    background: var(--wa-teal);
+    color: #fff;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pane-head .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #fff3; display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+  }
+  .pane-head .who { flex: 1; min-width: 0; }
+  .pane-head .who .role { font-size: 13px; font-weight: 600; }
+  .pane-head input {
+    width: 100%;
+    background: transparent; border: none; border-bottom: 1px dashed #fff8;
+    color: #fff; font-size: 12px; padding: 1px 0; outline: none;
+  }
+  .pane-head input::placeholder { color: #fffa; }
+  .log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bubble {
+    max-width: 85%;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    box-shadow: 0 1px 1px rgba(0,0,0,.12);
+  }
+  .bubble.in  { background: var(--wa-bubble-in); align-self: flex-start; border-top-left-radius: 2px; }
+  .bubble.out { background: var(--wa-bubble-out); align-self: flex-end; border-top-right-radius: 2px; }
+  .bubble .time { display: block; font-size: 10px; color: #667; text-align: right; margin-top: 3px; }
+  .chips {
+    align-self: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: 85%;
+  }
+  .chips button {
+    background: #fff;
+    color: var(--wa-teal);
+    border: 1px solid var(--wa-teal);
+    border-radius: 16px;
+    padding: 5px 12px;
+    font-size: 12.5px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .chips button:hover { background: var(--wa-teal); color: #fff; }
+  .chips button small { display: block; font-size: 10.5px; opacity: .75; }
+  .chips .section-label {
+    width: 100%; font-size: 11px; color: #556; margin: 2px 0 0 4px; font-weight: 600;
+  }
+  .composer {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    background: #f0f2f5;
+  }
+  .composer input {
+    flex: 1;
+    border: none;
+    border-radius: 18px;
+    padding: 9px 14px;
+    font-size: 13.5px;
+    outline: none;
+  }
+  .composer button {
+    background: var(--wa-green);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 38px; height: 38px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .banner {
+    align-self: center;
+    background: #fdf3c7;
+    color: #6b5d1f;
+    border-radius: 6px;
+    font-size: 11.5px;
+    padding: 4px 10px;
+  }
+  .error { color: #b71c1c; font-size: 12px; align-self: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agyary WhatsApp Simulator</h1>
+  <div>
+    <select id="agyarySelect" title="Agyary"></select>
+    <span class="sub" id="agyaryInfo"></span>
+  </div>
+  <button id="addPane">+ New phone</button>
+</header>
+<div id="panes"></div>
+
+<script>
+"use strict";
+
+const state = {
+  agyary: null,
+  agyaries: [],
+  panes: [],   // { phone, role, logEl, paneEl, inputEl }
+};
+
+const panesEl = document.getElementById("panes");
+const selectEl = document.getElementById("agyarySelect");
+const infoEl = document.getElementById("agyaryInfo");
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function now() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function findPane(phone) {
+  return state.panes.find(p => p.inputEl.value.trim() === phone);
+}
+
+function addBanner(pane, text) {
+  const el = document.createElement("div");
+  el.className = "banner";
+  el.textContent = text;
+  pane.logEl.appendChild(el);
+  pane.logEl.scrollTop = pane.logEl.scrollHeight;
+}
+
+function addBubble(pane, text, direction) {
+  const el = document.createElement("div");
+  el.className = "bubble " + direction;
+  el.innerHTML = escapeHtml(text) + '<span class="time">' + now() + "</span>";
+  pane.logEl.appendChild(el);
+  pane.logEl.scrollTop = pane.logEl.scrollHeight;
+}
+
+function addChips(pane, message) {
+  const wrap = document.createElement("div");
+  wrap.className = "chips";
+  const addChip = (id, title, description) => {
+    const b = document.createElement("button");
+    b.innerHTML = escapeHtml(title) + (description ? "<small>" + escapeHtml(description) + "</small>" : "");
+    b.addEventListener("click", () => sendFromPane(pane, id, title));
+    wrap.appendChild(b);
+  };
+  for (const btn of message.buttons || []) addChip(btn.id, btn.title, null);
+  for (const section of message.sections || []) {
+    if (section.title) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = section.title;
+      wrap.appendChild(label);
+    }
+    for (const row of section.rows || []) addChip(row.id, row.title, row.description);
+  }
+  if (wrap.children.length) {
+    pane.logEl.appendChild(wrap);
+    pane.logEl.scrollTop = pane.logEl.scrollHeight;
+  }
+}
+
+function createPane(phone, role) {
+  const pane = { role };
+  const el = document.createElement("div");
+  el.className = "pane";
+  el.innerHTML = `
+    <div class="pane-head">
+      <div class="avatar">${role === "Panthaky" ? "🔥" : "🙏"}</div>
+      <div class="who">
+        <div class="role">${escapeHtml(role)}</div>
+        <input type="text" spellcheck="false" placeholder="+91..." />
+      </div>
+    </div>
+    <div class="log"></div>
+    <div class="composer">
+      <input type="text" placeholder="Type a message" />
+      <button title="Send">➤</button>
+    </div>`;
+  pane.paneEl = el;
+  pane.logEl = el.querySelector(".log");
+  pane.inputEl = el.querySelector(".pane-head input");
+  pane.inputEl.value = phone;
+  const composerInput = el.querySelector(".composer input");
+  const sendBtn = el.querySelector(".composer button");
+  const doSend = () => {
+    const text = composerInput.value.trim();
+    if (!text) return;
+    composerInput.value = "";
+    sendFromPane(pane, text, text);
+  };
+  sendBtn.addEventListener("click", doSend);
+  composerInput.addEventListener("keydown", e => { if (e.key === "Enter") doSend(); });
+  panesEl.appendChild(el);
+  state.panes.push(pane);
+  addBanner(pane, role === "Panthaky"
+    ? "This phone receives booking requests to approve or decline."
+    : "Send any message (e.g. 'hi') to start booking.");
+  return pane;
+}
+
+async function sendFromPane(pane, wireText, displayText) {
+  const phone = pane.inputEl.value.trim();
+  if (!phone) { addBanner(pane, "Set a phone number first."); return; }
+  if (!state.agyary) { addBanner(pane, "Pick an agyary first."); return; }
+  addBubble(pane, displayText, "out");
+  try {
+    const res = await fetch("/api/chat/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agyary_id: state.agyary.id,
+        phone_number: phone,
+        text: wireText,
+      }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    for (const message of data.messages) {
+      let target = findPane(message.to);
+      if (!target) target = createPane(message.to, "Phone " + message.to);
+      addBubble(target, message.text, "in");
+      addChips(target, message);
+    }
+  } catch (err) {
+    const el = document.createElement("div");
+    el.className = "error";
+    el.textContent = "Send failed: " + err.message;
+    pane.logEl.appendChild(el);
+  }
+}
+
+async function init() {
+  const res = await fetch("/api/chat/agyaries");
+  state.agyaries = await res.json();
+  if (!state.agyaries.length) {
+    infoEl.textContent = "No agyaries found - run: uv run python -m agyary.scripts.seed_demo";
+    return;
+  }
+  for (const a of state.agyaries) {
+    const opt = document.createElement("option");
+    opt.value = a.id;
+    opt.textContent = `${a.name} (${a.city})`;
+    selectEl.appendChild(opt);
+  }
+  const pick = () => {
+    state.agyary = state.agyaries.find(a => a.id === Number(selectEl.value));
+    infoEl.textContent = state.agyary.calendar_system + " calendar";
+    panesEl.innerHTML = "";
+    state.panes = [];
+    createPane("+919900011111", "Customer");
+    const admin = state.agyary.admins[0];
+    createPane(admin ? admin.phone : "", "Panthaky");
+  };
+  selectEl.addEventListener("change", pick);
+  pick();
+}
+
+document.getElementById("addPane").addEventListener("click", () => {
+  createPane("", "Phone");
+});
+
+init();
+</script>
+</body>
+</html>
