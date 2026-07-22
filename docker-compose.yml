@@ -32,5 +32,13 @@ services:
     volumes:
       - ./src:/app/src
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      app:
+        condition: service_started
+
 volumes:
   agyary_pgdata:
