@@ -6,7 +6,7 @@ HTTP/JWT/request-response layer on top of it.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -18,8 +18,9 @@ from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.messaging import booking_service, wa_flows
 from agyary.messaging.flows.approval import handle_pwa_booking_action
-from agyary.models import Agyary, AgyaryUser, Booking, Service, User
-from agyary.services import mobed_auth, mobed_dashboard
+from agyary.models import Agyary, AgyaryInvite, AgyaryUser, Booking, Service, User
+from agyary.models.enums import USER_ROLES
+from agyary.services import mobed_auth, mobed_dashboard, otp_delivery
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -54,7 +55,7 @@ async def _require_membership(db: AsyncSession, agyary_id: int, user: User) -> A
 
 
 # ---------------------------------------------------------------------------
-# Auth: name + phone login (no OTP - see services/mobed_auth.py), refresh, me
+# Auth: phone + WhatsApp OTP (see services/mobed_auth.py), refresh, me
 # ---------------------------------------------------------------------------
 def _set_refresh_cookie(response: Response, user_id: int) -> None:
     settings = get_settings()
@@ -73,30 +74,79 @@ def _set_refresh_cookie(response: Response, user_id: int) -> None:
     )
 
 
-class LoginIn(BaseModel):
-    name: str
+class OtpRequestIn(BaseModel):
     phone: Phone
 
 
-@router.post("/auth/login")
-async def login(
-    payload: LoginIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)
+@router.post("/auth/otp/request")
+async def request_otp(
+    payload: OtpRequestIn, request: Request, db: AsyncSession = Depends(get_db)
 ) -> dict:
-    """Name + phone, no verification. First visit creates the mobed's User;
-    a returning visit that re-enters name + phone logs them straight back in
-    (the existing session cookie carries them in without this call). Joining
-    an agyari is a separate, authenticated step (search -> join/activate).
+    """Step 1 of sign-in: send a code to the phone over WhatsApp.
 
-    Rate-limited per IP (see api/rate_limit.py): with no OTP, phone is the
-    only gate, so this slows scripted phone-number guessing without
-    changing the trust model itself."""
-    rate_limit.enforce(request, "login", max_requests=10, window_seconds=300)
-    name = payload.name.strip()
+    Deliberately says nothing about whether the number is already known to
+    us. The response is identical for a registered mobed and a stranger, so
+    this endpoint can't be used to test whether a given number belongs to
+    someone here.
+
+    Two rate limits, because they stop different things: per-IP caps how
+    fast one caller can work through a list of numbers, per-phone stops
+    anyone using us to bombard a single person's WhatsApp.
+    """
     phone = payload.phone.strip()
-    if not name or not phone:
-        raise HTTPException(status_code=400, detail="Name and phone are both required")
+    rate_limit.enforce(request, "otp_request", max_requests=10, window_seconds=300)
+    rate_limit.enforce_key(f"otp_phone:{phone}", max_requests=3, window_seconds=300)
 
-    user = await mobed_auth.login_user(db, phone, name)
+    code = await mobed_auth.issue_otp(db, phone)
+    try:
+        await otp_delivery.send_login_otp(phone, code)
+    except otp_delivery.OtpDeliveryError as exc:
+        # Don't leave a live code stranded behind an undelivered message -
+        # the next request would otherwise be rejected by the per-phone
+        # limiter while the user has nothing to type.
+        await db.rollback()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await db.commit()
+    return {"expires_in_seconds": get_settings().otp_ttl_seconds}
+
+
+class OtpVerifyIn(BaseModel):
+    phone: Phone
+    code: str
+    # Only used the first time a phone signs in; a returning user may send
+    # it to correct their display name, or omit it to keep the stored one.
+    name: str = ""
+
+
+@router.post("/auth/otp/verify")
+async def verify_otp(
+    payload: OtpVerifyIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Step 2 of sign-in: exchange a valid code for a session.
+
+    Rate-limited on top of the OTP's own attempt cap - the cap protects one
+    issued code, this protects against churning through fresh codes.
+
+    Any invite addressed to this phone is redeemed here (see
+    mobed_auth.redeem_all_invites), so an invited panthaky arrives already
+    a member at the right role instead of having to go find the temple.
+    """
+    rate_limit.enforce(request, "otp_verify", max_requests=20, window_seconds=300)
+    phone = payload.phone.strip()
+
+    try:
+        await mobed_auth.verify_otp(db, phone, payload.code)
+    except mobed_auth.OtpError as exc:
+        await db.commit()  # persist the burnt attempt / expiry cleanup
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    user = await mobed_auth.login_user(db, phone, payload.name.strip())
+    if not user.name:
+        # A brand-new phone that sent no name has nothing to display; ask
+        # the client for one rather than creating a nameless mobed.
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Name is required for a first sign-in")
+    await mobed_auth.redeem_all_invites(db, user)
     await db.commit()
 
     _set_refresh_cookie(response, user.id)
@@ -204,7 +254,7 @@ async def join_agyari(
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
         raise HTTPException(status_code=404, detail="Unknown agyary")
-    await mobed_auth.ensure_agyary_membership(db, agyary_id, user.id)
+    await mobed_auth.ensure_agyary_membership(db, agyary_id, user)
     await db.commit()
     # Include the agyari (with status) so the client knows whether an
     # activation step is still needed for an unclaimed seed entry.
@@ -262,9 +312,131 @@ async def create_agyari(
         name=payload.name, city=payload.city,
         address=payload.address, contact_phone=payload.contact_phone,
     )
-    await mobed_auth.ensure_agyary_membership(db, agyary.id, user.id)
+    await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
     await db.commit()
     return {"user": await _serialize_user(db, user), "agyary": _agyary_summary(agyary)}
+
+
+# ---------------------------------------------------------------------------
+# Role invites: the only way to hand out panthaky/caretaker
+# ---------------------------------------------------------------------------
+async def _require_invite_rights(db: AsyncSession, agyary_id: int, user: User) -> Agyary:
+    """Who may issue invites at this agyari.
+
+    Normally: an existing admin (panthaky/caretaker). But every membership
+    that predates invites is a plain 'mobed', so a migrated agyari would
+    have nobody able to issue the first one and the feature would be dead on
+    arrival. When an agyari has no admin at all, any active member may
+    invite - which is how the first panthaky gets appointed. As soon as one
+    exists the bootstrap closes by itself, permanently.
+    """
+    agyary = await _require_membership(db, agyary_id, user)
+    if await mobed_auth.is_admin_member(db, agyary_id, user.id):
+        return agyary
+    if not await mobed_auth.agyary_has_admin(db, agyary_id):
+        return agyary
+    raise HTTPException(
+        status_code=403, detail="Only a panthaky or caretaker can invite people to this fire temple"
+    )
+
+
+def _invite_summary(invite: AgyaryInvite) -> dict:
+    return {
+        "id": invite.id,
+        "agyary_id": invite.agyary_id,
+        "phone": invite.phone,
+        "role": invite.role,
+        "expires_at": invite.expires_at.isoformat(),
+        "redeemed_at": invite.redeemed_at.isoformat() if invite.redeemed_at else None,
+    }
+
+
+class CreateInviteIn(BaseModel):
+    phone: Phone
+    role: str
+
+
+@router.post("/agyaries/{agyary_id}/invites")
+async def create_invite(
+    agyary_id: int,
+    payload: CreateInviteIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Invite a phone number to this agyari at a named role.
+
+    Re-inviting a number that already has a live invite rewrites it rather
+    than adding a second, so there is never a question of which role applies
+    when it's redeemed (enforced by uq_agyary_invites_pending too).
+    """
+    await _require_invite_rights(db, agyary_id, user)
+    if payload.role not in USER_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {', '.join(USER_ROLES)}")
+
+    phone = payload.phone.strip()
+    existing = await mobed_auth.pending_invites(db, phone, agyary_id)
+    settings = get_settings()
+    expires_at = datetime.now(UTC) + timedelta(days=settings.invite_ttl_days)
+    if existing:
+        invite = existing[0]
+        invite.role = payload.role
+        invite.invited_by_user_id = user.id
+        invite.expires_at = expires_at
+    else:
+        invite = AgyaryInvite(
+            agyary_id=agyary_id,
+            phone=phone,
+            role=payload.role,
+            invited_by_user_id=user.id,
+            expires_at=expires_at,
+        )
+        db.add(invite)
+    await db.commit()
+    return _invite_summary(invite)
+
+
+@router.get("/agyaries/{agyary_id}/invites")
+async def list_invites(
+    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> list[dict]:
+    """Live invites for this agyari - what's still outstanding, not history."""
+    await _require_invite_rights(db, agyary_id, user)
+    result = await db.execute(
+        select(AgyaryInvite)
+        .where(
+            AgyaryInvite.agyary_id == agyary_id,
+            AgyaryInvite.redeemed_at.is_(None),
+            AgyaryInvite.revoked_at.is_(None),
+            AgyaryInvite.expires_at > datetime.now(UTC),
+        )
+        .order_by(AgyaryInvite.created_at.desc())
+    )
+    return [_invite_summary(i) for i in result.scalars()]
+
+
+@router.delete("/agyaries/{agyary_id}/invites/{invite_id}")
+async def revoke_invite(
+    agyary_id: int,
+    invite_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Revoke an unredeemed invite - a mistyped number has to be stoppable.
+
+    Soft: the row stays, so who-invited-whom remains readable. Revoking an
+    already-redeemed invite does nothing to the membership it created;
+    changing someone's existing role is a different action from cancelling
+    an invitation, and isn't this endpoint.
+    """
+    await _require_invite_rights(db, agyary_id, user)
+    invite = await db.get(AgyaryInvite, invite_id)
+    if invite is None or invite.agyary_id != agyary_id:
+        raise HTTPException(status_code=404, detail="Unknown invite")
+    if invite.redeemed_at is not None:
+        raise HTTPException(status_code=409, detail="That invite has already been redeemed")
+    invite.revoked_at = datetime.now(UTC)
+    await db.commit()
+    return {"revoked": True, "id": invite.id}
 
 
 # ---------------------------------------------------------------------------

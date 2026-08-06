@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     # again." Pinning this too low would silently log people out mid-season.
     jwt_refresh_token_days: int = 180
 
+    # Login OTP (services/mobed_auth.py). A 6-digit code is only safe
+    # because of the other two numbers: it dies in five minutes and after
+    # three wrong guesses.
+    otp_length: int = 6
+    otp_ttl_seconds: int = 300
+    otp_max_attempts: int = 3
+    # The Meta phone_number_id login OTPs are sent FROM. Separate from the
+    # per-agyari Agyary.wa_phone_number_id: someone signing in for the first
+    # time has no agyari yet, so there is no per-tenant number to send from.
+    whatsapp_otp_phone_number_id: str = ""
+
+    # How long an issued role invite stays redeemable (models/invite.py).
+    invite_ttl_days: int = 14
+
     def validate_runtime_secrets(self) -> None:
         """Refuse to serve with a blank JWT signing key.
 

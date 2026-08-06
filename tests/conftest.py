@@ -58,6 +58,29 @@ async def seeded(db):
     }
 
 
+# Codes captured from the last OTP send, keyed by phone. The login helpers
+# read this instead of a real WhatsApp inbox.
+SENT_OTPS: dict[str, str] = {}
+
+
+@pytest.fixture(autouse=True)
+def _capture_otps(monkeypatch):
+    """Intercept OTP delivery so tests can read the code that was sent.
+
+    Patched at the delivery boundary rather than stubbing issue_otp, so
+    everything the endpoint actually does - generating, hashing, storing,
+    expiring, counting attempts - runs for real in every test that logs in.
+    """
+
+    async def fake_send(phone: str, code: str, client=None) -> None:
+        SENT_OTPS[phone] = code
+
+    SENT_OTPS.clear()
+    monkeypatch.setattr("agyary.services.otp_delivery.send_login_otp", fake_send)
+    yield SENT_OTPS
+    SENT_OTPS.clear()
+
+
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
     """The login rate limiter (api/rate_limit.py) keeps its counters in a

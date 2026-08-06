@@ -1,8 +1,8 @@
-"""Mobed PWA API (mobed-only v0): name+phone login (no OTP), agyari
-search/join/activate/create, My Day, Machi Board, manual add, edit (through
-the shared slot-check / conflict core), and the PWA half of accept/decline
-(the second required entry point sharing the exact idempotent core the
-WhatsApp path uses - see messaging/flows/approval.py)."""
+"""Mobed PWA API: phone+OTP login, agyari search/join/activate/create, My
+Day, Machi Board, manual add, edit (through the shared slot-check /
+conflict core), and the PWA half of accept/decline (the second required
+entry point sharing the exact idempotent core the WhatsApp path uses - see
+messaging/flows/approval.py)."""
 
 from __future__ import annotations
 
@@ -12,12 +12,20 @@ from sqlalchemy import func, select
 
 from agyary.messaging.geh_times import to_ist
 from agyary.models import Agyary, Booking, BookingMobed, Machi, Service, User
+from tests.conftest import SENT_OTPS
 
 NEW_MOBED_PHONE = "+919911100001"
 
 
 async def _login(client, name="New Mobed", phone=NEW_MOBED_PHONE) -> dict:
-    r = await client.post("/api/mobed/auth/login", json={"name": name, "phone": phone})
+    """Full two-step sign-in, reading the code out of the captured send
+    (conftest's _capture_otps) the way a mobed reads it off WhatsApp."""
+    r = await client.post("/api/mobed/auth/otp/request", json={"phone": phone})
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        "/api/mobed/auth/otp/verify",
+        json={"phone": phone, "code": SENT_OTPS[phone], "name": name},
+    )
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -35,7 +43,7 @@ async def _member_headers(client, seeded, name="New Mobed", phone=NEW_MOBED_PHON
 
 
 # ---------------------------------------------------------------------------
-# Auth: name + phone, no verification
+# Auth: phone + WhatsApp OTP (see test_mobed_auth.py for the OTP mechanics)
 # ---------------------------------------------------------------------------
 async def test_login_creates_user_and_returns_session(db, client, seeded):
     body = await _login(client)
