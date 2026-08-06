@@ -1538,8 +1538,16 @@ async function saveForm(cfg, agyaryId, isMachi, isEdit) {
     const date = document.getElementById("fDate").value;
     const time = document.getElementById("fTime").value || "10:00";
     if (!date) return showError("Please pick a date.");
+    // There is no location/offsite control on this form yet, but both fields
+    // are real (Booking.location / is_offsite, round-tripped by the detail
+    // and edit endpoints and shown as an "Offsite" tag on My Day). Sending
+    // a flat null/false here used to silently wipe whatever an offsite
+    // booking had recorded every time it was edited - carry the loaded
+    // values through on edit instead, and only default on create.
     const body = { behdin_phone, behdin_name, service_id: serviceId,
-      ceremony_datetime: `${date}T${time}:00`, purpose, names, location: null, is_offsite: false };
+      ceremony_datetime: `${date}T${time}:00`, purpose, names,
+      location: isEdit ? (cfg._detail?.location ?? null) : null,
+      is_offsite: isEdit ? !!cfg._detail?.is_offsite : false };
     if (isEdit) {
       await api(`/agyaries/${agyaryId}/bookings/${cfg.id}`, { method: "PUT", body: JSON.stringify(body) });
       return openSlip("booking", agyaryId, cfg.id, cfg.origin);

@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from agyary.messaging.geh_times import to_ist
-from agyary.models import Agyary, AgyaryUser, Booking, BookingMobed, Machi, Service, User
+from agyary.models import Agyary, Booking, BookingMobed, Machi, Service, User
 
 NEW_MOBED_PHONE = "+919911100001"
 
@@ -252,7 +252,8 @@ async def test_edit_machi_reschedule_and_collision(db, client, seeded):
         }
 
     m1 = (await client.post(f"/api/mobed/agyaries/{aid}/manual-add/machi", json=machi_body(1), headers=headers)).json()["machi_id"]
-    m2 = (await client.post(f"/api/mobed/agyaries/{aid}/manual-add/machi", json=machi_body(2), headers=headers)).json()["machi_id"]
+    # Second machi exists only to occupy geh 2 for the collision check below.
+    await client.post(f"/api/mobed/agyaries/{aid}/manual-add/machi", json=machi_body(2), headers=headers)
 
     # detail pre-fills the edit form
     detail = (await client.get(f"/api/mobed/agyaries/{aid}/machis/{m1}/detail", headers=headers)).json()
@@ -305,6 +306,45 @@ async def test_edit_booking_updates_time(db, client, seeded):
     customer = await db.get(Customer, booking.customer_id)
     await db.refresh(customer)
     assert customer.name == "Edited Family Name"
+
+
+async def test_edit_booking_round_trips_location_and_offsite(db, client, seeded):
+    """The contract the form's edit path depends on: whatever detail hands
+    back for location/is_offsite, sending it straight back on the PUT must
+    preserve it. The form has no control for either field, so it can only
+    carry them through - it used to send a flat null/false instead, wiping
+    an offsite booking's location on any unrelated edit."""
+    headers = await _member_headers(client, seeded)
+    aid = seeded["agyary_id"]
+    create = {
+        "behdin_phone": "+919933300009", "behdin_name": "Offsite Family",
+        "service_id": 2, "ceremony_datetime": "2028-01-12T09:00:00",
+        "purpose": "khushali_nu",
+        "names": [{"section": "farmayeshne", "title": "behdin", "name": "X", "status": "living", "pair_group": None}],
+        "location": "14 Cusrow Baug, Colaba", "is_offsite": True,
+    }
+    bid = (await client.post(f"/api/mobed/agyaries/{aid}/manual-add/booking", json=create, headers=headers)).json()["booking_id"]
+
+    detail = (await client.get(f"/api/mobed/agyaries/{aid}/bookings/{bid}/detail", headers=headers)).json()
+    assert detail["location"] == "14 Cusrow Baug, Colaba" and detail["is_offsite"] is True
+
+    # An edit that changes only the time, carrying detail's values through.
+    edit = {
+        "behdin_phone": detail["behdin_phone"], "behdin_name": detail["behdin_name"],
+        "service_id": 2, "ceremony_datetime": "2028-01-12T17:00:00",
+        "purpose": "khushali_nu", "names": detail["names"],
+        "location": detail["location"], "is_offsite": detail["is_offsite"],
+    }
+    assert (await client.put(f"/api/mobed/agyaries/{aid}/bookings/{bid}", json=edit, headers=headers)).status_code == 200
+
+    booking = await db.get(Booking, bid)
+    await db.refresh(booking)
+    assert booking.location == "14 Cusrow Baug, Colaba" and booking.is_offsite is True
+    assert to_ist(booking.ceremony_datetime).strftime("%H:%M") == "17:00"
+
+    # My Day still shows the offsite tag afterwards.
+    entry = [e for e in (await client.get("/api/mobed/my-day", headers=headers)).json() if e["booking_id"] == bid][0]
+    assert entry["is_offsite"] is True and entry["location"] == "14 Cusrow Baug, Colaba"
 
 
 # ---------------------------------------------------------------------------

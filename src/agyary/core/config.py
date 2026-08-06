@@ -50,6 +50,24 @@ class Settings(BaseSettings):
     # again." Pinning this too low would silently log people out mid-season.
     jwt_refresh_token_days: int = 180
 
+    def validate_runtime_secrets(self) -> None:
+        """Refuse to serve with a blank JWT signing key.
+
+        An empty ``jwt_secret_key`` doesn't disable auth, which would at
+        least be obvious - it signs every session token with the empty
+        string, so anyone can mint a token for any user id and the app looks
+        like it's working. The default has to stay "" for tooling that
+        imports Settings without a .env, so this is an explicit call made at
+        app startup (api/main.py) rather than a field validator.
+        """
+        if not self.jwt_secret_key.strip():
+            raise RuntimeError(
+                "JWT_SECRET_KEY is empty. Session tokens would be signed with a "
+                "blank key and could be forged by anyone. Generate one with "
+                "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
+                "and set it in .env before starting the app."
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:

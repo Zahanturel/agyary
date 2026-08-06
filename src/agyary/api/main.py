@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 
 from agyary.api.routes.calendar import router as calendar_router
@@ -16,6 +16,7 @@ from agyary.core.database import async_session_factory
 from agyary.messaging import send_worker
 
 settings = get_settings()
+settings.validate_runtime_secrets()
 
 
 @asynccontextmanager
@@ -65,7 +66,15 @@ async def security_headers(request, call_next):
 
 
 app.include_router(calendar_router)
-app.include_router(chat_router)
+# The web-chat simulator is a development tool, not a customer-facing
+# surface: it has no auth at all, takes the behdin's phone number as a
+# request parameter, and will happily drive that person's whole
+# conversation - read their upcoming bookings and saved names, book for
+# them, cancel on them - for any number the caller cares to type. It also
+# lists every agyari's admin names and phone numbers. Registered only in
+# debug mode, the same gate already applied to docs_url/openapi_url above.
+if settings.app_debug:
+    app.include_router(chat_router)
 app.include_router(mobed_router)
 app.include_router(whatsapp_router)
 
@@ -82,7 +91,14 @@ def root() -> RedirectResponse:
 
 @app.get("/chat", include_in_schema=False)
 def chat_ui() -> FileResponse:
-    """The WhatsApp-conversation simulator (vanilla HTML/JS)."""
+    """The WhatsApp-conversation simulator (vanilla HTML/JS).
+
+    Debug-only, matching the /api/chat router gate above - serving the page
+    without its API would just be a broken screen, and the page itself
+    displays the admin phone numbers it fetches.
+    """
+    if not settings.app_debug:
+        raise HTTPException(status_code=404)
     return FileResponse(_STATIC_DIR / "chat.html", media_type="text/html")
 
 
