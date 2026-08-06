@@ -13,7 +13,7 @@
 import { route, setGuard, setNotFound, start, navigate, resolve } from "./router.js";
 import { state, isManager } from "./state.js";
 import { tryRefresh, getMe } from "./api.js";
-import { chrome, markActiveTab, refreshHeader, tabsEl, fabEl, profileBtn, flashError } from "./ui.js";
+import { chrome, markActiveTab, refreshHeader, tabsEl, profileBtn, flashError, setDefaultFabAction } from "./ui.js";
 import { loadSessionExtras, signedIn } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
@@ -74,11 +74,12 @@ tabsEl.onclick = (e) => {
   if (btn) navigate(btn.dataset.route);
 };
 profileBtn.onclick = () => navigate("#/settings");
-fabEl.onclick = () => {
+// What the add button does unless a screen overrides it (see ui.showFab).
+setDefaultFabAction(() => {
   // A fresh event, not whatever half-finished draft is lying around.
   state.draft = null;
   navigate("#/event/new");
-};
+});
 
 // Swipe left/right to move the calendar a day/week/month. Triggers whichever
 // prev/next control is currently on screen rather than duplicating the

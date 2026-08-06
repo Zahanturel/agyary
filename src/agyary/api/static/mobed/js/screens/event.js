@@ -17,7 +17,7 @@
  */
 
 import {
-  listServices, createService, createBehdin, getSavedNames, putSavedNames,
+  listServices, createService, getSavedNames, putSavedNames,
   listBehdins, convertDate, fromParsi, addMachi, addBooking,
   machiDetail, bookingDetail, editMachi, editBooking,
 } from "../api.js";
@@ -26,9 +26,10 @@ import {
   MACHI_PURPOSE_DISPLAY, SERVICE_PURPOSE_DISPLAY,
 } from "../state.js";
 import { renderCalendar } from "../calendar.js";
+import { renderAddBehdin } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import { chrome, mainEl, showFab, showError, showInfo, markActiveTab, refreshHeader, loading } from "../ui.js";
-import { esc, phoneField, readPhone, setPhoneField, istYmd, istTime, todayIst, gregLabel } from "../util.js";
+import { esc, istYmd, istTime, todayIst, gregLabel } from "../util.js";
 import { navigate } from "../router.js";
 
 const STEPS = ["Behdin", "Service", "Date", "Time", "Names", "Confirm"];
@@ -183,7 +184,7 @@ async function stepBehdin(draft) {
           <div class="who"><b>${esc(chosen.name)}</b><span>${esc(chosen.phone)}</span></div>
           <button class="ghost small" id="bhChange">Change</button>
         </div>` : `
-        <label>Search your behdins</label>
+        <label>Search behdins</label>
         <input type="text" id="bhSearch" placeholder="Name or phone number" autocomplete="off">
         <div id="bhResults" style="margin-top:8px"></div>
         <div style="margin-top:12px">
@@ -228,35 +229,10 @@ async function stepBehdin(draft) {
   input.focus();
 
   document.getElementById("bhNew").onclick = () => {
-    const panel = document.getElementById("bhNewPanel");
-    panel.innerHTML = `
-      <div class="card" style="margin-top:12px">
-        <label>Name</label><input type="text" id="nbName" placeholder="e.g. Behdin Jaidev Mistry">
-        <label>WhatsApp number</label>${phoneField("nbPhone")}
-        <div class="row tight" style="margin-top:12px">
-          <button class="small" id="nbSave">Add behdin</button>
-          <button class="ghost small" id="nbCancel">Cancel</button>
-        </div>
-      </div>`;
-    document.getElementById("nbCancel").onclick = () => { panel.innerHTML = ""; };
-    document.getElementById("nbSave").onclick = async () => {
-      const name = document.getElementById("nbName").value.trim();
-      const phone = readPhone("nbPhone");
-      if (!name) return showError("Please enter the behdin's name.");
-      if (!phone) return showError("Please enter a valid phone number.");
-      try {
-        // Explicit creation against the real endpoint. This flow no longer
-        // relies on create-by-phone-as-a-side-effect-of-saving; that path
-        // still exists server-side for the WhatsApp callers.
-        const created = await createBehdin(state.currentAgyaryId, name, phone);
-        if (!created.created) {
-          showInfo(`${created.name} is already on file - using their existing record.`);
-        }
-        choose(draft, created);
-      } catch (e) {
-        showError(e.message);
-      }
-    };
+    // Same form as the Behdins screen - one add-behdin UI, not two.
+    renderAddBehdin(document.getElementById("bhNewPanel"), {
+      onCreated: (created) => choose(draft, created),
+    });
   };
 }
 

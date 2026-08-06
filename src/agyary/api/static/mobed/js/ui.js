@@ -19,9 +19,21 @@ export function chrome(show) {
   if (!show) fabEl.classList.add("hidden");
 }
 
-export function showFab(show, title = "Add") {
+/**
+ * Show/hide the floating add button, and say what it adds HERE.
+ *
+ * The handler is reassigned on every call, never left over from the last
+ * screen - the Behdins screen points it at "add a behdin" and the calendar
+ * at "add an event", and a stale handler would silently do the wrong
+ * thing. Callers that pass no handler get the default set in main.js.
+ */
+let defaultFabAction = () => {};
+export function setDefaultFabAction(fn) { defaultFabAction = fn; }
+
+export function showFab(show, title = "Add", handler = null) {
   fabEl.classList.toggle("hidden", !show);
   fabEl.title = title;
+  fabEl.onclick = handler || defaultFabAction;
 }
 
 export function setHeader(text) { headerTitle.textContent = text; }

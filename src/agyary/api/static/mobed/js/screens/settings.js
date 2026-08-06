@@ -78,9 +78,7 @@ export async function renderSettings() {
         <h2 style="margin:0">Behdins</h2>
         <button class="ghost small" id="stBehdins">Open</button>
       </div>
-      <p class="meta">${manage
-        ? "Register a behdin, correct their details, and manage their saved names."
-        : "The behdins you have booked for, and your history with each."}</p>
+      <p class="meta">Add a behdin, correct their details, and manage the names they book with.</p>
     </div>
 
     ${manage ? `
