@@ -58,6 +58,11 @@ class Booking(Base):
     location: Mapped[str | None] = mapped_column(Text)
     is_offsite: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
+    # Which mobed personally manually-entered this (PWA walk-in flow only -
+    # NULL for WhatsApp-originated bookings). Basis for "my customers"
+    # search: a customer relationship belongs to the mobed, not the temple.
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
+
     status: Mapped[str] = mapped_column(String(20), server_default="requested")
 
     recurrence_rule_id: Mapped[int | None] = mapped_column(
@@ -109,6 +114,11 @@ class Booking(Base):
         ),
         Index("idx_bookings_customer", "customer_id", text("date_time DESC")),
         Index("idx_bookings_service", "service_id", "date_time"),
+        Index(
+            "idx_bookings_created_by",
+            "created_by_user_id",
+            postgresql_where=text("created_by_user_id IS NOT NULL"),
+        ),
         Index(
             "idx_bookings_recurrence",
             "recurrence_rule_id",

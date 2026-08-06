@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.messaging import state as state_store
-from agyary.messaging.types import Button, ListRow, ListSection, OutgoingMessage
+from agyary.messaging.types import Button, FlowPrompt, ListSection, OutgoingMessage
 from agyary.models import Agyary, ConversationState, Customer
 
 
@@ -42,9 +42,10 @@ class FlowContext:
         text: str,
         buttons: list[Button] | None = None,
         sections: list[ListSection] | None = None,
+        flow: FlowPrompt | None = None,
     ) -> OutgoingMessage:
         return OutgoingMessage(
-            to=self.phone, text=text, buttons=buttons or [], sections=sections or []
+            to=self.phone, text=text, buttons=buttons or [], sections=sections or [], flow=flow
         )
 
 
@@ -76,13 +77,3 @@ def split_done_lines(text: str) -> tuple[list[str], bool]:
     is_done = any(is_done_line(line) for line in lines)
     content = [line for line in lines if line.strip() and not is_done_line(line)]
     return content, is_done
-
-
-def chunk_rows(rows: list[ListRow], section_title: str, chunk: int = 10) -> list[ListSection]:
-    """WhatsApp allows max 10 rows per list section - split as needed."""
-    if len(rows) <= chunk:
-        return [ListSection(title=section_title, rows=rows)]
-    return [
-        ListSection(title=f"{section_title} ({i // chunk + 1})", rows=rows[i : i + chunk])
-        for i in range(0, len(rows), chunk)
-    ]

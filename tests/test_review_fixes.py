@@ -8,7 +8,7 @@ from agyary.messaging.date_parser import parse_date_input, parse_time_input
 from agyary.messaging.flows.base import is_done_line
 from agyary.messaging.name_parser import parse_names
 from agyary.models import CustomerSavedName
-from tests.test_chat_flow import CUSTOMER, all_row_ids, book_patet_machi, onboard, send
+from tests.test_chat_flow import CUSTOMER, book_patet_machi, onboard, send
 
 TODAY = date(2026, 7, 21)
 
@@ -60,6 +60,7 @@ async def test_ist_display_in_my_bookings_and_approval(db, seeded):
     await send(db, seeded, "loc_agyary")
     await send(db, seeded, "Er. Zahan, Er. Meherzad\ndone")
     await send(db, seeded, "Behdin Jaidev\ndone")
+    await send(db, seeded, "priest_1")  # book with the panthaky
     replies = await send(db, seeded, "confirm_booking")
     approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
 
@@ -74,9 +75,7 @@ async def test_ist_display_in_my_bookings_and_approval(db, seeded):
 
 async def test_out_of_range_altslot_geh_does_not_crash(db, seeded):
     await onboard(db, seeded)
-    replies = await book_patet_machi(db, seeded)
-    approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
-    await send(db, seeded, approve_id, phone=seeded["panthaky_phone"])
+    await book_patet_machi(db, seeded)  # auto-confirms
 
     other = "+919900022222"
     await onboard(db, seeded, name="Roshan Mistry", phone=other)
@@ -101,6 +100,7 @@ async def test_gujrela_saved_offer_only_complete_pairs(db, seeded):
     await send(db, seeded, "loc_agyary")
     await send(db, seeded, "Behdin A, Behdin B\nEr. C (D), Er. D (D)\ndone")
     await send(db, seeded, "Behdin Jaidev\ndone")
+    await send(db, seeded, "priest_1")
     await send(db, seeded, "confirm_booking")
 
     # Pair homogenization: every saved pair group is status-consistent.
@@ -172,37 +172,40 @@ async def test_welcome_boilerplate_trimmed(db, seeded):
     assert "What would you like to do" in replies[0].text
 
 
-async def test_approval_confirmation_has_no_pure_tone_filler(db, seeded):
+async def test_auto_confirmation_has_no_pure_tone_filler(db, seeded):
+    """Machi is auto-confirmed (redesign v3, no approval step) - the single
+    confirmation message must still carry no gushing filler language."""
     await onboard(db, seeded)
     replies = await book_patet_machi(db, seeded)
-    approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
-
-    replies = await send(db, seeded, approve_id, phone=seeded["panthaky_phone"])
     customer_msg = next(r for r in replies if r.to == CUSTOMER)
     assert "look forward" not in customer_msg.text.casefold()
     assert "confirmed" in customer_msg.text
 
 
 async def test_roj_typo_falls_back_to_list(db, seeded):
-    """A Roj typo must offer the List picker instead of a dead-end error."""
+    """A Roj typo must offer the Flow picker instead of a dead-end error.
+
+    Roj/Mah fallbacks are WhatsApp Flows now (07-predefined-input-decision.md),
+    not list messages - but handle_message is transport-agnostic, so
+    sending 'roj_2'/'mah_1' as raw text is exactly what a completed Flow's
+    nfm_reply routes to."""
     await onboard(db, seeded)
     await send(db, seeded, "book_machi")
     await send(db, seeded, "purpose_patet")
     replies = await send(db, seeded, "Roj Bahmn")  # typo of Bahman
     assert "didn't recognize that Roj" in replies[0].text
-    roj_ids = all_row_ids(replies[0])
-    assert "roj_2" in roj_ids
+    assert replies[0].flow is not None
 
     replies = await send(db, seeded, "roj_2")
     assert "Which Mah" in replies[0].text
-    assert "mah_1" in all_row_ids(replies[0])
+    assert replies[0].flow is not None
 
     replies = await send(db, seeded, "mah_1")
     assert "Which Geh" in replies[0].text
 
 
 async def test_mah_typo_falls_back_to_scoped_mah_list(db, seeded):
-    """A Mah typo (with a valid Roj) reuses the existing Mah List, scoped."""
+    """A Mah typo (with a valid Roj) reuses the existing Mah Flow, scoped."""
     await onboard(db, seeded)
     await send(db, seeded, "book_service")
     await send(db, seeded, "Jashan")
@@ -210,7 +213,7 @@ async def test_mah_typo_falls_back_to_scoped_mah_list(db, seeded):
     replies = await send(db, seeded, "Roj Bahman Mah Fravrdn")  # typo of Fravardin
     assert "Roj Bahman" in replies[0].text
     assert "didn't recognize that Mah" in replies[0].text
-    assert "mah_1" in all_row_ids(replies[0])
+    assert replies[0].flow is not None
 
     replies = await send(db, seeded, "mah_1")  # Fravardin
     assert "What time?" in replies[0].text

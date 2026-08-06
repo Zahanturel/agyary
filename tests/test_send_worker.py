@@ -228,3 +228,52 @@ def test_build_graph_payload_sections():
     )
     assert payload["interactive"]["type"] == "list"
     assert payload["interactive"]["action"]["sections"][0]["rows"][0]["id"] == "a"
+
+
+def test_build_graph_payload_flow():
+    payload = send_worker.build_graph_payload(
+        {
+            "to": "+919900011111",
+            "text": "Pick a Roj",
+            "buttons": [],
+            "sections": [],
+            "flow": {
+                "flow_id": "999",
+                "flow_token": "roj:1:abc123",
+                "flow_cta": "Continue",
+                "screen": "SELECT_ROJ",
+                "data": {},
+            },
+        }
+    )
+    interactive = payload["interactive"]
+    assert interactive["type"] == "flow"
+    params = interactive["action"]["parameters"]
+    assert params["flow_message_version"] == "3"
+    assert params["flow_id"] == "999"
+    assert params["flow_token"] == "roj:1:abc123"
+    assert params["flow_action"] == "navigate"
+    assert params["flow_action_payload"]["screen"] == "SELECT_ROJ"
+    assert params["flow_action_payload"]["data"]  # non-empty, per Meta's requirement
+
+
+def test_build_graph_payload_flow_takes_precedence_over_buttons_and_sections():
+    """A message shouldn't carry both a flow and buttons/sections in
+    practice, but if it did, the flow branch must win - Cloud API rejects
+    an interactive payload with more than one action shape."""
+    payload = send_worker.build_graph_payload(
+        {
+            "to": "+919900011111",
+            "text": "pick",
+            "buttons": [{"id": "x", "title": "X"}],
+            "sections": [],
+            "flow": {
+                "flow_id": "1",
+                "flow_token": "t",
+                "flow_cta": "Go",
+                "screen": "S",
+                "data": {"k": "v"},
+            },
+        }
+    )
+    assert payload["interactive"]["type"] == "flow"

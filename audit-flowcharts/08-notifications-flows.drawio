@@ -1,0 +1,75 @@
+<mxfile host="app.diagrams.net" type="device">
+<diagram id="08-notifications-flows" name="8. Notifications + WhatsApp Flows plumbing  (send worker · webhook · data-exchange)">
+<mxGraphModel dx="1000" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="title_08-notifications-flows" value="8. Notifications + WhatsApp Flows plumbing  (send worker · webhook · data-exchange)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="900" height="30" as="geometry"/></mxCell>
+<mxCell id="n1" value="handle_message returns messages →
+persisted as outbox rows (status=pending)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="360" y="80" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n2" value="Webhook enqueues row ids;
+sweep re-discovers due pending rows" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="190" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n3" value="claim_and_send:
+SELECT ... FOR UPDATE SKIP LOCKED" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="300" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n4" value="Row claimed?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="410" width="220" height="80" as="geometry"/></mxCell>
+<mxCell id="n5" value="Lost race — another
+worker has it" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="720" y="410" width="220" height="60" as="geometry"/></mxCell>
+<mxCell id="n6" value="Build Graph payload
+(text / button / list / flow)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="530" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n7" value="Agyari has
+number + token?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="640" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n8" value="Mark failed" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="720" y="640" width="180" height="50" as="geometry"/></mxCell>
+<mxCell id="n9" value="POST to Graph API" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="770" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n10" value="2xx response?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="860" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n11" value="status=sent;
+store wa_message_id" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="990" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n12" value="Attempts
+&gt;= 3?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="720" y="860" width="200" height="90" as="geometry"/></mxCell>
+<mxCell id="n13" value="status=failed" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1000" y="860" width="180" height="50" as="geometry"/></mxCell>
+<mxCell id="n14" value="Backoff (5/20/60s);
+sweep retries" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="720" y="1010" width="200" height="50" as="geometry"/></mxCell>
+<mxCell id="n15" value="Delivered" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="360" y="1080" width="260" height="40" as="geometry"/></mxCell>
+<mxCell id="e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e18" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n3" target="n4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e19" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e20" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n6" target="n7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e22" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e23" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n7" target="n9"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e24" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n9" target="n10"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e25" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n11"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n11" target="n15"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e27" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n12"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e28" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n12" target="n13"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e29" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n12" target="n14"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e30" value="retry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="n14" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n31" value="Inbound Flow completion (nfm_reply)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="1120" y="120" width="300" height="50" as="geometry"/></mxCell>
+<mxCell id="n32" value="Extract the single Dropdown value
+(e.g. &#x27;roj_2&#x27;, &#x27;svc_5&#x27;, &#x27;priest_7&#x27;)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1120" y="210" width="300" height="60" as="geometry"/></mxCell>
+<mxCell id="n33" value="Route as an option id into the
+existing step handler" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="1120" y="320" width="300" height="60" as="geometry"/></mxCell>
+<mxCell id="n34" value="Flow data-exchange request (dynamic Flows)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="1120" y="440" width="320" height="50" as="geometry"/></mxCell>
+<mxCell id="n35" value="Verify signature; decrypt
+(RSA-OAEP unwrap AES key; AES-GCM)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1120" y="530" width="320" height="60" as="geometry"/></mxCell>
+<mxCell id="n36" value="Decrypt ok?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="1180" y="640" width="200" height="80" as="geometry"/></mxCell>
+<mxCell id="n37" value="HTTP 421 (client must
+refresh public key)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1440" y="640" width="220" height="60" as="geometry"/></mxCell>
+<mxCell id="n38" value="Resolve dynamic options
+(priests / services for tenant)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1120" y="760" width="320" height="60" as="geometry"/></mxCell>
+<mxCell id="n39" value="Encrypt response (flip IV) → 200" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="1120" y="870" width="320" height="50" as="geometry"/></mxCell>
+<mxCell id="e40" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n31" target="n32"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e41" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n32" target="n33"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e42" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n34" target="n35"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e43" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n35" target="n36"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e44" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n36" target="n37"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e45" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n36" target="n38"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e46" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n38" target="n39"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n47" value="VERIFICATION NOTE (acknowledged in code). The entire WhatsApp Flows path — Flow JSON validity, the encryption round-trip with real Meta, INIT vs data_exchange action handling — cannot be exercised without a Meta Business Account. Unit tests cover the crypto round-trip + an IV-flip known-answer vector, but nothing end-to-end. All flow ids / keys are empty in the repo. This is inherent, not a defect — but it means every Flow-based step is ASSUMED, not verified." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="40" y="700" width="420" height="200" as="geometry"/></mxCell>
+<mxCell id="e48" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#d6b656;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n6" target="n47"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n49" value="STRENGTH. Outbox is genuinely durable: startup sweep + periodic sweep + immediate enqueue all converge on a SKIP LOCKED claim, correct under restart and concurrency. Signature check + inbound dedup by wa_message_id present." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="1120" y="700" width="360" height="130" as="geometry"/></mxCell>
+<mxCell id="e50" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#d6b656;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n39" target="n49"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

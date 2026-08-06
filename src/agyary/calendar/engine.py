@@ -33,7 +33,7 @@ from enum import Enum
 ROJ_NAMES: tuple[str, ...] = (
     "Hormazd", "Bahman", "Ardibehesht", "Shahrevar", "Aspandard", "Khordad",
     "Amardad", "Daepadar", "Adar", "Avan", "Khorshed", "Mohor", "Tir", "Gosh",
-    "Dae-Pa-Meher", "Meher", "Srosh", "Rashne", "Fravardin", "Behram", "Ram",
+    "Dae-Pa-Meher", "Meher", "Sarosh", "Rashne", "Fravardin", "Behram", "Ram",
     "Govad", "Dae-Pa-Din", "Din", "Ashishvangh", "Ashtad", "Asman", "Zamyad",
     "Mareshpand", "Aneran",
 )

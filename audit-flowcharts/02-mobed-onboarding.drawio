@@ -1,0 +1,55 @@
+<mxfile host="app.diagrams.net" type="device">
+<diagram id="02-mobed-onboarding" name="2. Mobed onboarding  (name/phone → search → OTP → verify)">
+<mxGraphModel dx="1000" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="title_02-mobed-onboarding" value="2. Mobed onboarding  (name/phone → search → OTP → verify)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="900" height="30" as="geometry"/></mxCell>
+<mxCell id="n1" value="Mobed opens the PWA" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="360" y="80" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n2" value="Enter name + phone (step 1)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="170" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n3" value="Search + select agyari (step 2)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="260" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n4" value="POST /auth/request-otp" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="350" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n5" value="Agyari has WhatsApp
+connected?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="440" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n6" value="400: &#x27;This agyari hasn&#x27;t
+connected WhatsApp yet&#x27;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="720" y="440" width="240" height="60" as="geometry"/></mxCell>
+<mxCell id="n7" value="OTP generated, enqueued, sent via
+that agyari&#x27;s WhatsApp number" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="570" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n8" value="Mobed enters 6-digit code" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="680" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n9" value="verify_otp (5-min TTL, max 3 attempts)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="770" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n10" value="Code valid?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="860" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n11" value="Attempts
+remaining?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="720" y="860" width="200" height="90" as="geometry"/></mxCell>
+<mxCell id="n12" value="&#x27;Incorrect code, try again&#x27;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="720" y="1000" width="240" height="50" as="geometry"/></mxCell>
+<mxCell id="n13" value="&#x27;Too many attempts,
+request a new code&#x27;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1020" y="860" width="220" height="60" as="geometry"/></mxCell>
+<mxCell id="n14" value="get_or_create_user +
+ensure_agyary_membership (role=mobed)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="990" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n15" value="Issue access + refresh JWT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="1100" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n16" value="Land in My Day (Flow 7)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="360" y="1200" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="e17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e18" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e19" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n3" target="n4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e21" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n5" target="n6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e22" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n5" target="n7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e24" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n8" target="n9"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e25" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n9" target="n10"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e26" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n14"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e27" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n11"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e28" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n11" target="n12"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e29" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n12" target="n8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e30" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n11" target="n13"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e31" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n14" target="n15"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e32" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n15" target="n16"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n33" value="FINDING C1 (High). JWT_SECRET_KEY is empty in .env and .env.example, with no default and no startup guard. issue_access_token() then raises &#x27;HMAC key must not be empty&#x27; → 500 on the FIRST successful OTP. This also makes all 5 test_mobed_api tests fail under the documented &#x27;uv run pytest&#x27;." style="shape=note;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="1060" y="1140" width="320" height="170" as="geometry"/></mxCell>
+<mxCell id="e34" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" edge="1" parent="1" source="n15" target="n33"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="140" value="FINDING C2 (Med). The seeded demo agyary has no wa_phone_number_id, so onboarding to it 400s here. Combined with C1 and empty Flow ids, the documented dev/demo path for the PWA cannot actually be walked by hand." style="shape=note;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="1060" y="260" width="320" height="300" as="geometry"/></mxCell>
+<mxCell id="e35" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#b85450;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" edge="1" parent="1" source="n6" target="140"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n36" value="FINDING D1 (Med). Doc 05: &#x27;joining additional agyaries is a standing action from their own menu.&#x27; The API (/agyaries/{id}/join) exists, but the PWA never calls it — there is no join-another-agyari screen. A multi-agyari mobed can only ever belong to the one they onboarded with." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="1060" y="1330" width="320" height="150" as="geometry"/></mxCell>
+<mxCell id="e37" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" edge="1" parent="1" source="n16" target="n36"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

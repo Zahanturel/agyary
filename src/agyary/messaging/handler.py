@@ -238,9 +238,6 @@ async def _start_rebook(ctx: FlowContext) -> list[OutgoingMessage]:
         "service_id": booking_svc.id,
         "service_name": booking_svc.name,
         "offsite_capable": booking_svc.offsite_capable,
-        "default_price": str(booking_svc.default_price)
-        if booking_svc.default_price is not None
-        else None,
         "purpose": previous.purpose,
         "names": names,
         "names_from_saved": True,

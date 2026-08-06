@@ -3,17 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, ParsiDate, gregorian_to_parsi
+from agyary.messaging.geh_times import IST, machi_ceremony_datetime
 from agyary.models import Machi
 from agyary.models.enums import SLOT_RELEASING_STATUSES
 
 ALL_GEHS = (1, 2, 3, 4, 5)
 _SCAN_LIMIT_DAYS = 90
+
+
+def drop_elapsed_gehs(gehs: list[int], gregorian: date) -> list[int]:
+    """For same-day bookings, hide gehs whose start time already passed.
+
+    The one shared past-check both the WhatsApp flow and the PWA manual-add
+    path must call - never reimplement a naive date-only comparison, since
+    the Ushahin geh crosses midnight into the next Gregorian morning.
+    """
+    now = datetime.now(IST)
+    if gregorian != now.date():
+        return gehs
+    return [g for g in gehs if machi_ceremony_datetime(gregorian, g) > now]
 
 
 def parsi_slot_fields(parsi: ParsiDate) -> tuple[int, int, int]:

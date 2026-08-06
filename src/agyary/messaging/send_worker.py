@@ -61,12 +61,47 @@ async def enqueue_send(outbox_id: int) -> None:
 
 
 def build_graph_payload(content: dict) -> dict:
-    """OutgoingMessage.as_dict() shape (to/text/buttons/sections) -> Cloud
-    API send payload (plain text, interactive button, or interactive list)."""
+    """OutgoingMessage.as_dict() shape (to/text/buttons/sections/flow) ->
+    Cloud API send payload (plain text, interactive button, interactive
+    list, or interactive flow).
+
+    Flow shape verified against Meta's primary doc (fetched directly while
+    building this): developers.facebook.com/docs/whatsapp/flows/guides/
+    sendingaflow - interactive.type "flow", action.name "flow",
+    flow_message_version "3" (a Meta API version string, unrelated to the
+    Flow JSON version in wa_flows.py), flow_action "navigate" with a
+    screen + non-empty data object.
+    """
     to = content["to"]
     text = content["text"]
     buttons = content.get("buttons") or []
     sections = content.get("sections") or []
+    flow = content.get("flow")
+
+    if flow:
+        return {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "interactive",
+            "interactive": {
+                "type": "flow",
+                "body": {"text": text},
+                "action": {
+                    "name": "flow",
+                    "parameters": {
+                        "flow_message_version": "3",
+                        "flow_token": flow["flow_token"],
+                        "flow_id": flow["flow_id"],
+                        "flow_cta": flow["flow_cta"],
+                        "flow_action": "navigate",
+                        "flow_action_payload": {
+                            "screen": flow["screen"],
+                            "data": flow["data"] or {"_": True},  # must be non-empty
+                        },
+                    },
+                },
+            },
+        }
 
     if buttons:
         return {

@@ -7,6 +7,7 @@ the customer's saved name pool.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -16,8 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
-from agyary.messaging.availability import parsi_slot_fields
-from agyary.messaging.geh_times import GEH_START_TIMES, IST, machi_ceremony_datetime
+from agyary.messaging.availability import (
+    SlotOption,
+    available_gehs,
+    drop_elapsed_gehs,
+    next_days_with_geh,
+    parsi_slot_fields,
+)
+from agyary.messaging.geh_times import GEH_START_TIMES, ensure_ist, machi_ceremony_datetime
 from agyary.models import (
     Agyary,
     AgyaryCustomer,
@@ -86,6 +93,70 @@ async def get_admins(db: AsyncSession, agyary_id: int) -> list[User]:
 
 async def is_admin_phone(db: AsyncSession, agyary_id: int, phone: str) -> bool:
     return any(admin.phone == phone for admin in await get_admins(db, agyary_id))
+
+
+async def get_active_agyary_users(db: AsyncSession, agyary_id: int) -> list[User]:
+    """Every active member at an agyary, any role - not just ADMIN_ROLES.
+
+    Machi's FYI notification (module 3) goes to everyone, since a
+    peer-mobed agyari has no ADMIN_ROLES member at all and get_admins()
+    would silently return an empty list there - the exact bug this
+    redesign exists to fix.
+    """
+    result = await db.execute(
+        select(User)
+        .join(AgyaryUser, AgyaryUser.user_id == User.id)
+        .where(
+            AgyaryUser.agyary_id == agyary_id,
+            AgyaryUser.is_active.is_(True),
+            User.is_active.is_(True),
+        )
+    )
+    return list(result.scalars())
+
+
+# The standard service catalog a freshly set-up agyari starts with, so the
+# manual-add booking path works the moment a mobed activates it. Name +
+# min_mobeds + offsite_capable only - NO default price (money is parked this
+# pass, doc 05). Machi is included so it exists as a Service row, but the
+# booking flows exclude it by name (it has its own slot-based path).
+DEFAULT_SERVICE_SPECS = [
+    ("Machi", 1, False),
+    ("Jashan", 1, True),
+    ("Afringan", 1, True),
+    ("Farokshi", 1, True),
+    ("Satum", 1, False),
+    ("Navjote", 1, True),
+    ("Wedding", 1, True),
+    ("Vandidad", 1, False),
+    ("Yazeshni", 2, False),
+]
+
+
+async def ensure_default_services(db: AsyncSession, agyary_id: int) -> None:
+    """Idempotently give an agyari the standard service list (used when a
+    mobed activates or creates one). Only adds names not already present, so
+    it's safe to call more than once and never clobbers a mobed's edits."""
+    existing = {
+        name.strip().lower()
+        for name in (
+            await db.execute(select(Service.name).where(Service.agyary_id == agyary_id))
+        ).scalars()
+    }
+    for order, (name, min_mobeds, offsite) in enumerate(DEFAULT_SERVICE_SPECS):
+        if name.strip().lower() in existing:
+            continue
+        db.add(
+            Service(
+                agyary_id=agyary_id,
+                name=name,
+                default_price=None,
+                min_mobeds=min_mobeds,
+                offsite_capable=offsite,
+                display_order=order,
+            )
+        )
+    await db.flush()
 
 
 async def get_service_by_id(db: AsyncSession, agyary_id: int, service_id: int) -> Service | None:
@@ -267,6 +338,124 @@ async def create_machi_request(
     return machi
 
 
+@dataclass(frozen=True)
+class MachiSlotAlternatives:
+    """Structured, unrendered alternative data for a taken machi slot.
+
+    Deliberately plain data, not pre-built WhatsApp messages - each caller
+    (the WhatsApp flow, the PWA manual-add path) renders this into its own
+    shape. Mirrors what ``next_any_day`` deliberately excludes: that option
+    is a 90-day scan, expensive enough that today's flow only computes it
+    when the customer explicitly asks for it (the "next available day"
+    button) rather than eagerly on every taken-slot response - callers that
+    want it call ``next_days_with_any_geh`` themselves.
+    """
+
+    same_day_gehs: list[int]
+    same_geh_next_days: list[SlotOption]
+
+
+@dataclass(frozen=True)
+class MachiBookingResult:
+    """Outcome of ``book_machi_slot``: exactly one of the two is set."""
+
+    machi: Machi | None
+    alternatives: MachiSlotAlternatives | None
+
+
+async def compute_machi_alternatives(
+    db: AsyncSession, agyary: Agyary, roj: int, mah: int, year: int, geh: int, gregorian: date
+) -> MachiSlotAlternatives:
+    same_day = drop_elapsed_gehs(
+        await available_gehs(db, agyary.id, roj, mah, year), gregorian
+    )
+    same_geh_next = await next_days_with_geh(
+        db, agyary.id, CalendarSystem(agyary.calendar_system), gregorian, geh
+    )
+    return MachiSlotAlternatives(same_day_gehs=same_day, same_geh_next_days=same_geh_next)
+
+
+async def book_machi_slot(
+    db: AsyncSession,
+    agyary: Agyary,
+    customer: Customer,
+    *,
+    roj: int,
+    mah: int,
+    year: int,
+    geh: int,
+    gregorian: date,
+    purpose: str,
+    names: list[dict],
+) -> MachiBookingResult:
+    """The one function that owns "is this slot valid, is it free, claim it,
+    what are the alternatives if not" for machi bookings.
+
+    Both the WhatsApp flow (auto-confirm) and the PWA's manual walk-in entry
+    call into this - neither talks to persistence directly for this
+    decision, and neither re-implements the past-elapsed-geh check or the
+    alternatives computation independently. No money/payment: machi is
+    booked with no amount recorded in this redesign.
+    """
+    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+    if geh in free:
+        try:
+            machi = await create_machi_request(
+                db,
+                agyary,
+                customer,
+                roj=roj,
+                mah=mah,
+                year=year,
+                geh=geh,
+                gregorian=gregorian,
+                purpose=purpose,
+                names=names,
+                amount=None,
+            )
+            # This function IS the auto-confirm decision - no approval gate
+            # follows, so the machi is booked, not merely requested.
+            machi.status = "confirmed"
+            await db.flush()
+            return MachiBookingResult(machi=machi, alternatives=None)
+        except SlotTakenError:
+            pass  # raced between the pre-check and the insert - fall through
+
+    alternatives = await compute_machi_alternatives(db, agyary, roj, mah, year, geh, gregorian)
+    return MachiBookingResult(machi=None, alternatives=alternatives)
+
+
+def _booking_parsi_anchor(agyary: Agyary, ceremony_dt_local: datetime) -> tuple[datetime, int, int, int]:
+    """Anchor a local ceremony datetime to IST and derive its Parsi day.
+
+    Shared by create and edit so the (sunrise-anchored) date derivation and
+    the IST coercion (audit finding G1) live in exactly one place. A naive
+    datetime (the PWA sends one) means IST local time, not server-local; a
+    pre-sunrise ceremony belongs to the PREVIOUS Parsi day.
+    """
+    local = ensure_ist(ceremony_dt_local)
+    anchor = local.date()
+    if local.time() < GEH_START_TIMES[1]:
+        anchor -= timedelta(days=1)
+    roj, mah, year = parsi_slot_fields(
+        gregorian_to_parsi(anchor, CalendarSystem(agyary.calendar_system))
+    )
+    return local, roj, mah, year
+
+
+async def replace_ceremony_names(
+    db: AsyncSession, names: list[dict], *, machi_id: int | None = None, booking_id: int | None = None
+) -> None:
+    """Snapshot a fresh set of names onto a ceremony, dropping the old set.
+    Used by the edit path (create attaches directly)."""
+    column = CeremonyName.machi_id if machi_id is not None else CeremonyName.booking_id
+    value = machi_id if machi_id is not None else booking_id
+    await db.execute(delete(CeremonyName).where(column == value))
+    for row in _attach_names(names, machi_id=machi_id, booking_id=booking_id):
+        db.add(row)
+    await db.flush()
+
+
 async def create_booking_request(
     db: AsyncSession,
     agyary: Agyary,
@@ -280,21 +469,13 @@ async def create_booking_request(
     is_offsite: bool,
     amount: Decimal | None,
 ) -> Booking:
-    local = ceremony_dt_local.astimezone(IST)
-    # The Parsi day starts at sunrise: a pre-sunrise ceremony (e.g. an
-    # overnight Vandidad ending at 2 AM) belongs to the PREVIOUS Parsi day.
-    anchor = local.date()
-    if local.time() < GEH_START_TIMES[1]:
-        anchor -= timedelta(days=1)
-    roj, mah, year = parsi_slot_fields(
-        gregorian_to_parsi(anchor, CalendarSystem(agyary.calendar_system))
-    )
+    local, roj, mah, year = _booking_parsi_anchor(agyary, ceremony_dt_local)
     booking = Booking(
         agyary_id=agyary.id,
         service_id=service.id,
         customer_id=customer.id,
-        date_time=ceremony_dt_local,
-        ceremony_datetime=ceremony_dt_local,
+        date_time=local,
+        ceremony_datetime=local,
         parsi_roj=roj,
         parsi_mah=mah,
         parsi_year=year,
@@ -310,6 +491,77 @@ async def create_booking_request(
         db.add(row)
     await ensure_agyary_customer(db, agyary.id, customer.id)
     await db.flush()
+    return booking
+
+
+async def rebook_machi_slot(
+    db: AsyncSession,
+    agyary: Agyary,
+    machi: Machi,
+    *,
+    roj: int,
+    mah: int,
+    year: int,
+    geh: int,
+    gregorian: date,
+    purpose: str,
+    names: list[dict],
+) -> MachiBookingResult:
+    """Edit an existing machi, re-validating the slot through the SAME core
+    primitives create uses (available_gehs + drop_elapsed_gehs + the partial
+    unique index) - never a second slot-check path. If the day/geh actually
+    changed and the new slot is taken (or elapsed), returns alternatives and
+    leaves the machi untouched; an unchanged slot (name/purpose-only edit)
+    skips the re-check entirely so it can't collide with itself."""
+    if (roj, mah, year, geh) != (machi.parsi_roj, machi.parsi_mah, machi.parsi_year, machi.geh):
+        free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+        if geh not in free:
+            return MachiBookingResult(
+                machi=None,
+                alternatives=await compute_machi_alternatives(db, agyary, roj, mah, year, geh, gregorian),
+            )
+        try:
+            async with db.begin_nested():
+                machi.parsi_roj, machi.parsi_mah, machi.parsi_year = roj, mah, year
+                machi.geh = geh
+                machi.gregorian_date = gregorian
+                machi.ceremony_datetime = machi_ceremony_datetime(gregorian, geh)
+                await db.flush()
+        except IntegrityError:  # raced onto a slot taken between check and write
+            return MachiBookingResult(
+                machi=None,
+                alternatives=await compute_machi_alternatives(db, agyary, roj, mah, year, geh, gregorian),
+            )
+    machi.purpose = purpose
+    await replace_ceremony_names(db, names, machi_id=machi.id)
+    return MachiBookingResult(machi=machi, alternatives=None)
+
+
+async def update_booking(
+    db: AsyncSession,
+    agyary: Agyary,
+    booking: Booking,
+    service: Service,
+    *,
+    ceremony_dt_local: datetime,
+    purpose: str,
+    names: list[dict],
+    location: str | None,
+    is_offsite: bool,
+) -> Booking:
+    """Edit a booking's details in place (time-based, no slot uniqueness).
+    Re-derives the Parsi day via the shared anchor helper and re-snapshots
+    names. The caller recomputes the (non-blocking) calendar-conflict flag."""
+    local, roj, mah, year = _booking_parsi_anchor(agyary, ceremony_dt_local)
+    booking.service_id = service.id
+    booking.date_time = local
+    booking.ceremony_datetime = local
+    booking.parsi_roj, booking.parsi_mah, booking.parsi_year = roj, mah, year
+    booking.purpose = purpose
+    booking.location = location
+    booking.is_offsite = is_offsite
+    await db.flush()
+    await replace_ceremony_names(db, names, booking_id=booking.id)
     return booking
 
 

@@ -3,14 +3,18 @@ signature enforcement, message/status handling, and dedup."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
 
 from sqlalchemy import select
 
-from agyary.core.config import get_settings
+from agyary.core.config import Settings, get_settings
+from agyary.messaging import wa_flows
+from agyary.messaging.wa_flows_crypto import flip_iv
 from agyary.models import Agyary, WhatsAppMessage
+from tests.test_wa_flows_crypto import build_meta_style_request, generate_test_keypair
 
 PHONE_NUMBER_ID = "PNID_TEST_123"
 
@@ -73,6 +77,40 @@ def interactive_message_payload(
                                     "from": from_phone,
                                     "type": "interactive",
                                     "interactive": {kind: {"id": reply_id, "title": "n/a"}},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+
+def nfm_reply_payload(
+    phone_number_id: str, from_phone: str, wa_message_id: str, response: dict
+) -> dict:
+    """A completed WhatsApp Flow's inbound webhook shape: the submitted
+    fields arrive as a JSON string in response_json, not as a plain id."""
+    return {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": phone_number_id},
+                            "messages": [
+                                {
+                                    "id": wa_message_id,
+                                    "from": from_phone,
+                                    "type": "interactive",
+                                    "interactive": {
+                                        "nfm_reply": {
+                                            "response_json": json.dumps(response),
+                                            "body": "Sent",
+                                            "name": "flow",
+                                        }
+                                    },
                                 }
                             ],
                         }
@@ -270,3 +308,152 @@ async def test_statuses_payload_updates_row_without_calling_handler(client, db, 
 
     await db.refresh(row)
     assert row.status == "delivered"
+
+
+async def test_nfm_reply_routes_the_completed_flows_single_field_value(
+    client, db, seeded, monkeypatch
+):
+    """A completed Flow's nfm_reply must reach handle_message as the same
+    kind of routable text a button/list reply would produce - no parallel
+    input-handling path in the conversation-flow layer."""
+    from agyary.api.routes import whatsapp as whatsapp_routes
+
+    await _set_phone_number_id(db, seeded["agyary_id"], PHONE_NUMBER_ID)
+    phone = "+919900077010"
+
+    captured = []
+    real_handle = whatsapp_routes.handle_message_with_outbox_ids
+
+    async def capturing_wrapper(db_, agyary_id, phone_number, text, **kwargs):
+        captured.append(text)
+        return await real_handle(db_, agyary_id, phone_number, text, **kwargs)
+
+    monkeypatch.setattr(whatsapp_routes, "handle_message_with_outbox_ids", capturing_wrapper)
+
+    r = await post_webhook(
+        client,
+        nfm_reply_payload(PHONE_NUMBER_ID, phone, "wamid.NFM1", {"roj": "roj_2"}),
+    )
+    assert r.status_code == 200
+    assert captured == ["roj_2"]
+
+
+class _FlowsSettings(Settings):
+    whatsapp_flows_private_key_pem: str = ""
+
+
+async def _post_flow_request(client, private_key, payload: dict):
+    body, aes_key, iv = build_meta_style_request(private_key.public_key(), payload)
+    raw_body = json.dumps(body).encode()
+    r = await client.post(
+        "/webhooks/whatsapp/flows/data-exchange",
+        content=raw_body,
+        headers={"x-hub-signature-256": _sign(raw_body), "content-type": "application/json"},
+    )
+    return r, aes_key, iv
+
+
+def _decrypt_flow_response(r, aes_key: bytes, request_iv: bytes) -> dict:
+    encrypted = r.text
+    response_bytes = base64.b64decode(encrypted)
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    plaintext = AESGCM(aes_key).decrypt(flip_iv(request_iv), response_bytes, None)
+    return json.loads(plaintext)
+
+
+async def test_flows_data_exchange_ping_returns_active(client, monkeypatch):
+    from agyary.api.routes import whatsapp as whatsapp_routes
+
+    pem, private_key = generate_test_keypair()
+    monkeypatch.setattr(
+        whatsapp_routes,
+        "get_settings",
+        lambda: _FlowsSettings(whatsapp_flows_private_key_pem=pem.decode()),
+    )
+
+    r, aes_key, iv = await _post_flow_request(
+        client, private_key, {"action": "ping", "version": "3.0"}
+    )
+    assert r.status_code == 200
+    assert _decrypt_flow_response(r, aes_key, iv) == {"data": {"status": "active"}}
+
+
+async def test_flows_data_exchange_priest_picker_returns_active_agyary_users(
+    client, db, seeded, monkeypatch
+):
+    from agyary.api.routes import whatsapp as whatsapp_routes
+
+    pem, private_key = generate_test_keypair()
+    monkeypatch.setattr(
+        whatsapp_routes,
+        "get_settings",
+        lambda: _FlowsSettings(whatsapp_flows_private_key_pem=pem.decode()),
+    )
+
+    token = wa_flows.make_flow_token(wa_flows.PURPOSE_PRIEST_PICKER, seeded["agyary_id"])
+    r, aes_key, iv = await _post_flow_request(
+        client, private_key, {"action": "data_exchange", "screen": "PICK_PRIEST", "flow_token": token, "data": {}}
+    )
+    assert r.status_code == 200
+    response = _decrypt_flow_response(r, aes_key, iv)
+    titles = {row["title"] for row in response["data"]["options"]}
+    assert titles == {"Er. Hormuz Dadachanji", "Er. Pervez Kias"}
+
+
+async def test_flows_data_exchange_services_picker_excludes_machi(
+    client, db, seeded, monkeypatch
+):
+    from agyary.api.routes import whatsapp as whatsapp_routes
+
+    pem, private_key = generate_test_keypair()
+    monkeypatch.setattr(
+        whatsapp_routes,
+        "get_settings",
+        lambda: _FlowsSettings(whatsapp_flows_private_key_pem=pem.decode()),
+    )
+
+    token = wa_flows.make_flow_token(wa_flows.PURPOSE_SERVICES_PICKER, seeded["agyary_id"])
+    r, aes_key, iv = await _post_flow_request(
+        client, private_key, {"action": "data_exchange", "screen": "PICK_SERVICE", "flow_token": token, "data": {}}
+    )
+    assert r.status_code == 200
+    response = _decrypt_flow_response(r, aes_key, iv)
+    titles = {row["title"] for row in response["data"]["options"]}
+    assert "Machi" not in titles
+    assert "Jashan" in titles
+
+
+async def test_flows_data_exchange_undecryptable_request_returns_421(client, monkeypatch):
+    from agyary.api.routes import whatsapp as whatsapp_routes
+
+    pem, _private_key = generate_test_keypair()
+    monkeypatch.setattr(
+        whatsapp_routes,
+        "get_settings",
+        lambda: _FlowsSettings(whatsapp_flows_private_key_pem=pem.decode()),
+    )
+
+    raw_body = json.dumps(
+        {
+            "encrypted_flow_data": base64.b64encode(b"garbage").decode(),
+            "encrypted_aes_key": base64.b64encode(b"also garbage").decode(),
+            "initial_vector": base64.b64encode(b"0123456789abcdef").decode(),
+        }
+    ).encode()
+    r = await client.post(
+        "/webhooks/whatsapp/flows/data-exchange",
+        content=raw_body,
+        headers={"x-hub-signature-256": _sign(raw_body), "content-type": "application/json"},
+    )
+    assert r.status_code == 421
+
+
+async def test_flows_data_exchange_invalid_signature_returns_401(client):
+    raw_body = json.dumps({"encrypted_flow_data": "x", "encrypted_aes_key": "y", "initial_vector": "z"}).encode()
+    r = await client.post(
+        "/webhooks/whatsapp/flows/data-exchange",
+        content=raw_body,
+        headers={"x-hub-signature-256": "sha256=" + "0" * 64},
+    )
+    assert r.status_code == 401

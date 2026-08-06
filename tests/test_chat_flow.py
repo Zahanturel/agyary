@@ -6,7 +6,14 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from agyary.messaging import handle_message
-from agyary.models import Booking, CeremonyName, ConversationState, CustomerSavedName, Machi, Payment
+from agyary.models import (
+    Booking,
+    BookingMobed,
+    CeremonyName,
+    ConversationState,
+    CustomerSavedName,
+    Machi,
+)
 
 CUSTOMER = "+919900011111"
 
@@ -29,11 +36,19 @@ def all_row_ids(message):
 
 
 async def book_patet_machi(db, seeded, phone=CUSTOMER):
-    """Menu -> patet machi on Roj Bahman Mah Fravardin, Havan geh -> confirm."""
+    """Menu -> patet machi on Roj Bahman Mah Fravardin, Havan geh -> confirm.
+
+    'Which Geh' is now a WhatsApp Flow prompt, not a list message - but
+    handle_message is transport-agnostic, so sending 'geh_1' as raw text is
+    exactly what a completed Flow's nfm_reply routes to (see
+    _extract_flow_reply in api/routes/whatsapp.py), and this helper is
+    unaffected by the module 3 rewrite.
+    """
     await send(db, seeded, "book_machi", phone)
     await send(db, seeded, "purpose_patet", phone)
     replies = await send(db, seeded, "Roj Bahman Mah Fravardin", phone)
     assert "Which Geh" in replies[0].text
+    assert replies[0].flow is not None  # static Geh Flow, not a list message
     replies = await send(db, seeded, "geh_1", phone)
     assert "departed pair" in replies[0].text
     replies = await send(db, seeded, "Er. Kaikhushru, Er. Hormazd", phone)
@@ -41,24 +56,32 @@ async def book_patet_machi(db, seeded, phone=CUSTOMER):
     return await send(db, seeded, "confirm_booking", phone)
 
 
-async def test_full_patet_flow_with_approval(db, seeded):
+async def test_full_patet_flow_auto_confirms(db, seeded):
+    """Machi is fully automatic (redesign v3): no approval gate, no money,
+    a single confirmation message, and an FYI (not action-required) message
+    to every active agyary member - not just ADMIN_ROLES, since a
+    peer-mobed agyari has none."""
     await onboard(db, seeded)
     replies = await book_patet_machi(db, seeded)
 
-    # Customer ack + panthaky approval request.
-    assert "has been sent" in replies[0].text
-    admin_msgs = [r for r in replies if r.to == seeded["panthaky_phone"]]
-    assert len(admin_msgs) == 1
-    approve_id = admin_msgs[0].buttons[0].id
-    assert approve_id.startswith("approve_machi_")
+    customer_msgs = [r for r in replies if r.to == CUSTOMER]
+    assert len(customer_msgs) == 1
+    assert "confirmed" in customer_msgs[0].text
+    assert "hear back" not in customer_msgs[0].text
+    assert "upi" not in customer_msgs[0].text.casefold()
+    assert not customer_msgs[0].buttons  # no approve/decline gate
+
+    fyi_msgs = [r for r in replies if r.to != CUSTOMER]
+    assert {r.to for r in fyi_msgs} == {seeded["panthaky_phone"], seeded["mobed_phone"]}
+    assert all(not r.buttons for r in fyi_msgs)  # informational only, no action
 
     machi = (await db.execute(select(Machi))).scalar_one()
-    assert machi.status == "requested"
+    assert machi.status == "confirmed"
     assert machi.purpose == "patet"
     assert (machi.parsi_roj, machi.parsi_mah) == (2, 1)
     assert machi.geh == 1
     assert machi.ceremony_datetime is not None
-    assert str(machi.amount) in ("300", "300.00")
+    assert machi.amount is None  # no money in this pass
 
     # Names snapshotted: one departed pair in the 'pair' section.
     names = (await db.execute(select(CeremonyName))).scalars().all()
@@ -71,48 +94,24 @@ async def test_full_patet_flow_with_approval(db, seeded):
     pool = (await db.execute(select(CustomerSavedName))).scalars().all()
     assert len(pool) == 2 and all(r.section == "pair" for r in pool)
 
-    # Panthaky approves -> customer confirmation + payment row with UPI link.
-    replies = await send(db, seeded, approve_id, phone=seeded["panthaky_phone"])
-    assert any("Approved" in r.text for r in replies if r.to == seeded["panthaky_phone"])
-    customer_msgs = [r for r in replies if r.to == CUSTOMER]
-    assert len(customer_msgs) == 1 and "confirmed" in customer_msgs[0].text
-    assert "upi://pay?" in customer_msgs[0].text
-
-    await db.refresh(machi)
-    assert machi.status == "approved"
-    payment = (await db.execute(select(Payment))).scalar_one()
-    assert payment.machi_id == machi.id and payment.upi_intent_link
-
-
-async def test_non_admin_cannot_approve(db, seeded):
-    await onboard(db, seeded)
-    replies = await book_patet_machi(db, seeded)
-    approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
-
-    replies = await send(db, seeded, approve_id, phone=CUSTOMER)
-    assert "only the panthaky" in replies[0].text
-    machi = (await db.execute(select(Machi))).scalar_one()
-    assert machi.status == "requested"
-
 
 async def test_slot_conflict_offers_alternatives(db, seeded):
     await onboard(db, seeded)
-    replies = await book_patet_machi(db, seeded)
-    approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
-    await send(db, seeded, approve_id, phone=seeded["panthaky_phone"])
+    await book_patet_machi(db, seeded)  # auto-confirms Havan/geh_1, no approval step
 
-    # Second customer, same date: Havan (geh_1) must not be offered.
+    # Second customer, same date, insists on the now-taken geh directly
+    # (the Geh picker is a static Flow now - always all 5 options, not
+    # filtered to what's free - so the re-check that matters happens after
+    # selection, same as it always has for a Roj/Mah combo with zero free
+    # gehs left).
     other = "+919900022222"
     await onboard(db, seeded, name="Roshan Mistry", phone=other)
     await send(db, seeded, "book_machi", other)
     await send(db, seeded, "purpose_tandarosti", other)
     replies = await send(db, seeded, "Roj Bahman Mah Fravardin", other)
-    ids = all_row_ids(replies[0])
-    assert "geh_1" not in ids
-    assert {"geh_2", "geh_3", "geh_4", "geh_5"} <= set(ids)
+    assert replies[0].flow is not None
 
-    # Insisting on the taken geh by name -> alternatives list.
-    replies = await send(db, seeded, "Havan", other)
+    replies = await send(db, seeded, "geh_1", other)
     assert "is booked" in replies[0].text
     alt_ids = all_row_ids(replies[0])
     assert any(i.startswith("altslot_") for i in alt_ids)
@@ -145,9 +144,7 @@ async def test_tandarosti_accumulation_and_done(db, seeded):
 
 async def test_saved_names_reused_on_second_booking(db, seeded):
     await onboard(db, seeded)
-    replies = await book_patet_machi(db, seeded)
-    approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
-    await send(db, seeded, approve_id, phone=seeded["panthaky_phone"])
+    await book_patet_machi(db, seeded)  # auto-confirms
 
     # Second patet booking: saved pair should be offered, and reusing it
     # must snapshot onto the new machi.
@@ -168,10 +165,14 @@ async def test_saved_names_reused_on_second_booking(db, seeded):
 
 
 async def test_service_booking_full_flow(db, seeded):
+    """Services keep a human gate (unlike machi) - but it's now the
+    specifically-chosen priest, not any admin: 'choose who to book with'
+    (a dynamic Flow, seeded has 2 active members so it isn't auto-picked),
+    immediate two-way contact exchange, and only the chosen priest can
+    accept/decline."""
     await onboard(db, seeded)
     replies = await send(db, seeded, "book_service")
-    svc_ids = all_row_ids(replies[0])
-    assert svc_ids and all(i.startswith("svc_") for i in svc_ids)
+    assert replies[0].flow is not None  # services list is a dynamic Flow now
     await send(db, seeded, "Jashan")  # services also match by typed name
     replies = await send(db, seeded, "purpose_khushali_nu")
     assert "When would you like the Jashan" in replies[0].text
@@ -186,15 +187,23 @@ async def test_service_booking_full_flow(db, seeded):
     replies = await send(db, seeded, "Er. Zahan, Er. Meherzad\ndone")
     assert "Farmayeshne" in replies[0].text
     replies = await send(db, seeded, "Behdin Jaidev\ndone")
+    assert "book with" in replies[0].text.casefold()
+    assert replies[0].flow is not None  # priest picker is a dynamic Flow
+
+    replies = await send(db, seeded, "priest_2")  # the seeded mobed
     assert "booking summary" in replies[0].text
+    assert "Er. Pervez Kias" in replies[0].text  # contact shown at choice time
+
     replies = await send(db, seeded, "confirm_booking")
     assert "has been sent" in replies[0].text
+    assert seeded["mobed_phone"] in replies[0].text  # two-way contact exchange
 
     booking = (await db.execute(select(Booking))).scalar_one()
     assert booking.purpose == "khushali_nu"
     assert booking.is_offsite and "Marine Drive" in booking.location
     assert booking.ceremony_datetime == booking.date_time
     assert booking.status == "requested"
+    assert booking.amount is None  # no money in this pass
 
     names = (await db.execute(select(CeremonyName))).scalars().all()
     pair = [n for n in names if n.section == "pair"]
@@ -202,12 +211,23 @@ async def test_service_booking_full_flow(db, seeded):
     assert len(pair) == 2 and all(n.pair_group == 1 for n in pair)
     assert len(farm) == 1 and farm[0].status == "living"
 
-    # Approve via the booking button.
-    admin_replies = await send(db, seeded, f"approve_booking_{booking.id}",
-                               phone=seeded["panthaky_phone"])
-    assert any("confirmed" in r.text for r in admin_replies if r.to == CUSTOMER)
+    # Only the chosen priest (the mobed) can accept - not the panthaky,
+    # even though panthaky is still an ADMIN_ROLES member at this agyari.
+    request_msg = next(r for r in replies if r.to == seeded["mobed_phone"])
+    accept_id = next(b.id for b in request_msg.buttons if b.id.startswith("approve_booking_"))
+
+    rejected = await send(db, seeded, accept_id, phone=seeded["panthaky_phone"])
+    assert "not able to take that action" in rejected[0].text
+    await db.refresh(booking)
+    assert booking.status == "requested"
+
+    accept_replies = await send(db, seeded, accept_id, phone=seeded["mobed_phone"])
+    assert any("confirmed" in r.text for r in accept_replies if r.to == CUSTOMER)
     await db.refresh(booking)
     assert booking.status == "approved"
+
+    booking_mobed = (await db.execute(select(BookingMobed))).scalar_one()
+    assert booking_mobed.user_id == 2 and booking_mobed.status == "accepted"
 
 
 async def test_gujrela_pair_line_validation(db, seeded):
@@ -236,6 +256,8 @@ async def test_gujrela_pair_line_validation(db, seeded):
     replies = await send(db, seeded, "done")
     assert "Farmayeshne" in replies[0].text
     replies = await send(db, seeded, "Behdin Jaidev\ndone")
+    assert "book with" in replies[0].text.casefold()
+    replies = await send(db, seeded, "priest_1")
     assert "booking summary" in replies[0].text
 
 
@@ -260,6 +282,8 @@ async def test_pair_names_accumulate_across_messages(db, seeded):
     replies = await send(db, seeded, "done")
     assert "Farmayeshne" in replies[0].text
     replies = await send(db, seeded, "Behdin Jaidev\ndone")
+    assert "book with" in replies[0].text.casefold()
+    replies = await send(db, seeded, "priest_1")
     assert "booking summary" in replies[0].text
     await send(db, seeded, "confirm_booking")
 
@@ -289,9 +313,7 @@ async def test_hama_anjuman_skip_preserved(db, seeded):
 
 async def test_my_bookings_cancel_frees_slot(db, seeded):
     await onboard(db, seeded)
-    replies = await book_patet_machi(db, seeded)
-    approve_id = next(r for r in replies if r.to == seeded["panthaky_phone"]).buttons[0].id
-    await send(db, seeded, approve_id, phone=seeded["panthaky_phone"])
+    await book_patet_machi(db, seeded)  # auto-confirms, status="confirmed"
 
     replies = await send(db, seeded, "my_bookings")
     assert "1. Machi (Patet)" in replies[0].text
@@ -299,18 +321,23 @@ async def test_my_bookings_cancel_frees_slot(db, seeded):
     await send(db, seeded, "cancel_item")
     replies = await send(db, seeded, "confirm_cancel")
     assert "has been cancelled" in replies[0].text
-    assert any(r.to == seeded["panthaky_phone"] for r in replies)
+    # FYI to every active agyary member, not just ADMIN_ROLES.
+    assert {seeded["panthaky_phone"], seeded["mobed_phone"]} <= {r.to for r in replies}
 
     machi = (await db.execute(select(Machi))).scalar_one()
     assert machi.status == "cancelled"
 
-    # Slot is bookable again (partial unique index releases it).
+    # Slot is bookable again (partial unique index releases it): a second
+    # customer can now actually complete a booking on the same geh, not
+    # just see it offered (the Geh Flow always shows all 5 options
+    # regardless of availability - the real check happens on selection).
     other = "+919900022222"
     await onboard(db, seeded, name="Roshan Mistry", phone=other)
     await send(db, seeded, "book_machi", other)
     await send(db, seeded, "purpose_patet", other)
-    replies = await send(db, seeded, "Roj Bahman Mah Fravardin", other)
-    assert "geh_1" in all_row_ids(replies[0])
+    await send(db, seeded, "Roj Bahman Mah Fravardin", other)
+    replies = await send(db, seeded, "geh_1", other)
+    assert "departed pair" in replies[0].text  # proceeded to names, not "is booked"
 
 
 async def test_menu_reset_keyword(db, seeded):

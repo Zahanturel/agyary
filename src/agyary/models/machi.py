@@ -60,6 +60,11 @@ class Machi(Base):
 
     assigned_mobed_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
 
+    # Which mobed personally manually-entered this (PWA walk-in flow only -
+    # NULL for WhatsApp-originated machis). Basis for "my customers" search:
+    # a customer relationship belongs to the mobed, not the fire temple.
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
+
     status: Mapped[str] = mapped_column(String(20), server_default="requested")
 
     recurrence_rule_id: Mapped[int | None] = mapped_column(
@@ -123,6 +128,11 @@ class Machi(Base):
             "assigned_mobed_id",
             "gregorian_date",
             postgresql_where=text("assigned_mobed_id IS NOT NULL"),
+        ),
+        Index(
+            "idx_machis_created_by",
+            "created_by_user_id",
+            postgresql_where=text("created_by_user_id IS NOT NULL"),
         ),
         Index(
             "idx_machis_pending",

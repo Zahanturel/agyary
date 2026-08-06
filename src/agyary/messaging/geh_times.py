@@ -33,6 +33,14 @@ def to_ist(dt: datetime) -> datetime:
     return dt.astimezone(IST)
 
 
+def ensure_ist(dt: datetime) -> datetime:
+    """Anchor a local ceremony datetime to IST. A naive value (e.g. the PWA's
+    '2026-08-01T10:00:00') means 10:00 *IST* - so attach IST rather than let
+    it be reinterpreted in the server's own timezone (the bug audit finding
+    G1 fixed). An already-aware value is normalised to IST."""
+    return dt.replace(tzinfo=IST) if dt.tzinfo is None else dt.astimezone(IST)
+
+
 def machi_ceremony_datetime(gregorian_date: date, geh: int) -> datetime:
     """Physical start time of a machi anchored on the given Parsi-day date."""
     if geh not in GEH_START_TIMES:

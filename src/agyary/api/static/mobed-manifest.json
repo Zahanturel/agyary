@@ -1,0 +1,12 @@
+{
+  "name": "Agyary - Mobed",
+  "short_name": "Agyary",
+  "start_url": "/mobed",
+  "scope": "/mobed",
+  "display": "standalone",
+  "background_color": "#F7F8FA",
+  "theme_color": "#232A4D",
+  "icons": [
+    { "src": "/mobed-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

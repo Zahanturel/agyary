@@ -23,13 +23,14 @@ from agyary.models import Booking, Machi, Service
 
 FLOW = "my_bookings"
 
-ACTIVE_STATUSES = ("requested", "approved", "assigned", "mobed_declined")
+ACTIVE_STATUSES = ("requested", "approved", "assigned", "mobed_declined", "confirmed")
 
 STATUS_DISPLAY = {
     "requested": "Awaiting confirmation",
     "approved": "Confirmed",
     "assigned": "Confirmed",
     "mobed_declined": "Confirmed",
+    "confirmed": "Confirmed",  # auto-booked machi (redesign v3) - never "requested"
 }
 
 
@@ -233,10 +234,14 @@ async def _step_confirm_cancel(ctx: FlowContext) -> list[OutgoingMessage]:
             "If you'd like to rebook, just send us a message anytime."
         )
     ]
-    for admin in await booking_service.get_admins(ctx.db, ctx.agyary.id):
+    # Every active member, not just ADMIN_ROLES - a peer-mobed agyari has
+    # no panthaky/caretaker to notify, and get_admins() would silently
+    # return nobody there (the same class of bug this redesign exists to
+    # fix, not just for machi's booking path).
+    for member in await booking_service.get_active_agyary_users(ctx.db, ctx.agyary.id):
         messages.append(
             OutgoingMessage(
-                to=admin.phone,
+                to=member.phone,
                 text=(
                     f"Cancellation at {ctx.agyary.name}:\n\n"
                     f"{ctx.customer.name} ({ctx.customer.phone}) cancelled:\n"

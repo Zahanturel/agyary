@@ -5,6 +5,13 @@ Each test gets a clean schema (truncate-all) and a seeded demo agyary.
 
 from __future__ import annotations
 
+import os
+
+# The mobed auth layer signs JWTs with jwt_secret_key; the repo ships it empty.
+# Set a test value before any get_settings() call so the suite runs green under
+# a plain `uv run pytest` (an OS env var overrides the empty .env entry).
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -49,6 +56,20 @@ async def seeded(db):
         "panthaky_phone": "+919800000001",
         "mobed_phone": "+919800000002",
     }
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The login rate limiter (api/rate_limit.py) keeps its counters in a
+    module-level dict, keyed by client IP - every test hits it from the
+    same in-process ASGI transport, so without a reset here, the third or
+    fourth test to log in would 429 the rest of the suite. Real deployments
+    have real distinct client IPs; this is purely a test-isolation fix."""
+    from agyary.api import rate_limit
+
+    rate_limit._hits.clear()
+    yield
+    rate_limit._hits.clear()
 
 
 @pytest.fixture

@@ -12,28 +12,24 @@ Name sections per v2: 'pair' names adapted by purpose, then 'farmayeshne'
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from decimal import Decimal
 
-from agyary.messaging import booking_service
+from agyary.core.config import get_settings
+from agyary.messaging import booking_service, wa_flows
 from agyary.messaging.date_parser import parse_time_input
 from agyary.messaging.flows import date_steps
-from agyary.messaging.flows.base import (
-    FlowContext,
-    chunk_rows,
-    matched_option,
-    split_done_lines,
-)
+from agyary.messaging.flows.base import FlowContext, matched_option, split_done_lines
 from agyary.messaging.formatting import (
     PURPOSE_DISPLAY,
     PURPOSE_SHORT,
     date_label,
     name_line,
     names_block,
-    rupees,
 )
 from agyary.messaging.geh_times import IST
+from agyary.messaging.mobed_calendar import has_calendar_conflict
 from agyary.messaging.name_parser import parse_names, parse_pair_line
-from agyary.messaging.types import Button, ListRow, OutgoingMessage
+from agyary.messaging.types import Button, FlowPrompt, OutgoingMessage
+from agyary.models import BookingMobed, User
 
 FLOW = "service_booking"
 
@@ -89,12 +85,18 @@ async def start(ctx: FlowContext, prefill: dict | None = None) -> list[OutgoingM
     if not services:
         await ctx.clear_state()
         return [ctx.reply("No services are configured yet. Please contact the agyary.")]
-    rows = [ListRow(id=f"svc_{s.id}", title=s.name[:24]) for s in services]
     await ctx.set_state(FLOW, "select_service", data)
+    settings = get_settings()
     return [
         ctx.reply(
             "Which service would you like to book?",
-            sections=chunk_rows(rows, "Services"),
+            flow=FlowPrompt(
+                flow_id=settings.whatsapp_flow_id_services_picker,
+                flow_token=wa_flows.make_flow_token(wa_flows.PURPOSE_SERVICES_PICKER, ctx.agyary.id),
+                flow_cta="Choose",
+                screen="PICK_SERVICE",
+                data={},
+            ),
         )
     ]
 
@@ -121,6 +123,7 @@ async def handle(ctx: FlowContext) -> list[OutgoingMessage]:
         "enter_pair_names": _step_enter_pair_names,
         "offer_saved_farmayeshne": _step_offer_saved_farmayeshne,
         "enter_farmayeshne": _step_enter_farmayeshne,
+        "select_priest": _step_select_priest,
         "confirm": _step_confirm,
     }
     handler = handlers.get(ctx.state.step)
@@ -324,7 +327,7 @@ async def _step_enter_location(ctx: FlowContext) -> list[OutgoingMessage]:
 # ---------------------------------------------------------------------------
 async def _begin_pair_phase(ctx: FlowContext, data: dict) -> list[OutgoingMessage]:
     if data.get("names"):  # rebook prefill: both sections already captured
-        return await _show_confirmation(ctx, data)
+        return await _begin_priest_phase(ctx, data)
 
     if data["purpose"] in ("gujrela_nu", "khushali_nu"):
         pairs = booking_service.complete_pairs(
@@ -566,6 +569,64 @@ async def _step_enter_farmayeshne(ctx: FlowContext) -> list[OutgoingMessage]:
 
 async def _finalize_names(ctx: FlowContext, data: dict) -> list[OutgoingMessage]:
     data["names"] = data.get("pair_names", []) + data.get("farmayeshne_names", [])
+    return await _begin_priest_phase(ctx, data)
+
+
+# ---------------------------------------------------------------------------
+# Choose who to book with
+# ---------------------------------------------------------------------------
+async def _begin_priest_phase(ctx: FlowContext, data: dict) -> list[OutgoingMessage]:
+    """"Choose who to book with" - shown by name only, never the word
+    "mobed" (a mobed's wife or someone else may be running the account;
+    doc 05 - this applies to every customer-facing string, not just this
+    screen)."""
+    priests = await booking_service.get_active_agyary_users(ctx.db, ctx.agyary.id)
+    if not priests:
+        # Not-yet-staffed agyari: nobody to route the request to. The
+        # booking still goes through - the system never blocks the behdin
+        # at input time - but no one will see an accept/decline prompt
+        # until someone joins. A genuine bootstrapping edge case, not
+        # solved here (out of scope for this redesign).
+        data.pop("chosen_priest_id", None)
+        return await _show_confirmation(ctx, data)
+    if len(priests) == 1:
+        # Don't make the single-priest agyari pick from a list of one.
+        only = priests[0]
+        data["chosen_priest_id"] = only.id
+        data["chosen_priest_name"] = only.name
+        data["chosen_priest_phone"] = only.phone
+        return await _show_confirmation(ctx, data)
+    await ctx.set_state(FLOW, "select_priest", data)
+    settings = get_settings()
+    return [
+        ctx.reply(
+            "Who would you like to book with?",
+            flow=FlowPrompt(
+                flow_id=settings.whatsapp_flow_id_priest_picker,
+                flow_token=wa_flows.make_flow_token(wa_flows.PURPOSE_PRIEST_PICKER, ctx.agyary.id),
+                flow_cta="Choose",
+                screen="PICK_PRIEST",
+                data={},
+            ),
+        )
+    ]
+
+
+async def _step_select_priest(ctx: FlowContext) -> list[OutgoingMessage]:
+    data = ctx.data
+    text = ctx.text.strip().casefold()
+    priest_id = None
+    if text.startswith("priest_"):
+        try:
+            priest_id = int(text.removeprefix("priest_"))
+        except ValueError:
+            priest_id = None
+    priest = await ctx.db.get(User, priest_id) if priest_id is not None else None
+    if priest is None or not priest.is_active:
+        return [ctx.reply("Please choose from the list.")]
+    data["chosen_priest_id"] = priest.id
+    data["chosen_priest_name"] = priest.name
+    data["chosen_priest_phone"] = priest.phone
     return await _show_confirmation(ctx, data)
 
 
@@ -585,8 +646,12 @@ async def _show_confirmation(ctx: FlowContext, data: dict) -> list[OutgoingMessa
         "Names:",
         names_block(data["names"]),
     ]
-    if data.get("default_price"):
-        lines += ["", f"Amount: {rupees(data['default_price'])}"]
+    if data.get("chosen_priest_name"):
+        lines += [
+            "",
+            f"You'll be booking with {data['chosen_priest_name']} "
+            f"({data['chosen_priest_phone']}).",
+        ]
     await ctx.set_state(FLOW, "confirm", data)
     return [
         ctx.reply(
@@ -643,8 +708,8 @@ async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
     gregorian = date.fromisoformat(data["gregorian"])
     hour, minute = (int(p) for p in data["time"].split(":"))
     ceremony_dt = datetime.combine(gregorian, time(hour, minute), tzinfo=IST)
-    amount = Decimal(data["default_price"]) if data.get("default_price") else None
 
+    # No money/payment in this pass (doc 05).
     booking = await booking_service.create_booking_request(
         ctx.db,
         ctx.agyary,
@@ -655,7 +720,7 @@ async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
         names=data["names"],
         location=data.get("location"),
         is_offsite=bool(data.get("is_offsite")),
-        amount=amount,
+        amount=None,
     )
 
     if data.get("pair_names") and not data.get("pairs_from_saved"):
@@ -667,31 +732,51 @@ async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
             ctx.db, ctx.customer.id, "farmayeshne", data["farmayeshne_names"]
         )
 
+    # The chosen priest's own calendar is checked here, once the booking
+    # exists (so we have a ceremony_datetime) but before clearing state -
+    # never blocks creation, only flags the priest's own notification.
+    priest_id = data.get("chosen_priest_id")
+    conflict = False
+    if priest_id is not None:
+        ctx.db.add(BookingMobed(booking_id=booking.id, user_id=priest_id, status="assigned"))
+        await ctx.db.flush()
+        conflict = await has_calendar_conflict(ctx.db, priest_id, booking.ceremony_datetime)
+
     await ctx.clear_state()
 
-    messages = [
-        ctx.reply(
-            f"Your {service.name} request has been sent to {ctx.agyary.name}.\n"
-            "You'll hear back shortly."
+    # Contact info both directions: the priest's notification below already
+    # carries the customer's number; the customer gets the priest's number
+    # right here, in the same message that confirms the request was sent.
+    customer_lines = [f"Your {service.name} request has been sent to {ctx.agyary.name}."]
+    if data.get("chosen_priest_name"):
+        customer_lines.append(
+            f"You can reach {data['chosen_priest_name']} directly at "
+            f"{data['chosen_priest_phone']}."
         )
-    ]
-    admin_lines = [
-        f"New {service.name} request at {ctx.agyary.name}:",
-        "",
-        f"Customer: {ctx.customer.name} ({ctx.customer.phone})",
-        f"Purpose: {PURPOSE_SHORT[data['purpose']]}",
-        f"{date_label(data['roj'], data['mah'], gregorian)}, {_time_display(data['time'])}",
-    ]
-    if data.get("is_offsite"):
-        admin_lines.append(f"Location: {data['location']}")
-    admin_lines += ["", "Names:", names_block(data["names"])]
-    for admin in await booking_service.get_admins(ctx.db, ctx.agyary.id):
+    messages = [ctx.reply("\n".join(customer_lines))]
+
+    if priest_id is not None:
+        priest_lines = [
+            f"New {service.name} request at {ctx.agyary.name}:",
+            "",
+            f"Customer: {ctx.customer.name} ({ctx.customer.phone})",
+            f"Purpose: {PURPOSE_SHORT[data['purpose']]}",
+            f"{date_label(data['roj'], data['mah'], gregorian)}, {_time_display(data['time'])}",
+        ]
+        if data.get("is_offsite"):
+            priest_lines.append(f"Location: {data['location']}")
+        priest_lines += ["", "Names:", names_block(data["names"])]
+        if conflict:
+            priest_lines += [
+                "",
+                "Note: you already have something at this time - please check the app.",
+            ]
         messages.append(
             OutgoingMessage(
-                to=admin.phone,
-                text="\n".join(admin_lines),
+                to=data["chosen_priest_phone"],
+                text="\n".join(priest_lines),
                 buttons=[
-                    Button(id=f"approve_booking_{booking.id}", title="Approve"),
+                    Button(id=f"approve_booking_{booking.id}", title="Accept"),
                     Button(id=f"decline_booking_{booking.id}", title="Decline"),
                 ],
             )

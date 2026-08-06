@@ -1,0 +1,44 @@
+<mxfile host="app.diagrams.net" type="device">
+<diagram id="07-mobed-dashboard" name="7. Mobed dashboard  (My Day · Machi Board · Manual add)">
+<mxGraphModel dx="1000" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="title_07-mobed-dashboard" value="7. Mobed dashboard  (My Day · Machi Board · Manual add)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="900" height="30" as="geometry"/></mxCell>
+<mxCell id="n1" value="Authenticated mobed shell" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="560" y="80" width="240" height="50" as="geometry"/></mxCell>
+<mxCell id="n2" value="Which tab?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="590" y="180" width="180" height="90" as="geometry"/></mxCell>
+<mxCell id="n3" value="list pending (assigned) + accepted
+bookings across ALL agyaries" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="120" y="330" width="240" height="60" as="geometry"/></mxCell>
+<mxCell id="n4" value="Any?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="180" y="430" width="140" height="70" as="geometry"/></mxCell>
+<mxCell id="n5" value="&#x27;Nothing on your calendar&#x27;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="60" y="550" width="220" height="50" as="geometry"/></mxCell>
+<mxCell id="n6" value="Cards: accept/decline (Flow 6),
+View slip (Flow 9)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="300" y="550" width="240" height="60" as="geometry"/></mxCell>
+<mxCell id="n7" value="list machis for CURRENT agyari
+(shared, per-agyari)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="620" y="330" width="240" height="60" as="geometry"/></mxCell>
+<mxCell id="n8" value="Cards / empty → View slip (Flow 9)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="620" y="450" width="240" height="50" as="geometry"/></mxCell>
+<mxCell id="n9" value="Machi or
+service?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="1050" y="330" width="180" height="90" as="geometry"/></mxCell>
+<mxCell id="n10" value="Machi form: roj/mah/geh/date/
+purpose/names → manual_add_machi" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="980" y="460" width="280" height="60" as="geometry"/></mxCell>
+<mxCell id="n11" value="Service form: service/date/time/
+names → manual_add_booking" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="980" y="560" width="280" height="60" as="geometry"/></mxCell>
+<mxCell id="e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e13" value="My Day" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e14" value="Machi Board" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n2" target="n7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e15" value="Add" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n2" target="n9"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n3" target="n4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e17" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e18" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e19" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e20" value="Machi" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n9" target="n10"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e21" value="Service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n9" target="n11"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n22" value="FINDING G1 (High, VERIFIED). manual_add_booking sends a NAIVE datetime. (a) It is stored into a timestamptz column via the server&#x27;s local tz — a 10:00 walk-in came back as 07:30 IST on this box; on a UTC server it would read 15:30. Every manual service booking shows the wrong time on My Day and the slip. (b) has_calendar_conflict then compares naive vs tz-aware and raises TypeError → 500 on the 2nd overlapping booking. The existing test hides this by reusing one session; a fresh session reproduces the crash." style="shape=note;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="520" y="630" width="360" height="220" as="geometry"/></mxCell>
+<mxCell id="e23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n11" target="n22"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n24" value="FINDING G2 (Med). The Add form hardcodes every name as section=&#x27;pair&#x27;, status=&#x27;living&#x27;, and service purpose as &#x27;khushali_nu&#x27;. A manually-added Patet machi records its DEPARTED pair as &#x27;living&#x27;; farmayeshne and real purpose are never captured. Doc 07 says closed-vocab fields (purpose) must be selectable — here purpose isn&#x27;t even offered." style="shape=note;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="120" y="630" width="340" height="180" as="geometry"/></mxCell>
+<mxCell id="e25" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#b85450;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n24"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="n26" value="Multi-agyari: My Day merges all agyaries (good); Machi Board is per-agyari via the switcher. But the switcher only lists ALREADY-joined agyaries — no &#x27;join another&#x27; action (see Finding D1, Flow 2)." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="980" y="320" width="300" height="110" as="geometry"/></mxCell>
+<mxCell id="e27" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#d6b656;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" edge="1" parent="1" source="n2" target="n26"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

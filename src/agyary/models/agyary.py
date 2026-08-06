@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
-from agyary.models.enums import BEHDIN_LANGUAGES, CALENDAR_SYSTEMS, sql_in
+from agyary.models.enums import AGYARY_STATUSES, BEHDIN_LANGUAGES, CALENDAR_SYSTEMS, sql_in
 
 
 class Agyary(Base):
@@ -42,6 +42,13 @@ class Agyary(Base):
     require_mobed_acceptance: Mapped[bool] = mapped_column(Boolean, server_default="false")
     behdin_language: Mapped[str] = mapped_column(String(10), server_default="en")
 
+    # Lifecycle: 'unclaimed' seed entry vs 'active' (set up by a real mobed).
+    status: Mapped[str] = mapped_column(String(20), server_default="active")
+    # WhatsApp behdin self-service toggle (parked feature). Schema-only for
+    # now: nothing reads or writes it this pass - added here to avoid a second
+    # agyari migration when that work lands.
+    auto_booking_enabled: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -51,6 +58,7 @@ class Agyary(Base):
     __table_args__ = (
         CheckConstraint(f"calendar_system IN ({sql_in(CALENDAR_SYSTEMS)})", name="calendar_system"),
         CheckConstraint(f"behdin_language IN ({sql_in(BEHDIN_LANGUAGES)})", name="behdin_language"),
+        CheckConstraint(f"status IN ({sql_in(AGYARY_STATUSES)})", name="status"),
         Index(
             "uq_agyaries_wa_phone_number_id",
             "wa_phone_number_id",
@@ -58,4 +66,10 @@ class Agyary(Base):
             postgresql_where=text("wa_phone_number_id IS NOT NULL"),
         ),
         Index("idx_agyaries_city", "city"),
+        Index(
+            "idx_agyaries_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
     )

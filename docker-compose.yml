@@ -2,12 +2,13 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    # No host port mapping on purpose - the app reaches this over the
+    # internal Docker network DSN below; Postgres must never be reachable
+    # from outside the host, especially not with the default dev creds.
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-agyary}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agyary}
       POSTGRES_DB: ${POSTGRES_DB:-agyary}
-    ports:
-      - "5432:5432"
     volumes:
       - agyary_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,8 +25,11 @@ services:
     environment:
       # Always the in-network DSN; must not inherit a localhost DSN from .env
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agyary}:${POSTGRES_PASSWORD:-agyary}@db:5432/${POSTGRES_DB:-agyary}
-    ports:
-      - "8000:8000"
+    # No host port mapping - cloudflared reaches this over the internal
+    # Docker network (service URL app:8000 in the tunnel's public hostname
+    # config), and that's the only path in production. Publishing 8000 on
+    # the host would let anyone bypass Cloudflare's TLS/DDoS protection
+    # entirely and hit the app over plain HTTP directly.
     depends_on:
       db:
         condition: service_healthy

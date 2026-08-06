@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#232A4D">
+<title>Agyary - Mobed</title>
+<link rel="manifest" href="/mobed-manifest.json">
+<link rel="preload" href="/mobed-fonts/geist-sans.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face {
+    font-family: "Geist Sans";
+    src: url("/mobed-fonts/geist-sans.woff2") format("woff2-variations"),
+         url("/mobed-fonts/geist-sans.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("/mobed-fonts/geist-mono.woff2") format("woff2-variations"),
+         url("/mobed-fonts/geist-mono.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  :root {
+    /* Neutral scale */
+    --ink-900:#171923; --ink-700:#3D4354; --ink-400:#8B92A3;
+    --ink-200:#DDE1E8; --ink-100:#EEF1F5; --ink-50:#F7F8FA;
+    /* Primary - deep indigo/charcoal */
+    --indigo-700:#232A4D; --indigo-600:#333C6B; --indigo-100:#E7E9F5;
+    /* Accent - warm amber, echoes the flame in the app icon */
+    --amber-600:#B8790E; --amber-500:#E0973A; --amber-100:#FFF1D9;
+    /* Semantic status */
+    --success-600:#1F8A4C; --success-100:#E4F5EA;
+    --danger-600:#C4362B; --danger-100:#FBE7E5;
+
+    /* Semantic aliases - components below reference these, not the raw scale */
+    --bg: var(--ink-50); --surface:#ffffff; --border: var(--ink-200);
+    --text: var(--ink-900); --muted: var(--ink-400);
+    --primary: var(--indigo-700); --primary-strong: var(--indigo-600); --primary-tint: var(--indigo-100);
+    --accent: var(--amber-500); --accent-text: var(--amber-600); --accent-tint: var(--amber-100);
+    --success: var(--success-600); --success-tint: var(--success-100);
+    --danger: var(--danger-600); --danger-tint: var(--danger-100);
+
+    --font-sans: "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Geist Mono", "SFMono-Regular", Consolas, monospace;
+    --text-xs:12px; --text-sm:13px; --text-base:16px; --text-md:17px; --text-lg:20px;
+
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px;
+    --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-pill:999px;
+    --shadow-sm: 0 1px 2px rgba(23,25,35,.06), 0 1px 1px rgba(23,25,35,.04);
+    --shadow-md: 0 4px 16px rgba(23,25,35,.14);
+
+    /* Only nonzero inside an installed standalone PWA on a notched device */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font-family: var(--font-sans); background: var(--bg); color: var(--text);
+    min-height: 100vh; display: flex; flex-direction: column; font-size: var(--text-base); line-height: 1.5; }
+  header { background: var(--primary); color: #fff;
+    padding: calc(var(--space-3) + var(--safe-top)) var(--space-4) var(--space-3);
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  header h1 { font-size: var(--text-lg); margin: 0; font-weight: 600; }
+  header .right { display: flex; align-items: center; gap: var(--space-2); }
+  header select, header button.chip {
+    background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.4);
+    border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-sm);
+    cursor: pointer; min-height: 36px; font-family: inherit; }
+  main { flex: 1; padding: var(--space-4); max-width: 640px; width: 100%; margin: 0 auto; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: var(--space-4); margin-bottom: var(--space-3); box-shadow: var(--shadow-sm); }
+  .card h2 { margin: 0 0 var(--space-1); font-size: var(--text-md); font-weight: 600; }
+  .meta { color: var(--muted); font-size: var(--text-sm); }
+  .tag { display: inline-block; font-size: var(--text-xs); padding: 2px var(--space-2); border-radius: var(--radius-pill);
+    background: var(--accent-tint); color: var(--accent-text); margin-right: var(--space-2); font-weight: 500; }
+  .tag.grey { background: var(--ink-100); color: var(--muted); }
+  .status-confirmed, .status-approved { color: var(--success-600); }
+  label { display: block; font-size: var(--text-sm); margin: var(--space-3) 0 var(--space-1); color: var(--muted); font-weight: 500; }
+  input, select { width: 100%; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: var(--text-base); background: #fff; font-family: inherit; color: var(--text); min-height: 44px; }
+  input:focus, select:focus { outline: 2px solid var(--primary-strong); outline-offset: 1px; }
+  button { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4); font-size: var(--text-base); font-weight: 500; cursor: pointer;
+    font-family: inherit; min-height: 44px; }
+  button.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  button.small { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); min-height: 36px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: var(--space-2); align-items: center; }
+  .row > * { flex: 1; }
+  .row.tight > * { flex: 0 0 auto; }
+  .phone-field { display: flex; gap: var(--space-2); }
+  .phone-field .cc-group { flex: 0 0 auto; display: flex; align-items: center; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--ink-100); overflow: hidden; }
+  .phone-field .cc-plus { padding-left: var(--space-3); color: var(--text); font-size: var(--text-base); }
+  .phone-field .cc-input { width: 44px; border: none; background: transparent; text-align: left;
+    padding: var(--space-3) var(--space-2) var(--space-3) var(--space-1); min-height: 44px; font-size: var(--text-base); }
+  .phone-field input:not(.cc-input) { flex: 1; min-width: 0; }
+  .search-result { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: var(--space-2); cursor: pointer; }
+  .search-result:hover { background: var(--primary-tint); }
+  .search-result .addr { color: var(--muted); font-size: var(--text-xs); }
+  nav.tabs { display: flex; border-top: 1px solid var(--border); background: var(--surface);
+    position: sticky; bottom: 0; padding-bottom: var(--safe-bottom); }
+  nav.tabs button { flex: 1; background: none; color: var(--muted); border-radius: 0;
+    padding: var(--space-3) 0; font-size: var(--text-xs); min-height: 48px; font-weight: 500; }
+  nav.tabs button.active { color: var(--primary); font-weight: 600; }
+  .hidden { display: none !important; }
+  .error-banner { background: var(--danger-tint); color: var(--danger-600); padding: var(--space-3);
+    border-radius: var(--radius-sm); font-size: var(--text-sm); margin-bottom: var(--space-3); }
+  .info-banner { background: var(--accent-tint); color: var(--accent-text); padding: var(--space-3);
+    border-radius: var(--radius-sm); font-size: var(--text-sm); margin-bottom: var(--space-3); }
+  .empty-state { color: var(--muted); text-align: center; padding: var(--space-8) 0; font-size: var(--text-sm); }
+  .datebar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .datebar .dlabel { text-align: center; flex: 1; }
+  .datebar .dlabel .greg { font-weight: 600; font-size: var(--text-md); }
+  .datebar .dlabel .parsi { color: var(--muted); font-size: var(--text-xs); }
+  .toggle { display: inline-flex; border: 1px solid var(--primary); border-radius: var(--radius-sm); overflow: hidden; }
+  .toggle button { background: #fff; color: var(--primary); border: none; border-radius: 0;
+    padding: var(--space-2) var(--space-3); min-height: 36px; font-size: var(--text-sm); }
+  .toggle button.active { background: var(--primary); color: #fff; }
+  /* Month view: Parsi-native grid (Roj 1-30, or the Gatha days), not a
+     Gregorian week-aligned grid - 6 columns x 5 rows for a normal month. */
+  .parsi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .pg-cell { min-height: 84px; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 3px; cursor: pointer; overflow: hidden; background: #fff;
+    display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .pg-cell.pg-today { border-color: var(--primary); border-width: 2px; }
+  .pg-roj-name { width: 100%; font-size: 10.5px; font-weight: 600; line-height: 1.15;
+    overflow-wrap: break-word; word-break: break-word; hyphens: auto; }
+  .pg-greg { font-size: 9px; color: var(--muted); margin-top: 2px; }
+  .pg-event { width: 100%; font-size: 9px; background: var(--accent-tint); color: var(--accent-text); border-radius: 4px;
+    padding: 1px 3px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pg-more { font-size: 8px; color: var(--muted); margin-top: 2px; }
+  .event { padding: var(--space-3); margin-bottom: var(--space-2); background: #fff; border: 1px solid var(--border);
+    border-left: 3px solid var(--primary); border-radius: var(--radius-sm); cursor: pointer; }
+  .event .t { font-weight: 600; font-size: var(--text-sm); }
+  .event .s { font-size: var(--text-sm); color: var(--text); }
+  .daysection h3 { font-size: var(--text-sm); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-weight: 600; }
+  .geh-slot { display: flex; flex-direction: column; gap: var(--space-1);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-3);
+    margin-bottom: var(--space-2); min-height: 44px; }
+  .geh-slot.empty { border-style: dashed; border-color: var(--primary); color: var(--primary); cursor: pointer; }
+  .geh-slot.elapsed { border-style: dashed; color: var(--muted); opacity: .6; }
+  .geh-slot .g { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
+  .geh-slot.empty .g { color: var(--primary); }
+  .geh-slot .detail-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .geh-slot .detail-row .detail { min-width: 0; overflow-wrap: break-word; }
+  .name-row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); align-items: center; }
+  .name-row select.t { flex: 0 0 34%; max-width: 130px; }
+  .name-row input { flex: 1; min-width: 0; }
+  .name-row button.rm { flex: 0 0 auto; background: none; color: var(--danger-600);
+    padding: var(--space-1) var(--space-2); font-size: 18px; min-height: 36px; }
+  .pair-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3);
+    margin-bottom: var(--space-3); background: var(--ink-50); }
+  .pair-card .phead { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+  .pair-card .phead .ptitle { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
+  .pair-card .phead button.rm { background: none; color: var(--danger-600); padding: 2px var(--space-2); font-size: 18px; }
+  .names-group-label { display: flex; align-items: baseline; justify-content: space-between; margin: var(--space-4) 0 var(--space-1); }
+  .names-group-label b { font-size: var(--text-sm); font-weight: 600; }
+  .names-group-label span { font-size: var(--text-xs); color: var(--muted); }
+  .fab { position: fixed; right: var(--space-4); bottom: calc(70px + var(--safe-bottom)); width: 56px; height: 56px;
+    border-radius: var(--radius-pill); font-size: 26px; line-height: 1; box-shadow: var(--shadow-md); }
+  .slip { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-6);
+    font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; background: #fff; }
+  .slip .slip-agyary { font-family: var(--font-sans); font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-3); }
+  .slip .slip-rule { border: none; border-top: 1px dashed var(--border); margin: var(--space-3) 0; }
+  .slip .slip-behdin { color: var(--muted); }
+  .slip pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
+  @media print {
+    header, nav.tabs, .no-print, .fab { display: none !important; }
+    main { max-width: 100%; padding: 0; }
+    .slip { border: none; border-radius: 0; box-shadow: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="headerTitle">Agyary</h1>
+  <div class="right">
+    <button id="profileBtn" class="chip hidden" title="Your details">Profile</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<button id="fab" class="fab hidden" title="Add">+</button>
+
+<nav class="tabs hidden" id="tabs">
+  <button data-page="myday">My day</button>
+  <button data-page="board">Machi board</button>
+</nav>
+
+<script>
+"use strict";
+
+const API = "/api/mobed";
+// TODO: set this to the real WhatsApp number (E.164, no "+", e.g. "919876543210")
+// that alpha feedback should land on before sharing this build further.
+const FEEDBACK_WHATSAPP_NUMBER = "";
+const GEHS = [[1,"Havan"],[2,"Rapithwin"],[3,"Uziran"],[4,"Aiwisruthrem"],[5,"Ushahin"]];
+const GEH_NAME_BY_NUM = Object.fromEntries(GEHS);
+const MACHI_PURPOSE_DISPLAY = { patet: "Patet (for the departed)", tandarosti: "Tandarosti (for the living)" };
+const SERVICE_PURPOSE_DISPLAY = {
+  gujrela_nu: "Gujrela nu (for the departed)",
+  khushali_nu: "Khushali nu (for happiness)",
+  hama_anjuman: "Hama Anjuman (for the community)",
+};
+const GEH_TAKEN_MSG = "That geh is already booked for that day - pick a different Roj/Mah/Geh.";
+
+const state = {
+  accessToken: null, user: null, currentAgyaryId: null,
+  calendarOptions: null, formOptionsCache: {},
+  page: "myday",
+  myday: { mode: "day", focus: null, parsiMonth: null },   // focus: "YYYY-MM-DD" (IST day); parsiMonth: {mah,year} for Month mode
+  board: { mode: "day", focus: null, parsiMonth: null },
+  parsiCache: {},
+};
+
+const mainEl = document.getElementById("main");
+const tabsEl = document.getElementById("tabs");
+const fabEl = document.getElementById("fab");
+const headerTitle = document.getElementById("headerTitle");
+const profileBtn = document.getElementById("profileBtn");
+
+// --------------------------------------------------------------------------
+// Utilities
+// --------------------------------------------------------------------------
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+  {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function istYmd(iso) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata",
+    year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+function istTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { timeZone: "Asia/Kolkata",
+    hour: "2-digit", minute: "2-digit" });
+}
+function todayIst() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata",
+    year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+function shiftYmd(ymd, delta) {
+  const [y,m,d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0,10);
+}
+function weekDays(ymd) {  // Mon..Sun containing ymd
+  const [y,m,d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d));
+  const dow = (dt.getUTCDay() + 6) % 7; // Mon=0
+  const start = shiftYmd(ymd, -dow);
+  return Array.from({length:7}, (_,i) => shiftYmd(start, i));
+}
+// The Month view is Parsi-native, not a Gregorian grid: a Parsi month is
+// always exactly 30 Roj (no leading/trailing filler days needed, unlike a
+// Gregorian month), plus the 5-6 Gatha days once a year as mah=13.
+const MAH_NAMES_JS = ["Fravardin","Ardibehesht","Khordad","Tir","Amardad","Shahrevar",
+  "Meher","Avan","Adar","Dae","Bahman","Aspandard"];
+function stepParsiMonth(mah, year, delta) {
+  // Sequence: Mah 1..12, then Gatha (13), then Mah 1 of the next year.
+  if (delta > 0) {
+    if (mah < 12) return { mah: mah+1, year };
+    if (mah === 12) return { mah: 13, year };
+    return { mah: 1, year: year+1 };
+  }
+  if (mah === 1) return { mah: 13, year: year-1 };
+  if (mah === 13) return { mah: 12, year };
+  return { mah: mah-1, year };
+}
+function monthYearLabel(mah, year) {
+  return mah === 13 ? `Gatha days, Y${year}` : `${MAH_NAMES_JS[mah-1]}, Y${year}`;
+}
+function gregLabel(ymd) {
+  const [y,m,d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y,m-1,d)).toLocaleDateString([], { weekday:"short",
+    day:"numeric", month:"short", year:"numeric", timeZone:"UTC" });
+}
+function currentAgyary() {
+  return (state.user.agyaries || []).find(a => a.id === state.currentAgyaryId) || state.user.agyaries[0];
+}
+async function parsiLabel(ymd, system) {
+  const key = ymd + "|" + system;
+  if (state.parsiCache[key]) return state.parsiCache[key];
+  try {
+    const p = await api(`/../calendar/convert?date=${ymd}&system=${system}`);
+    const label = p.is_gatha ? `${p.gatha_name} (Gatha), Y${p.year}`
+      : `Roj ${p.roj_name}, Mah ${p.mah_name}, Y${p.year}`;
+    state.parsiCache[key] = label;
+    return label;
+  } catch (e) { return ""; }
+}
+
+async function api(path, opts = {}) {
+  // path starting with /../ escapes the /api/mobed prefix (e.g. calendar)
+  const base = path.startsWith("/../") ? "/api" : API;
+  const p = path.startsWith("/../") ? path.slice(3) : path;
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (state.accessToken) headers["Authorization"] = "Bearer " + state.accessToken;
+  const res = await fetch(base + p, Object.assign({}, opts, { headers, credentials: "include" }));
+  if (res.status === 401 && !opts._retried) {
+    if (await tryRefresh()) return api(path, Object.assign({}, opts, { _retried: true }));
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      // A FastAPI validation 422's `detail` is a list of structured objects,
+      // not a string - fall back to statusText rather than showing "[object
+      // Object]" if it isn't the plain-string shape our own handlers return.
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.status === 204 ? null : res.json();
+}
+async function tryRefresh() {
+  try {
+    const res = await fetch(API + "/auth/refresh", { method: "POST", credentials: "include" });
+    if (!res.ok) return false;
+    state.accessToken = (await res.json()).access_token;
+    return true;
+  } catch (e) { return false; }
+}
+// A refresh that redraws the SAME logical screen (a save, a toggle, an
+// accept/decline) shouldn't yank the user back to the top of a long list -
+// only a genuine navigation to a different day/page should do that.
+async function keepScroll(fn) {
+  const y = window.scrollY;
+  await fn();
+  window.scrollTo(0, y);
+}
+function showError(msg) { banner("error-banner", msg); }
+function showInfo(msg) { banner("info-banner", msg); }
+function banner(cls, msg) {
+  // Only one banner at a time - a second failed attempt on the same screen
+  // (e.g. retrying a booking) must replace the old message, not stack under it.
+  mainEl.querySelectorAll(".error-banner, .info-banner").forEach(el => el.remove());
+  const el = document.createElement("div");
+  el.className = cls; el.textContent = msg;
+  mainEl.prepend(el);
+  el.scrollIntoView({ block: "nearest" });
+}
+
+// --------------------------------------------------------------------------
+// Phone field: a country-code box (defaults to 91/India, since ~99% of
+// mobeds are Indian) next to a local-number box - editable, not locked,
+// since behdins (and some mobeds) can be from anywhere, per the fire-temple
+// list itself spanning India, Iran, Pakistan, Canada, the UK, Hong Kong...
+// `id` is the local-number <input>'s id; the code box is `${id}_cc`.
+// --------------------------------------------------------------------------
+// Best-effort split of a stored E.164 number into (country code, local
+// number) for edit-prefill only - country codes are 1-3 digits with no
+// separator in the raw string, so this is a heuristic over common codes,
+// not a guaranteed-correct parse. What actually gets SAVED is always
+// freshly recomposed from the two boxes, so a rare wrong guess here is a
+// one-time cosmetic edit-prefill glitch, not a correctness issue - the
+// mobed can trivially fix the split by eye since every digit is still there.
+const KNOWN_COUNTRY_CODES = [
+  "971","852","966","968","965","974",                     // 3-digit
+  "91","98","92","94","44","61","64","65","86","81","82",
+  "49","33","39","34","27","20","60","66","63",             // 2-digit
+  "1","7",                                                  // 1-digit
+];
+function splitE164(value) {
+  const digits = (value || "").replace(/^\+/, "").replace(/\D/g, "");
+  for (const cc of KNOWN_COUNTRY_CODES) {
+    if (digits.startsWith(cc)) return { cc, local: digits.slice(cc.length) };
+  }
+  return { cc: "91", local: digits };
+}
+function phoneField(id, existingValue) {
+  const { cc, local } = existingValue ? splitE164(existingValue) : { cc: "91", local: "" };
+  return `<div class="phone-field">
+    <div class="cc-group"><span class="cc-plus">+</span>
+      <input type="tel" class="cc-input" id="${id}_cc" inputmode="numeric" maxlength="3" value="${esc(cc)}"></div>
+    <input type="tel" id="${id}" inputmode="numeric" maxlength="12"
+      placeholder="98765 43210" value="${esc(local)}"></div>`;
+}
+function readPhone(id) {  // required fields: null means "not a valid phone number"
+  const cc = document.getElementById(id + "_cc").value.replace(/\D/g, "");
+  const digits = document.getElementById(id).value.replace(/\D/g, "");
+  return cc && digits.length >= 4 ? "+" + cc + digits : null;
+}
+function readOptionalPhone(id) {  // optional fields: distinguishes blank from malformed
+  const raw = document.getElementById(id).value.trim();
+  if (!raw) return { ok: true, value: null };
+  const cc = document.getElementById(id + "_cc").value.replace(/\D/g, "");
+  const digits = raw.replace(/\D/g, "");
+  return cc && digits.length >= 4 ? { ok: true, value: "+" + cc + digits } : { ok: false, value: null };
+}
+function setPhoneField(id, e164) {  // programmatic fill (customer-search autofill), mirrors phoneField's prefill split
+  const { cc, local } = splitE164(e164);
+  document.getElementById(id + "_cc").value = cc;
+  document.getElementById(id).value = local;
+}
+
+// --------------------------------------------------------------------------
+// Onboarding: name + phone (no OTP), then search -> join/activate/create
+// --------------------------------------------------------------------------
+function chrome(show) {
+  tabsEl.classList.toggle("hidden", !show);
+  fabEl.classList.toggle("hidden", !show);
+  profileBtn.classList.toggle("hidden", !show);
+}
+
+function renderLogin() {
+  chrome(false);
+  headerTitle.textContent = "Agyary";
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>Welcome</h2>
+      <p class="meta">Enter your name and WhatsApp number to sign in.</p>
+      <label>Full name</label>
+      <input type="text" id="obName" placeholder="e.g. Er. Firstname Lastname">
+      <label>WhatsApp number</label>
+      ${phoneField("obPhone")}
+      <p class="meta">This number is your login — please make sure it's entered correctly. You'll stay signed in on this device after this.</p>
+      <div style="margin-top:14px"><button id="obGo">Continue</button></div>
+    </div>`;
+  document.getElementById("obGo").onclick = async () => {
+    const name = document.getElementById("obName").value.trim();
+    const phone = readPhone("obPhone");
+    if (!name) return showError("Please enter your name.");
+    if (!phone) return showError("Please enter a valid phone number.");
+    try {
+      const data = await api("/auth/login", { method: "POST", body: JSON.stringify({ name, phone }) });
+      state.accessToken = data.access_token; state.user = data.user;
+      if (state.user.agyaries.length) { enterApp(); } else { renderSearch(); }
+    } catch (e) { showError(e.message); }
+  };
+}
+
+// One mobed, one fire temple for this alpha - no switching between several.
+// "Fire temple" (not "agyari") in every user-facing string here: the seed
+// list and real-world search results are Adarians, Atash Behrams, Dadgahs,
+// and prayer halls just as often as agyaris proper - "agyari" specifically
+// undersells/misdescribes what's actually being searched.
+function renderSearch() {
+  chrome(false);
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>Which fire temple do you work at?</h2>
+      <p class="meta">Search by name or city, then select it below.</p>
+      <input type="text" id="agySearch" placeholder="Start typing...">
+      <div id="agyResults" style="margin-top:8px"></div>
+    </div>`;
+  const input = document.getElementById("agySearch");
+  const results = document.getElementById("agyResults");
+  let deb, seq = 0;
+  const runSearch = async () => {
+    const q = input.value.trim();
+    if (!q) { results.innerHTML = ""; return; }
+    const mine = ++seq;
+    let list = [];
+    try { list = await api("/agyaries/search?q=" + encodeURIComponent(q)); }
+    catch (e) { return showError(e.message); }
+    if (mine !== seq) return; // a newer keystroke already superseded this
+    results.innerHTML = "";
+    for (const a of list) {
+      const row = document.createElement("div");
+      row.className = "search-result";
+      const badge = a.status === "unclaimed" ? '<span class="tag grey">not set up yet</span>' : '';
+      row.innerHTML = `<div><strong>${esc(a.name)}</strong> ${badge}</div>
+        <div class="addr">${esc([a.address, a.city].filter(Boolean).join(", "))}</div>`;
+      row.onclick = () => pickAgyari(a);
+      results.appendChild(row);
+    }
+    // One "create" prompt, worded for whichever case actually happened -
+    // never both at once (that was the earlier bug: a static footer link
+    // duplicating this exact prompt regardless of search results).
+    const create = document.createElement("div");
+    if (list.length) {
+      create.className = "meta";
+      create.style.marginTop = "8px";
+      create.innerHTML = `Not here? <a href="#" id="createInline">Add "${esc(q)}" as a new fire temple</a>`;
+    } else {
+      create.className = "search-result";
+      create.style.borderStyle = "dashed";
+      create.innerHTML = `<strong>No fire temple found.</strong>
+        <div class="addr">Tap to add "${esc(q)}" as a new fire temple.</div>`;
+    }
+    create.onclick = (e) => { e.preventDefault(); renderCreate(q); };
+    results.appendChild(create);
+  };
+  input.oninput = () => { clearTimeout(deb); deb = setTimeout(runSearch, 150); };
+}
+
+async function pickAgyari(a) {
+  try {
+    const res = await api(`/agyaries/${a.id}/join`, { method: "POST" });
+    state.user = res.user;
+    if (a.status === "unclaimed") renderActivate(a); else enterApp();
+  } catch (e) { showError(e.message); }
+}
+
+function renderActivate(a) {
+  chrome(false);
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>Set up ${esc(a.name)}</h2>
+      <p class="meta">Please confirm or correct these details before this fire temple goes live.</p>
+      <label>Name</label><input type="text" id="acName" value="${esc(a.name)}">
+      <label>City</label><input type="text" id="acCity" value="${esc(a.city || "")}">
+      <label>Address</label><input type="text" id="acAddr" value="${esc(a.address || "")}">
+      <label>Contact phone (optional)</label>${phoneField("acPhone")}
+      <div style="margin-top:14px"><button id="acGo">Confirm &amp; activate</button></div>
+    </div>`;
+  document.getElementById("acGo").onclick = async () => {
+    const phoneRes = readOptionalPhone("acPhone");
+    if (!phoneRes.ok) return showError("Please enter a valid phone number, or leave it blank.");
+    const body = {
+      name: document.getElementById("acName").value.trim(),
+      city: document.getElementById("acCity").value.trim(),
+      address: document.getElementById("acAddr").value.trim() || null,
+      contact_phone: phoneRes.value,
+    };
+    if (!body.name || !body.city) return showError("Name and city are required.");
+    try {
+      const res = await api(`/agyaries/${a.id}/activate`, { method: "POST", body: JSON.stringify(body) });
+      state.user = res.user; enterApp();
+    } catch (e) { showError(e.message); }
+  };
+}
+
+function renderCreate(prefillName) {
+  chrome(false);
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>Add a new fire temple</h2>
+      <p class="meta">Enter its details - it will be set up and ready to use.</p>
+      <label>Name</label><input type="text" id="crName" value="${esc(prefillName || "")}">
+      <label>City</label><input type="text" id="crCity">
+      <label>Address</label><input type="text" id="crAddr">
+      <label>Contact phone (optional)</label>${phoneField("crPhone")}
+      <div style="margin-top:14px" class="row tight">
+        <button id="crGo">Create</button>
+        <button class="ghost" id="crBack">Back to search</button></div>
+    </div>`;
+  document.getElementById("crBack").onclick = () => renderSearch();
+  document.getElementById("crGo").onclick = async () => {
+    const phoneRes = readOptionalPhone("crPhone");
+    if (!phoneRes.ok) return showError("Please enter a valid phone number, or leave it blank.");
+    const body = {
+      name: document.getElementById("crName").value.trim(),
+      city: document.getElementById("crCity").value.trim(),
+      address: document.getElementById("crAddr").value.trim() || null,
+      contact_phone: phoneRes.value,
+    };
+    if (!body.name || !body.city) return showError("Name and city are required.");
+    try {
+      const res = await api("/agyaries", { method: "POST", body: JSON.stringify(body) });
+      state.user = res.user; enterApp();
+    } catch (e) { showError(e.message); }
+  };
+}
+
+// --------------------------------------------------------------------------
+// App shell
+// --------------------------------------------------------------------------
+function enterApp() {
+  // One mobed, one fire temple - always the (only) one they're a member of.
+  state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
+  state.myday.focus = state.myday.focus || todayIst();
+  state.board.focus = state.board.focus || todayIst();
+  headerTitle.textContent = "Hi, " + state.user.name.split(" ")[0];
+  chrome(true);
+  for (const btn of tabsEl.querySelectorAll("button"))
+    btn.classList.toggle("active", btn.dataset.page === state.page);
+  render();
+}
+tabsEl.onclick = (e) => {
+  const btn = e.target.closest("button"); if (!btn) return;
+  state.page = btn.dataset.page;
+  for (const b of tabsEl.querySelectorAll("button")) b.classList.toggle("active", b === btn);
+  render();
+};
+profileBtn.onclick = () => renderProfile();
+fabEl.onclick = () => renderForm({ mode: "create", type: state.page === "board" ? "machi" : "service" });
+
+function render() {
+  fabEl.title = state.page === "board" ? "Add machi" : "Add service";
+  if (state.page === "myday") renderMyDay(); else renderBoard();
+}
+
+// Swipe left/right to go next/previous day, week, or month - on top of the
+// existing ‹ › buttons, not instead of them. Triggers whichever prev/next
+// button is currently on screen rather than duplicating the day/week/month
+// navigation logic, so swipe and tap can never drift out of sync.
+(function setupSwipeNav() {
+  let startX = 0, startY = 0, tracking = false;
+  mainEl.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY; tracking = true;
+  }, { passive: true });
+  mainEl.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    // Require a clearly horizontal, deliberate swipe so a vertical scroll
+    // (or a tap on a month-grid day cell) never gets mistaken for one.
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const btn = document.getElementById(
+      dx < 0
+        ? (state.page === "board" ? "bnext" : "next")
+        : (state.page === "board" ? "bprev" : "prev")
+    );
+    if (btn) btn.click();
+  }, { passive: true });
+})();
+
+// --------------------------------------------------------------------------
+// Profile: see/edit your own name and your fire temple's details - there was
+// previously no way to review or correct either after onboarding.
+// --------------------------------------------------------------------------
+function svcRowHtml(s) {
+  return `<div class="row" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+    <span style="flex:1">${esc(s.name)}${s.is_active ? '' : ' <span class="tag grey">inactive</span>'}</span>
+    <button class="ghost small" data-svc-toggle="${s.id}" data-active="${s.is_active}">${s.is_active ? 'Deactivate' : 'Activate'}</button>
+  </div>`;
+}
+
+async function renderProfile() {
+  fabEl.classList.add("hidden");
+  const agy = currentAgyary();
+  mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+  let services = [];
+  if (agy) { try { services = await api(`/agyaries/${agy.id}/services`); } catch (e) {} }
+
+  mainEl.innerHTML = `
+    <div class="card">
+      <div class="row tight" style="justify-content:space-between">
+        <h2>Your details</h2>
+        <button class="ghost small" id="pBack">Back</button>
+      </div>
+      <label>Your name</label>
+      <input type="text" id="pName" value="${esc(state.user.name)}">
+      <label>Your phone</label>
+      <input type="text" value="${esc(state.user.phone)}" disabled>
+      <p class="meta">Your phone is how you sign in - contact us if it needs to change.</p>
+      <div style="margin-top:14px"><button id="pSaveName">Save name</button></div>
+    </div>
+    <div class="card">
+      <div class="row tight" style="justify-content:space-between">
+        <h2>My behdins</h2>
+        <button class="ghost small" id="pBehdins">View</button>
+      </div>
+      <p class="meta">The customers you've personally added, and your history with each - just yours, not shared with other mobeds.</p>
+    </div>
+    <div class="card">
+      <h2>Feedback</h2>
+      <p class="meta">Something confusing, broken, or missing? Tell us directly.</p>
+      <button class="secondary small" id="pFeedback">Send feedback</button>
+    </div>
+    ${agy ? `
+    <div class="card">
+      <h2>${esc(agy.name)}</h2>
+      <p class="meta">Your fire temple's details.</p>
+      <label>Name</label><input type="text" id="pTempleName" value="${esc(agy.name)}">
+      <label>City</label><input type="text" id="pTempleCity" value="${esc(agy.city || "")}">
+      <label>Address</label><input type="text" id="pTempleAddr" value="${esc(agy.address || "")}">
+      <label>Contact phone (optional)</label>${phoneField("pTemplePhone", agy.contact_phone || "")}
+      <div style="margin-top:14px"><button id="pSaveTemple">Save fire temple details</button></div>
+    </div>
+    <div class="card">
+      <h2>Services</h2>
+      <p class="meta">The services your fire temple offers when booking (Machi isn't listed here - it has its own booking flow).</p>
+      <div id="svcList">${services.length ? services.map(svcRowHtml).join("") : '<p class="meta">No services yet.</p>'}</div>
+      <div style="margin-top:10px"><button class="secondary small" id="svcAddBtn">+ Add a service</button></div>
+      <div id="svcAddPanel" class="hidden"></div>
+    </div>` : ''}`;
+
+  document.getElementById("pBack").onclick = () => render();
+  document.getElementById("pSaveName").onclick = async () => {
+    const name = document.getElementById("pName").value.trim();
+    if (!name) return showError("Please enter your name.");
+    try {
+      state.user = await api("/auth/me", { method: "PATCH", body: JSON.stringify({ name }) });
+      headerTitle.textContent = "Hi, " + state.user.name.split(" ")[0];
+      showInfo("Saved.");
+    } catch (e) { showError(e.message); }
+  };
+  document.getElementById("pBehdins").onclick = () => renderBehdins();
+  document.getElementById("pFeedback").onclick = () => {
+    if (!FEEDBACK_WHATSAPP_NUMBER) return showError("Feedback isn't set up yet - no number configured.");
+    const msg = encodeURIComponent(`Feedback on the Agyary mobed app, from ${state.user.name}:\n\n`);
+    window.open(`https://wa.me/${FEEDBACK_WHATSAPP_NUMBER}?text=${msg}`, "_blank");
+  };
+  if (!agy) return;
+  document.getElementById("pSaveTemple").onclick = async () => {
+    const phoneRes = readOptionalPhone("pTemplePhone");
+    if (!phoneRes.ok) return showError("Please enter a valid phone number, or leave it blank.");
+    const body = {
+      name: document.getElementById("pTempleName").value.trim(),
+      city: document.getElementById("pTempleCity").value.trim(),
+      address: document.getElementById("pTempleAddr").value.trim() || null,
+      contact_phone: phoneRes.value,
+    };
+    if (!body.name || !body.city) return showError("Name and city are required.");
+    try {
+      const res = await api(`/agyaries/${agy.id}/activate`, { method: "POST", body: JSON.stringify(body) });
+      state.user = res.user;
+      showInfo("Saved.");
+      keepScroll(renderProfile);
+    } catch (e) { showError(e.message); }
+  };
+  mainEl.querySelectorAll('[data-svc-toggle]').forEach(btn => {
+    btn.onclick = async () => {
+      const isActive = btn.dataset.active === "true";
+      try {
+        await api(`/agyaries/${agy.id}/services/${btn.dataset.svcToggle}`, {
+          method: "PATCH", body: JSON.stringify({ is_active: !isActive }),
+        });
+        delete state.formOptionsCache[agy.id];
+        keepScroll(renderProfile);
+      } catch (e) { showError(e.message); }
+    };
+  });
+  document.getElementById("svcAddBtn").onclick = () => {
+    renderCreateServiceForm(document.getElementById("svcAddPanel"), agy.id, () => renderProfile());
+  };
+}
+
+// A mobed's own customer book - personal to them, not the fire temple's
+// shared customer pool (see search_my_customers's docstring). Reuses the
+// same /customers/search endpoint the add-machi/add-booking autofill uses,
+// with an empty query, since "search everything" and "list everything" are
+// the same request there - already sorted most-recently-added first.
+async function renderBehdins() {
+  fabEl.classList.add("hidden");
+  mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+  let customers = [];
+  try { customers = await api("/customers/search"); }
+  catch (e) { mainEl.innerHTML = ""; return showError(e.message); }
+
+  mainEl.innerHTML = `
+    <div class="card">
+      <div class="row tight" style="justify-content:space-between">
+        <h2>My behdins</h2>
+        <button class="ghost small" id="bhBack">Back</button>
+      </div>
+      <p class="meta">Most recently added first.</p>
+      ${customers.length ? customers.map(c => `
+        <div class="search-result" data-cid="${c.customer_id}">
+          <div>${esc(c.name)}</div>
+          <div class="addr">${esc(c.phone)}</div>
+        </div>`).join("") : '<p class="meta">No behdins yet - they\'ll show up here once you add a machi or service for them.</p>'}
+    </div>`;
+  document.getElementById("bhBack").onclick = () => renderProfile();
+  mainEl.querySelectorAll("[data-cid]").forEach(el =>
+    el.onclick = () => renderBehdinDetail(Number(el.dataset.cid)));
+}
+
+async function renderBehdinDetail(customerId) {
+  fabEl.classList.add("hidden");
+  mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+  let data;
+  try { data = await api(`/customers/${customerId}/history`); }
+  catch (e) { mainEl.innerHTML = ""; return showError(e.message); }
+
+  mainEl.innerHTML = `
+    <div class="card">
+      <div class="row tight" style="justify-content:space-between">
+        <h2>${esc(data.name)}</h2>
+        <button class="ghost small" id="bhdBack">Back</button>
+      </div>
+      <p class="meta">${esc(data.phone)}</p>
+      ${data.history.length ? data.history.map(h => `
+        <div class="detail-row" style="padding:8px 0;border-bottom:1px solid var(--border)">
+          <div>${esc(h.event)}</div>
+          <div class="meta">${esc(h.when)}</div>
+        </div>`).join("") : '<p class="meta">No bookings recorded for this behdin yet.</p>'}
+    </div>`;
+  document.getElementById("bhdBack").onclick = () => renderBehdins();
+}
+
+// --------------------------------------------------------------------------
+// My Day (calendar)
+// --------------------------------------------------------------------------
+async function renderMyDay() {
+  fabEl.classList.remove("hidden");
+  mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+  let pending = [], events = [];
+  try { [pending, events] = await Promise.all([api("/pending-requests"), api("/my-day")]); }
+  catch (e) { mainEl.innerHTML = ""; return showError(e.message); }
+
+  const md = state.myday;
+  const isMonth = md.mode === "month";
+  const system = (currentAgyary() || {}).calendar_system || "shenshai";
+
+  // Month mode is Parsi-native (Roj 1-30, or the Gatha days), not a
+  // Gregorian week-aligned grid. The first time it's opened, derive which
+  // Mah/Year to show from the current Gregorian focus.
+  let monthDays = [];
+  if (isMonth) {
+    if (!md.parsiMonth) {
+      try {
+        const p = await api(`/../calendar/convert?date=${md.focus}&system=${system}`);
+        md.parsiMonth = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
+      } catch (e) { md.parsiMonth = { mah: 1, year: 1395 }; }
+    }
+    try {
+      monthDays = await parsiMonth(md.parsiMonth.mah, md.parsiMonth.year, system);
+    } catch (e) { mainEl.innerHTML = ""; return showError(e.message); }
+  }
+
+  const days = md.mode === "day" ? [md.focus] : md.mode === "week" ? weekDays(md.focus) : monthDays.map(p => p.gregorian_date);
+  const parsi = md.mode === "day" ? await parsiLabel(md.focus, system) : "";
+  const dateLabel = md.mode === "day" ? gregLabel(md.focus)
+    : md.mode === "week" ? "Week of " + gregLabel(days[0])
+    : monthYearLabel(md.parsiMonth.mah, md.parsiMonth.year);
+
+  let html = `
+    <div class="toggle" style="margin-bottom:8px">
+      <button data-mode="day" class="${md.mode==='day'?'active':''}">Day</button>
+      <button data-mode="week" class="${md.mode==='week'?'active':''}">Week</button>
+      <button data-mode="month" class="${md.mode==='month'?'active':''}">Month</button>
+    </div>
+    <div class="datebar">
+      <button class="ghost small" id="prev">‹</button>
+      <div class="dlabel" ${isMonth ? 'id="monthLabelTap" style="cursor:pointer"' : ''}>
+        <div class="greg">${esc(dateLabel)}</div>
+        <div class="parsi">${md.mode==='day' ? esc(parsi) : (isMonth ? 'Tap to jump to a month' : '')}</div>
+      </div>
+      <button class="ghost small" id="next">›</button>
+    </div>
+    <div class="row tight" style="justify-content:flex-end;margin-bottom:8px">
+      <button class="secondary small" id="jumpBtn">Jump to a date</button>
+    </div>
+    <div id="monthYearPanel" class="card hidden"></div>
+    <div id="jumpPanel" class="card hidden"></div>`;
+
+  if (pending.length) {
+    html += `<h3 class="meta" style="margin:6px 0">Awaiting your response</h3>`;
+    html += pending.map(pendingCard).join("");
+  }
+
+  let visible = 0;
+  if (isMonth) {
+    visible = events.filter(ev => days.includes(istYmd(ev.ceremony_datetime))).length;
+    html += parsiMonthGridHtml(monthDays, events, ev => istYmd(ev.ceremony_datetime), ev => ev.service_name);
+  } else {
+    for (const day of days) {
+      const dayEvents = events.filter(ev => istYmd(ev.ceremony_datetime) === day)
+        .sort((a,b) => a.ceremony_datetime.localeCompare(b.ceremony_datetime));
+      visible += dayEvents.length;
+      if (md.mode === "week")
+        html += `<div class="daysection"><h3>${gregLabel(day)}</h3>`;
+      if (dayEvents.length) html += dayEvents.map(eventCard).join("");
+      else if (md.mode === "week") html += `<div class="meta" style="padding:2px 2px 8px">Nothing booked.</div>`;
+      else html += `<div class="empty-state">Nothing on your calendar ${md.mode==='day'?'this day':'this week'}.</div>`;
+      if (md.mode === "week") html += `</div>`;
+    }
+  }
+  // If nothing shows here but there are upcoming events elsewhere, point to
+  // the next one so a booking on another date is never silently off-screen.
+  let jumpTo = null;
+  if (!visible && events.length) {
+    const next = events.find(ev => istYmd(ev.ceremony_datetime) >= md.focus) || events[0];
+    jumpTo = istYmd(next.ceremony_datetime);
+    html += `<div class="info-banner" style="cursor:pointer" id="jumpNext">
+      You have ${events.length} upcoming event${events.length>1?'s':''}.
+      Next: ${esc(next.service_name)} on ${gregLabel(jumpTo)} - tap to view.</div>`;
+  }
+  mainEl.innerHTML = html;
+  if (jumpTo) document.getElementById("jumpNext").onclick = () => {
+    state.myday.focus = jumpTo; state.myday.mode = "day"; renderMyDay();
+  };
+
+  mainEl.querySelectorAll(".toggle button").forEach(b =>
+    b.onclick = () => { md.mode = b.dataset.mode; renderMyDay(); });
+  document.getElementById("prev").onclick = () => {
+    if (isMonth) md.parsiMonth = stepParsiMonth(md.parsiMonth.mah, md.parsiMonth.year, -1);
+    else md.focus = md.mode==="day" ? shiftYmd(md.focus,-1) : shiftYmd(md.focus,-7);
+    renderMyDay();
+  };
+  document.getElementById("next").onclick = () => {
+    if (isMonth) md.parsiMonth = stepParsiMonth(md.parsiMonth.mah, md.parsiMonth.year, 1);
+    else md.focus = md.mode==="day" ? shiftYmd(md.focus,1) : shiftYmd(md.focus,7);
+    renderMyDay();
+  };
+  if (isMonth) document.getElementById("monthLabelTap").onclick = () => renderMonthYearPanel();
+  document.getElementById("jumpBtn").onclick = () => renderJumpPanel();
+  for (const item of pending) {
+    wire(`[data-accept="${item.booking_id}"]`, () => resolveBooking(item.booking_id, "accept"));
+    wire(`[data-decline="${item.booking_id}"]`, () => resolveBooking(item.booking_id, "decline"));
+  }
+  if (isMonth) {
+    // Tap any day -> full Day view (Roj/Mah + event details); the Month
+    // toggle button takes you straight back to this same grid.
+    const grid = mainEl.querySelector(".parsi-grid");
+    if (grid) grid.addEventListener("click", (e) => {
+      const cell = e.target.closest(".pg-cell"); if (!cell) return;
+      md.mode = "day"; md.focus = cell.dataset.day; renderMyDay();
+    });
+  } else {
+    for (const ev of events)
+      wire(`[data-ev="${ev.booking_id}"]`, () => openSlip("booking", ev.agyary_id, ev.booking_id, "myday"));
+  }
+}
+
+// Generic Parsi month grid - used by both My Day (per-item = a booking, by
+// ceremony_datetime) and the Machi Board (per-item = a machi, by
+// gregorian_date). dateOf/labelOf let each page supply its own data shape
+// without duplicating the whole grid-building/CSS structure.
+function parsiMonthGridHtml(monthDays, items, dateOf, labelOf) {
+  const todayY = todayIst();
+  let html = '<div class="parsi-grid">';
+  for (const p of monthDays) {
+    const day = p.gregorian_date;
+    const dayItems = items.filter(it => dateOf(it) === day);
+    const label = p.is_gatha ? p.gatha_name : p.roj_name;
+    const gregShort = new Date(day + "T00:00:00Z")
+      .toLocaleDateString([], { day: "numeric", month: "short", timeZone: "UTC" });
+    let inner = `<div class="pg-roj-name">${esc(label)}</div><div class="pg-greg">${gregShort}</div>`;
+    // Show real labels, not just a count - up to as many as reasonably fit;
+    // the rest collapse into a "+N more" line.
+    const shown = dayItems.slice(0, 2);
+    for (const it of shown) inner += `<div class="pg-event">${esc(labelOf(it))}</div>`;
+    if (dayItems.length > shown.length) inner += `<div class="pg-more">+${dayItems.length - shown.length} more</div>`;
+    const cls = ["pg-cell", day===todayY?'pg-today':''].filter(Boolean).join(" ");
+    html += `<div class="${cls}" data-day="${day}">${inner}</div>`;
+  }
+  return html + '</div>';
+}
+
+// Which page's calendar state/rerender to act on - Month/Jump navigation
+// is shared chrome between My Day and the Machi Board, always acting on
+// whichever page is currently open.
+function activeCalendarPage() {
+  return state.page === "board"
+    ? { state: state.board, render: renderBoard }
+    : { state: state.myday, render: renderMyDay };
+}
+
+function renderMonthYearPanel() {
+  const panel = document.getElementById("monthYearPanel");
+  document.getElementById("jumpPanel").classList.add("hidden"); // only one panel open at a time
+  panel.classList.toggle("hidden");
+  if (panel.classList.contains("hidden")) return;
+  const { state: pageState, render } = activeCalendarPage();
+  const mahOptions = MAH_NAMES_JS.map((n,i) =>
+    `<option value="${i+1}" ${pageState.parsiMonth.mah===i+1?'selected':''}>${n}</option>`).join("")
+    + `<option value="13" ${pageState.parsiMonth.mah===13?'selected':''}>Gatha days</option>`;
+  panel.innerHTML = `
+    <div class="row">
+      <div><label>Mah</label><select id="myMah">${mahOptions}</select></div>
+      <div><label>Year (YZ)</label><input type="number" id="myYear" value="${pageState.parsiMonth.year}"></div>
+    </div>
+    <div style="margin-top:10px"><button class="small" id="myGo">Go</button></div>`;
+  document.getElementById("myGo").onclick = () => {
+    pageState.parsiMonth = { mah: Number(document.getElementById("myMah").value), year: Number(document.getElementById("myYear").value) };
+    render();
+  };
+}
+
+function eventCard(ev) {
+  return `<div class="event" data-ev="${ev.booking_id}">
+    <div class="t">${istTime(ev.ceremony_datetime)} · ${esc(ev.service_name)}</div>
+    <div class="s">${esc(ev.behdin_name || "-")}</div>
+    <div class="meta"><span class="tag">${esc(ev.agyary_name)}</span>${ev.is_offsite?'<span class="tag">Offsite</span>':''}</div>
+  </div>`;
+}
+function pendingCard(item) {
+  return `<div class="card">
+    <span class="tag">${esc(item.agyary_name)}</span>
+    <h2>${esc(item.service_name)} · ${esc(item.behdin_name || "-")}</h2>
+    <p class="meta">${istTime(item.ceremony_datetime)} ${gregLabel(istYmd(item.ceremony_datetime))}</p>
+    <div class="row"><button data-accept="${item.booking_id}">Accept</button>
+      <button class="secondary" data-decline="${item.booking_id}">Decline</button></div>
+  </div>`;
+}
+
+// Jump to a specific day - by Roj/Mah/Year or by a plain Gregorian date,
+// whichever's easier to think in at the moment. Either way, lands on Day
+// view for that exact date so the mobed can then browse nearby days from
+// there (this is deliberately separate from the Month view's own
+// header-tap picker, which navigates the GRID, not a single day).
+async function renderJumpPanel() {
+  const opts = await calendarOptions();
+  const panel = document.getElementById("jumpPanel");
+  document.getElementById("monthYearPanel").classList.add("hidden"); // only one panel open at a time
+  panel.classList.toggle("hidden");
+  if (panel.classList.contains("hidden")) return;
+  const cur = new Date().getUTCFullYear() - 630;
+  const system = (currentAgyary() || {}).calendar_system || "shenshai";
+  panel.innerHTML = `
+    <div class="names-group-label"><b>By Roj &amp; Mah</b></div>
+    <div class="row">
+      <div><label>Roj</label><select id="jRoj">${opts.roj.map(o=>`<option value="${o.id.replace('roj_','')}">${esc(o.title)}</option>`).join("")}</select></div>
+      <div><label>Mah</label><select id="jMah">${opts.mah.map(o=>`<option value="${o.id.replace('mah_','')}">${esc(o.title)}</option>`).join("")}</select></div>
+      <div><label>Year (YZ)</label><input type="number" id="jYear" value="${cur}"></div>
+    </div>
+    <div style="margin-top:10px"><button class="small" id="jGo">Go</button></div>
+    <div class="names-group-label" style="margin-top:16px"><b>By date</b></div>
+    <input type="date" id="jDate">
+    <div style="margin-top:10px"><button class="small" id="jDateGo">Go</button></div>`;
+  document.getElementById("jGo").onclick = async () => {
+    try {
+      const roj = document.getElementById("jRoj").value, mah = document.getElementById("jMah").value,
+            year = document.getElementById("jYear").value;
+      const p = await api(`/../calendar/from-parsi?roj=${roj}&mah=${mah}&year=${year}&system=${system}`);
+      jumpToDay(p.gregorian_date);
+    } catch (e) { showError(e.message); }
+  };
+  document.getElementById("jDateGo").onclick = () => {
+    const d = document.getElementById("jDate").value;
+    if (!d) return showError("Please pick a date.");
+    jumpToDay(d);
+  };
+}
+function jumpToDay(ymd) {
+  const { state: pageState, render } = activeCalendarPage();
+  pageState.mode = "day"; pageState.focus = ymd; render();
+}
+
+async function resolveBooking(id, action) {
+  try { await api(`/bookings/${id}/${action}`, { method: "POST" }); keepScroll(renderMyDay); }
+  catch (e) { showError(e.message); }
+}
+
+// --------------------------------------------------------------------------
+// Machi Board (per-agyari, one day, five geh slots)
+// --------------------------------------------------------------------------
+function gehSlotRowHtml(g, name, m, bookable) {
+  if (m) {
+    return `<div class="geh-slot" data-slip="${m.id}">
+      <span class="g">${name}</span>
+      <div class="detail-row"><span class="detail">${esc(m.behdin_name || "-")} · ${esc(m.purpose)}</span>
+        <button class="secondary small">Slip</button></div></div>`;
+  }
+  if (bookable) {
+    return `<div class="geh-slot empty" data-book="${g}">
+      <span class="g">${name}</span>
+      <div class="detail-row"><span class="detail">Empty - tap to book</span><span>+</span></div></div>`;
+  }
+  // Not taken by a machi, but not bookable either - it has already elapsed
+  // today (a genuinely past DAY is fine to edit; only today's own already-
+  // passed gehs are excluded - see services/mobed_dashboard.bookable_gehs).
+  return `<div class="geh-slot elapsed">
+    <span class="g">${name}</span>
+    <div class="detail-row"><span class="detail">Already passed today</span></div></div>`;
+}
+
+async function renderBoard() {
+  fabEl.classList.add("hidden"); // the empty geh slots are the add affordance here
+  mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+  const bd = state.board;
+  const isMonth = bd.mode === "month";
+  const agy = currentAgyary();
+  const system = agy ? agy.calendar_system : "shenshai";
+
+  // Fired together, not one-after-the-other: bookable-gehs (day mode only)
+  // doesn't depend on machis, so there's no reason to make the user wait
+  // for both round trips back-to-back.
+  const bookableFetch = bd.mode === "day"
+    ? api(`/agyaries/${state.currentAgyaryId}/bookable-gehs?on=${bd.focus}`).catch(() => ({ bookable: [] }))
+    : Promise.resolve({ bookable: [] });
+
+  let machis = [];
+  try { machis = await api(`/agyaries/${state.currentAgyaryId}/machi-board`); }
+  catch (e) { mainEl.innerHTML = ""; return showError(e.message); }
+
+  let monthDays = [];
+  if (isMonth) {
+    if (!bd.parsiMonth) {
+      try {
+        const p = await api(`/../calendar/convert?date=${bd.focus}&system=${system}`);
+        bd.parsiMonth = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
+      } catch (e) { bd.parsiMonth = { mah: 1, year: 1395 }; }
+    }
+    try {
+      monthDays = await parsiMonth(bd.parsiMonth.mah, bd.parsiMonth.year, system);
+    } catch (e) { mainEl.innerHTML = ""; return showError(e.message); }
+  }
+
+  const days = bd.mode === "day" ? [bd.focus] : bd.mode === "week" ? weekDays(bd.focus) : monthDays.map(p => p.gregorian_date);
+  const parsi = bd.mode === "day" ? await parsiLabel(bd.focus, system) : "";
+  const dateLabel = bd.mode === "day" ? gregLabel(bd.focus)
+    : bd.mode === "week" ? "Week of " + gregLabel(days[0])
+    : monthYearLabel(bd.parsiMonth.mah, bd.parsiMonth.year);
+
+  let html = `
+    <div class="toggle" style="margin-bottom:8px">
+      <button data-bmode="day" class="${bd.mode==='day'?'active':''}">Day</button>
+      <button data-bmode="week" class="${bd.mode==='week'?'active':''}">Week</button>
+      <button data-bmode="month" class="${bd.mode==='month'?'active':''}">Month</button>
+    </div>
+    <div class="datebar">
+      <button class="ghost small" id="bprev">‹</button>
+      <div class="dlabel" ${isMonth ? 'id="monthLabelTap" style="cursor:pointer"' : ''}>
+        <div class="greg">${esc(dateLabel)}${agy && !isMonth ? ` · ${esc(agy.name)}` : ''}</div>
+        <div class="parsi">${bd.mode==='day' ? esc(parsi) : (isMonth ? 'Tap to jump to a month' : '')}</div>
+      </div>
+      <button class="ghost small" id="bnext">›</button>
+    </div>
+    <div class="row tight" style="justify-content:${bd.mode==='day'?'space-between':'flex-end'};margin-bottom:8px">
+      ${bd.mode==='day' ? '<button class="ghost small" id="btoday">Today</button>' : ''}
+      <button class="secondary small" id="jumpBtn">Jump to a date</button>
+    </div>
+    <div id="monthYearPanel" class="card hidden"></div>
+    <div id="jumpPanel" class="card hidden"></div>`;
+
+  let bookableSet = new Set();
+  if (bd.mode === "day") {
+    bookableSet = new Set((await bookableFetch).bookable);
+    const byGeh = {};
+    machis.filter(m => m.gregorian_date === bd.focus).forEach(m => { byGeh[m.geh] = m; });
+    for (const [g, name] of GEHS) html += gehSlotRowHtml(g, name, byGeh[g], bookableSet.has(g));
+  } else if (bd.mode === "week") {
+    for (const day of days) {
+      const dayMachis = machis.filter(m => m.gregorian_date === day).sort((a,b) => a.geh - b.geh);
+      html += `<div class="daysection"><h3 data-jumpday="${day}" style="cursor:pointer">${gregLabel(day)}</h3>`;
+      if (dayMachis.length) {
+        for (const m of dayMachis) html += gehSlotRowHtml(m.geh, GEH_NAME_BY_NUM[m.geh], m, false);
+      } else {
+        html += `<div class="meta" style="padding:2px 2px 8px">Nothing booked.</div>`;
+      }
+      html += `</div>`;
+    }
+  } else {
+    html += parsiMonthGridHtml(monthDays, machis, m => m.gregorian_date,
+      m => `${GEH_NAME_BY_NUM[m.geh]}: ${m.behdin_name || m.purpose}`);
+  }
+  mainEl.innerHTML = html;
+
+  mainEl.querySelectorAll("[data-bmode]").forEach(b =>
+    b.onclick = () => { bd.mode = b.dataset.bmode; renderBoard(); });
+  document.getElementById("bprev").onclick = () => {
+    if (isMonth) bd.parsiMonth = stepParsiMonth(bd.parsiMonth.mah, bd.parsiMonth.year, -1);
+    else bd.focus = bd.mode==="day" ? shiftYmd(bd.focus,-1) : shiftYmd(bd.focus,-7);
+    renderBoard();
+  };
+  document.getElementById("bnext").onclick = () => {
+    if (isMonth) bd.parsiMonth = stepParsiMonth(bd.parsiMonth.mah, bd.parsiMonth.year, 1);
+    else bd.focus = bd.mode==="day" ? shiftYmd(bd.focus,1) : shiftYmd(bd.focus,7);
+    renderBoard();
+  };
+  if (bd.mode === "day") document.getElementById("btoday").onclick = () => { bd.focus = todayIst(); renderBoard(); };
+  if (isMonth) document.getElementById("monthLabelTap").onclick = () => renderMonthYearPanel();
+  document.getElementById("jumpBtn").onclick = () => renderJumpPanel();
+
+  if (bd.mode === "month") {
+    const grid = mainEl.querySelector(".parsi-grid");
+    if (grid) grid.addEventListener("click", (e) => {
+      const cell = e.target.closest(".pg-cell"); if (!cell) return;
+      bd.mode = "day"; bd.focus = cell.dataset.day; renderBoard();
+    });
+  } else {
+    mainEl.querySelectorAll("[data-jumpday]").forEach(h => h.onclick = () => jumpToDay(h.dataset.jumpday));
+    for (const m of machis) wire(`[data-slip="${m.id}"]`, () => openSlip("machi", state.currentAgyaryId, m.id, "board"));
+    if (bd.mode === "day") for (const g of bookableSet) wire(`[data-book="${g}"]`, () => bookGeh(g, bd.focus, system));
+  }
+}
+
+async function bookGeh(geh, focus, system) {
+  let conv;
+  try { conv = await api(`/../calendar/convert?date=${focus}&system=${system}`); }
+  catch (e) { return showError(e.message); }
+  if (conv.is_gatha) return showError("Machi cannot be booked on a Gatha day.");
+  renderForm({ mode: "create", type: "machi",
+    prefill: { roj: conv.roj, mah: conv.mah, year: conv.year, geh, gregorian: focus } });
+}
+
+// --------------------------------------------------------------------------
+// Add / Edit form
+// --------------------------------------------------------------------------
+// A Parsi month's Roj<->Gregorian mapping never changes once computed, so
+// re-opening a month already viewed this session (switching tabs, paging
+// back and forth) should never re-hit the network - this was the biggest
+// avoidable source of the "every click waits on the network" lag.
+state.parsiMonthCache = state.parsiMonthCache || {};
+async function parsiMonth(mah, year, system) {
+  const key = `${system}-${mah}-${year}`;
+  if (!state.parsiMonthCache[key])
+    state.parsiMonthCache[key] = await api(`/../calendar/parsi-month?mah=${mah}&year=${year}&system=${system}`);
+  return state.parsiMonthCache[key];
+}
+async function calendarOptions() {
+  return state.calendarOptions || (state.calendarOptions = await api("/reference/calendar-options"));
+}
+async function formOptions(agyaryId) {
+  if (!state.formOptionsCache[agyaryId])
+    state.formOptionsCache[agyaryId] = await api(`/agyaries/${agyaryId}/form-options`);
+  return state.formOptionsCache[agyaryId];
+}
+
+const NAME_TITLES = ["ervad","behdin","osta","osti","khud"];
+const TITLE_DISPLAY = { ervad:"Ervad", behdin:"Behdin", osta:"Osta", osti:"Osti", khud:"Khud" };
+function titleSelect(sel) {
+  return `<select class="t">${NAME_TITLES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${TITLE_DISPLAY[t]}</option>`).join("")}</select>`;
+}
+function memberRow(n) {  // one half of a pair (no remove; a pair is two people)
+  return `<div class="name-row">${titleSelect(n&&n.title)}
+    <input class="nm" placeholder="e.g. Zahan" value="${esc(n?n.name:'')}"></div>`;
+}
+function singleRow(n) {  // one name on its own line (farmayeshne / tandarosti)
+  return `<div class="name-row">${titleSelect(n&&n.title)}
+    <input class="nm" placeholder="e.g. Zahan" value="${esc(n?n.name:'')}">
+    <button type="button" class="rm" title="Remove">×</button></div>`;
+}
+function pairCard(status, m1, m2) {
+  // Status (departed/living) is derived from the purpose, not chosen per
+  // pair - no toggle here. Kept in data-status so an already-saved pair
+  // (edit mode) preserves whatever status it was originally recorded with.
+  return `<div class="pair-card" data-status="${status}">
+    <div class="phead"><span class="ptitle">Pair</span>
+      <button type="button" class="rm" title="Remove pair">×</button></div>
+    ${memberRow(m1)}${memberRow(m2)}</div>`;
+}
+
+// Reconstruct the two structures from a flat CeremonyName list (edit mode).
+function groupPairs(names) {
+  const byGroup = {};
+  names.filter(n => n.section === "pair" && n.pair_group != null)
+    .forEach(n => { (byGroup[n.pair_group] = byGroup[n.pair_group] || []).push(n); });
+  return Object.values(byGroup);
+}
+
+function renderNamesSection(region, isMachi, purpose, existingNames) {
+  const names = existingNames || [];
+  if (isMachi && purpose === "tandarosti") {
+    // Living names, one per line.
+    const singles = names.filter(n => n.section !== "farmayeshne"); // stored as ungrouped pair singles
+    region.innerHTML = `<div class="names-group-label"><b>Living names</b><span>one name per line</span></div>
+      <div id="fSingles"></div>
+      <button class="secondary small" id="addSingle" type="button">+ Add name</button>`;
+    const box = region.querySelector("#fSingles");
+    (singles.length ? singles : [null]).forEach(n => box.insertAdjacentHTML("beforeend", singleRow(n)));
+    region.querySelector("#addSingle").onclick = () => box.insertAdjacentHTML("beforeend", singleRow(null));
+  } else if (isMachi) {
+    // Patet: exactly one departed pair (two names), status fixed.
+    const pair = groupPairs(names)[0] || [];
+    region.innerHTML = `<div class="names-group-label"><b>Departed pair</b><span>two names, one line</span></div>
+      <div id="fPairs">${pairCard("departed", pair[0], pair[1])}</div>`;
+    region.querySelector("#fPairs .rm").onclick = () => {}; // single pair - remove is a no-op for machi
+  } else {
+    // Service: pairs (departed/living) + farmayeshne (living singles).
+    const pairs = groupPairs(names);
+    const farm = names.filter(n => n.section === "farmayeshne");
+    const defStatus = purpose === "gujrela_nu" ? "departed" : "living";
+    region.innerHTML = `
+      <div class="names-group-label"><b>Pairs</b><span>two names per line</span></div>
+      <div id="fPairs"></div>
+      <button class="secondary small" id="addPair" type="button">+ Add pair</button>
+      <div class="names-group-label"><b>Farmayeshne</b><span>one name per line</span></div>
+      <div id="fFarm"></div>
+      <button class="secondary small" id="addFarm" type="button">+ Add name</button>`;
+    const pairsBox = region.querySelector("#fPairs");
+    const farmBox = region.querySelector("#fFarm");
+    const addPair = (members) => {
+      const st = members && members[0] ? members[0].status : defStatus;
+      pairsBox.insertAdjacentHTML("beforeend", pairCard(st, members && members[0], members && members[1]));
+    };
+    (pairs.length ? pairs : [null]).forEach(addPair);
+    (farm.length ? farm : [null]).forEach(n => farmBox.insertAdjacentHTML("beforeend", singleRow(n)));
+    region.querySelector("#addPair").onclick = () => addPair(null);
+    region.querySelector("#addFarm").onclick = () => farmBox.insertAdjacentHTML("beforeend", singleRow(null));
+  }
+  // Delegated remove for singles and (service) pairs.
+  region.onclick = (e) => {
+    const btn = e.target.closest("button.rm"); if (!btn) return;
+    const card = btn.closest(".pair-card");
+    if (card) { if (region.querySelectorAll(".pair-card").length > 0 && !isMachi) card.remove(); }
+    else { const row = btn.closest(".name-row"); if (row) row.remove(); }
+  };
+}
+
+function readMember(row) {
+  const name = row.querySelector(".nm").value.trim();
+  return name ? { title: row.querySelector(".t").value, name } : null;
+}
+
+async function renderForm(cfg) {
+  // cfg: { mode:'create'|'edit', type:'machi'|'service', prefill?, agyaryId?, id?, origin? }
+  fabEl.classList.add("hidden");
+  const agyaryId = cfg.agyaryId || state.currentAgyaryId;
+  const opts = await calendarOptions();
+  const fopts = await formOptions(agyaryId);
+  const isEdit = cfg.mode === "edit";
+  let d = cfg.prefill || {};
+  let existingNames = null, behdin = { name: "", phone: "" };
+
+  if (isEdit) {
+    const path = cfg.type === "machi"
+      ? `/agyaries/${agyaryId}/machis/${cfg.id}/detail`
+      : `/agyaries/${agyaryId}/bookings/${cfg.id}/detail`;
+    try { d = await api(path); } catch (e) { return showError(e.message); }
+    existingNames = d.names;
+    behdin = { name: d.behdin_name || "", phone: d.behdin_phone || "" };
+    cfg._detail = d;
+  }
+
+  const machiSel = (list, cur, prefix) => list.map(o =>
+    `<option value="${o.id.replace(prefix,'')}" ${Number(o.id.replace(prefix,''))===cur?'selected':''}>${esc(o.title)}</option>`).join("");
+  const isMachi = cfg.type === "machi";
+  const dateVal = isMachi
+    ? (d.gregorian || state.board.focus || todayIst())
+    : (d.ceremony_datetime ? istYmd(d.ceremony_datetime) : (state.myday.focus || todayIst()));
+  const timeVal = (!isMachi && d.ceremony_datetime) ? istTime(d.ceremony_datetime).replace(/\s?[AP]M/i,"") : "";
+
+  mainEl.innerHTML = `
+    <div class="card">
+      <div class="row tight" style="justify-content:space-between">
+        <h2>${isEdit ? "Edit" : "Add"} ${isMachi ? "machi" : "service"}</h2>
+        <button class="ghost small" id="fBack">Back</button>
+      </div>
+      ${!isEdit ? `
+      <label>Find a returning customer</label>
+      <input type="text" id="fCustSearch" placeholder="Search your customers by name or phone" autocomplete="off">
+      <div id="fCustResults" class="hidden" style="margin-bottom:var(--space-3)"></div>
+      ` : ""}
+      <label>Behdin name</label>
+      <input type="text" id="fBName" value="${esc(behdin.name)}">
+      <label>Behdin phone</label>
+      ${phoneField("fBPhone", behdin.phone)}
+
+      ${isMachi ? `
+        <div class="row">
+          <div><label>Roj</label><select id="fRoj">${machiSel(opts.roj,d.roj,'roj_')}</select></div>
+          <div><label>Mah</label><select id="fMah">${machiSel(opts.mah,d.mah,'mah_')}</select></div>
+          <div><label>Geh</label><select id="fGeh">${machiSel(opts.geh,d.geh,'geh_')}</select></div>
+        </div>
+        <label>Date</label><input type="date" id="fDate" value="${esc(dateVal)}">
+        <label>Purpose</label>
+        <select id="fPurpose">
+          <option value="patet" ${d.purpose==='patet'?'selected':''}>${MACHI_PURPOSE_DISPLAY.patet}</option>
+          <option value="tandarosti" ${d.purpose==='tandarosti'?'selected':''}>${MACHI_PURPOSE_DISPLAY.tandarosti}</option>
+        </select>
+      ` : `
+        <label>Service</label>
+        <select id="fService">
+          <option value="" ${!d.service_id?'selected':''} disabled>Select a service...</option>
+          ${fopts.services.map(s=>`<option value="${s.id}" ${s.id===d.service_id?'selected':''}>${esc(s.name)}</option>`).join("")}
+          <option value="__new__">+ Add a new service</option>
+        </select>
+        <div id="fNewServicePanel" class="hidden"></div>
+        <label>Date</label><input type="date" id="fDate" value="${esc(dateVal)}">
+        <label>Time</label><input type="time" id="fTime" value="${esc(timeVal)}">
+        <label>Purpose</label>
+        <select id="fPurpose">
+          <option value="gujrela_nu" ${!d.purpose||d.purpose==='gujrela_nu'?'selected':''}>${SERVICE_PURPOSE_DISPLAY.gujrela_nu}</option>
+          <option value="khushali_nu" ${d.purpose==='khushali_nu'?'selected':''}>${SERVICE_PURPOSE_DISPLAY.khushali_nu}</option>
+          <option value="hama_anjuman" ${d.purpose==='hama_anjuman'?'selected':''}>${SERVICE_PURPOSE_DISPLAY.hama_anjuman}</option>
+        </select>
+      `}
+      <div id="fNamesRegion"></div>
+      <div style="margin-top:14px"><button id="fSave">${isEdit?"Save changes":"Save"}</button></div>
+    </div>`;
+
+  const region = document.getElementById("fNamesRegion");
+  renderNamesSection(region, isMachi, document.getElementById("fPurpose").value, existingNames);
+  // A machi's name shape depends on purpose (patet = one departed pair;
+  // tandarosti = living names one per line), so re-render on purpose change.
+  if (isMachi) document.getElementById("fPurpose").onchange = () =>
+    renderNamesSection(region, true, document.getElementById("fPurpose").value, null);
+
+  if (!isMachi) {
+    const fService = document.getElementById("fService");
+    fService.onchange = () => {
+      if (fService.value === "__new__") renderNewServicePanel(agyaryId, fService);
+    };
+  }
+
+  if (!isEdit) wireCustomerSearch(region, isMachi);
+
+  document.getElementById("fBack").onclick = () => cfg.origin === "board" || state.page === "board" ? renderBoard() : renderMyDay();
+  document.getElementById("fSave").onclick = () => saveForm(cfg, agyaryId, isMachi, isEdit);
+}
+
+// Search-and-autofill from the mobed's own customer history (create mode
+// only - an edit already has a specific behdin bound to it). Selecting a
+// match fills behdin name/phone and the last names used for them, since
+// behdins tend to book the same departed pairs/farmayeshne every time; the
+// mobed can still edit anything before saving.
+function wireCustomerSearch(namesRegion, isMachi) {
+  const input = document.getElementById("fCustSearch");
+  const results = document.getElementById("fCustResults");
+  let token = 0, timer = null;
+
+  const hide = () => { results.classList.add("hidden"); results.innerHTML = ""; };
+
+  input.oninput = () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    timer = setTimeout(async () => {
+      const myToken = ++token;
+      let matches;
+      try { matches = await api(`/customers/search?q=${encodeURIComponent(q)}`); }
+      catch (e) { return; }
+      if (myToken !== token) return; // a newer keystroke's request already superseded this one
+      if (!matches.length) return hide();
+      results.classList.remove("hidden");
+      results.innerHTML = matches.map((m, i) => `
+        <div class="search-result" data-i="${i}">
+          <div>${esc(m.name)}</div>
+          <div class="addr">${esc(m.phone)}</div>
+        </div>`).join("");
+      results.querySelectorAll(".search-result").forEach(el => {
+        el.onclick = () => {
+          const m = matches[Number(el.dataset.i)];
+          document.getElementById("fBName").value = m.name;
+          setPhoneField("fBPhone", m.phone);
+          input.value = m.name;
+          hide();
+          renderNamesSection(namesRegion, isMachi, document.getElementById("fPurpose").value, m.last_names);
+        };
+      });
+    }, 250);
+  };
+  input.onblur = () => setTimeout(hide, 150); // delay so a result click still registers first
+}
+
+// Inline "+ Add a new service", triggered from the event form's Service
+// select - lets a mobed extend their own catalog without leaving the form
+// they're in the middle of filling out.
+// Shared "add a service" mini-form - used both inline in the event form's
+// Service picker and from the Profile's service-management section, so a
+// mobed can extend their own catalog from wherever they happen to need it.
+function renderCreateServiceForm(container, agyaryId, onCreated, onCancel) {
+  container.classList.remove("hidden");
+  container.innerHTML = `
+    <div class="card">
+      <label>New service name</label>
+      <input type="text" id="csName" placeholder="e.g. Afringan">
+      <div class="row tight" style="align-items:center;gap:8px;margin-top:10px">
+        <input type="checkbox" id="csOffsite" style="width:auto;min-height:auto;flex:0 0 auto">
+        <span class="meta">Can be performed offsite</span>
+      </div>
+      <div class="row tight" style="margin-top:12px">
+        <button class="small" id="csSave">Add service</button>
+        <button class="ghost small" id="csCancel">Cancel</button>
+      </div>
+    </div>`;
+  document.getElementById("csCancel").onclick = () => {
+    container.classList.add("hidden"); container.innerHTML = "";
+    if (onCancel) onCancel();
+  };
+  document.getElementById("csSave").onclick = async () => {
+    const name = document.getElementById("csName").value.trim();
+    if (!name) return showError("Please enter a service name.");
+    try {
+      const svc = await api(`/agyaries/${agyaryId}/services`, { method: "POST",
+        body: JSON.stringify({ name, offsite_capable: document.getElementById("csOffsite").checked }) });
+      delete state.formOptionsCache[agyaryId]; // so later forms this session see it too
+      container.classList.add("hidden"); container.innerHTML = "";
+      onCreated(svc);
+    } catch (e) { showError(e.message); }
+  };
+}
+
+function renderNewServicePanel(agyaryId, selectEl) {
+  renderCreateServiceForm(
+    document.getElementById("fNewServicePanel"), agyaryId,
+    (svc) => {
+      const opt = document.createElement("option");
+      opt.value = svc.id; opt.textContent = svc.name;
+      selectEl.insertBefore(opt, selectEl.querySelector('option[value="__new__"]'));
+      selectEl.value = svc.id;
+    },
+    () => { selectEl.value = ""; },
+  );
+}
+
+function collectNames(isMachi, purpose) {
+  const out = [];
+  let group = 0;
+  if (isMachi && purpose === "tandarosti") {  // living names, one per line
+    document.querySelectorAll("#fSingles .name-row").forEach(row => {
+      const m = readMember(row);
+      if (m) out.push({ section:"pair", title:m.title, name:m.name, status:"living", pair_group:null });
+    });
+    return out;
+  }
+  if (isMachi) {  // patet: one departed pair (two names, one line)
+    document.querySelectorAll("#fPairs .pair-card").forEach(card => {
+      group++;
+      card.querySelectorAll(".name-row").forEach(row => {
+        const m = readMember(row);
+        if (m) out.push({ section:"pair", title:m.title, name:m.name, status:"departed", pair_group:group });
+      });
+    });
+    return out;
+  }
+  // service: pairs (each two names share a pair_group) + farmayeshne singles
+  document.querySelectorAll("#fPairs .pair-card").forEach(card => {
+    const members = [];
+    card.querySelectorAll(".name-row").forEach(row => { const m = readMember(row); if (m) members.push(m); });
+    if (!members.length) return;
+    group++;
+    const st = card.dataset.status || "departed";
+    members.forEach(m => out.push({ section:"pair", title:m.title, name:m.name, status:st, pair_group:group }));
+  });
+  document.querySelectorAll("#fFarm .name-row").forEach(row => {
+    const m = readMember(row);
+    if (m) out.push({ section:"farmayeshne", title:m.title, name:m.name, status:"living", pair_group:null });
+  });
+  return out;
+}
+
+async function saveForm(cfg, agyaryId, isMachi, isEdit) {
+  const purpose = document.getElementById("fPurpose").value;
+  const names = collectNames(isMachi, purpose);
+  const behdin_name = document.getElementById("fBName").value.trim();
+  const behdin_phone = readPhone("fBPhone");
+  if (!behdin_name) return showError("Behdin name is required.");
+  if (!behdin_phone) return showError("Please enter a valid behdin phone number.");
+  try {
+    if (isMachi) {
+      const roj = Number(document.getElementById("fRoj").value);
+      const mah = Number(document.getElementById("fMah").value);
+      const geh = Number(document.getElementById("fGeh").value);
+      const gregorian = document.getElementById("fDate").value;
+      if (!gregorian) return showError("Please pick a date.");
+      // Prefer a known-correct year (prefill from a board tap, or the loaded
+      // machi on edit); fall back to the YZ approximation.
+      const year = cfg.prefill?.year || cfg._detail?.year || (new Date(gregorian).getUTCFullYear() - 630);
+      const body = { behdin_phone, behdin_name, roj, mah, year, geh, gregorian, purpose, names };
+      if (isEdit) {
+        const r = await api(`/agyaries/${agyaryId}/machis/${cfg.id}`, { method: "PUT", body: JSON.stringify(body) });
+        if (!r.confirmed) return showError(GEH_TAKEN_MSG);
+        return openSlip("machi", agyaryId, cfg.id, cfg.origin);
+      }
+      const r = await api(`/agyaries/${agyaryId}/manual-add/machi`, { method: "POST", body: JSON.stringify(body) });
+      if (!r.confirmed) return showError(GEH_TAKEN_MSG);
+      state.page = "board"; state.board.focus = gregorian; enterApp(); return;  // land on the new machi's day
+    }
+    // service
+    const serviceRaw = document.getElementById("fService").value;
+    if (!serviceRaw || serviceRaw === "__new__") return showError("Please select a service.");
+    const serviceId = Number(serviceRaw);
+    const date = document.getElementById("fDate").value;
+    const time = document.getElementById("fTime").value || "10:00";
+    if (!date) return showError("Please pick a date.");
+    const body = { behdin_phone, behdin_name, service_id: serviceId,
+      ceremony_datetime: `${date}T${time}:00`, purpose, names, location: null, is_offsite: false };
+    if (isEdit) {
+      await api(`/agyaries/${agyaryId}/bookings/${cfg.id}`, { method: "PUT", body: JSON.stringify(body) });
+      return openSlip("booking", agyaryId, cfg.id, cfg.origin);
+    }
+    await api(`/agyaries/${agyaryId}/manual-add/booking`, { method: "POST", body: JSON.stringify(body) });
+    state.page = "myday"; state.myday.focus = date; state.myday.mode = "day"; enterApp();  // land on the new event's day
+  } catch (e) { showError(e.message); }
+}
+
+// --------------------------------------------------------------------------
+// Slip (shared sub-view: Edit + Print)
+// --------------------------------------------------------------------------
+async function openSlip(kind, agyaryId, id, origin) {
+  fabEl.classList.add("hidden");
+  mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+  let slip;
+  const path = `/agyaries/${agyaryId}/${kind === "machi" ? "machis" : "bookings"}/${id}/slip`;
+  try { slip = await api(path); } catch (e) { mainEl.innerHTML = ""; return showError("Couldn't load the slip: " + e.message); }
+  mainEl.innerHTML = `
+    <div class="card no-print row tight" style="justify-content:space-between">
+      <button class="ghost small" id="sBack">‹ Back</button>
+      <div class="row tight">
+        <button class="secondary small" id="sEdit">Edit</button>
+        <button class="small" id="sPrint">Print</button>
+      </div>
+    </div>
+    <div class="slip">
+      <div class="slip-agyary">${esc(slip.agyary_name)}</div>
+      <hr class="slip-rule">
+      <div>${esc(slip.event)}</div>
+      <div>${esc(slip.when)}</div>
+      <div class="slip-behdin">${esc(slip.behdin_name)} (${esc(slip.behdin_phone)})</div>
+      <hr class="slip-rule">
+      <pre>${esc(slip.names_text)}</pre>
+      <hr class="slip-rule">
+    </div>`;
+  document.getElementById("sBack").onclick = () => origin === "board" ? renderBoard() : renderMyDay();
+  document.getElementById("sPrint").onclick = () => window.print();
+  document.getElementById("sEdit").onclick = () => renderForm({
+    mode: "edit", type: kind === "machi" ? "machi" : "service",
+    agyaryId, id, origin });
+}
+
+function wire(sel, fn) { const el = mainEl.querySelector(sel); if (el) el.onclick = fn; }
+
+// --------------------------------------------------------------------------
+// Boot
+// --------------------------------------------------------------------------
+async function boot() {
+  if (!state.accessToken && await tryRefresh()) {
+    try {
+      state.user = await api("/auth/me");
+      state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
+    } catch (e) { state.accessToken = null; }
+  }
+  if (!state.accessToken || !state.user) { renderLogin(); return; }
+  if (!state.user.agyaries.length) { renderSearch(); return; }
+  enterApp();
+}
+
+if ("serviceWorker" in navigator)
+  navigator.serviceWorker.register("/mobed-sw.js").catch(() => {});
+boot();
+</script>
+</body>
+</html>

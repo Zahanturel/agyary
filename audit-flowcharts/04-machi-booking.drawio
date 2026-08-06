@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" type="device">
+<diagram id="04-machi-booking" name="4. Machi booking  (slot-based, fully automatic)">
+<mxGraphModel dx="1000" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="title_04-machi-booking" value="4. Machi booking  (slot-based, fully automatic)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="900" height="30" as="geometry"/></mxCell>
+<mxCell id="n1" value="Behdin picks &#x27;Book a Machi&#x27;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="360" y="80" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n2" value="Select purpose: Patet / Tandarosti" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="170" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n3" value="Enter date (Parsi / Gregorian / tomorrow)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="260" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n4" value="Date resolved?
+(may ask Mah/Roj/confirm)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="350" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n5" value="Compute free gehs; drop elapsed gehs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="480" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n6" value="Any geh free
+that day?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="570" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n7" value="Offer: try another date /
+next available day / contact us" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="720" y="570" width="240" height="60" as="geometry"/></mxCell>
+<mxCell id="n8" value="Send Geh picker (WhatsApp Flow)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="700" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n9" value="Behdin selects a geh" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="790" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n10" value="Geh still free?
+(re-check)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="880" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n11" value="Show alternatives: same-day geh /
+same-geh next days / cancel / contact" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="720" y="880" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n12" value="Names phase (offer saved / enter new)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="1010" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n13" value="Show confirmation summary" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="1100" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n14" value="Confirm?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="1190" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n15" value="Nothing booked" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1000" y="1190" width="180" height="50" as="geometry"/></mxCell>
+<mxCell id="n16" value="book_machi_slot (shared core:
+validate · free? · claim · alternatives)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="1320" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n17" value="Slot claimed?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="380" y="1430" width="220" height="90" as="geometry"/></mxCell>
+<mxCell id="n18" value="status = confirmed; save names to pool" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="360" y="1560" width="260" height="50" as="geometry"/></mxCell>
+<mxCell id="n19" value="Confirm to behdin +
+FYI to every active member" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="360" y="1650" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="n20" value="Appears on shared Machi Board (Flow 7)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="360" y="1760" width="260" height="60" as="geometry"/></mxCell>
+<mxCell id="e21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n3" target="n4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e24" value="No — reprompt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.15;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e25" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n5" target="n6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e27" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n6" target="n7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e28" value="try another date" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n7" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e29" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n6" target="n8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e30" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n8" target="n9"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e31" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n9" target="n10"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e32" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n11"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e33" value="pick alt slot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;" edge="1" parent="1" source="n11" target="n12"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e34" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n12"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e35" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n12" target="n13"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e36" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n13" target="n14"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e37" value="Cancel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n14" target="n15"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e38" value="Edit names" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.15;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="n14" target="n12"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e39" value="Confirm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n14" target="n16"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e40" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n16" target="n17"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e41" value="No (raced/elapsed)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="n17" target="n11"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e42" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n17" target="n18"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e43" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n18" target="n19"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e44" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="n19" target="n20"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="175" value="FINDING B1 (Med). The Geh step sends a WhatsApp Flow with NO buttons/sections. The /chat simulator (addChips) renders only buttons+sections, never &#x27;flow&#x27;. A human testing via /chat sees the prompt with no selectable option and must know to TYPE &#x27;Havan&#x27;. README still claims /chat &#x27;drives the full booking flow&#x27;. Drift." style="shape=note;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;size=14;" vertex="1" parent="1"><mxGeometry x="1060" y="470" width="320" height="300" as="geometry"/></mxCell>
+<mxCell id="e45" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;endArrow=none;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" edge="1" parent="1" source="n8" target="175"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

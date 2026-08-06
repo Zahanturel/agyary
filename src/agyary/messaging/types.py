@@ -30,11 +30,34 @@ class ListSection:
 
 
 @dataclass(frozen=True)
+class FlowPrompt:
+    """A WhatsApp Flow launch, for any closed-vocabulary picker that can
+    exceed the interactive list message's real 10-row-total cap (or, per
+    07-predefined-input-decision.md, any closed-vocabulary picker at all -
+    tap-to-select, never free text/fuzzy matching).
+
+    ``flow_id`` and ``flow_token`` are Meta/registration and per-request
+    concerns respectively - callers get flow_id from Settings (module 2's
+    Flows are registered out-of-band, see wa_flows.py) and mint flow_token
+    themselves (wa_flows.make_flow_token). ``data`` is the initial screen
+    data payload (WhatsApp Flows doc: "flow_action_payload.data must be a
+    non-empty object").
+    """
+
+    flow_id: str
+    flow_token: str
+    flow_cta: str  # advised <=30 chars, no emoji
+    screen: str
+    data: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class OutgoingMessage:
     to: str  # recipient phone, E.164
     text: str
     buttons: list[Button] = field(default_factory=list)
     sections: list[ListSection] = field(default_factory=list)
+    flow: FlowPrompt | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -51,6 +74,17 @@ class OutgoingMessage:
                 }
                 for s in self.sections
             ],
+            "flow": (
+                {
+                    "flow_id": self.flow.flow_id,
+                    "flow_token": self.flow.flow_token,
+                    "flow_cta": self.flow.flow_cta,
+                    "screen": self.flow.screen,
+                    "data": self.flow.data,
+                }
+                if self.flow
+                else None
+            ),
         }
 
 

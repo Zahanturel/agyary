@@ -10,14 +10,14 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
-from agyary.messaging import booking_service
+from agyary.core.config import get_settings
+from agyary.messaging import booking_service, wa_flows
 from agyary.messaging.availability import (
     available_gehs,
+    drop_elapsed_gehs,
     next_days_with_any_geh,
-    next_days_with_geh,
     parsi_slot_fields,
 )
-from agyary.messaging.booking_service import SlotTakenError
 from agyary.messaging.flows import date_steps
 from agyary.messaging.flows.base import FlowContext, matched_option, split_done_lines
 from agyary.messaging.formatting import (
@@ -29,10 +29,9 @@ from agyary.messaging.formatting import (
     name_line,
     names_block,
     parsi_label,
-    rupees,
 )
-from agyary.messaging.geh_times import IST, machi_ceremony_datetime
-from agyary.messaging.types import Button, ListRow, ListSection, OutgoingMessage
+from agyary.messaging.geh_times import IST
+from agyary.messaging.types import Button, FlowPrompt, ListRow, ListSection, OutgoingMessage
 from agyary.models.enums import GEH_NAMES
 
 FLOW = "machi_booking"
@@ -191,20 +190,12 @@ async def _step_confirm_date(ctx: FlowContext) -> list[OutgoingMessage]:
     ]
 
 
-def _drop_elapsed_gehs(gehs: list[int], gregorian: date) -> list[int]:
-    """For same-day bookings, hide gehs whose start time already passed."""
-    now = datetime.now(IST)
-    if gregorian != now.date():
-        return gehs
-    return [g for g in gehs if machi_ceremony_datetime(gregorian, g) > now]
-
-
 async def _proceed_to_geh(ctx: FlowContext, data: dict) -> list[OutgoingMessage]:
     free = await available_gehs(
         ctx.db, ctx.agyary.id, data["roj"], data["mah"], data["year"]
     )
     gregorian = date.fromisoformat(data["gregorian"])
-    free = _drop_elapsed_gehs(free, gregorian)
+    free = drop_elapsed_gehs(free, gregorian)
     label = date_label(data["roj"], data["mah"], gregorian)
 
     if not free:
@@ -220,15 +211,23 @@ async def _proceed_to_geh(ctx: FlowContext, data: dict) -> list[OutgoingMessage]
             )
         ]
 
-    rows = [
-        ListRow(id=f"geh_{geh}", title=GEH_NAMES[geh], description="Available")
-        for geh in free
-    ]
+    # Geh is a static Flow (all 5 options, values never change) - same
+    # treatment as Roj/Mah, per 07-predefined-input-decision.md. It isn't
+    # filtered to just the currently-free gehs (unlike the old list
+    # message): availability is re-checked after selection, the same way
+    # a Roj/Mah combo can already resolve to zero free gehs today.
     await ctx.set_state(FLOW, "select_geh", data)
+    settings = get_settings()
     return [
         ctx.reply(
             f"{label}\n\nWhich Geh would you like?",
-            sections=[ListSection(title="Available Gehs", rows=rows)],
+            flow=FlowPrompt(
+                flow_id=settings.whatsapp_flow_id_geh,
+                flow_token=wa_flows.make_flow_token("geh", ctx.agyary.id),
+                flow_cta="Select Geh",
+                screen="SELECT_GEH",
+                data={},
+            ),
         )
     ]
 
@@ -241,7 +240,7 @@ async def _step_select_geh(ctx: FlowContext) -> list[OutgoingMessage]:
         return [ctx.reply("Please select a Geh from the list above.")]
     geh = int(choice.split("_")[1])
 
-    free = _drop_elapsed_gehs(
+    free = drop_elapsed_gehs(
         await available_gehs(ctx.db, ctx.agyary.id, data["roj"], data["mah"], data["year"]),
         date.fromisoformat(data["gregorian"]),
     )
@@ -252,37 +251,25 @@ async def _step_select_geh(ctx: FlowContext) -> list[OutgoingMessage]:
     return await _begin_names_phase(ctx, data)
 
 
-async def _alternatives_for_taken_slot(
-    ctx: FlowContext, data: dict, geh: int
-) -> list[OutgoingMessage]:
-    """The chosen geh is (or just became) booked: same-day and same-geh options."""
+def _alternatives_sections(
+    data: dict, geh: int, same_day_gehs: list[int], same_geh_next_days: list
+) -> list[ListSection]:
     gregorian = date.fromisoformat(data["gregorian"])
-    free_today = _drop_elapsed_gehs(
-        await available_gehs(ctx.db, ctx.agyary.id, data["roj"], data["mah"], data["year"]),
-        gregorian,
-    )
     same_day = [
         ListRow(
             id=f"altslot_{data['gregorian']}_{g}",
             title=f"{GEH_NAMES[g]} Geh",
             description=f"{parsi_label(data['roj'], data['mah'])} ({gregorian_label(gregorian)})"[:72],
         )
-        for g in free_today
+        for g in same_day_gehs
     ]
-    next_days = await next_days_with_geh(
-        ctx.db,
-        ctx.agyary.id,
-        CalendarSystem(ctx.agyary.calendar_system),
-        gregorian,
-        geh,
-    )
     same_geh = [
         ListRow(
             id=f"altslot_{option.gregorian.isoformat()}_{option.geh}",
             title=parsi_label(option.roj, option.mah)[:24],
             description=f"{geh_label(option.geh)} ({gregorian_label(option.gregorian)})"[:72],
         )
-        for option in next_days
+        for option in same_geh_next_days
     ]
     sections = []
     if same_day:
@@ -300,6 +287,18 @@ async def _alternatives_for_taken_slot(
             ],
         )
     )
+    return sections
+
+
+async def _render_taken_slot_alternatives(
+    ctx: FlowContext,
+    data: dict,
+    geh: int,
+    alternatives: booking_service.MachiSlotAlternatives,
+) -> list[OutgoingMessage]:
+    sections = _alternatives_sections(
+        data, geh, alternatives.same_day_gehs, alternatives.same_geh_next_days
+    )
     await ctx.set_state(FLOW, "select_alternative", data)
     return [
         ctx.reply(
@@ -308,6 +307,20 @@ async def _alternatives_for_taken_slot(
             sections=sections,
         )
     ]
+
+
+async def _alternatives_for_taken_slot(
+    ctx: FlowContext, data: dict, geh: int
+) -> list[OutgoingMessage]:
+    """Mid-flow re-check (geh selection / altslot navigation): not yet
+    attempting to claim a slot, just showing what's free, so this computes
+    fresh via the shared availability query rather than through
+    book_machi_slot (that function claims a slot; this is only browsing)."""
+    gregorian = date.fromisoformat(data["gregorian"])
+    alternatives = await booking_service.compute_machi_alternatives(
+        ctx.db, ctx.agyary, data["roj"], data["mah"], data["year"], geh, gregorian
+    )
+    return await _render_taken_slot_alternatives(ctx, data, geh, alternatives)
 
 
 async def _step_select_alternative(ctx: FlowContext) -> list[OutgoingMessage]:
@@ -368,7 +381,7 @@ async def _step_select_alternative(ctx: FlowContext) -> list[OutgoingMessage]:
         system = CalendarSystem(ctx.agyary.calendar_system)
         roj, mah, year = parsi_slot_fields(gregorian_to_parsi(gregorian, system))
         data.update(date_steps.date_fields(roj, mah, year, gregorian))
-        free = _drop_elapsed_gehs(
+        free = drop_elapsed_gehs(
             await available_gehs(ctx.db, ctx.agyary.id, roj, mah, year), gregorian
         )
         if geh not in free:
@@ -547,9 +560,8 @@ async def _step_enter_names(ctx: FlowContext) -> list[OutgoingMessage]:
 # Confirmation
 # ---------------------------------------------------------------------------
 async def _show_confirmation(ctx: FlowContext, data: dict) -> list[OutgoingMessage]:
-    price = await booking_service.machi_price(ctx.db, ctx.agyary.id)
-    if price is not None:
-        data["amount"] = str(price)
+    # No money/payment in this pass - machi confirmation never showed a
+    # price, and the eventual booking never records an amount either.
     gregorian = date.fromisoformat(data["gregorian"])
     lines = [
         "Here's your booking summary:",
@@ -562,8 +574,6 @@ async def _show_confirmation(ctx: FlowContext, data: dict) -> list[OutgoingMessa
         "Names:",
         names_block(data["names"]),
     ]
-    if data.get("amount"):
-        lines += ["", f"Amount: {rupees(data['amount'])}"]
     await ctx.set_state(FLOW, "confirm", data)
     return [
         ctx.reply(
@@ -578,8 +588,6 @@ async def _show_confirmation(ctx: FlowContext, data: dict) -> list[OutgoingMessa
 
 
 async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
-    from decimal import Decimal
-
     data = ctx.data
     choice = matched_option(
         ctx.text,
@@ -608,23 +616,28 @@ async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
         ]
 
     gregorian = date.fromisoformat(data["gregorian"])
-    amount = Decimal(data["amount"]) if data.get("amount") else None
-    try:
-        machi = await booking_service.create_machi_request(
-            ctx.db,
-            ctx.agyary,
-            ctx.customer,
-            roj=data["roj"],
-            mah=data["mah"],
-            year=data["year"],
-            geh=data["geh"],
-            gregorian=gregorian,
-            purpose=data["purpose"],
-            names=data["names"],
-            amount=amount,
-        )
-    except SlotTakenError:
-        return await _alternatives_for_taken_slot(ctx, data, data["geh"])
+
+    # Machi is fully automatic: no approval gate, no human in the loop.
+    # book_machi_slot (module 1's shared core) owns the entire "is this
+    # slot valid, is it free, claim it, what are the alternatives if not"
+    # decision - re-checked fresh here (including the elapsed-geh past
+    # check), not just relying on the unique-index race exception, so a
+    # slot that quietly elapsed while the customer was typing names can't
+    # silently get booked in the past.
+    result = await booking_service.book_machi_slot(
+        ctx.db,
+        ctx.agyary,
+        ctx.customer,
+        roj=data["roj"],
+        mah=data["mah"],
+        year=data["year"],
+        geh=data["geh"],
+        gregorian=gregorian,
+        purpose=data["purpose"],
+        names=data["names"],
+    )
+    if result.machi is None:
+        return await _render_taken_slot_alternatives(ctx, data, data["geh"], result.alternatives)
 
     # Update the saved pool only with freshly typed names ('New set' replaces).
     if not data.get("names_from_saved"):
@@ -645,15 +658,16 @@ async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
 
     messages = [
         ctx.reply(
-            f"Your Machi request has been sent to {ctx.agyary.name}.\n"
-            "You'll hear back shortly."
+            f"Your Machi ({PURPOSE_SHORT[data['purpose']]}) at {ctx.agyary.name} is "
+            f"confirmed for {date_label(data['roj'], data['mah'], gregorian)}, "
+            f"{geh_label(data['geh'])}."
         )
     ]
-    admin_text = "\n".join(
+    fyi_text = "\n".join(
         [
-            f"New Machi request at {ctx.agyary.name}:",
+            f"New Machi booked at {ctx.agyary.name}:",
             "",
-            f"Customer: {ctx.customer.name} ({ctx.customer.phone})",
+            f"{ctx.customer.name} ({ctx.customer.phone})",
             f"Purpose: {PURPOSE_SHORT[data['purpose']]}",
             date_label(data["roj"], data["mah"], gregorian),
             geh_label(data["geh"]),
@@ -662,15 +676,10 @@ async def _step_confirm(ctx: FlowContext) -> list[OutgoingMessage]:
             names_block(data["names"]),
         ]
     )
-    for admin in await booking_service.get_admins(ctx.db, ctx.agyary.id):
-        messages.append(
-            OutgoingMessage(
-                to=admin.phone,
-                text=admin_text,
-                buttons=[
-                    Button(id=f"approve_machi_{machi.id}", title="Approve"),
-                    Button(id=f"decline_machi_{machi.id}", title="Decline"),
-                ],
-            )
-        )
+    # Every active member at the agyary, not just ADMIN_ROLES - a
+    # peer-mobed agyari has no panthaky/caretaker to notify, and this is
+    # informational only (no button, no gate) so there's no reason to
+    # narrow the recipient list the way an approval request would.
+    for member in await booking_service.get_active_agyary_users(ctx.db, ctx.agyary.id):
+        messages.append(OutgoingMessage(to=member.phone, text=fyi_text))
     return messages

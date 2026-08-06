@@ -6,15 +6,23 @@ adding a value is an in-place constraint swap, never a type migration.
 
 CALENDAR_SYSTEMS = ("shenshai", "kadmi", "fasli")
 
+# Agyari lifecycle. 'unclaimed' rows are seeded reference data (e.g. the
+# worldwide fire-temple list) that no mobed has set up yet; 'active' means a
+# real mobed has joined and vouched for / corrected its details. Kept separate
+# from is_active (which is soft-delete / deactivation) so "exists as a seed
+# entry" and "has been set up by a real person" stay different facts.
+AGYARY_STATUSES = ("unclaimed", "active")
+
 USER_ROLES = ("panthaky", "mobed", "caretaker")
 ADMIN_ROLES = ("panthaky", "caretaker")
 
 # Shared state machine for machis and bookings (doc 2 refinement of doc 1).
 CEREMONY_STATUSES = (
-    "requested",  # customer submitted, awaiting panthaky decision
+    "requested",  # customer submitted, awaiting panthaky decision (bookings) / legacy (machis)
     "approved",  # panthaky approved, no mobed assigned yet
     "assigned",  # mobed assigned (and accepted, where acceptance is required)
     "mobed_declined",  # mobed backed out, needs reassignment
+    "confirmed",  # machi auto-booked (no human gate) - redesign v3, machis only
     "completed",  # terminal
     "cancelled",  # terminal
     "declined",  # terminal: panthaky declined the request

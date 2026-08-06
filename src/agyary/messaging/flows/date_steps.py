@@ -9,11 +9,13 @@ from __future__ import annotations
 from datetime import date
 
 from agyary.calendar import CalendarSystem, ROJ_NAMES, gregorian_to_parsi
+from agyary.core.config import get_settings
+from agyary.messaging import wa_flows
 from agyary.messaging.availability import parsi_slot_fields
 from agyary.messaging.date_parser import DateParse, infer_parsi_year, parse_date_input
-from agyary.messaging.flows.base import FlowContext, chunk_rows
+from agyary.messaging.flows.base import FlowContext
 from agyary.messaging.formatting import parsi_label
-from agyary.messaging.types import Button, ListRow, ListSection, OutgoingMessage
+from agyary.messaging.types import Button, FlowPrompt, OutgoingMessage
 
 DATE_HELP = (
     "You can type:\n"
@@ -38,20 +40,40 @@ MAH_ROWS = [
 ]
 
 
-def _mah_sections() -> list[ListSection]:
-    rows = [ListRow(id=row_id, title=title) for row_id, title in MAH_ROWS]
-    return [
-        ListSection(title="Months", rows=rows[:10]),
-        ListSection(title="More", rows=rows[10:]),
-    ]
+def _mah_flow_prompt(ctx: FlowContext, text: str) -> OutgoingMessage:
+    """A predefined Dropdown, not a list message - Mah has 12 options,
+    already over the interactive list message's real 10-row-total cap
+    (confirmed against Meta's docs; the old chunk_rows-based 2-section
+    split silently violated it). Per 07-predefined-input-decision.md."""
+    settings = get_settings()
+    return ctx.reply(
+        text,
+        flow=FlowPrompt(
+            flow_id=settings.whatsapp_flow_id_mah,
+            flow_token=wa_flows.make_flow_token("mah", ctx.agyary.id),
+            flow_cta="Select Mah",
+            screen="SELECT_MAH",
+            data={},
+        ),
+    )
 
 
 ROJ_ROWS = [(f"roj_{i + 1}", name) for i, name in enumerate(ROJ_NAMES)]
 
 
-def _roj_sections() -> list[ListSection]:
-    rows = [ListRow(id=row_id, title=title) for row_id, title in ROJ_ROWS]
-    return chunk_rows(rows, "Roj")
+def _roj_flow_prompt(ctx: FlowContext, text: str) -> OutgoingMessage:
+    """Roj has 30 options - same reasoning as _mah_flow_prompt."""
+    settings = get_settings()
+    return ctx.reply(
+        text,
+        flow=FlowPrompt(
+            flow_id=settings.whatsapp_flow_id_roj,
+            flow_token=wa_flows.make_flow_token("roj", ctx.agyary.id),
+            flow_cta="Select Roj",
+            screen="SELECT_ROJ",
+            data={},
+        ),
+    )
 
 
 def date_fields(roj: int, mah: int, year: int, gregorian: date) -> dict:
@@ -74,24 +96,22 @@ def resolve_date_text(
         return "resolved", date_fields(parsed.roj, parsed.mah, year, gregorian), []
 
     if parsed.kind == "parsi_roj_only":
-        message = ctx.reply(
-            f"Roj {ctx.text.strip().split()[-1].capitalize()}. Which Mah?",
-            sections=_mah_sections(),
+        message = _mah_flow_prompt(
+            ctx, f"Roj {ctx.text.strip().split()[-1].capitalize()}. Which Mah?"
         )
         return "need_mah", {"pending_roj": parsed.roj}, [message]
 
     if parsed.kind == "roj_invalid":
-        message = ctx.reply(
-            "Sorry, I didn't recognize that Roj. Please select one from the list:",
-            sections=_roj_sections(),
+        message = _roj_flow_prompt(
+            ctx, "Sorry, I didn't recognize that Roj. Please select one:"
         )
         return "need_roj", {}, [message]
 
     if parsed.kind == "mah_invalid":
-        message = ctx.reply(
+        message = _mah_flow_prompt(
+            ctx,
             f"Roj {ROJ_NAMES[parsed.roj - 1]}. Sorry, I didn't recognize that Mah. "
-            "Please select one from the list:",
-            sections=_mah_sections(),
+            "Please select one:",
         )
         return "need_mah", {"pending_roj": parsed.roj}, [message]
 
@@ -135,9 +155,7 @@ def resolve_mah_selection(
     if mah is None:
         mah = _match_calendar_name(normalized, _MAH_LOOKUP)
     if mah is None:
-        return "invalid", {}, [
-            ctx.reply("Please select a Mah from the list above.", sections=_mah_sections())
-        ]
+        return "invalid", {}, [_mah_flow_prompt(ctx, "Please select a Mah.")]
 
     system = CalendarSystem(ctx.agyary.calendar_system)
     year, gregorian = infer_parsi_year(pending_roj, mah, system, today)
@@ -157,9 +175,7 @@ def resolve_roj_selection(ctx: FlowContext) -> tuple[str, dict, list[OutgoingMes
     if roj is None:
         roj = _match_calendar_name(normalized, _ROJ_LOOKUP)
     if roj is None:
-        return "invalid", {}, [
-            ctx.reply("Please select a Roj from the list above.", sections=_roj_sections())
-        ]
+        return "invalid", {}, [_roj_flow_prompt(ctx, "Please select a Roj.")]
 
-    message = ctx.reply(f"Roj {ROJ_NAMES[roj - 1]}. Which Mah?", sections=_mah_sections())
+    message = _mah_flow_prompt(ctx, f"Roj {ROJ_NAMES[roj - 1]}. Which Mah?")
     return "need_mah", {"pending_roj": roj}, [message]

@@ -22,9 +22,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
+from agyary.messaging import wa_flows
 from agyary.messaging.handler import handle_message_with_outbox_ids
 from agyary.messaging.send_worker import enqueue_send
-from agyary.models import Agyary, WhatsAppMessage
+from agyary.messaging.wa_flows_crypto import (
+    FLOW_ENDPOINT_ERROR_STATUS,
+    FlowDecryptionError,
+    decrypt_request,
+    encrypt_response,
+)
+from agyary.models import Agyary, AgyaryUser, Service, User, WhatsAppMessage
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +90,24 @@ def _extract_text(message: dict) -> str:
             return interactive["button_reply"].get("id", "")
         if "list_reply" in interactive:
             return interactive["list_reply"].get("id", "")
+        if "nfm_reply" in interactive:
+            return _extract_flow_reply(interactive["nfm_reply"])
+    return ""
+
+
+def _extract_flow_reply(nfm_reply: dict) -> str:
+    """A completed WhatsApp Flow (nfm_reply) carries its submitted fields as
+    a JSON string in response_json. Every Flow this codebase sends has
+    exactly one Dropdown field per screen (wa_flows.py), so its single
+    value - already an option id like "roj_2" or "svc_5" - is the routable
+    text, letting the existing button/list step handlers (matched_option)
+    consume it without a parallel input-handling path."""
+    try:
+        response_data = json.loads(nfm_reply.get("response_json") or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if isinstance(response_data, dict) and response_data:
+        return str(next(iter(response_data.values())))
     return ""
 
 
@@ -141,3 +166,74 @@ async def _process_status(db: AsyncSession, status: dict) -> None:
         logger.warning("Status update for unknown wa_message_id=%s", wa_message_id)
         return
     row.status = new_status
+
+
+async def _resolve_dynamic_options(db: AsyncSession, purpose: str, agyary_id: int) -> list[dict]:
+    """The current option list for a dynamic Flow (module 2 plumbing; the
+    actual "choose who to book with" / services-list steps that SEND these
+    Flows are built in modules 4/5 - this resolver is what the data-exchange
+    endpoint calls regardless of which flow triggered it)."""
+    if purpose == wa_flows.PURPOSE_PRIEST_PICKER:
+        result = await db.execute(
+            select(User)
+            .join(AgyaryUser, AgyaryUser.user_id == User.id)
+            .where(
+                AgyaryUser.agyary_id == agyary_id,
+                AgyaryUser.is_active.is_(True),
+                User.is_active.is_(True),
+            )
+        )
+        return [{"id": f"priest_{u.id}", "title": u.name[:24]} for u in result.scalars()]
+    if purpose == wa_flows.PURPOSE_SERVICES_PICKER:
+        result = await db.execute(
+            select(Service)
+            .where(Service.agyary_id == agyary_id, Service.is_active.is_(True))
+            .order_by(Service.display_order, Service.id)
+        )
+        services = [s for s in result.scalars() if s.name.strip().lower() != "machi"]
+        return [{"id": f"svc_{s.id}", "title": s.name[:24]} for s in services]
+    return []
+
+
+@router.post("/flows/data-exchange", include_in_schema=False)
+async def flows_data_exchange(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    """Meta's Flows Data Exchange endpoint for the dynamic Flows (priest
+    picker, per-agyari services list). Encryption per wa_flows_crypto.py,
+    verified against Meta's primary doc - see that module's docstring.
+    Also signed the same way as the main webhook (X-Hub-Signature-256
+    against the app secret) - confirmed against the same primary doc during
+    module 2's review pass, not assumed by analogy: "Meta signs all
+    endpoint requests with a SHA256 signature and includes the signature in
+    the request's X-Hub-Signature-256 header." Reuses _valid_signature,
+    the exact check receive_webhook already does.
+    Decryption failure -> HTTP 421 (Meta's required status, not a generic
+    4xx/5xx), so the client knows to refresh its public key rather than
+    silently retrying against a stale one.
+    """
+    settings = get_settings()
+    raw_body = await request.body()
+    signature_header = request.headers.get("x-hub-signature-256", "")
+    if not _valid_signature(raw_body, signature_header, settings.whatsapp_app_secret):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    try:
+        body = json.loads(raw_body) if raw_body else {}
+        decrypted, aes_key, iv = decrypt_request(
+            body, settings.whatsapp_flows_private_key_pem.encode()
+        )
+    except (FlowDecryptionError, ValueError, KeyError):
+        return PlainTextResponse(status_code=FLOW_ENDPOINT_ERROR_STATUS, content="")
+
+    if decrypted.get("action") == "ping":
+        response_payload: dict = {"data": {"status": "active"}}
+    else:
+        flow_token = decrypted.get("flow_token", "")
+        try:
+            purpose, agyary_id, _nonce = wa_flows.parse_flow_token(flow_token)
+        except ValueError:
+            return PlainTextResponse(status_code=FLOW_ENDPOINT_ERROR_STATUS, content="")
+        options = await _resolve_dynamic_options(db, purpose, agyary_id)
+        response_payload = {"screen": decrypted.get("screen"), "data": {"options": options}}
+
+    encrypted = encrypt_response(response_payload, aes_key, iv)
+    return PlainTextResponse(content=encrypted, status_code=200)
