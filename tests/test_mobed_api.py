@@ -210,7 +210,13 @@ async def test_manual_add_booking_and_my_day_and_machi_board(db, client, seeded)
     await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/manual-add/machi", json=machi_payload, headers=headers)
 
     assert len((await client.get("/api/mobed/my-day", headers=headers)).json()) == 1  # machi never on My Day
-    board = (await client.get(f"/api/mobed/agyaries/{seeded['agyary_id']}/machi-board", headers=headers)).json()
+    board = (
+        await client.get(
+            f"/api/mobed/agyaries/{seeded['agyary_id']}/machi-board",
+            params={"from": "2027-11-01", "to": "2027-11-30"},
+            headers=headers,
+        )
+    ).json()
     assert len(board) == 1 and board[0]["status"] == "confirmed"
 
 

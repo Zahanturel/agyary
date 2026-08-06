@@ -198,14 +198,41 @@ async def bookable_gehs(db: AsyncSession, agyary: Agyary, gregorian: date) -> li
     return drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
 
 
-async def list_machi_board(db: AsyncSession, agyary_id: int) -> list[MachiBoardEntry]:
-    """Per-agyari, shared, not merged across a multi-agyari mobed's
+MAX_BOARD_RANGE_DAYS = 366
+
+
+async def list_machi_board(
+    db: AsyncSession, agyary_id: int, start: date, end: date
+) -> list[MachiBoardEntry]:
+    """Machis at one agyari between two dates, inclusive.
+
+    Per-agyari and shared, not merged across a multi-agyari mobed's
     memberships - institutional context, every active mobed at that agyary
-    sees the same board. Carries the booked-by name for the geh cards."""
+    sees the same board. Carries the booked-by name for the geh cards.
+
+    The window is required, not optional. This used to return every
+    non-released machi at the agyari for all time and let the client filter
+    by day, which was survivable only while it was fetched once for a board
+    showing a single date. A calendar refetching on every month step turns
+    that into "re-download the temple's entire history to render 30 days",
+    growing without bound. Bounded on gregorian_date (the Parsi-day anchor
+    the board is keyed by, and the indexed column) rather than
+    ceremony_datetime, which for Ushahin lands on the following morning.
+    """
+    if end < start:
+        raise ValueError("end must not be before start")
+    if (end - start).days + 1 > MAX_BOARD_RANGE_DAYS:
+        raise ValueError(f"Range too large (max {MAX_BOARD_RANGE_DAYS} days)")
+
     stmt = (
         select(Machi, Customer)
         .outerjoin(Customer, Customer.id == Machi.customer_id)
-        .where(Machi.agyary_id == agyary_id, Machi.status.notin_(SLOT_RELEASING_STATUSES))
+        .where(
+            Machi.agyary_id == agyary_id,
+            Machi.status.notin_(SLOT_RELEASING_STATUSES),
+            Machi.gregorian_date >= start,
+            Machi.gregorian_date <= end,
+        )
         .order_by(Machi.ceremony_datetime)
     )
     return [

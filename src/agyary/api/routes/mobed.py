@@ -18,9 +18,27 @@ from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.messaging import booking_service, wa_flows
 from agyary.messaging.flows.approval import handle_pwa_booking_action
-from agyary.models import Agyary, AgyaryInvite, AgyaryUser, Booking, Service, User
-from agyary.models.enums import USER_ROLES
-from agyary.services import mobed_auth, mobed_dashboard, otp_delivery
+from agyary.models import (
+    Agyary,
+    AgyaryInvite,
+    AgyaryUser,
+    Booking,
+    Customer,
+    Service,
+    User,
+    UserPreferences,
+)
+from agyary.models.enums import (
+    CALENDAR_SYSTEMS,
+    DISPLAY_CALENDAR_SYSTEMS,
+    DISPLAY_LANGUAGES,
+    NAME_SECTIONS,
+    NAME_STATUSES,
+    NAME_TITLES,
+    USER_ROLES,
+)
+from agyary.models.preferences import default_preferences
+from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, otp_delivery
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -226,6 +244,81 @@ async def update_me(
     user.name = name
     await db.commit()
     return await _serialize_user(db, user)
+
+
+# ---------------------------------------------------------------------------
+# Display preferences (per user, not per agyari - see models/preferences.py)
+# ---------------------------------------------------------------------------
+def _preferences_response(prefs: UserPreferences | None) -> dict:
+    if prefs is None:
+        return default_preferences()
+    return {
+        "visible_calendar_systems": list(prefs.visible_calendar_systems),
+        "default_secondary_system": prefs.default_secondary_system,
+        "display_language": prefs.display_language,
+    }
+
+
+@router.get("/me/preferences")
+async def get_preferences(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict:
+    """Someone who has never opened Settings has no row; they get the
+    defaults rather than a 404, so the client has one shape to render."""
+    return _preferences_response(await db.get(UserPreferences, user.id))
+
+
+class PreferencesIn(BaseModel):
+    visible_calendar_systems: list[str]
+    default_secondary_system: str
+    display_language: str
+
+
+@router.put("/me/preferences")
+async def put_preferences(
+    payload: PreferencesIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Replace this user's display preferences. Writes the row on first use.
+
+    Does not touch Agyary.calendar_system, and must not: that field decides
+    which Parsi reckoning is stamped onto ceremony records and is part of
+    the historical record, not a view setting.
+    """
+    systems = list(dict.fromkeys(payload.visible_calendar_systems))  # de-dup, keep order
+    unknown = [s for s in systems if s not in DISPLAY_CALENDAR_SYSTEMS]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown calendar system(s): {', '.join(unknown)}. "
+            f"Choose from: {', '.join(DISPLAY_CALENDAR_SYSTEMS)}",
+        )
+    if not systems:
+        raise HTTPException(status_code=400, detail="At least one calendar system must stay visible")
+    if payload.default_secondary_system not in CALENDAR_SYSTEMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Secondary system must be one of: {', '.join(CALENDAR_SYSTEMS)}",
+        )
+    if payload.default_secondary_system not in systems:
+        raise HTTPException(
+            status_code=400, detail="The secondary system has to be one of the visible ones"
+        )
+    if payload.display_language not in DISPLAY_LANGUAGES:
+        raise HTTPException(
+            status_code=400, detail=f"Language must be one of: {', '.join(DISPLAY_LANGUAGES)}"
+        )
+
+    prefs = await db.get(UserPreferences, user.id)
+    if prefs is None:
+        prefs = UserPreferences(user_id=user.id)
+        db.add(prefs)
+    prefs.visible_calendar_systems = systems
+    prefs.default_secondary_system = payload.default_secondary_system
+    prefs.display_language = payload.display_language
+    await db.commit()
+    return _preferences_response(prefs)
 
 
 # ---------------------------------------------------------------------------
@@ -578,10 +671,21 @@ async def set_service_active(
 
 @router.get("/agyaries/{agyary_id}/machi-board")
 async def machi_board(
-    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    agyary_id: int,
+    from_: date = Query(alias="from"),
+    to: date = Query(),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[dict]:
+    """Machis at this agyari within [from, to] inclusive, by Parsi-day
+    anchor (gregorian_date). The window is required: this previously
+    returned the agyari's entire machi history on every call, which a
+    calendar refetching per month-step would re-download in full."""
     await _require_membership(db, agyary_id, user)
-    entries = await mobed_dashboard.list_machi_board(db, agyary_id)
+    try:
+        entries = await mobed_dashboard.list_machi_board(db, agyary_id, from_, to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return [
         {
             "id": e.machi.id,
@@ -663,6 +767,169 @@ async def customer_history(
     if result is None:
         raise HTTPException(status_code=404, detail="Unknown customer")
     return result
+
+
+# ---------------------------------------------------------------------------
+# Behdin records: explicit create/read/update, plus their saved name pool.
+#
+# Complements - does not replace - the implicit create-on-save that the
+# booking paths still use (mobed_dashboard._resolve_customer): a walk-in
+# dictated at the counter shouldn't need a separate setup step first, but
+# it can't be the only way to get a record either, or a mistyped number is
+# uncorrectable and a family's names can't be prepared in advance.
+# ---------------------------------------------------------------------------
+async def _require_behdin(db: AsyncSession, agyary_id: int, customer_id: int, user: User) -> Customer:
+    await _require_membership(db, agyary_id, user)
+    customer = await behdin_directory.get_scoped(db, agyary_id, customer_id)
+    if customer is None:
+        # Deliberately 404 rather than 403 for a behdin who exists but
+        # belongs to another temple - whether a given person is registered
+        # elsewhere isn't this caller's business.
+        raise HTTPException(status_code=404, detail="Unknown behdin at this fire temple")
+    return customer
+
+
+class CreateBehdinIn(BaseModel):
+    name: str
+    phone: Phone
+
+
+@router.post("/agyaries/{agyary_id}/behdins")
+async def create_behdin(
+    agyary_id: int,
+    payload: CreateBehdinIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Register a behdin at this agyari.
+
+    A phone already on file resolves to that existing person and links them
+    here (``created: false``) rather than erroring - phone is the identity,
+    and that is what lets a behdin who visits more than one temple keep a
+    single history. Their stored name is left alone in that case.
+    """
+    await _require_membership(db, agyary_id, user)
+    try:
+        customer, created = await behdin_directory.create_or_link(
+            db, agyary_id, name=payload.name, phone=payload.phone
+        )
+    except behdin_directory.BehdinError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    return {**behdin_directory.customer_summary(customer), "created": created}
+
+
+@router.get("/agyaries/{agyary_id}/behdins/{customer_id}")
+async def get_behdin(
+    agyary_id: int,
+    customer_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    customer = await _require_behdin(db, agyary_id, customer_id, user)
+    return behdin_directory.customer_summary(customer)
+
+
+class UpdateBehdinIn(BaseModel):
+    # Both optional so a caller can correct one without restating the other.
+    name: str | None = None
+    phone: OptionalPhone = None
+
+
+@router.patch("/agyaries/{agyary_id}/behdins/{customer_id}")
+async def update_behdin(
+    agyary_id: int,
+    customer_id: int,
+    payload: UpdateBehdinIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Correct a behdin's name or number. Moving a number onto a person who
+    already has their own record is refused - that would merge two
+    histories, which is not a typo-shaped decision."""
+    customer = await _require_behdin(db, agyary_id, customer_id, user)
+    try:
+        await behdin_directory.update(db, customer, name=payload.name, phone=payload.phone)
+    except behdin_directory.BehdinError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    return behdin_directory.customer_summary(customer)
+
+
+# --- Saved name pool (the same rows the WhatsApp flows read/write) ---------
+@router.get("/agyaries/{agyary_id}/behdins/{customer_id}/saved-names")
+async def list_saved_names(
+    agyary_id: int,
+    customer_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    await _require_behdin(db, agyary_id, customer_id, user)
+    return await behdin_directory.list_saved_names(db, customer_id)
+
+
+class SavedNameIn(BaseModel):
+    title: str
+    name: str
+    status: str
+    pair_group: int | None = None
+
+
+class ReplaceSectionIn(BaseModel):
+    names: list[SavedNameIn]
+
+
+@router.put("/agyaries/{agyary_id}/behdins/{customer_id}/saved-names/{section}")
+async def replace_saved_name_section(
+    agyary_id: int,
+    customer_id: int,
+    section: str,
+    payload: ReplaceSectionIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Replace one section ('pair' or 'farmayeshne') of the pool wholesale.
+
+    Section-at-a-time rather than row-at-a-time because the invariant lives
+    at that level: a pair is exactly two names of one status, which is a
+    property of the set. It's also already how the WhatsApp side thinks
+    about this ('New set'), and reuses the same service function.
+    """
+    await _require_behdin(db, agyary_id, customer_id, user)
+    if section not in NAME_SECTIONS:
+        raise HTTPException(status_code=404, detail=f"Unknown section: {section}")
+    for n in payload.names:
+        if n.title not in NAME_TITLES:
+            raise HTTPException(status_code=400, detail=f"Unknown title: {n.title}")
+        if n.status not in NAME_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Unknown status: {n.status}")
+    try:
+        rows = await behdin_directory.replace_section(
+            db, customer_id, section, [n.model_dump() for n in payload.names]
+        )
+    except behdin_directory.BehdinError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    return rows
+
+
+@router.delete("/agyaries/{agyary_id}/behdins/{customer_id}/saved-names/{row_id}")
+async def delete_saved_name(
+    agyary_id: int,
+    customer_id: int,
+    row_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Remove one saved name. A paired name takes its partner with it -
+    leaving half a pair behind would create exactly the orphan that
+    complete_pairs silently hides, so the name would vanish from the
+    behdin's options with no explanation."""
+    await _require_behdin(db, agyary_id, customer_id, user)
+    if not await behdin_directory.delete_saved_name(db, customer_id, row_id):
+        raise HTTPException(status_code=404, detail="Unknown saved name")
+    await db.commit()
+    return {"deleted": True}
 
 
 # ---------------------------------------------------------------------------

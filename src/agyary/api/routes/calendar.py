@@ -2,7 +2,13 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 
-from agyary.calendar import CalendarSystem, ParsiDate, gregorian_to_parsi, parsi_to_gregorian
+from agyary.calendar import (
+    CalendarSystem,
+    ParsiDate,
+    gregorian_to_parsi,
+    nearest_occurrence,
+    parsi_to_gregorian,
+)
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -96,14 +102,43 @@ def parsi_month(
 @router.get("/from-parsi")
 def from_parsi(
     roj: int = Query(ge=1, le=30),
-    mah: int = Query(ge=1, le=12),
-    year: int = Query(),
+    mah: int = Query(ge=1, le=13),
+    year: int | None = Query(default=None),
     system: CalendarSystem = Query(default=CalendarSystem.SHENSHAI),
 ) -> dict:
-    """Roj/Mah/Year -> Gregorian, so the calendar can be navigated by the
-    Parsi reading as well as the Gregorian one (My Day 'jump to Roj/Mah')."""
+    """Roj/Mah (+ optional Year) -> Gregorian.
+
+    With ``year``, this is a plain conversion. Without it, the server
+    resolves the soonest occurrence on or after today, because a Roj/Mah
+    pair on its own repeats every year and doesn't name a date.
+
+    **Clients must never compute the YZ year themselves.** It is not
+    ``Gregorian year - 630``: Shenshai and Kadmi Navroze falls in
+    mid-August and drifts a day every four years, so that subtraction is
+    wrong for every day between January 1st and Navroze. Any UI that keeps
+    a Date field and a Roj/Mah field in sync belongs on this endpoint in
+    both directions - call it with no ``year`` and use what comes back.
+
+    (The current PWA gets exactly this wrong in two places, both to be
+    fixed in the frontend pass: mobed.html:991 seeds the jump panel's year
+    input from `getUTCFullYear() - 630`, and mobed.html:1523 uses the same
+    expression as the year actually SAVED onto a machi when no prefill is
+    available - which mis-files the ceremony by a whole Parsi year for any
+    machi entered between January and Navroze.)
+
+    ``mah=13`` addresses the Gatha days, where ``roj`` is the Gatha index
+    (1-5, or 1-6 inside a Fasli leap cycle).
+    """
+    is_gatha = mah == 13
+    if is_gatha and roj > 6:
+        raise HTTPException(status_code=400, detail="Gatha index must be between 1 and 6")
+    kwargs = {"gatha_index": roj} if is_gatha else {"mah": mah, "roj": roj}
+
     try:
-        gregorian = parsi_to_gregorian(year, system, mah=mah, roj=roj)
+        if year is None:
+            gregorian = nearest_occurrence(system, **kwargs)
+        else:
+            gregorian = parsi_to_gregorian(year, system, **kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _serialize(gregorian_to_parsi(gregorian, system))

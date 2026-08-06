@@ -6,6 +6,20 @@ adding a value is an in-place constraint swap, never a type migration.
 
 CALENDAR_SYSTEMS = ("shenshai", "kadmi", "fasli")
 
+# What a calendar can be *displayed* in, which includes Gregorian - unlike
+# CALENDAR_SYSTEMS above, which is the set of Parsi systems a ceremony's
+# Roj/Mah can be reckoned in and stamped onto the record with.
+DISPLAY_CALENDAR_SYSTEMS = ("gregorian", *CALENDAR_SYSTEMS)
+DEFAULT_VISIBLE_CALENDAR_SYSTEMS = ("gregorian", "shenshai")
+DEFAULT_SECONDARY_CALENDAR_SYSTEM = "shenshai"
+
+# Languages the mobed-facing UI can render in. Deliberately separate from
+# BEHDIN_LANGUAGES below: one is what a mobed reads on their own screen,
+# the other is what a behdin receives over WhatsApp, and there is no reason
+# a mobed reading English can't be messaging a Gujarati-speaking behdin.
+DISPLAY_LANGUAGES = ("en", "gu")
+DEFAULT_DISPLAY_LANGUAGE = "en"
+
 # Agyari lifecycle. 'unclaimed' rows are seeded reference data (e.g. the
 # worldwide fire-temple list) that no mobed has set up yet; 'active' means a
 # real mobed has joined and vouched for / corrected its details. Kept separate

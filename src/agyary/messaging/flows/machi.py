@@ -460,10 +460,11 @@ async def _step_offer_saved_names(ctx: FlowContext) -> list[OutgoingMessage]:
                 {**n, "section": "pair", "status": "departed", "pair_group": 1} for n in saved[:2]
             ]
         else:
-            # Tandarosti names live on the machi as ungrouped 'pair'-section
-            # singles (machis have no farmayeshne section).
+            # Tandarosti names are the living family the machi is for, which
+            # is what 'farmayeshne' means - and is already the section they
+            # were saved under in the pool these are being read back from.
             names = [
-                {**n, "section": "pair", "status": "living", "pair_group": None}
+                {**n, "section": "farmayeshne", "status": "living", "pair_group": None}
                 for n in saved[:MAX_TANDAROSTI_NAMES]
             ]
         data["names"] = names
@@ -525,7 +526,7 @@ async def _step_enter_names(ctx: FlowContext) -> list[OutgoingMessage]:
     pending = data.get("pending_names", [])
     pending.extend(
         {
-            "section": "pair",
+            "section": "farmayeshne",  # living names of the family, not a pair
             "title": n.title,
             "name": n.name,
             "status": "living",

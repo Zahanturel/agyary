@@ -43,15 +43,23 @@ Then open http://localhost:8000/chat — a two-pane WhatsApp simulator
 machi (patet/tandarosti), service bookings with purpose and name sections,
 saved-name reuse, slot alternatives, approval, cancellation.
 
-## Mobed PWA (mobed-only v0)
+**The simulator is development-only.** It has no auth and takes the behdin's
+phone number as a parameter, so it can read and act on any person's bookings.
+It is registered only when `APP_DEBUG` is true; in production `/chat` and
+`/api/chat/*` return 404.
+
+## Mobed PWA
 
 The priest-facing calendar tool lives at `/mobed` (a no-build vanilla PWA).
-Sign in with name + phone (no OTP in this pass), search for your agyari, and
-you land in a day/week calendar (My Day) and a per-agyari Machi Board; both
-open a shared print-ready slip with Edit.
+Sign in with your phone number and the code sent to you on WhatsApp, search
+for your agyari, and you land in a day/week calendar (My Day) and a
+per-agyari Machi Board; both open a shared print-ready slip with Edit.
 
-Set `JWT_SECRET_KEY` in `.env` first (`openssl rand -hex 32`) — the PWA signs
-its session token with it. Then seed the worldwide fire-temple reference list
+Locally, leave `WHATSAPP_OTP_PHONE_NUMBER_ID` blank — sign-in codes are
+written to the server log instead of sent, so you can read yours from there.
+
+Set `JWT_SECRET_KEY` in `.env` first (`openssl rand -hex 32`) — the app won't
+start without it. Then seed the worldwide fire-temple reference list
 (167 temples, imported as `unclaimed` until a mobed claims and sets one up):
 
 ```bash

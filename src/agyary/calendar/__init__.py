@@ -6,6 +6,7 @@ from agyary.calendar.engine import (
     ParsiDate,
     get_navroze,
     gregorian_to_parsi,
+    nearest_occurrence,
     parsi_to_gregorian,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "ParsiDate",
     "get_navroze",
     "gregorian_to_parsi",
+    "nearest_occurrence",
     "parsi_to_gregorian",
 ]

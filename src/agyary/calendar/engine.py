@@ -57,6 +57,11 @@ YZ_ERA_OFFSET = 630
 
 KADMI_SHENSHAI_OFFSET_DAYS = 30
 
+# How many years ahead nearest_occurrence() looks. Five covers a full Fasli
+# leap cycle, which is the only case needing more than one (see that
+# function's docstring).
+_OCCURRENCE_SCAN_YEARS = 5
+
 
 class CalendarSystem(str, Enum):
     SHENSHAI = "shenshai"
@@ -278,6 +283,60 @@ def parsi_to_gregorian(
     if system == CalendarSystem.FASLI:
         return _fasli_to_gregorian(year, day_of_year)
     raise ValueError(f"Unknown calendar system: {system}")
+
+
+def nearest_occurrence(
+    system: CalendarSystem,
+    mah: int | None = None,
+    roj: int | None = None,
+    gatha_index: int | None = None,
+    on_or_after: date | None = None,
+) -> date:
+    """The soonest Gregorian date matching a Roj/Mah (or Gatha day), no year given.
+
+    A Roj/Mah pair names a day within *some* year and repeats annually, so
+    on its own it does not identify a date. This resolves that the way a
+    person naturally would: the next time that day comes round, counting
+    today itself as "next".
+
+    The year cannot be guessed as ``gregorian_year - 630``. Shenshai and
+    Kadmi Navroze falls in mid-August and drifts a day every four years, so
+    that subtraction is wrong for the whole stretch between January 1st and
+    Navroze. The current year is therefore *derived* by converting the
+    reference date, then the neighbours on either side are evaluated and the
+    soonest non-past one wins - the same candidate-scan shape as
+    ``get_navroze`` below, and for the same reason.
+
+    Gatha days are addressed by ``gatha_index``, not by mah/roj. Fasli grows
+    a sixth Gatha in leap cycles, so a year that has no such day simply
+    fails to produce a candidate rather than being assumed away.
+
+    The scan runs a few years out rather than just to the next one. For an
+    ordinary Roj/Mah that is free - the following year always answers, and
+    the nearer candidate wins anyway - but Fasli's sixth Gatha comes round
+    every four years, not annually, so a one-year window would declare a
+    perfectly real day nonexistent for three years out of four.
+    """
+    reference = on_or_after or date.today()
+    current_year = gregorian_to_parsi(reference, system).year
+
+    candidates = []
+    for year in range(current_year - 1, current_year + _OCCURRENCE_SCAN_YEARS + 1):
+        try:
+            candidate = parsi_to_gregorian(
+                year, system, mah=mah, roj=roj, gatha_index=gatha_index
+            )
+        except ValueError:
+            continue  # e.g. the 6th Gatha in a non-leap Fasli cycle
+        if candidate >= reference:
+            candidates.append(candidate)
+
+    if not candidates:
+        raise ValueError(
+            f"No occurrence of that date found on or after {reference.isoformat()} "
+            f"in the {system.value} calendar"
+        )
+    return min(candidates)
 
 
 def get_navroze(gregorian_year: int, system: CalendarSystem) -> date:

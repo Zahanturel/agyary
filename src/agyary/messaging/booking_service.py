@@ -278,6 +278,32 @@ def saved_rows_to_dicts(rows: list[CustomerSavedName], section: str) -> list[dic
 # ---------------------------------------------------------------------------
 # Ceremony creation (snapshot-on-booking)
 # ---------------------------------------------------------------------------
+def normalize_machi_names(purpose: str, names: list[dict]) -> list[dict]:
+    """Put Tandarosti names in the section they belong to.
+
+    Tandarosti names are the living family the machi is being done for -
+    which is what 'farmayeshne' means. They were being written as
+    section='pair' with pair_group=NULL, i.e. as pair-section rows that
+    aren't in a pair, on the reasoning that machis have no farmayeshne
+    section. That was inconsistent two ways: the saved-name pool has always
+    stored the very same names as 'farmayeshne'
+    (flows/machi.py's replace_saved_section call), so a name changed
+    sections on its way from the pool onto the ceremony; and any consumer
+    grouping pair rows had to special-case a NULL group.
+
+    Applied at the two shared slot functions below, so it holds for the
+    WhatsApp flow and the PWA alike no matter what either sends, and for
+    anything added later. Patet is untouched - it genuinely is one departed
+    pair.
+    """
+    if purpose != "tandarosti":
+        return names
+    return [
+        {**n, "section": "farmayeshne", "pair_group": None} if n.get("section") == "pair" else n
+        for n in names
+    ]
+
+
 def _attach_names(names: list[dict], *, machi_id: int | None = None, booking_id: int | None = None):
     for i, n in enumerate(names):
         yield CeremonyName(
@@ -397,6 +423,7 @@ async def book_machi_slot(
     alternatives computation independently. No money/payment: machi is
     booked with no amount recorded in this redesign.
     """
+    names = normalize_machi_names(purpose, names)
     free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
     if geh in free:
         try:
@@ -513,6 +540,7 @@ async def rebook_machi_slot(
     changed and the new slot is taken (or elapsed), returns alternatives and
     leaves the machi untouched; an unchanged slot (name/purpose-only edit)
     skips the re-check entirely so it can't collide with itself."""
+    names = normalize_machi_names(purpose, names)
     if (roj, mah, year, geh) != (machi.parsi_roj, machi.parsi_mah, machi.parsi_year, machi.geh):
         free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
         if geh not in free:

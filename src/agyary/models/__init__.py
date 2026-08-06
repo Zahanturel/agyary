@@ -15,6 +15,7 @@ from agyary.models.invite import AgyaryInvite
 from agyary.models.machi import Machi
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
+from agyary.models.preferences import UserPreferences
 from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
 from agyary.models.user import AgyaryUser, User
@@ -39,5 +40,6 @@ __all__ = [
     "RecurrenceRule",
     "Service",
     "User",
+    "UserPreferences",
     "WhatsAppMessage",
 ]

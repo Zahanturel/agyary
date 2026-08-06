@@ -61,8 +61,15 @@ cp .env.example .env
 
 Edit `.env`:
 - **`JWT_SECRET_KEY`** — generate a real one: `openssl rand -hex 32`. The
-  repo ships this empty; leaving it empty breaks every mobed login (a 500 on
-  the first sign-in). Do not skip this.
+  repo ships this empty, and the app now **refuses to start** until it is
+  set. That is deliberate: an empty key doesn't disable auth, it signs every
+  session token with the empty string, so anyone could mint a token for any
+  user while the app looked perfectly healthy.
+- **`WHATSAPP_OTP_PHONE_NUMBER_ID`** — the Meta phone number sign-in codes
+  are sent from. Required in production: sign-in is phone + WhatsApp OTP, and
+  with this unset `/api/mobed/auth/otp/request` returns 503 rather than
+  accepting codes nobody can receive. In local development it can stay blank
+  (the code is written to the log instead of sent).
 - Leave `DATABASE_URL` as the `.env.example` default
   (`postgresql+asyncpg://agyary:agyary@db:5432/agyary`) — `docker-compose.yml`
   overrides it to the in-network Postgres hostname regardless, so the exact
