@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#232A4D">
+<title>Agyary - Mobed</title>
+<link rel="manifest" href="/mobed-manifest.json">
+<link rel="preload" href="/mobed-fonts/geist-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/mobed-app/app.css">
+</head>
+<body>
+
+<header>
+  <h1 id="headerTitle">Agyary</h1>
+  <div class="right">
+    <button id="profileBtn" class="chip hidden" title="Settings">Settings</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<button id="fab" class="fab hidden" title="Add">+</button>
+
+<nav class="tabs hidden" id="tabs">
+  <button data-route="#/my-day">My day</button>
+  <button data-route="#/calendar">Calendar</button>
+  <button data-route="#/behdins">Behdins</button>
+  <button data-route="#/settings">Settings</button>
+</nav>
+
+<script type="module" src="/mobed-app/js/main.js"></script>
+</body>
+</html>

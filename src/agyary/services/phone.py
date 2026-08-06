@@ -4,7 +4,7 @@ Behdins (and some mobeds) can be from any country - the fire-temple list
 itself spans India, Iran, Pakistan, Canada, the UK, Hong Kong. The frontend
 shows an editable country-code box (defaulting to 91/India, since ~99% of
 mobeds are Indian) next to a local-number box, composing a general E.164
-string (see mobed.html's phoneField/readPhone helpers). This module is the
+string (see static/mobed/js/util.js's phoneField/readPhone helpers). This module is the
 single place that resulting shape is validated server-side, reused as a
 Pydantic field type rather than a regex repeated per model.
 """

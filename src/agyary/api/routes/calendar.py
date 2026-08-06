@@ -119,12 +119,13 @@ def from_parsi(
     a Date field and a Roj/Mah field in sync belongs on this endpoint in
     both directions - call it with no ``year`` and use what comes back.
 
-    (The current PWA gets exactly this wrong in two places, both to be
-    fixed in the frontend pass: mobed.html:991 seeds the jump panel's year
-    input from `getUTCFullYear() - 630`, and mobed.html:1523 uses the same
-    expression as the year actually SAVED onto a machi when no prefill is
-    available - which mis-files the ceremony by a whole Parsi year for any
-    machi entered between January and Navroze.)
+    (The PWA used to get this wrong in two places - a jump panel that
+    pre-filled the year from `getUTCFullYear() - 630`, and the same
+    expression used for the year actually SAVED onto a machi, which
+    mis-filed any machi entered between January and Navroze by a whole
+    Parsi year. Both are gone: static/mobed/js/api.js has no year
+    arithmetic at all, and the New Event date step round-trips through
+    here in both directions.)
 
     ``mah=13`` addresses the Gatha days, where ``roj`` is the Gatha index
     (1-5, or 1-6 inside a Fasli leap cycle).

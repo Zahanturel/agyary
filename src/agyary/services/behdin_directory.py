@@ -22,7 +22,7 @@ back to them, and vice versa.
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.messaging import booking_service
@@ -53,6 +53,30 @@ async def get_scoped(db: AsyncSession, agyary_id: int, customer_id: int) -> Cust
     if customer is None or not await is_linked(db, agyary_id, customer.id):
         return None
     return customer
+
+
+async def search_at_agyary(
+    db: AsyncSession, agyary_id: int, query: str, limit: int = 30
+) -> list[Customer]:
+    """Every behdin on file at this fire temple, optionally filtered.
+
+    Distinct from mobed_dashboard.search_my_customers, which answers a
+    different question: that one is "people I have personally booked for",
+    derived from created_by_user_id, and deliberately personal. This one is
+    the temple's own register - it includes someone registered five minutes
+    ago who has never booked, which the booking-derived search cannot see.
+    """
+    q = query.strip()
+    stmt = (
+        select(Customer)
+        .join(AgyaryCustomer, AgyaryCustomer.customer_id == Customer.id)
+        .where(AgyaryCustomer.agyary_id == agyary_id, Customer.is_active.is_(True))
+        .order_by(Customer.name)
+        .limit(limit)
+    )
+    if q:
+        stmt = stmt.where(or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%")))
+    return list((await db.execute(stmt)).scalars())
 
 
 async def create_or_link(

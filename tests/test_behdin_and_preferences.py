@@ -170,6 +170,67 @@ async def test_known_phone_links_instead_of_duplicating(db, client, seeded):
     assert len(rows) == 1
 
 
+async def test_register_lists_behdins_who_have_never_booked(db, client, seeded):
+    """The register has to include someone added a minute ago. The
+    booking-derived /customers/search cannot see them, which makes it
+    useless for the one moment it's most needed - looking up the behdin you
+    just registered in order to book for them."""
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    created = await _behdin(client, aid, headers)
+
+    listed = (await client.get(f"/api/mobed/agyaries/{aid}/behdins", headers=headers)).json()
+    assert created["id"] in [b["id"] for b in listed]
+    # ...and they are invisible in the personal, booking-derived list.
+    assert created["id"] not in [
+        b["customer_id"] for b in (await client.get("/api/mobed/customers/search", headers=headers)).json()
+    ]
+
+    filtered = (
+        await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": "Jaidev"}, headers=headers)
+    ).json()
+    assert [b["id"] for b in filtered] == [created["id"]]
+    assert (
+        await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": "zzzz"}, headers=headers)
+    ).json() == []
+
+
+async def test_register_is_scoped_to_the_agyari(db, client, seeded):
+    from agyary.models import Agyary
+
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    mine = await _behdin(client, aid, headers)
+
+    other = Agyary(name="Register Elsewhere", city="Pune", status="active")
+    db.add(other)
+    await db.commit()
+    other_headers = await _member_headers(client, seeded, name="Other Temple Mobed", phone="+919944400088")
+    await client.post(f"/api/mobed/agyaries/{other.id}/join", headers=other_headers)
+
+    listed = (await client.get(f"/api/mobed/agyaries/{other.id}/behdins", headers=other_headers)).json()
+    assert mine["id"] not in [b["id"] for b in listed]
+
+
+async def test_register_requires_membership(db, client, seeded):
+    from tests.test_mobed_auth import _headers as _bare_headers
+
+    outsider = await _bare_headers(client, phone="+919944400099", name="Outsider")
+    r = await client.get(f"/api/mobed/agyaries/{seeded['agyary_id']}/behdins", headers=outsider)
+    assert r.status_code == 403
+
+
+async def test_logout_clears_the_refresh_cookie(db, client, seeded):
+    """Sign-out has to be a server round trip: the refresh cookie is
+    httpOnly, so without this the next page load signs you straight back
+    in - which on a shared phone is the opposite of signing out."""
+    await _member_headers(client, seeded)
+    assert (await client.post("/api/mobed/auth/refresh")).status_code == 200
+
+    assert (await client.post("/api/mobed/auth/logout")).status_code == 200
+    assert (await client.post("/api/mobed/auth/refresh")).status_code == 401
+
+
 async def test_update_refuses_to_merge_two_behdins(db, client, seeded):
     aid = seeded["agyary_id"]
     headers = await _member_headers(client, seeded)

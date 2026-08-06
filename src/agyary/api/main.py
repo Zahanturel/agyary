@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from agyary.api.routes.calendar import router as calendar_router
 from agyary.api.routes.chat import router as chat_router
@@ -62,6 +63,15 @@ async def security_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # The PWA is a dozen ES modules with no build step, so no filename
+    # hashing to bust caches with. Without this the browser is free to
+    # serve some modules from its own cache after a deploy and fetch
+    # others fresh - a half-updated app, which fails in ways far stranger
+    # than being wholly out of date. "no-cache" means revalidate, not
+    # don't store: the usual answer is a cheap 304.
+    path = request.url.path
+    if path == "/mobed" or path.startswith("/mobed-app"):
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 
@@ -79,6 +89,7 @@ app.include_router(mobed_router)
 app.include_router(whatsapp_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_MOBED_DIR = _STATIC_DIR / "mobed"
 
 
 @app.get("/", include_in_schema=False)
@@ -104,9 +115,19 @@ def chat_ui() -> FileResponse:
 
 @app.get("/mobed", include_in_schema=False)
 def mobed_ui() -> FileResponse:
-    """The mobed PWA (vanilla HTML/JS, no build step - same pattern as
-    /chat above)."""
-    return FileResponse(_STATIC_DIR / "mobed.html", media_type="text/html")
+    """The mobed PWA shell (vanilla HTML + ES modules, still no build step).
+
+    Everything under the hash lives in the client-side router, so this one
+    file answers /mobed for every route.
+    """
+    return FileResponse(_MOBED_DIR / "index.html", media_type="text/html")
+
+
+# The PWA's own modules and stylesheet. A mount rather than a route each,
+# because the app is now a dozen ES modules instead of one inlined script -
+# and native `import` needs each one served with a JS content type, which
+# StaticFiles handles.
+app.mount("/mobed-app", StaticFiles(directory=_MOBED_DIR), name="mobed-app")
 
 
 @app.get("/mobed-manifest.json", include_in_schema=False)

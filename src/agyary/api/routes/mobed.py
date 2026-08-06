@@ -222,6 +222,27 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
     return {"id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries}
 
 
+@router.post("/auth/logout")
+async def logout(response: Response) -> dict:
+    """End the session.
+
+    Needed because the refresh cookie is httpOnly: the client can drop its
+    in-memory access token, but it cannot clear the cookie, so without this
+    "sign out" would silently sign you straight back in on the next load -
+    the opposite of what someone handing their phone to a colleague wants.
+    Cleared with the same attributes it was set with, or the browser won't
+    match it.
+    """
+    settings = get_settings()
+    response.delete_cookie(
+        "refresh_token",
+        httponly=True,
+        secure=not settings.app_debug,
+        samesite="strict",
+    )
+    return {"signed_out": True}
+
+
 @router.get("/auth/me")
 async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     return await _serialize_user(db, user)
@@ -787,6 +808,26 @@ async def _require_behdin(db: AsyncSession, agyary_id: int, customer_id: int, us
         # elsewhere isn't this caller's business.
         raise HTTPException(status_code=404, detail="Unknown behdin at this fire temple")
     return customer
+
+
+@router.get("/agyaries/{agyary_id}/behdins")
+async def list_behdins(
+    agyary_id: int,
+    q: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    """This fire temple's behdin register.
+
+    Deliberately not the same list as /customers/search, which answers
+    "people I have personally booked for" and is derived from bookings.
+    Someone registered a minute ago has no bookings yet and is invisible
+    there - which is exactly the person a mobed is most likely to be
+    looking for when they come to book.
+    """
+    await _require_membership(db, agyary_id, user)
+    rows = await behdin_directory.search_at_agyary(db, agyary_id, q)
+    return [behdin_directory.customer_summary(c) for c in rows]
 
 
 class CreateBehdinIn(BaseModel):
