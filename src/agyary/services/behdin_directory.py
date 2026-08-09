@@ -26,7 +26,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.messaging import booking_service
-from agyary.models import AgyaryCustomer, Customer, CustomerSavedName
+from agyary.models import AgyaryCustomer, Customer, CustomerSavedName, UserCustomer
 
 
 class BehdinError(Exception):
@@ -47,30 +47,63 @@ async def is_linked(db: AsyncSession, agyary_id: int, customer_id: int) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def get_scoped(db: AsyncSession, agyary_id: int, customer_id: int) -> Customer | None:
-    """A behdin, but only if they're one of this agyari's."""
+async def owns(db: AsyncSession, user_id: int, customer_id: int) -> bool:
+    """Whether this behdin is in this mobed's own book."""
+    row = await db.get(UserCustomer, (user_id, customer_id))
+    return row is not None
+
+
+async def claim(db: AsyncSession, user_id: int, customer_id: int) -> None:
+    """Record that this mobed deals with this behdin. Idempotent."""
+    if not await owns(db, user_id, customer_id):
+        db.add(UserCustomer(user_id=user_id, customer_id=customer_id))
+        await db.flush()
+
+
+async def get_scoped(
+    db: AsyncSession, agyary_id: int, customer_id: int, user_id: int
+) -> Customer | None:
+    """A behdin, but only if they are BOTH one of this agyari's and one of
+    this mobed's own.
+
+    Both checks matter and neither is redundant. Agyari membership stops
+    cross-tenant reads; ownership stops a mobed reading a colleague's
+    behdins - names and phone numbers of people who never agreed to be
+    visible to them. Enforced here rather than filtered in the UI, because
+    a filtered list is not a permission.
+    """
     customer = await db.get(Customer, customer_id)
-    if customer is None or not await is_linked(db, agyary_id, customer.id):
+    if customer is None:
+        return None
+    if not await is_linked(db, agyary_id, customer.id):
+        return None
+    if not await owns(db, user_id, customer.id):
         return None
     return customer
 
 
-async def search_at_agyary(
-    db: AsyncSession, agyary_id: int, query: str, limit: int = 30
+async def search_mine(
+    db: AsyncSession, agyary_id: int, user_id: int, query: str, limit: int = 30
 ) -> list[Customer]:
-    """Every behdin on file at this fire temple, optionally filtered.
+    """This mobed's own behdins at this fire temple, optionally filtered.
 
-    Distinct from mobed_dashboard.search_my_customers, which answers a
-    different question: that one is "people I have personally booked for",
-    derived from created_by_user_id, and deliberately personal. This one is
-    the temple's own register - it includes someone registered five minutes
-    ago who has never booked, which the booking-derived search cannot see.
+    Not the temple's register. A behdin's name and phone number belong to
+    them, not to everyone who happens to work at the same fire temple, so
+    the list is scoped to the mobed who registered or served them. Includes
+    someone registered moments ago and never booked for - which is exactly
+    who you are looking for right after adding them, and which a
+    booking-derived list cannot see.
     """
     q = query.strip()
     stmt = (
         select(Customer)
         .join(AgyaryCustomer, AgyaryCustomer.customer_id == Customer.id)
-        .where(AgyaryCustomer.agyary_id == agyary_id, Customer.is_active.is_(True))
+        .join(UserCustomer, UserCustomer.customer_id == Customer.id)
+        .where(
+            AgyaryCustomer.agyary_id == agyary_id,
+            UserCustomer.user_id == user_id,
+            Customer.is_active.is_(True),
+        )
         .order_by(Customer.name)
         .limit(limit)
     )
@@ -80,7 +113,7 @@ async def search_at_agyary(
 
 
 async def create_or_link(
-    db: AsyncSession, agyary_id: int, *, name: str, phone: str
+    db: AsyncSession, agyary_id: int, user_id: int, *, name: str, phone: str
 ) -> tuple[Customer, bool]:
     """Register a behdin at this agyari. Returns (customer, created).
 
@@ -110,6 +143,8 @@ async def create_or_link(
     # and the booking path fills it in when a real one arrives.
     if not await is_linked(db, agyary_id, customer.id):
         db.add(AgyaryCustomer(agyary_id=agyary_id, customer_id=customer.id))
+    # ...and into this mobed's own book, which is what the behdin list reads.
+    await claim(db, user_id, customer.id)
     await db.flush()
     return customer, created
 

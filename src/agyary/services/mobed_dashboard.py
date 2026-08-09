@@ -385,13 +385,24 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
     return {"customer_id": customer.id, "name": customer.name, "phone": customer.phone, "history": entries}
 
 
-async def _resolve_customer(db: AsyncSession, phone: str, name: str) -> Customer:
+async def _resolve_customer(
+    db: AsyncSession, phone: str, name: str, actor_user_id: int | None = None
+) -> Customer:
     """Same shared lookup both surfaces hit (doc 05) - reuses exactly the
     customer pool the WhatsApp flows already use, not a second saved-name
-    system for the mobed side."""
+    system for the mobed side.
+
+    ``actor_user_id`` puts the behdin into that mobed's own book. Serving
+    someone is how most behdins get there: without this, a walk-in entered
+    through the event flow would never show up in the mobed's behdin list.
+    """
     customer = await booking_service.get_customer_by_phone(db, phone)
     if customer is None:
         customer = await booking_service.create_customer(db, phone, name)
+    if actor_user_id is not None:
+        from agyary.services import behdin_directory
+
+        await behdin_directory.claim(db, actor_user_id, customer.id)
     return customer
 
 
@@ -416,7 +427,7 @@ async def manual_add_machi(
     here, after the shared core hands back a real row, rather than
     threading it into book_machi_slot itself - that function is shared
     with the WhatsApp path and shouldn't grow a PWA-only parameter."""
-    customer = await _resolve_customer(db, behdin_phone, behdin_name)
+    customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
     result = await booking_service.book_machi_slot(
         db, agyary, customer, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
@@ -459,7 +470,7 @@ async def manual_add_booking(
     # BookingMobed row, or it would find itself and always report a
     # conflict.
     conflict = await has_calendar_conflict(db, actor_user_id, ceremony_dt_local)
-    customer = await _resolve_customer(db, behdin_phone, behdin_name)
+    customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
     booking = await booking_service.create_booking_request(
         db, agyary, customer, service,
         ceremony_dt_local=ceremony_dt_local, purpose=purpose, names=names,
@@ -512,7 +523,10 @@ async def get_booking_detail(db: AsyncSession, agyary_id: int, booking_id: int) 
     }
 
 
-async def _apply_behdin_edit(db: AsyncSession, ceremony, behdin_phone: str, behdin_name: str) -> None:
+async def _apply_behdin_edit(
+    db: AsyncSession, ceremony, behdin_phone: str, behdin_name: str,
+    actor_user_id: int | None = None,
+) -> None:
     """Re-point a ceremony to the customer identified by (possibly edited)
     phone, creating them if new and updating their display name - the PWA
     gives the mobed the flexibility to correct a walk-in's name/number."""
@@ -525,6 +539,10 @@ async def _apply_behdin_edit(db: AsyncSession, ceremony, behdin_phone: str, behd
     elif name and customer.name != name:
         customer.name = name
     ceremony.customer_id = customer.id
+    if actor_user_id is not None:
+        from agyary.services import behdin_directory
+
+        await behdin_directory.claim(db, actor_user_id, customer.id)
     await db.flush()
 
 
@@ -532,6 +550,7 @@ async def edit_machi(
     db: AsyncSession,
     agyary: Agyary,
     machi_id: int,
+    actor_user_id: int,
     *,
     behdin_phone: str,
     behdin_name: str,
@@ -550,7 +569,7 @@ async def edit_machi(
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary.id:
         return None
-    await _apply_behdin_edit(db, machi, behdin_phone, behdin_name)
+    await _apply_behdin_edit(db, machi, behdin_phone, behdin_name, actor_user_id)
     return await booking_service.rebook_machi_slot(
         db, agyary, machi, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
@@ -578,7 +597,7 @@ async def edit_booking(
     service = await booking_service.get_service_by_id(db, agyary.id, service_id)
     if service is None:
         return None
-    await _apply_behdin_edit(db, booking, behdin_phone, behdin_name)
+    await _apply_behdin_edit(db, booking, behdin_phone, behdin_name, actor_user_id)
     await booking_service.update_booking(
         db, agyary, booking, service,
         ceremony_dt_local=ceremony_dt_local, purpose=purpose, names=names,

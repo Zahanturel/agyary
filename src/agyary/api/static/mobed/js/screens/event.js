@@ -214,10 +214,9 @@ async function stepBehdin(draft) {
     timer = setTimeout(async () => {
       const mine = ++token;
       let matches = [];
-      // The temple's register, not the booking-derived personal list: a
-      // behdin registered moments ago has no bookings yet and would be
-      // invisible in the latter - which is precisely who you're looking
-      // for when you just added them.
+      // This mobed's own behdins. Includes someone registered moments ago
+      // and never booked for - precisely who you're looking for when you
+      // just added them, and who a booking-derived list cannot see.
       try { matches = await listBehdins(state.currentAgyaryId, input.value.trim()); }
       catch (e) { return; }
       if (mine !== token) return;

@@ -19,6 +19,7 @@ from agyary.models.preferences import UserPreferences
 from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
 from agyary.models.user import AgyaryUser, User
+from agyary.models.user_customer import UserCustomer
 from agyary.models.whatsapp import WhatsAppMessage
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "RecurrenceRule",
     "Service",
     "User",
+    "UserCustomer",
     "UserPreferences",
     "WhatsAppMessage",
 ]

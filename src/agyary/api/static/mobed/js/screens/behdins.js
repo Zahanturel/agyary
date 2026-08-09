@@ -1,14 +1,15 @@
 "use strict";
 
 /**
- * Behdins - the fire temple's register of the people it prays for.
+ * Behdins - THIS mobed's own book, not the fire temple's register.
  *
- * Adding, viewing and correcting a behdin are open to any member. That
- * matches the API (all three ask only for membership) and matches who
- * actually does the work: the mobed taking a walk-in at the counter is
- * usually the one holding the phone number. The management-only parts of
- * this app are invites, the temple's own details, and its service catalog
- * - not this.
+ * A behdin's name and phone number are their own. A colleague at the same
+ * fire temple has no business reading them, so every read here is scoped
+ * server-side to the signed-in mobed; this screen could not show someone
+ * else's behdins even if it tried.
+ *
+ * Adding, viewing and correcting are open to any member - the mobed taking
+ * a walk-in at the counter is the one holding the phone number.
  *
  * The saved-names editor here is the same component the New Event wizard
  * uses, pointed at the same rows the WhatsApp flows read and write.
@@ -50,7 +51,7 @@ export async function renderBehdinList() {
         <h2 style="margin:0">Behdins</h2>
         <button class="icon-add" id="bhAdd" title="Add a behdin" aria-label="Add a behdin">+</button>
       </div>
-      <p class="meta">Everyone on file at this fire temple.</p>
+      <p class="meta">The behdins you look after.</p>
       <input type="text" id="bhFilter" placeholder="Search by name or phone" autocomplete="off">
       <div id="bhAddPanel"></div>
       <div id="bhRows" style="margin-top:8px"></div>
@@ -61,7 +62,7 @@ export async function renderBehdinList() {
     rowsEl.innerHTML = list.length
       ? list.map(c => `<div class="search-result" data-cid="${c.id}">
           <div>${esc(c.name)}</div><div class="addr">${esc(c.phone)}</div></div>`).join("")
-      : `<p class="meta">Nobody here yet - add the first behdin above.</p>`;
+      : `<p class="meta">No behdins yet - add one above, or they appear here when you book for them.</p>`;
     rowsEl.querySelectorAll("[data-cid]").forEach(el => {
       el.onclick = () => navigate(`#/behdins/${el.dataset.cid}`);
     });

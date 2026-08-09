@@ -204,6 +204,70 @@ async def test_register_lists_behdins_who_have_never_booked(db, client, seeded):
     ).json() == []
 
 
+async def test_a_mobed_cannot_see_another_mobeds_behdins(db, client, seeded):
+    """The behdin list is one mobed's own book, not the fire temple's
+    register. A behdin's name and phone number are their own; a colleague
+    at the same temple has no business reading them.
+
+    Enforced server-side on every read - listing, fetching by id, and the
+    saved-name pool - because a list filtered in the client is not a
+    permission.
+    """
+    aid = seeded["agyary_id"]
+    mine = await _member_headers(client, seeded)
+    theirs = await _member_headers(client, seeded, name="Colleague", phone="+919944400222")
+
+    created = await _behdin(client, aid, mine, name="Private Behdin", phone="+919944400333")
+    cid = created["id"]
+
+    # Not in their list...
+    listed = (await client.get(f"/api/mobed/agyaries/{aid}/behdins", headers=theirs)).json()
+    assert listed == []
+    # ...not findable by searching for the name or the number...
+    for q in ("Private", "9944400333"):
+        found = (
+            await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": q}, headers=theirs)
+        ).json()
+        assert found == [], q
+    # ...and not reachable by guessing the id, on any of the three reads.
+    assert (await client.get(f"/api/mobed/agyaries/{aid}/behdins/{cid}", headers=theirs)).status_code == 404
+    assert (
+        await client.get(f"/api/mobed/agyaries/{aid}/behdins/{cid}/saved-names", headers=theirs)
+    ).status_code == 404
+    assert (
+        await client.patch(
+            f"/api/mobed/agyaries/{aid}/behdins/{cid}", json={"name": "Hijacked"}, headers=theirs
+        )
+    ).status_code == 404
+
+    # The owner still sees them.
+    assert [b["id"] for b in (await client.get(f"/api/mobed/agyaries/{aid}/behdins", headers=mine)).json()] == [cid]
+
+
+async def test_serving_a_behdin_adds_them_to_your_book(db, client, seeded):
+    """Most behdins arrive by being served, not registered: a walk-in
+    dictated at the counter goes straight into an event. Without this they
+    would never appear in the mobed's own list."""
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+
+    r = await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/booking",
+        json={
+            "behdin_phone": "+919944400444", "behdin_name": "Walk-in Family",
+            "service_id": 2, "ceremony_datetime": "2028-03-01T10:00:00",
+            "purpose": "khushali_nu",
+            "names": [{"section": "farmayeshne", "title": "behdin", "name": "X", "status": "living", "pair_group": None}],
+            "location": None, "is_offsite": False,
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+
+    listed = (await client.get(f"/api/mobed/agyaries/{aid}/behdins", headers=headers)).json()
+    assert "Walk-in Family" in [b["name"] for b in listed]
+
+
 async def test_register_is_scoped_to_the_agyari(db, client, seeded):
     from agyary.models import Agyary
 

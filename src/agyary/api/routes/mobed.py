@@ -813,12 +813,12 @@ async def customer_history(
 # ---------------------------------------------------------------------------
 async def _require_behdin(db: AsyncSession, agyary_id: int, customer_id: int, user: User) -> Customer:
     await _require_membership(db, agyary_id, user)
-    customer = await behdin_directory.get_scoped(db, agyary_id, customer_id)
+    customer = await behdin_directory.get_scoped(db, agyary_id, customer_id, user.id)
     if customer is None:
-        # Deliberately 404 rather than 403 for a behdin who exists but
-        # belongs to another temple - whether a given person is registered
-        # elsewhere isn't this caller's business.
-        raise HTTPException(status_code=404, detail="Unknown behdin at this fire temple")
+        # Deliberately 404, not 403, for a behdin who exists but isn't this
+        # mobed's: whether a given person is on file elsewhere - or at all -
+        # is not this caller's business, and a 403 would confirm it.
+        raise HTTPException(status_code=404, detail="Unknown behdin")
     return customer
 
 
@@ -829,16 +829,19 @@ async def list_behdins(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[dict]:
-    """This fire temple's behdin register.
+    """This mobed's own behdins at this fire temple.
 
-    Deliberately not the same list as /customers/search, which answers
-    "people I have personally booked for" and is derived from bookings.
-    Someone registered a minute ago has no bookings yet and is invisible
-    there - which is exactly the person a mobed is most likely to be
-    looking for when they come to book.
+    NOT the temple's register. A behdin's name and phone number are their
+    own; a mobed has no business reading the people a colleague serves.
+    Scoped server-side, because a list filtered in the client is not a
+    permission.
+
+    Unlike /customers/search this is not derived from bookings, so it
+    includes someone registered moments ago and never booked for - exactly
+    who you are looking for right after adding them.
     """
     await _require_membership(db, agyary_id, user)
-    rows = await behdin_directory.search_at_agyary(db, agyary_id, q)
+    rows = await behdin_directory.search_mine(db, agyary_id, user.id, q)
     return [behdin_directory.customer_summary(c) for c in rows]
 
 
@@ -864,7 +867,7 @@ async def create_behdin(
     await _require_membership(db, agyary_id, user)
     try:
         customer, created = await behdin_directory.create_or_link(
-            db, agyary_id, name=payload.name, phone=payload.phone
+            db, agyary_id, user.id, name=payload.name, phone=payload.phone
         )
     except behdin_directory.BehdinError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1120,7 +1123,7 @@ async def edit_machi(
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
     result = await mobed_dashboard.edit_machi(
-        db, agyary, machi_id,
+        db, agyary, machi_id, user.id,
         behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
         roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
         gregorian=payload.gregorian, purpose=payload.purpose,

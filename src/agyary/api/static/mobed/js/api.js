@@ -112,8 +112,8 @@ export const setServiceActive = (aid, sid, is_active) =>
 export const searchCustomers = (q) => get(`/customers/search?q=${encodeURIComponent(q || "")}`);
 export const customerHistory = (id) => get(`/customers/${id}/history`);
 
-/** The fire temple's behdin register - includes people who have never
- *  booked, unlike searchCustomers (which is derived from bookings). */
+/** THIS mobed's own behdins - scoped server-side, and unlike
+ *  searchCustomers it includes people registered but not yet booked for. */
 export const listBehdins = (aid, q) => get(`/agyaries/${aid}/behdins?q=${encodeURIComponent(q || "")}`);
 export const createBehdin = (aid, name, phone) => post(`/agyaries/${aid}/behdins`, { name, phone });
 export const getBehdin = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}`);

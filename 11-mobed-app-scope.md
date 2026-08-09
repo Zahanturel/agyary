@@ -69,6 +69,17 @@ Three sections:
 
 ### 2.4 Behdin list
 
+**This mobed's own behdins — never the fire temple's register.** A behdin's
+name and phone number belong to them, and a colleague at the same fire
+temple has no business reading them. Scoped server-side on every read
+(list, search, fetch-by-id, saved names), because a list filtered in the
+client is not a permission.
+
+A behdin enters a mobed's book by being registered by them or served by
+them. Recorded in `user_customers`; it could not previously be expressed
+at all, being inferred from `created_by_user_id` on ceremonies, which says
+nothing about someone registered before any ceremony.
+
 - Rows: name and number.
 - **Exactly one** add control — top-right or bottom-right, never both.
 - Tapping a row opens that behdin.
