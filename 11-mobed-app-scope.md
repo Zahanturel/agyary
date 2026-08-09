@@ -16,12 +16,23 @@ product. It is the free tier of a planned tiered architecture; an agyari
 management system will follow, once actual panthakies have been consulted
 about what they need.
 
+**Each mobed is an individual user. There is no agyari layer in this app.**
+A mobed is linked to a fire temple in the database, for the management
+system that comes later, but that link is not a product concept here: it
+is shown as information in the menu (name and address) and nowhere else.
+No joining a temple, no temple-scoped anything, no shared surfaces, no
+inviting people "to" a temple. One mobed, their own events, their own
+behdins.
+
 **Vocabulary:** the user-facing word is **event**, never "booking".
 Internally the models are still `Booking` and `Machi` — that is a
 persistence detail and does not surface in the UI.
 
 ### Non-goals (explicitly not in this app)
 
+- **Anything agyari-shaped as a user-facing concept.** No temple search or
+  join flow, no temple-scoped grouping, no shared views. The DB link
+  exists; the product does not mention it beyond the menu's info line.
 - Agyari-wide views. A mobed does not need to see every machi at their
   fire temple. A machi they are responsible for is simply one of their
   events.
