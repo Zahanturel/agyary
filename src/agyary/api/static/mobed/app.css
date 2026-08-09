@@ -54,10 +54,12 @@ header { background: var(--primary); color: #fff;
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 header h1 { font-size: var(--text-lg); margin: 0; font-weight: 600; }
 header .right { display: flex; align-items: center; gap: var(--space-2); }
-header select, header button.chip {
-  background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.4);
-  border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-sm);
-  cursor: pointer; min-height: 36px; font-family: inherit; }
+header button.icon-btn {
+  background: transparent; color: #fff; border: none; padding: var(--space-2);
+  min-height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); cursor: pointer; }
+header button.icon-btn:active { background: rgba(255,255,255,.16); }
+header button.icon-btn svg { width: 24px; height: 24px; fill: none; }
 main { flex: 1; padding: var(--space-4); max-width: 640px; width: 100%; margin: 0 auto; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: var(--space-4); margin-bottom: var(--space-3); box-shadow: var(--shadow-sm); }
@@ -94,11 +96,6 @@ button:disabled { opacity: .5; cursor: default; }
   margin-bottom: var(--space-2); cursor: pointer; }
 .search-result:hover { background: var(--primary-tint); }
 .search-result .addr { color: var(--muted); font-size: var(--text-xs); }
-nav.tabs { display: flex; border-top: 1px solid var(--border); background: var(--surface);
-  position: sticky; bottom: 0; padding-bottom: var(--safe-bottom); }
-nav.tabs button { flex: 1; background: none; color: var(--muted); border-radius: 0;
-  padding: var(--space-3) 0; font-size: var(--text-xs); min-height: 48px; font-weight: 500; }
-nav.tabs button.active { color: var(--primary); font-weight: 600; }
 .hidden { display: none !important; }
 .error-banner { background: var(--danger-tint); color: var(--danger-600); padding: var(--space-3);
   border-radius: var(--radius-sm); font-size: var(--text-sm); margin-bottom: var(--space-3); }
@@ -145,6 +142,7 @@ nav.tabs button.active { color: var(--primary); font-weight: 600; }
 .event .t { font-weight: 600; font-size: var(--text-sm); }
 .event .s { font-size: var(--text-sm); color: var(--text); }
 .daysection h3 { font-size: var(--text-sm); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-weight: 600; }
+.daysection h3 .wk-parsi { font-weight: 400; opacity: .8; }
 
 /* Day view geh blocks: the machi board's slot affordance, now living
    inside the shared calendar rather than a separate screen. */
@@ -171,7 +169,7 @@ nav.tabs button.active { color: var(--primary); font-weight: 600; }
 .names-group-label b { font-size: var(--text-sm); font-weight: 600; }
 .names-group-label span { font-size: var(--text-xs); color: var(--muted); }
 
-.fab { position: fixed; right: var(--space-4); bottom: calc(70px + var(--safe-bottom)); width: 56px; height: 56px;
+.fab { position: fixed; right: var(--space-4); bottom: calc(20px + var(--safe-bottom)); width: 56px; height: 56px;
   border-radius: var(--radius-pill); font-size: 26px; line-height: 1; box-shadow: var(--shadow-md); }
 .slip { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-6);
   font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; background: #fff; }
@@ -222,7 +220,35 @@ nav.tabs button.active { color: var(--primary); font-weight: 600; }
 .check-row label { margin: 0; color: var(--text); font-size: var(--text-base); font-weight: 400; }
 
 @media print {
-  header, nav.tabs, .no-print, .fab { display: none !important; }
+  header, .no-print, .fab { display: none !important; }
   main { max-width: 100%; padding: 0; }
   .slip { border: none; border-radius: 0; box-shadow: none; padding: 0; }
 }
+
+/* --- Menu ---------------------------------------------------------------- */
+/* A section bar: the whole row opens the section, the button on its right
+   is a shortcut into that section's "add" action. */
+.section-bar { display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); width: 100%; cursor: pointer; }
+.section-bar .sb-text { min-width: 0; }
+.section-bar .sb-text b { display: block; font-size: var(--text-md); font-weight: 600; }
+.section-bar .sb-text span { font-size: var(--text-sm); color: var(--muted); }
+.section-bar .sb-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2); }
+.section-bar .chev { color: var(--muted); font-size: 20px; line-height: 1; }
+
+/* Small square icon button, used for the single add control on a list. */
+button.icon-add { background: var(--primary); color: #fff; border: none;
+  width: 40px; height: 40px; min-height: 40px; border-radius: var(--radius-sm);
+  font-size: 22px; line-height: 1; padding: 0; display: flex; align-items: center;
+  justify-content: center; }
+
+/* Read-only facts in the You section - not disabled inputs, which look
+   like something you failed to be allowed to edit. */
+.fact { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.fact:last-child { border-bottom: none; }
+.fact .fl { font-size: var(--text-xs); color: var(--muted); }
+.fact .fv { font-size: var(--text-base); }
+
+/* A phone number that dials when tapped. */
+a.tel { color: var(--primary); text-decoration: none; font-weight: 500; }
+a.tel:active { text-decoration: underline; }

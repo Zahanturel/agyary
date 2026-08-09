@@ -56,18 +56,32 @@ export function isManager() {
   return ADMIN_ROLES.includes(currentRole());
 }
 
-/** The Parsi system shown as the secondary label, from the user's own
- *  preferences. Falls back to the agyari's stamping system, then shenshai. */
-export function secondarySystem() {
-  if (state.preferences && state.preferences.default_secondary_system)
-    return state.preferences.default_secondary_system;
-  const agyary = currentAgyary();
-  return (agyary && agyary.calendar_system) || "shenshai";
+/**
+ * THE primary calendar: the Parsi system this mobed reads in.
+ *
+ * This is the single source for every Parsi date the app renders or
+ * accepts - labels, month navigation, Roj/Mah entry, the slip. It is a
+ * per-mobed preference and defaults to Shenshai.
+ *
+ * Explicitly NOT Agyary.calendar_system. That is the fire temple's own
+ * system, used server-side to stamp a stable Roj/Mah onto the stored
+ * record, and it must not follow a display preference. Reading it here
+ * was a real bug: setting Kadmi as primary changed the calendar labels
+ * while the New Event date fields silently stayed Shenshai.
+ */
+export function primarySystem() {
+  const chosen = state.preferences && state.preferences.default_secondary_system;
+  return chosen || "shenshai";
 }
 
-/** Which systems the user asked to be able to see, minus Gregorian, which
- *  is always the primary label and never one of the alternates. */
+/** Every system the mobed keeps available, minus Gregorian - which is
+ *  always the top-line date and never one of the Parsi alternates. The
+ *  primary is listed first. */
 export function visibleParsiSystems() {
   const visible = (state.preferences && state.preferences.visible_calendar_systems) || ["gregorian", "shenshai"];
-  return visible.filter(s => s !== "gregorian");
+  const parsi = visible.filter(s => s !== "gregorian");
+  const primary = primarySystem();
+  // The primary always appears, even if it somehow fell out of the
+  // visible list, and it always leads.
+  return [primary, ...parsi.filter(s => s !== primary)];
 }

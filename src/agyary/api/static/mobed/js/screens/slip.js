@@ -7,14 +7,13 @@
  */
 
 import { machiSlip, bookingSlip } from "../api.js";
-import { chrome, mainEl, showFab, showError, markActiveTab, refreshHeader, loading } from "../ui.js";
+import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
 import { esc } from "../util.js";
 import { navigate } from "../router.js";
 
 export async function renderSlip({ kind, aid, id }) {
   chrome(true);
   refreshHeader();
-  markActiveTab("#/calendar");
   showFab(false);
   loading();
 

@@ -1,21 +1,19 @@
 "use strict";
 
-import { state, currentAgyary, isManager } from "./state.js";
+import { state, currentAgyary } from "./state.js";
 
 export const mainEl = document.getElementById("main");
-export const tabsEl = document.getElementById("tabs");
 export const fabEl = document.getElementById("fab");
 export const headerTitle = document.getElementById("headerTitle");
-export const profileBtn = document.getElementById("profileBtn");
+export const menuBtn = document.getElementById("menuBtn");
 
 export function setMain(html) { mainEl.innerHTML = html; }
 export function loading() { mainEl.innerHTML = `<div class="empty-state">Loading...</div>`; }
 
-/** Show the app chrome (tabs, FAB, settings button) or hide it for the
- *  full-screen onboarding/login flows. */
+/** Show the app chrome (menu icon, add button) or hide it for the
+ *  full-screen login and onboarding flows. */
 export function chrome(show) {
-  tabsEl.classList.toggle("hidden", !show);
-  profileBtn.classList.toggle("hidden", !show);
+  menuBtn.classList.toggle("hidden", !show);
   if (!show) fabEl.classList.add("hidden");
 }
 
@@ -37,14 +35,6 @@ export function showFab(show, title = "Add", handler = null) {
 }
 
 export function setHeader(text) { headerTitle.textContent = text; }
-
-export function markActiveTab(hash) {
-  for (const b of tabsEl.querySelectorAll("button")) {
-    // Sub-routes light up their parent tab: #/behdins/7 is still Behdins.
-    const r = b.dataset.route;
-    b.classList.toggle("active", hash === r || hash.startsWith(r + "/"));
-  }
-}
 
 function banner(cls, msg) {
   // Only one banner at a time - a second failed attempt on the same screen
@@ -117,8 +107,5 @@ export function refreshHeader() {
   if (!state.user) return setHeader("Agyary");
   const agyary = currentAgyary();
   const first = shortName(state.user.name);
-  setHeader(agyary ? `${first} · ${agyary.name}` : `Hi, ${first}`);
-  // Management-only tabs are hidden here AND guarded in the router; this is
-  // just so plain mobeds aren't shown doors they can't open.
-  tabsEl.querySelectorAll("[data-manage]").forEach(b => b.classList.toggle("hidden", !isManager()));
+  setHeader(agyary ? `${first} · ${agyary.name}` : first);
 }

@@ -1,19 +1,18 @@
 "use strict";
 
 /**
- * The one calendar. Renders Day/Week/Month and is used by three callers:
- * the Calendar screen, My Day, and the date picker inside New Event. There
- * is no second grid implementation anywhere - the Machi board's geh slots
- * are a Day-view mode of THIS component, not a separate screen.
+ * The one calendar. Renders Day/Week/Month, and is used both as the app's
+ * home screen and as the date picker inside New Event. There is no second
+ * grid implementation anywhere.
  *
- * Labelling rule: the primary label on every cell is the Gregorian date,
- * the secondary is whichever Parsi system the user picked in Settings.
- * Their other visible systems are revealed by tapping a day, not stacked
- * into the cell - four date labels per cell is unreadable.
+ * Labelling rule: the top line of every cell is the Gregorian date, with
+ * the mobed's PRIMARY calendar reading beneath it. Their other calendars
+ * are revealed by tapping a day rather than stacked into every cell -
+ * four date labels per cell is unreadable.
  */
 
-import { parsiMonth as fetchParsiMonth, convertDate, bookableGehs } from "./api.js";
-import { state, GEHS, GEH_NAME_BY_NUM, secondarySystem, visibleParsiSystems } from "./state.js";
+import { parsiMonth as fetchParsiMonth, convertDate, calendarRange } from "./api.js";
+import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
 import {
   esc, todayIst, shiftYmd, weekDays, gregLabel, gregShort,
   parsiLabel, stepParsiMonth, monthYearLabel,
@@ -29,8 +28,8 @@ export async function parsiMonthDays(mah, year, system) {
   return state.parsiMonthCache[key];
 }
 
-/** The Gregorian days a view covers - and therefore the window every fetch
- *  must be bounded by. The machi-board endpoint requires one. */
+/** The Gregorian days a view covers - and therefore the window any fetch
+ *  of events must be bounded by. */
 export async function viewRange(view, system) {
   if (view.mode === "day") return { days: [view.focus], from: view.focus, to: view.focus };
   if (view.mode === "week") {
@@ -98,6 +97,24 @@ function monthGridHtml(monthDays, items, secondaryByDay, selectedDay) {
   return html + "</div>";
 }
 
+/** The week's seven Parsi readings, fetched as one range rather than seven
+ *  conversions, and cached like every other reading. */
+async function weekReadings(range, system) {
+  const out = {};
+  const missing = range.days.filter(d => !state.parsiCache[`${d}|short|${system}`]);
+  if (missing.length) {
+    try {
+      const rows = await calendarRange(range.from, range.to, system);
+      for (const p of rows) {
+        const label = p.is_gatha ? p.gatha_name : `Roj ${p.roj_name}`;
+        state.parsiCache[`${p.gregorian_date}|short|${system}`] = label;
+      }
+    } catch (e) { /* fall through: the week renders without readings */ }
+  }
+  for (const d of range.days) out[d] = state.parsiCache[`${d}|short|${system}`] || "";
+  return out;
+}
+
 function itemCardHtml(it) {
   const when = it.time ? `${it.time} · ` : it.geh ? `${GEH_NAME_BY_NUM[it.geh]} Geh · ` : "";
   return `<div class="event ${it.kind === "machi" ? "machi" : ""}" data-cal-item="${it.kind}:${it.id}">
@@ -107,55 +124,33 @@ function itemCardHtml(it) {
   </div>`;
 }
 
-/** Day view. Timed bookings first, then the five Geh blocks - which is the
- *  old Machi board, kept as a mode of the calendar rather than a screen of
- *  its own, including its empty/taken/already-elapsed states. */
-function dayHtml(items, gehState) {
-  const timed = items.filter(it => it.kind !== "machi").sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-  const machiByGeh = {};
-  items.filter(it => it.kind === "machi").forEach(it => { machiByGeh[it.geh] = it; });
-
-  let html = "";
-  html += `<div class="daysection"><h3>Services</h3>`;
-  html += timed.length
-    ? timed.map(itemCardHtml).join("")
-    : `<div class="meta" style="padding:2px 2px 8px">Nothing booked.</div>`;
-  html += `</div>`;
-
-  html += `<div class="daysection"><h3>Machi</h3>`;
-  for (const [g, name] of GEHS) {
-    const m = machiByGeh[g];
-    if (m) {
-      html += `<div class="geh-block" data-cal-item="machi:${m.id}">
-        <span class="g">${name}</span>
-        <div class="detail-row"><span class="detail">${esc(m.sublabel || m.label)}</span>
-          <button class="secondary small">Open</button></div></div>`;
-    } else if (gehState.bookable.includes(g)) {
-      html += `<div class="geh-block empty" data-cal-book="${g}">
-        <span class="g">${name}</span>
-        <div class="detail-row"><span class="detail">Empty - tap to book</span><span>+</span></div></div>`;
-    } else {
-      // Not taken, but not bookable either: its start time has already
-      // passed today. A genuinely past DAY stays editable - only today's
-      // own elapsed gehs are excluded (see bookable_gehs server-side).
-      html += `<div class="geh-block elapsed">
-        <span class="g">${name}</span>
-        <div class="detail-row"><span class="detail">${esc(gehState.reason)}</span></div></div>`;
-    }
-  }
-  html += `</div>`;
-  return html;
+/** Day view: this mobed's own events for the day, in time order.
+ *
+ * There is no Geh slot grid here. A mobed does not need to see every
+ * machi at their fire temple - a machi they are responsible for is simply
+ * one of their events, added the same way any event is.
+ */
+function dayHtml(items) {
+  if (!items.length) return `<div class="empty-state">Nothing on this day.</div>`;
+  return items
+    .slice()
+    .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
+    .map(itemCardHtml)
+    .join("");
 }
 
-function weekHtml(days, items) {
+function weekHtml(days, items, readings) {
   let html = "";
   for (const day of days) {
     const dayItems = items.filter(it => it.day === day)
       .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-    html += `<div class="daysection"><h3 data-cal-day="${day}" style="cursor:pointer">${gregLabel(day)}</h3>`;
+    // Every date carries its primary-calendar reading, week view included -
+    // a mobed scanning the week needs the Roj as much as the weekday.
+    const reading = readings[day] ? ` <span class="wk-parsi">${esc(readings[day])}</span>` : "";
+    html += `<div class="daysection"><h3 data-cal-day="${day}" style="cursor:pointer">${gregLabel(day)}${reading}</h3>`;
     html += dayItems.length
       ? dayItems.map(itemCardHtml).join("")
-      : `<div class="meta" style="padding:2px 2px 8px">Nothing booked.</div>`;
+      : `<div class="meta" style="padding:2px 2px 8px">Nothing.</div>`;
     html += `</div>`;
   }
   return html;
@@ -188,14 +183,11 @@ async function cellDetailHtml(ymd) {
  *   view           {mode, focus, parsiMonth, selectedDay} - mutated in place
  *   loadItems      async ({from, to, days}) -> [{kind,id,day,time,geh,label,sublabel,tags}]
  *   onItem         (kind, id) -> void
- *   onBookGeh      (geh, ymd) -> void   (Day view empty-slot tap)
- *   gehSlots       bool - show the five Geh blocks in Day view
- *   agyaryId       needed when gehSlots is on, for the bookable-gehs check
  *   rerender       () -> void  (called after view state changes)
  */
 export async function renderCalendar(container, opts) {
   const view = opts.view;
-  const system = secondarySystem();
+  const system = primarySystem();
   view.focus = view.focus || todayIst();
 
   container.innerHTML = `<div class="empty-state">Loading...</div>`;
@@ -207,16 +199,6 @@ export async function renderCalendar(container, opts) {
   } catch (e) {
     container.innerHTML = "";
     throw e;
-  }
-
-  // Geh availability is only consulted in Day view, and only when this
-  // calendar is showing machi slots at all.
-  let gehState = { bookable: [], reason: "Already passed today" };
-  if (opts.gehSlots && view.mode === "day" && opts.agyaryId) {
-    try {
-      const res = await bookableGehs(opts.agyaryId, view.focus);
-      gehState.bookable = res.bookable || [];
-    } catch (e) { /* leave every slot non-bookable rather than guessing */ }
   }
 
   const label = view.mode === "day" ? gregLabel(view.focus)
@@ -234,13 +216,9 @@ export async function renderCalendar(container, opts) {
     // per cell was 30 extra round trips for something already in hand.
     body = monthGridHtml(range.monthDays, items, {}, view.selectedDay);
   } else if (view.mode === "week") {
-    body = weekHtml(range.days, items);
+    body = weekHtml(range.days, items, await weekReadings(range, system));
   } else {
-    body = opts.gehSlots
-      ? dayHtml(items, gehState)
-      : (items.length
-        ? items.sort((a, b) => (a.time || "").localeCompare(b.time || "")).map(itemCardHtml).join("")
-        : `<div class="empty-state">Nothing on your calendar this day.</div>`);
+    body = dayHtml(items);
   }
 
   container.innerHTML = chromeHtml(view, label, secondaryLabel) + body;
@@ -304,9 +282,6 @@ function wireChrome(container, view, system, opts) {
       const [kind, id] = el.dataset.calItem.split(":");
       opts.onItem && opts.onItem(kind, Number(id));
     };
-  });
-  container.querySelectorAll("[data-cal-book]").forEach(el => {
-    el.onclick = () => opts.onBookGeh && opts.onBookGeh(Number(el.dataset.calBook), view.focus);
   });
 }
 

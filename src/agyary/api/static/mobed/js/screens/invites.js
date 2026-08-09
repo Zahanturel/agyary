@@ -1,6 +1,10 @@
 "use strict";
 
 /**
+ * UNREACHABLE IN THE MOBED APP. No route points here (see main.js); this
+ * file is kept for the agyari management system, which will be designed
+ * after talking to panthakies. Do not wire it up without that decision.
+ *
  * Invites - the only way anyone becomes a panthaky or caretaker.
  *
  * COPY REVIEW NEEDED (flagged, not guessed):
@@ -20,7 +24,7 @@
 import { listInvites, createInvite, revokeInvite } from "../api.js";
 import { state, currentAgyary } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, markActiveTab, refreshHeader,
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader,
   loading, backBar, wireAll,
 } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
@@ -35,7 +39,6 @@ const ROLES = [
 export async function renderInvites() {
   chrome(true);
   refreshHeader();
-  markActiveTab("#/settings");
   showFab(false);
   loading();
 

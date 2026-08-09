@@ -22,7 +22,7 @@ import { state } from "../state.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, markActiveTab,
+  chrome, mainEl, showFab, showError, showInfo,
   refreshHeader, loading, backBar, wireAll,
 } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
@@ -31,10 +31,9 @@ import { navigate } from "../router.js";
 export async function renderBehdinList() {
   chrome(true);
   refreshHeader();
-  markActiveTab("#/behdins");
-  // The FAB is the add affordance on this screen, the same way it is on
-  // the calendar - so "add someone" is reachable without reading the page.
-  showFab(true, "Add a behdin", () => openAddPanel());
+  // Exactly one add control on this screen: the icon in the header below.
+  // No floating button as well.
+  showFab(false);
   loading();
 
   let rows = [];
@@ -49,7 +48,7 @@ export async function renderBehdinList() {
     <div class="card">
       <div class="row tight" style="justify-content:space-between;align-items:center">
         <h2 style="margin:0">Behdins</h2>
-        <button class="small" id="bhAdd">+ Add behdin</button>
+        <button class="icon-add" id="bhAdd" title="Add a behdin" aria-label="Add a behdin">+</button>
       </div>
       <p class="meta">Everyone on file at this fire temple.</p>
       <input type="text" id="bhFilter" placeholder="Search by name or phone" autocomplete="off">
@@ -100,7 +99,6 @@ function openAddPanel() {
 export async function renderBehdinDetail({ id }) {
   chrome(true);
   refreshHeader();
-  markActiveTab("#/behdins");
   showFab(false);
   loading();
 
@@ -130,6 +128,8 @@ export async function renderBehdinDetail({ id }) {
       ${backBar(esc(record.name), "#/behdins")}
       <label>Name</label><input type="text" id="bdName" value="${esc(record.name)}">
       <label>WhatsApp number</label>${phoneField("bdPhone", record.phone)}
+      <p class="meta" style="margin-top:6px">
+        <a class="tel" href="tel:${esc(record.phone)}">Call ${esc(record.phone)}</a></p>
       <div style="margin-top:12px"><button class="small" id="bdSave">Save details</button></div>
     </div>
 

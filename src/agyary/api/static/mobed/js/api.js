@@ -94,9 +94,11 @@ export const pendingRequests = () => get("/pending-requests");
 export const acceptBooking = (id) => post(`/bookings/${id}/accept`);
 export const declineBooking = (id) => post(`/bookings/${id}/decline`);
 
-/** Machi board now REQUIRES a bounded window - never call it without one. */
+/** This mobed's own machis in a bounded window. `mine=true` is not
+ *  optional here: the mobed app must never pull the fire temple's whole
+ *  board, which carries other mobeds' behdin names. */
 export const machiBoard = (aid, from, to) =>
-  get(`/agyaries/${aid}/machi-board?from=${from}&to=${to}`);
+  get(`/agyaries/${aid}/machi-board?from=${from}&to=${to}&mine=true`);
 export const bookableGehs = (aid, on) => get(`/agyaries/${aid}/bookable-gehs?on=${on}`);
 
 export const formOptions = (aid) => get(`/agyaries/${aid}/form-options`);
@@ -132,6 +134,10 @@ export const bookingSlip = (aid, id) => get(`/agyaries/${aid}/bookings/${id}/sli
 
 // --- Calendar (outside the /api/mobed prefix) -------------------------------
 export const convertDate = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);
+/** Every day in [start, end] with its Parsi reading, in one call - the
+ *  week view needs seven and shouldn't make seven round trips. */
+export const calendarRange = (start, end, system) =>
+  get(`/../calendar/range?start=${start}&end=${end}&system=${system}`);
 export const parsiMonth = (mah, year, system) =>
   get(`/../calendar/parsi-month?mah=${mah}&year=${year}&system=${system}`);
 

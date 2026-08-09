@@ -22,21 +22,29 @@ import {
   machiDetail, bookingDetail, editMachi, editBooking,
 } from "../api.js";
 import {
-  state, currentAgyary, GEHS, GEH_NAME_BY_NUM,
+  state, primarySystem, GEHS, GEH_NAME_BY_NUM,
   MACHI_PURPOSE_DISPLAY, SERVICE_PURPOSE_DISPLAY,
 } from "../state.js";
 import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
-import { chrome, mainEl, showFab, showError, showInfo, markActiveTab, refreshHeader, loading } from "../ui.js";
+import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
 import { esc, istYmd, istTime, todayIst, gregLabel } from "../util.js";
 import { navigate } from "../router.js";
 
 const STEPS = ["Behdin", "Service", "Date", "Time", "Names", "Confirm"];
 
+/**
+ * Roj/Mah on this form is read and entered in the mobed's PRIMARY
+ * calendar. This used to read the fire temple's calendar_system, which
+ * meant setting Kadmi as primary changed every label in the app except
+ * the one place you actually type a Parsi date.
+ *
+ * The fire temple's system still governs what gets STAMPED on the stored
+ * record - the server derives that from the Gregorian date we send.
+ */
 function system() {
-  const agyary = currentAgyary();
-  return (agyary && agyary.calendar_system) || "shenshai";
+  return primarySystem();
 }
 
 function blankDraft(prefill = {}) {
@@ -69,7 +77,6 @@ function blankDraft(prefill = {}) {
 export async function renderNewEvent() {
   chrome(true);
   refreshHeader();
-  markActiveTab("");
   showFab(false);
 
   if (!state.draft || state.draft.edit) {
@@ -83,7 +90,6 @@ export async function renderNewEvent() {
 export async function renderEditEvent({ kind, id }) {
   chrome(true);
   refreshHeader();
-  markActiveTab("");
   showFab(false);
   loading();
 

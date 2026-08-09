@@ -695,16 +695,28 @@ async def machi_board(
     agyary_id: int,
     from_: date = Query(alias="from"),
     to: date = Query(),
+    mine: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Machis at this agyari within [from, to] inclusive, by Parsi-day
-    anchor (gregorian_date). The window is required: this previously
-    returned the agyari's entire machi history on every call, which a
-    calendar refetching per month-step would re-download in full."""
+    anchor (gregorian_date).
+
+    The window is required: this previously returned the agyari's entire
+    machi history on every call, which a calendar refetching per month-step
+    would re-download in full.
+
+    ``mine=true`` narrows it to the machis the caller entered themselves.
+    The mobed app always asks for that - a mobed has no need to see every
+    machi at their fire temple, and the unfiltered response carries other
+    mobeds' behdin names. The unfiltered form remains for the agyari
+    management surface that will come later.
+    """
     await _require_membership(db, agyary_id, user)
     try:
-        entries = await mobed_dashboard.list_machi_board(db, agyary_id, from_, to)
+        entries = await mobed_dashboard.list_machi_board(
+            db, agyary_id, from_, to, created_by_user_id=user.id if mine else None
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return [
@@ -751,7 +763,7 @@ async def machi_slip(
     agyary_id: int, machi_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     await _require_membership(db, agyary_id, user)
-    slip = await mobed_dashboard.get_machi_slip(db, agyary_id, machi_id)
+    slip = await mobed_dashboard.get_machi_slip(db, agyary_id, machi_id, reader_user_id=user.id)
     if slip is None:
         raise HTTPException(status_code=404, detail="Unknown machi")
     return _slip_response(slip)
@@ -762,7 +774,7 @@ async def booking_slip(
     agyary_id: int, booking_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     await _require_membership(db, agyary_id, user)
-    slip = await mobed_dashboard.get_booking_slip(db, agyary_id, booking_id)
+    slip = await mobed_dashboard.get_booking_slip(db, agyary_id, booking_id, reader_user_id=user.id)
     if slip is None:
         raise HTTPException(status_code=404, detail="Unknown booking")
     return _slip_response(slip)

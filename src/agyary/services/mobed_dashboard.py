@@ -18,8 +18,18 @@ from agyary.messaging.booking_service import MachiBookingResult
 from agyary.messaging.formatting import PURPOSE_SHORT, date_label, geh_label, names_block
 from agyary.messaging.geh_times import to_ist
 from agyary.messaging.mobed_calendar import has_calendar_conflict
-from agyary.models import Agyary, AgyaryUser, Booking, BookingMobed, CeremonyName, Customer, Machi, Service
-from agyary.models.enums import SLOT_RELEASING_STATUSES
+from agyary.models import (
+    Agyary,
+    AgyaryUser,
+    Booking,
+    BookingMobed,
+    CeremonyName,
+    Customer,
+    Machi,
+    Service,
+    UserPreferences,
+)
+from agyary.models.enums import DEFAULT_SECONDARY_CALENDAR_SYSTEM, SLOT_RELEASING_STATUSES
 
 MY_DAY_HORIZON = timedelta(hours=12)  # mirrors my_bookings.py's past-cutoff
 AGYARI_SEARCH_MIN_SIMILARITY = 0.2
@@ -202,13 +212,16 @@ MAX_BOARD_RANGE_DAYS = 366
 
 
 async def list_machi_board(
-    db: AsyncSession, agyary_id: int, start: date, end: date
+    db: AsyncSession, agyary_id: int, start: date, end: date, created_by_user_id: int | None = None
 ) -> list[MachiBoardEntry]:
     """Machis at one agyari between two dates, inclusive.
 
-    Per-agyari and shared, not merged across a multi-agyari mobed's
-    memberships - institutional context, every active mobed at that agyary
-    sees the same board. Carries the booked-by name for the geh cards.
+    ``created_by_user_id`` narrows this to the machis that one mobed
+    entered themselves. The mobed app always passes it: a mobed does not
+    need - and should not be shown - every machi at their fire temple,
+    and the unfiltered response carries other mobeds' behdin names, which
+    is somebody else's business. Left as None it is the agyari-wide board,
+    for the management surface that will come later.
 
     The window is required, not optional. This used to return every
     non-released machi at the agyari for all time and let the client filter
@@ -235,6 +248,8 @@ async def list_machi_board(
         )
         .order_by(Machi.ceremony_datetime)
     )
+    if created_by_user_id is not None:
+        stmt = stmt.where(Machi.created_by_user_id == created_by_user_id)
     return [
         MachiBoardEntry(machi=machi, behdin_name=customer.name if customer else "")
         for machi, customer in (await db.execute(stmt)).all()
@@ -605,24 +620,52 @@ async def _names_as_dicts(db: AsyncSession, *, machi_id: int | None = None, book
     ]
 
 
-async def get_machi_slip(db: AsyncSession, agyary_id: int, machi_id: int) -> SlipData | None:
+async def reading_system(db: AsyncSession, user_id: int) -> CalendarSystem:
+    """The calendar a given mobed reads in - their primary preference.
+
+    Slips are rendered in this, NOT in the stored Roj/Mah. A mobed prints,
+    tears off and uses these slips themselves, so the slip has to read the
+    way they read. The stored values stay exactly as they are: they are the
+    fire temple's own reckoning and the stable historical record. Only the
+    rendering follows the reader.
+    """
+    prefs = await db.get(UserPreferences, user_id)
+    chosen = prefs.default_secondary_system if prefs else DEFAULT_SECONDARY_CALENDAR_SYSTEM
+    return CalendarSystem(chosen)
+
+
+def _reading(gregorian: date, system: CalendarSystem) -> tuple[int, int]:
+    """(roj, mah) for a Gregorian day in `system`, Gatha days as mah=13."""
+    roj, mah, _year = parsi_slot_fields(gregorian_to_parsi(gregorian, system))
+    return roj, mah
+
+
+async def get_machi_slip(
+    db: AsyncSession, agyary_id: int, machi_id: int, reader_user_id: int | None = None
+) -> SlipData | None:
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary_id:
         return None
     agyary = await db.get(Agyary, agyary_id)
     customer = await db.get(Customer, machi.customer_id)
     names = await _names_as_dicts(db, machi_id=machi.id)
+    if reader_user_id is None:
+        roj, mah = machi.parsi_roj, machi.parsi_mah
+    else:
+        roj, mah = _reading(machi.gregorian_date, await reading_system(db, reader_user_id))
     return SlipData(
         agyary_name=agyary.name,
         behdin_name=customer.name,
         behdin_phone=customer.phone,
         event=f"Machi ({machi.purpose})",
-        when=f"{date_label(machi.parsi_roj, machi.parsi_mah, machi.gregorian_date)}, {geh_label(machi.geh)}",
+        when=f"{date_label(roj, mah, machi.gregorian_date)}, {geh_label(machi.geh)}",
         names_text=names_block(names),
     )
 
 
-async def get_booking_slip(db: AsyncSession, agyary_id: int, booking_id: int) -> SlipData | None:
+async def get_booking_slip(
+    db: AsyncSession, agyary_id: int, booking_id: int, reader_user_id: int | None = None
+) -> SlipData | None:
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary_id:
         return None
@@ -631,7 +674,11 @@ async def get_booking_slip(db: AsyncSession, agyary_id: int, booking_id: int) ->
     service = await db.get(Service, booking.service_id)
     names = await _names_as_dicts(db, booking_id=booking.id)
     local = to_ist(booking.date_time)
-    when = f"{date_label(booking.parsi_roj, booking.parsi_mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}"
+    if reader_user_id is None:
+        roj, mah = booking.parsi_roj, booking.parsi_mah
+    else:
+        roj, mah = _reading(local.date(), await reading_system(db, reader_user_id))
+    when = f"{date_label(roj, mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}"
     return SlipData(
         agyary_name=agyary.name,
         behdin_name=customer.name,

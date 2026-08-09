@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#232A4D">
-<title>Agyary - Mobed</title>
+<title>Mobed Diary</title>
 <link rel="manifest" href="/mobed-manifest.json">
 <link rel="preload" href="/mobed-fonts/geist-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/mobed-app/app.css">
@@ -12,22 +12,21 @@
 <body>
 
 <header>
-  <h1 id="headerTitle">Agyary</h1>
+  <h1 id="headerTitle">Mobed Diary</h1>
   <div class="right">
-    <button id="profileBtn" class="chip hidden" title="Settings">Settings</button>
+    <!-- The menu is an icon, not a word. It is the only thing in the header
+         besides the title - there is no tab bar; the calendar IS the app. -->
+    <button id="menuBtn" class="icon-btn hidden" title="Menu" aria-label="Menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
   </div>
 </header>
 
 <main id="main"></main>
 
-<button id="fab" class="fab hidden" title="Add">+</button>
-
-<nav class="tabs hidden" id="tabs">
-  <button data-route="#/my-day">My day</button>
-  <button data-route="#/calendar">Calendar</button>
-  <button data-route="#/behdins">Behdins</button>
-  <button data-route="#/settings">Settings</button>
-</nav>
+<button id="fab" class="fab hidden" title="Add an event" aria-label="Add an event">+</button>
 
 <script type="module" src="/mobed-app/js/main.js"></script>
 </body>

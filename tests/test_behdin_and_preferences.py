@@ -3,9 +3,18 @@ preferences, the tandarosti section fix, and the bounded machi board."""
 
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import select
 
-from agyary.models import AgyaryCustomer, CeremonyName, Customer, CustomerSavedName, UserPreferences
+from agyary.models import (
+    AgyaryCustomer,
+    CeremonyName,
+    Customer,
+    CustomerSavedName,
+    Machi,
+    UserPreferences,
+)
 from tests.test_mobed_api import _member_headers
 
 BEHDIN_PHONE = "+919944400001"
@@ -473,6 +482,83 @@ async def test_machi_board_requires_and_honours_a_window(db, client, seeded):
     # Boundaries are inclusive on both ends.
     edge = await client.get(url, params={"from": "2027-06-15", "to": "2027-06-15"}, headers=headers)
     assert len(edge.json()) == 1
+
+
+async def test_machi_board_mine_scopes_to_the_caller(db, client, seeded):
+    """The mobed app must never pull the fire temple's whole board: a mobed
+    has no need of every machi there, and the unfiltered rows carry other
+    mobeds' behdin names."""
+    aid = seeded["agyary_id"]
+    mine = await _member_headers(client, seeded)
+    theirs = await _member_headers(client, seeded, name="Other Mobed", phone="+919944400123")
+
+    await _add_machi(
+        client, aid, mine, "patet",
+        [
+            {"section": "pair", "title": "ervad", "name": "A", "status": "departed", "pair_group": 1},
+            {"section": "pair", "title": "ervad", "name": "B", "status": "departed", "pair_group": 1},
+        ],
+        geh=1,
+    )
+    url = f"/api/mobed/agyaries/{aid}/machi-board"
+    window = {"from": "2027-06-01", "to": "2027-06-30"}
+
+    # The other mobed sees it on the agyari-wide board...
+    everyones = await client.get(url, params=window, headers=theirs)
+    assert len(everyones.json()) == 1
+    # ...but not among their own.
+    only_theirs = await client.get(url, params={**window, "mine": "true"}, headers=theirs)
+    assert only_theirs.json() == []
+    # The mobed who entered it does.
+    only_mine = await client.get(url, params={**window, "mine": "true"}, headers=mine)
+    assert len(only_mine.json()) == 1
+
+
+async def test_slip_reads_in_the_mobeds_primary_calendar(db, client, seeded):
+    """A mobed prints and uses these slips themselves, so the slip reads the
+    way they read - not in whatever system the record was stamped with."""
+    from agyary.calendar import CalendarSystem, gregorian_to_parsi
+
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    mid = (
+        await _add_machi(
+            client, aid, headers, "patet",
+            [
+                {"section": "pair", "title": "ervad", "name": "A", "status": "departed", "pair_group": 1},
+                {"section": "pair", "title": "ervad", "name": "B", "status": "departed", "pair_group": 1},
+            ],
+            geh=4,
+        )
+    ).json()["machi_id"]
+
+    day = date(2027, 6, 15)
+    readings = {}
+    for system in ("shenshai", "kadmi", "fasli"):
+        r = await client.put(
+            "/api/mobed/me/preferences",
+            json={
+                "visible_calendar_systems": ["gregorian", system],
+                "default_secondary_system": system,
+                "display_language": "en",
+            },
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        slip = (await client.get(f"/api/mobed/agyaries/{aid}/machis/{mid}/slip", headers=headers)).json()
+        readings[system] = slip["when"]
+        # The slip's Roj name must be that system's reading of the day.
+        expected = gregorian_to_parsi(day, CalendarSystem(system)).roj_name
+        assert expected in slip["when"], (system, slip["when"], expected)
+
+    # And the three genuinely differ - otherwise the assertions above could
+    # pass on a slip that never changed at all.
+    assert len(set(readings.values())) == 3, readings
+
+    # The stored record is untouched by any of it.
+    machi = await db.get(Machi, mid)
+    await db.refresh(machi)
+    assert machi.calendar_system == "shenshai"
 
 
 async def test_machi_board_rejects_a_silly_window(db, client, seeded):
