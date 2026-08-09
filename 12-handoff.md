@@ -1,7 +1,14 @@
 # Handoff — Mobed Diary
 
-Read `11-mobed-app-scope.md` first. It is the contract. This file is the
-state of play and the things a previous session got wrong.
+Read these first, in order:
+
+1. `11-mobed-app-scope.md` — what the app is and is not. The contract.
+2. `13-mobed-ui-spec.md` — every screen and control, described. It marks
+   which parts the owner specified directly and which are unreviewed
+   implementation open to redesign.
+
+This file is the state of play and the things a previous session got
+wrong.
 
 ---
 
