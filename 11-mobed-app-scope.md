@@ -208,6 +208,28 @@ be changed to a template send once the template name and language are
 known. Until then, local development is unaffected — the code is logged,
 not sent.
 
+**8.1a Template creation needs a real WABA.** Confirmed against the live
+account: a *test* WhatsApp Business Account cannot create templates of any
+category. The five present on it (`hello_world`, four `jaspers_market_*`,
+all `en_US`) are Meta's auto-provisioned samples, not user-created. This is
+not a business-verification problem — Required Actions is empty and
+verification is marked optional. The unblock is registering a real phone
+number, which creates a real WABA. The number must not already be active
+on WhatsApp or WhatsApp Business.
+
+**8.1b Sign-in codes cost money.** Business-initiated messages are billable;
+authentication conversations have no free allowance to real users. Two
+consequences:
+
+- A running cost on a tier meant to be free. Small at this scale - a mobed
+  signs in about twice a year given the 180-day sliding session - but it
+  scales with *sign-ins*, so anything that shortens sessions increases it.
+- `/auth/otp/request` becomes a way to spend money. The existing limits (10
+  per IP, 3 per phone, per 5 minutes) were written as anti-enumeration and
+  anti-harassment measures and are per-IP, so a distributed caller can still
+  burn credit. **Before going live, add a global daily send ceiling that
+  fails closed.** Not yet implemented.
+
 **8.2 Slip rendering** — see §4.2 implementation note.
 
 **8.3 Primary calendar plumbing.** The event form currently derives its

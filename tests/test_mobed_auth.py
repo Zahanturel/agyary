@@ -166,6 +166,82 @@ async def test_undeliverable_code_is_not_left_live(db, client, seeded, monkeypat
     assert await db.get(AuthOtp, PHONE) is None
 
 
+def test_template_payload_omits_components_when_there_are_none():
+    """hello_world and friends have no variables. Sending an empty or absent
+    components array matters: WhatsApp rejects components a template doesn't
+    define, and this is the payload the smoke test uses to prove credentials
+    before our own template exists."""
+    from agyary.services import otp_delivery
+
+    payload = otp_delivery.build_template_payload("+919800000003", "hello_world", "en_US")
+    assert payload["messaging_product"] == "whatsapp"
+    assert payload["type"] == "template"
+    # E.164 without the plus - what the Cloud API wants.
+    assert payload["to"] == "919800000003"
+    assert payload["template"] == {"name": "hello_world", "language": {"code": "en_US"}}
+    assert "components" not in payload["template"]
+
+
+def test_template_payload_carries_the_code_in_body_and_button():
+    """An Authentication template with a copy-code button needs the code
+    twice - once to render, once for the button to copy."""
+    from agyary.services import otp_delivery
+
+    payload = otp_delivery.build_template_payload(
+        "+919800000003", "mobed_diary_login_code", "en",
+        body_parameters=["123456"], copy_code="123456",
+    )
+    components = payload["template"]["components"]
+    assert [c["type"] for c in components] == ["body", "button"]
+    assert components[0]["parameters"] == [{"type": "text", "text": "123456"}]
+    assert components[1]["parameters"] == [{"type": "text", "text": "123456"}]
+    assert components[1]["index"] == "0"
+
+
+def test_template_payload_can_omit_the_button():
+    """A template without a copy-code button rejects a button component, so
+    it has to be possible to leave it out."""
+    from agyary.services import otp_delivery
+
+    payload = otp_delivery.build_template_payload(
+        "+919800000003", "some_template", "en", body_parameters=["123456"],
+    )
+    assert [c["type"] for c in payload["template"]["components"]] == ["body"]
+
+
+async def test_send_uses_the_configured_template(db, client, seeded, monkeypatch):
+    """End to end through the endpoint: with WhatsApp configured, a sign-in
+    request sends the configured template - not a text message, which
+    WhatsApp would reject for a business-initiated conversation."""
+    import importlib
+
+    from agyary.core import config
+    from agyary.services import otp_delivery
+
+    importlib.reload(otp_delivery)  # conftest stubs the sender; get the real one
+    sent = {}
+
+    async def fake_post(payload, client=None):
+        sent.update(payload)
+        return {"messages": [{"id": "wamid.TEST"}]}
+
+    monkeypatch.setattr(otp_delivery, "post_to_graph", fake_post)
+    monkeypatch.setenv("WHATSAPP_API_TOKEN", "test-token")
+    monkeypatch.setenv("WHATSAPP_OTP_PHONE_NUMBER_ID", "1234567890")
+    monkeypatch.setenv("WHATSAPP_OTP_TEMPLATE_NAME", "mobed_diary_login_code")
+    monkeypatch.setenv("WHATSAPP_OTP_TEMPLATE_LANGUAGE", "en")
+    config.get_settings.cache_clear()
+    try:
+        await otp_delivery.send_login_otp("+919800000003", "654321")
+        assert sent["type"] == "template"
+        assert sent["template"]["name"] == "mobed_diary_login_code"
+        assert sent["template"]["language"] == {"code": "en"}
+        body = sent["template"]["components"][0]
+        assert body["parameters"] == [{"type": "text", "text": "654321"}]
+    finally:
+        config.get_settings.cache_clear()
+
+
 def test_delivery_refuses_to_no_op_in_production(monkeypatch):
     """Unconfigured WhatsApp in debug logs the code (the dev path). In
     production the same state has to raise, or every mobed is locked out

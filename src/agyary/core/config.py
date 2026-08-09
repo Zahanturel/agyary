@@ -61,6 +61,24 @@ class Settings(BaseSettings):
     # time has no agyari yet, so there is no per-tenant number to send from.
     whatsapp_otp_phone_number_id: str = ""
 
+    # The approved Authentication template the code is sent in. WhatsApp
+    # rejects free-text business-initiated messages, so without this nothing
+    # can be delivered at all.
+    #
+    # The language is the template's OWN code, not a display label: "en" and
+    # "en_US" are different templates to the API, and a mismatch fails at
+    # send time with an unhelpful error.
+    #
+    # otp_ttl_seconds above must stay in step with the expiry the template
+    # states in its footer - the template's text is fixed at approval time,
+    # so changing the TTL here alone would make the message tell users
+    # something untrue.
+    whatsapp_otp_template_name: str = ""
+    whatsapp_otp_template_language: str = "en"
+    # Authentication templates with a copy-code button need the code passed
+    # a second time as a button component. Templates without one reject it.
+    whatsapp_otp_template_has_copy_code: bool = True
+
     # How long an issued role invite stays redeemable (models/invite.py).
     invite_ttl_days: int = 14
 
