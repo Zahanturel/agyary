@@ -84,7 +84,9 @@ flowchart TD
 ```
 
 Any signed-in user can **create** a fire temple and **edit** an unclaimed
-one. See finding #3.
+one, with no check that they work there. **Intentional** — any mobed can
+serve at any agyari, and this step exists to build a directory of mobeds
+and fire temples with real addresses. Not a permission hole.
 
 ---
 
@@ -207,7 +209,7 @@ flowchart TD
 
 | Endpoint | Note |
 |---|---|
-| `POST/GET/DELETE /agyaries/{id}/invites` | Finding #2 |
+| `POST/GET/DELETE /agyaries/{id}/invites` | Finding #2 — delete |
 | `GET /pending-requests` | WhatsApp booking-request flow, off |
 | `POST /bookings/{id}/accept` / `decline` | same |
 | `GET /agyaries/{id}/bookable-gehs` | was the Geh slot board, removed |
@@ -223,9 +225,9 @@ flowchart TD
 | # | What | Where | Severity |
 |---|---|---|---|
 | 1 | **Sign-in doesn't work in production.** WhatsApp OTP needs a template a test WABA can't create, plus billing. Decision pending: inbound-WhatsApp sign-in. | `services/otp_delivery.py`, `routes/mobed.py:99` | **Blocker** |
-| 2 | **Invite API is live with no UI.** Any signed-in mobed at a temple with no admin can issue `panthaky`/`caretaker` roles by curl. Scope §5 says invites are unreachable — that's true of the screen, not the endpoints. | `routes/mobed.py:473-553` | **High** |
-| 3 | **Onboarding writes to the temple table.** Any user can `POST /agyaries` (create) or `activate` an unclaimed one — no verification that they work there. Scope §5 says fire-temple editing is unreachable; it isn't. | `routes/mobed.py:385,414` | **High** |
-| 4 | **Phone numbers stored in plaintext** — mobeds' and behdins'. Needs encryption at rest + HMAC blind index, because behdins are looked up by phone. | `models/user.py:27`, customers table | **High** |
+| 2 | **Leftover invite code should be deleted.** There is no invite concept in this product, but the table, model, 3 live endpoints and a screen file are all still in the tree. The endpoints let any mobed at a temple with no admin assign themselves `panthaky` by curl. Delete: `models/invite.py`, `js/screens/invites.js`, `routes/mobed.py:434-553`, and the `agyary_invites` table. | `routes/mobed.py:473-553` | **High** |
+| 3 | **Phone numbers stored in plaintext** — mobeds' and behdins'. Needs encryption at rest + HMAC blind index, because behdins are looked up by phone. | `models/user.py:27`, customers table | **High** |
+| 4 | **`13-mobed-ui-spec.md` §1 is stale.** It says invite links are replacing OTP. That's been rejected — sign-in stays phone-based, delivery still undecided. | `13-mobed-ui-spec.md:59` | Medium |
 | 5 | `#/my-day` **is navigated to but has no route.** Four call sites bounce through not-found → `#/calendar`. Works by accident. | `session.js:45`, `onboarding.js:76,109,148`, `event.js:174` | Medium |
 | 6 | **Scope §8.3 is stale.** It says the event form reads the temple's calendar system; it was fixed and now reads the mobed's primary. §4.1 row 7 already says so. The two contradict. | `11-mobed-app-scope.md:258` | Medium |
 | 7 | **Scope §5 says the service catalog is unreachable, but the wizard creates services.** Step 2 has "+ Add a new service" wired to `POST /services`. Either the doc or the wizard is wrong. | `event.js:309`, scope §5 | Medium |
