@@ -132,8 +132,7 @@ uv run uvicorn agyary.api.main:app --reload --port 8000
 ```
 
 Then `localhost:8000/mobed`. Sign-in codes appear in that terminal. The
-seeded panthaky is `+919800000001`; a plain mobed is `+919800000002`; the
-user is `+919800000003`.
+seeded panthaky is `+919800000001`; a plain mobed is `+919800000002`.
 
 `JWT_SECRET_KEY` must be set or the app refuses to start. `.env` already
 has a WhatsApp test token (expires ~24h from 10 Aug 2026) and phone number

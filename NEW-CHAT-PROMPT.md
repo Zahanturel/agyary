@@ -115,7 +115,7 @@ uv run uvicorn agyary.api.main:app --reload --port 8000
 ```
 
 Then `localhost:8000/mobed`. Seeded numbers: `+919800000001` (panthaky),
-`+919800000002` (mobed). Mine is `+919800000003`.
+`+919800000002` (mobed).
 
 ## What works today
 
@@ -273,7 +273,7 @@ Investigate:
 
 Domain `gotiadarian.com` is on Cloudflare free plan. Tunnel is token-based
 (dashboard-managed, not a local config.yml). Zone ID:
-`REDACTED`.
+in the Cloudflare dashboard.
 
 Need:
 - `mobed.gotiadarian.com` → `/mobed/` routes
