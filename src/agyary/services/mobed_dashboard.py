@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agyary.calendar import CalendarSystem, gregorian_to_parsi
+from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
 from agyary.messaging import booking_service
 from agyary.messaging.availability import available_gehs, drop_elapsed_gehs, parsi_slot_fields
 from agyary.messaging.booking_service import MachiBookingResult
@@ -26,6 +26,7 @@ from agyary.models import (
     CeremonyName,
     Customer,
     Machi,
+    RecurrenceRule,
     Service,
     UserPreferences,
 )
@@ -440,6 +441,7 @@ async def manual_add_machi(
     gregorian,
     purpose: str,
     names: list[dict],
+    recurring: bool = False,
 ) -> MachiBookingResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
     the exact same shared function the WhatsApp flow uses (module 1) -
@@ -455,7 +457,66 @@ async def manual_add_machi(
     if result.machi is not None:
         result.machi.created_by_user_id = actor_user_id
         await db.flush()
+        if recurring and mah <= 12:
+            await _create_recurring_machis(
+                db, agyary, customer, result.machi, actor_user_id,
+                roj=roj, geh=geh, purpose=purpose, names=names,
+            )
     return result
+
+
+async def _create_recurring_machis(
+    db: AsyncSession,
+    agyary: Agyary,
+    customer: Customer,
+    source_machi: Machi,
+    actor_user_id: int,
+    *,
+    roj: int,
+    geh: int,
+    purpose: str,
+    names: list[dict],
+    horizon_months: int = 3,
+) -> None:
+    """Generate recurring machi instances for the next N months on the same
+    roj+geh. Creates a RecurrenceRule linking back to the source machi, then
+    books each future slot that is still open (skips taken ones silently)."""
+    system = CalendarSystem(agyary.calendar_system)
+    rule = RecurrenceRule(
+        agyary_id=agyary.id,
+        source_machi_id=source_machi.id,
+        pattern="same_roj_every_mah",
+        end_type="indefinite",
+        generation_horizon_months=horizon_months,
+    )
+    db.add(rule)
+    await db.flush()
+
+    source_machi.recurrence_rule_id = rule.id
+
+    start_mah = source_machi.parsi_mah
+    start_year = source_machi.parsi_year
+    for i in range(1, horizon_months + 1):
+        next_mah = start_mah + i
+        next_year = start_year
+        while next_mah > 12:
+            next_mah -= 12
+            next_year += 1
+        try:
+            greg = parsi_to_gregorian(next_year, system, mah=next_mah, roj=roj)
+        except ValueError:
+            continue
+        result = await booking_service.book_machi_slot(
+            db, agyary, customer, roj=roj, mah=next_mah, year=next_year,
+            geh=geh, gregorian=greg, purpose=purpose, names=names,
+        )
+        if result.machi is not None:
+            result.machi.created_by_user_id = actor_user_id
+            result.machi.recurrence_rule_id = rule.id
+            result.machi.is_recurring_instance = True
+
+    rule.last_generated_until = greg
+    await db.flush()
 
 
 @dataclass(frozen=True)

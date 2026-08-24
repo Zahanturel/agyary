@@ -1009,6 +1009,7 @@ class ManualAddMachiIn(BaseModel):
     gregorian: date
     purpose: str
     names: list[ManualAddNameIn]
+    recurring: bool = False
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/machi")
@@ -1025,6 +1026,7 @@ async def manual_add_machi(
         roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
         gregorian=payload.gregorian, purpose=payload.purpose,
         names=[n.model_dump() for n in payload.names],
+        recurring=payload.recurring,
     )
     await db.commit()
     if result.machi is None:
