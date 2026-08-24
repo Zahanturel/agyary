@@ -218,10 +218,11 @@ export async function renderCalendar(container, opts) {
   } else if (view.mode === "week") {
     body = weekHtml(range.days, items, await weekReadings(range, system));
   } else {
-    body = dayHtml(items);
+    body = opts.renderDay ? await opts.renderDay(items, view) : dayHtml(items);
   }
 
   container.innerHTML = chromeHtml(view, label, secondaryLabel) + body;
+  if (opts.wireDay && view.mode === "day") opts.wireDay(container);
   wireChrome(container, view, system, opts);
 }
 

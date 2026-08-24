@@ -94,11 +94,10 @@ export const pendingRequests = () => get("/pending-requests");
 export const acceptBooking = (id) => post(`/bookings/${id}/accept`);
 export const declineBooking = (id) => post(`/bookings/${id}/decline`);
 
-/** This mobed's own machis in a bounded window. `mine=true` is not
- *  optional here: the mobed app must never pull the fire temple's whole
- *  board, which carries other mobeds' behdin names. */
-export const machiBoard = (aid, from, to) =>
-  get(`/agyaries/${aid}/machi-board?from=${from}&to=${to}&mine=true`);
+/** Machis in a bounded window. The mobed app passes `mine=true` to see
+ *  only their own; the machi board app omits it to see the full board. */
+export const machiBoard = (aid, from, to, { mine = true } = {}) =>
+  get(`/agyaries/${aid}/machi-board?from=${from}&to=${to}${mine ? "&mine=true" : ""}`);
 export const bookableGehs = (aid, on) => get(`/agyaries/${aid}/bookable-gehs?on=${on}`);
 
 export const formOptions = (aid) => get(`/agyaries/${aid}/form-options`);

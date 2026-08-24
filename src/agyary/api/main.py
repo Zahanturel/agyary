@@ -70,7 +70,7 @@ async def security_headers(request, call_next):
     # than being wholly out of date. "no-cache" means revalidate, not
     # don't store: the usual answer is a cheap 304.
     path = request.url.path
-    if path == "/mobed" or path.startswith("/mobed-app"):
+    if path == "/mobed" or path.startswith("/mobed-app") or path == "/machi":
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -90,13 +90,15 @@ app.include_router(whatsapp_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _MOBED_DIR = _STATIC_DIR / "mobed"
+_MACHI_DIR = _STATIC_DIR / "machi"
 
 
 @app.get("/", include_in_schema=False)
 def root() -> RedirectResponse:
-    """mobed.gotiadarian.com is dedicated to the mobed PWA - the bare
-    domain root would otherwise 404, which is exactly what people hit when
-    a shared link doesn't include the /mobed path."""
+    """mobed.gotiadarian.com and machi.gotiadarian.com are dedicated to
+    their respective PWAs - the bare domain root would otherwise 404,
+    which is exactly what people hit when a shared link doesn't include
+    the path."""
     return RedirectResponse(url="/mobed")
 
 
@@ -156,6 +158,25 @@ def font_geist_sans() -> FileResponse:
 @app.get("/mobed-fonts/geist-mono.woff2", include_in_schema=False)
 def font_geist_mono() -> FileResponse:
     return FileResponse(_STATIC_DIR / "fonts" / "geist-mono.woff2", media_type="font/woff2")
+
+
+# --- Machi PWA ---------------------------------------------------------------
+# A separate shell with its own route table, manifest and SW, sharing the
+# same JS modules, CSS, fonts and API as the mobed app.
+
+@app.get("/machi", include_in_schema=False)
+def machi_ui() -> FileResponse:
+    return FileResponse(_MACHI_DIR / "index.html", media_type="text/html")
+
+
+@app.get("/machi-manifest.json", include_in_schema=False)
+def machi_manifest() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "machi-manifest.json", media_type="application/manifest+json")
+
+
+@app.get("/machi-sw.js", include_in_schema=False)
+def machi_service_worker() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "machi-sw.js", media_type="application/javascript")
 
 
 @app.get("/health")

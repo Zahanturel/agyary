@@ -146,6 +146,15 @@ button:disabled { opacity: .5; cursor: default; }
 
 /* Day view geh blocks: the machi board's slot affordance, now living
    inside the shared calendar rather than a separate screen. */
+.geh-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.geh-btn { flex: 1 1 auto; min-width: 90px; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--ink-900); font-size: var(--text-sm); cursor: pointer; text-align: center; }
+.geh-btn.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
+.geh-btn.taken { opacity: .4; cursor: not-allowed; border-style: dashed; }
+.geh-btn:not(.taken):not(.selected):hover { border-color: var(--primary); }
+.names-inline .meta { margin-bottom: var(--space-2); }
+
 .geh-block { border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: var(--space-3); margin-bottom: var(--space-2); min-height: 44px; }
 .geh-block .g { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
@@ -154,6 +163,21 @@ button:disabled { opacity: .5; cursor: default; }
 .geh-block.elapsed { border-style: dashed; color: var(--muted); opacity: .6; }
 .geh-block .detail-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .geh-block .detail-row .detail { min-width: 0; overflow-wrap: break-word; }
+
+.geh-slots { display: flex; flex-direction: column; gap: var(--space-2); }
+.geh-slot { border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: var(--space-3); min-height: 56px; }
+.geh-slot-head { font-weight: 600; font-size: var(--text-sm); color: var(--muted);
+  margin-bottom: var(--space-1); }
+.geh-slot-purpose { font-size: var(--text-sm); }
+.geh-slot-behdin { font-size: var(--text-sm); color: var(--muted); }
+.geh-slot.booked { cursor: pointer; }
+.geh-slot.booked:hover { border-color: var(--primary); }
+.geh-slot.open { border-style: dashed; border-color: var(--primary); cursor: pointer; }
+.geh-slot.open .geh-slot-head { color: var(--primary); }
+.geh-slot-open { font-size: var(--text-sm); color: var(--primary); }
+.geh-slot.taken { opacity: .5; border-style: dashed; }
+.geh-slot-taken { font-size: var(--text-sm); color: var(--muted); }
 
 .name-row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); align-items: center; }
 .name-row select.t { flex: 0 0 34%; max-width: 130px; }

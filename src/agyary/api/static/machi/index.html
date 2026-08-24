@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#232A4D">
+<title>Machi Board</title>
+<link rel="manifest" href="/machi-manifest.json">
+<link rel="preload" href="/mobed-fonts/geist-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/mobed-app/app.css">
+</head>
+<body>
+
+<header>
+  <h1 id="headerTitle">Machi Board</h1>
+  <div class="right">
+    <button id="menuBtn" class="icon-btn hidden" title="Menu" aria-label="Menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<button id="fab" class="fab hidden" title="Add a machi" aria-label="Add a machi">+</button>
+
+<script type="module" src="/mobed-app/js/machi_main.js"></script>
+</body>
+</html>

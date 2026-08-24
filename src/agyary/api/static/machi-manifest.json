@@ -1,0 +1,12 @@
+{
+  "name": "Agyary - Machi Board",
+  "short_name": "Machi",
+  "start_url": "/machi",
+  "scope": "/machi",
+  "display": "standalone",
+  "background_color": "#F7F8FA",
+  "theme_color": "#232A4D",
+  "icons": [
+    { "src": "/mobed-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
