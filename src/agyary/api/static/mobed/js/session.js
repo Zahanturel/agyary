@@ -42,7 +42,7 @@ export async function afterSignIn() {
   await loadSessionExtras();
   chrome(true);
   refreshHeader();
-  navigate(state.user.agyaries.length ? "#/my-day" : "#/onboarding");
+  navigate(state.user.agyaries.length ? "#/calendar" : "#/onboarding");
 }
 
 export function signedIn() {

@@ -51,7 +51,7 @@ function match(hash) {
 }
 
 export async function resolve() {
-  const hash = location.hash || "#/my-day";
+  const hash = location.hash || "#/calendar";
   const found = match(hash);
 
   if (!found) {
@@ -72,6 +72,6 @@ export async function resolve() {
 
 export function start() {
   window.addEventListener("hashchange", () => { resolve(); });
-  if (!location.hash) location.replace("#/my-day");
+  if (!location.hash) location.replace("#/calendar");
   return resolve();
 }
