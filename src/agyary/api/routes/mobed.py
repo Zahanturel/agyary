@@ -1046,8 +1046,8 @@ class ManualAddBookingIn(BaseModel):
     behdin_name: str
     service_id: int
     ceremony_datetime: datetime
-    purpose: str
-    names: list[ManualAddNameIn]
+    purpose: str = "gujrela_nu"
+    names: list[ManualAddNameIn] | None = None
     location: str | None = None
     is_offsite: bool = False
 
@@ -1060,11 +1060,12 @@ async def manual_add_booking(
     user: User = Depends(get_current_user),
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
+    names = [n.model_dump() for n in payload.names] if payload.names is not None else None
     result = await mobed_dashboard.manual_add_booking(
         db, agyary, user.id,
         behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
         service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime,
-        purpose=payload.purpose, names=[n.model_dump() for n in payload.names],
+        purpose=payload.purpose, names=names,
         location=payload.location, is_offsite=payload.is_offsite,
     )
     if result is None:
@@ -1151,8 +1152,8 @@ class EditBookingIn(BaseModel):
     behdin_name: str
     service_id: int
     ceremony_datetime: datetime
-    purpose: str
-    names: list[ManualAddNameIn]
+    purpose: str = "gujrela_nu"
+    names: list[ManualAddNameIn] | None = None
     location: str | None = None
     is_offsite: bool = False
 
@@ -1166,11 +1167,12 @@ async def edit_booking(
     user: User = Depends(get_current_user),
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
+    names = [n.model_dump() for n in payload.names] if payload.names is not None else None
     result = await mobed_dashboard.edit_booking(
         db, agyary, user.id, booking_id,
         behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
         service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime,
-        purpose=payload.purpose, names=[n.model_dump() for n in payload.names],
+        purpose=payload.purpose, names=names,
         location=payload.location, is_offsite=payload.is_offsite,
     )
     if result is None:
