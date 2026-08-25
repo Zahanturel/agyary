@@ -44,7 +44,8 @@ def _mah_flow_prompt(ctx: FlowContext, text: str) -> OutgoingMessage:
     """A predefined Dropdown, not a list message - Mah has 12 options,
     already over the interactive list message's real 10-row-total cap
     (confirmed against Meta's docs; the old chunk_rows-based 2-section
-    split silently violated it). Per 07-predefined-input-decision.md."""
+    split silently violated it). Closed vocabularies are tap-to-select,
+    never free text."""
     settings = get_settings()
     return ctx.reply(
         text,

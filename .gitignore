@@ -41,3 +41,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local, throwaway: filter-repo replacement rules
+.git-scrub-rules.txt

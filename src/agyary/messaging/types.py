@@ -32,9 +32,9 @@ class ListSection:
 @dataclass(frozen=True)
 class FlowPrompt:
     """A WhatsApp Flow launch, for any closed-vocabulary picker that can
-    exceed the interactive list message's real 10-row-total cap (or, per
-    07-predefined-input-decision.md, any closed-vocabulary picker at all -
-    tap-to-select, never free text/fuzzy matching).
+    exceed the interactive list message's real 10-row-total cap - and in
+    practice for any closed-vocabulary picker at all: tap-to-select,
+    never free text/fuzzy matching.
 
     ``flow_id`` and ``flow_token`` are Meta/registration and per-request
     concerns respectively - callers get flow_id from Settings (module 2's

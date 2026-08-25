@@ -23,8 +23,8 @@ invite mechanism that used to do so was removed, since this app has no
 role management and an unreachable endpoint that hands out privilege is
 worse than no endpoint at all.
 
-JWT pattern is unchanged (short-lived access token + longer-lived refresh
-token in an httpOnly cookie), per 02-backend-api.md's auth section.
+JWT pattern is unchanged: a short-lived access token plus a
+longer-lived refresh token in an httpOnly cookie.
 """
 
 from __future__ import annotations

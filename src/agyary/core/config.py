@@ -39,8 +39,7 @@ class Settings(BaseSettings):
 
     # Mobed PWA auth: WhatsApp OTP (existing AuthOtp table/precedent, no
     # send/verify logic previously existed) + JWT, per the pattern already
-    # documented in 02-backend-api.md's auth routes section (the one part
-    # of that doc not superseded by the v3 redesign). No passwords, no
+    # established for the earlier API's auth routes. No passwords, no
     # OAuth - priests don't want another login to remember.
     jwt_secret_key: str = ""
     jwt_access_token_minutes: int = 60

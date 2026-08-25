@@ -1,6 +1,6 @@
 """WhatsApp Flow JSON builders.
 
-Per `07-predefined-input-decision.md`: any closed-vocabulary picker that can
+Any closed-vocabulary picker that can
 exceed the interactive list message's real 10-row-total cap (confirmed
 against Meta's docs during planning - not 10-per-section, as the older
 `chunk_rows` helper in `flows/base.py` assumed) becomes a WhatsApp Flow with
@@ -106,8 +106,7 @@ def _single_dropdown_screen(screen_id: str, title: str, field_name: str, options
 def roj_options() -> list[dict]:
     """The canonical Roj option list - the one source both the static
     WhatsApp Flow below and the PWA's <select> dropdown (module 6) read
-    from, per 07-predefined-input-decision.md's closing requirement: never
-    two independently-hardcoded copies."""
+    from. One list, never two independently-hardcoded copies."""
     return [{"id": f"roj_{i + 1}", "title": name} for i, name in enumerate(ROJ_NAMES)]
 
 

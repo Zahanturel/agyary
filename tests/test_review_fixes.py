@@ -185,8 +185,8 @@ async def test_auto_confirmation_has_no_pure_tone_filler(db, seeded):
 async def test_roj_typo_falls_back_to_list(db, seeded):
     """A Roj typo must offer the Flow picker instead of a dead-end error.
 
-    Roj/Mah fallbacks are WhatsApp Flows now (07-predefined-input-decision.md),
-    not list messages - but handle_message is transport-agnostic, so
+    Roj/Mah fallbacks are WhatsApp Flows now, not list messages - but
+    handle_message is transport-agnostic, so
     sending 'roj_2'/'mah_1' as raw text is exactly what a completed Flow's
     nfm_reply routes to."""
     await onboard(db, seeded)

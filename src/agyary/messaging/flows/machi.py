@@ -212,7 +212,7 @@ async def _proceed_to_geh(ctx: FlowContext, data: dict) -> list[OutgoingMessage]
         ]
 
     # Geh is a static Flow (all 5 options, values never change) - same
-    # treatment as Roj/Mah, per 07-predefined-input-decision.md. It isn't
+    # treatment as Roj/Mah: a closed vocabulary is tap-to-select. It isn't
     # filtered to just the currently-free gehs (unlike the old list
     # message): availability is re-checked after selection, the same way
     # a Roj/Mah combo can already resolve to zero free gehs today.
