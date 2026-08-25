@@ -1,6 +1,12 @@
 """Idempotent demo seed: one agyary, a panthaky, a mobed, standard services.
 
-Run with:  uv run python -m agyary.scripts.seed_demo
+Lives under tests/ because that is what it is for. Every test fixture is
+built from it (see conftest.seeded), and it is not production data - the
+people and services in here are invented. The fire-temple directory, which
+IS real reference data the app needs, is seeded separately by
+agyary.scripts.seed_fire_temples.
+
+Run with:  uv run python -m tests.seed_demo
 """
 
 from __future__ import annotations

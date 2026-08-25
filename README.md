@@ -20,7 +20,6 @@ src/agyary/
               flows (machi/service booking, approvals, cancellations),
               regex name parser, Parsi/Gregorian date parser, geh times
   services/   business logic
-  scripts/    seed_demo (demo agyary + panthaky + services)
   calendar/   Parsi (Zoroastrian) calendar engine — pure functions, no DB
 ```
 
@@ -34,7 +33,7 @@ adapters around `handle_message`.
 uv sync
 cp .env.example .env          # set DATABASE_URL to your local Postgres
 uv run alembic upgrade head   # create the schema
-uv run python -m agyary.scripts.seed_demo
+uv run python -m tests.seed_demo   # optional: demo agyary, mobeds, services
 uv run uvicorn agyary.api.main:app --reload
 ```
 

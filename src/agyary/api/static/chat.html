@@ -310,7 +310,7 @@ async function init() {
   const res = await fetch("/api/chat/agyaries");
   state.agyaries = await res.json();
   if (!state.agyaries.length) {
-    infoEl.textContent = "No agyaries found - run: uv run python -m agyary.scripts.seed_demo";
+    infoEl.textContent = "No agyaries found - run: uv run python -m tests.seed_demo";
     return;
   }
   for (const a of state.agyaries) {

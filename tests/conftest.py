@@ -48,7 +48,7 @@ async def db():
 @pytest.fixture
 async def seeded(db):
     """Demo agyary + panthaky + mobed + services; returns ids/phones."""
-    from agyary.scripts.seed_demo import seed
+    from tests.seed_demo import seed
 
     await seed(db)
     return {
