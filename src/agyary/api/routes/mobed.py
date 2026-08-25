@@ -34,7 +34,7 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
-from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, otp_delivery
+from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, otp_delivery, wa_login
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -164,6 +164,134 @@ async def verify_otp(
         "access_token": mobed_auth.issue_access_token(user.id),
         "user": await _serialize_user(db, user),
     }
+
+
+# ---------------------------------------------------------------------------
+# Inbound WhatsApp sign-in
+#
+# The reverse of the OTP pair above. Nothing is sent, so nothing needs an
+# approved template and nothing is billable; the mobed messages us instead.
+# The old path stays as a fallback until this one is proven against a real
+# number - see services/wa_login.py.
+# ---------------------------------------------------------------------------
+async def _wa_login_session(
+    db: AsyncSession, response: Response, poll_secret: str, phone: str, name: str
+) -> dict:
+    """Turn a claimed attempt into a session, or say a name is still needed.
+
+    The attempt row is only retired once a session actually exists, so a
+    first-ever sign-in can come back with a name and finish against the
+    same row rather than being handed its own phone number to post back.
+    """
+    user = await mobed_auth.login_user(db, phone, name)
+    if not user.name:
+        await db.commit()
+        return {"status": "needs_name"}
+
+    await wa_login.consume(db, poll_secret)
+    await db.commit()
+    response.delete_cookie("wa_login")
+    _set_refresh_cookie(response, user.id)
+    return {
+        "status": "signed_in",
+        "access_token": mobed_auth.issue_access_token(user.id),
+        "user": await _serialize_user(db, user),
+    }
+
+
+@router.post("/auth/wa/start")
+async def wa_login_start(
+    request: Request, response: Response, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Open a sign-in attempt and hand back the link to send.
+
+    Takes no phone number - that is the point. There is nothing here to
+    enumerate and nothing to confirm or deny, because the caller tells us
+    nothing about who they are; we learn that from a payload Meta signed.
+
+    Rate-limited per IP. Sends cost nothing now, but each call still writes
+    a row and mints a code, and an endpoint that does either without a
+    ceiling is an invitation.
+    """
+    rate_limit.enforce(request, "wa_login_start", max_requests=10, window_seconds=300)
+    try:
+        started = await wa_login.start(db)
+    except wa_login.WaLoginError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await db.commit()
+
+    settings = get_settings()
+    response.set_cookie(
+        "wa_login",
+        started.poll_secret,
+        httponly=True,
+        secure=not settings.app_debug,
+        samesite="lax",
+        max_age=settings.wa_login_ttl_seconds,
+    )
+    # The code goes back so the screen can show it: the wa.me text is a
+    # prefill the user can edit, and someone who mangles it needs to see
+    # what they were supposed to send.
+    return {
+        "code": started.code,
+        "wa_link": started.wa_link,
+        "expires_at": started.expires_at.isoformat(),
+    }
+
+
+@router.get("/auth/wa/poll")
+async def wa_login_poll(
+    request: Request,
+    response: Response,
+    wa_login_cookie: str | None = Cookie(default=None, alias="wa_login"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Has this browser's attempt been claimed yet?
+
+    Matches on the cookie, never on the code. The code is a bearer token
+    that travels through the user's own WhatsApp; if polling accepted it,
+    anyone who saw the link could collect the session it created.
+    """
+    rate_limit.enforce(request, "wa_login_poll", max_requests=200, window_seconds=300)
+    if not wa_login_cookie:
+        raise HTTPException(status_code=400, detail="No sign-in is in progress.")
+
+    phone = await wa_login.peek_claimed_phone(db, wa_login_cookie)
+    if phone is None:
+        return {"status": "pending"}
+    return await _wa_login_session(db, response, wa_login_cookie, phone, "")
+
+
+class WaLoginCompleteIn(BaseModel):
+    name: str
+
+
+@router.post("/auth/wa/complete")
+async def wa_login_complete(
+    payload: WaLoginCompleteIn,
+    request: Request,
+    response: Response,
+    wa_login_cookie: str | None = Cookie(default=None, alias="wa_login"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Finish a first-ever sign-in by supplying a display name.
+
+    WhatsApp does send the sender's profile name, and we deliberately do
+    not use it: what someone calls themselves on WhatsApp is not what they
+    want printed on a ceremony slip.
+    """
+    rate_limit.enforce(request, "wa_login_complete", max_requests=20, window_seconds=300)
+    if not wa_login_cookie:
+        raise HTTPException(status_code=400, detail="No sign-in is in progress.")
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required for a first sign-in")
+
+    phone = await wa_login.peek_claimed_phone(db, wa_login_cookie)
+    if phone is None:
+        raise HTTPException(status_code=400, detail="That sign-in has expired. Please start again.")
+    return await _wa_login_session(db, response, wa_login_cookie, phone, name)
 
 
 @router.post("/auth/refresh")

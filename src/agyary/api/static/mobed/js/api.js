@@ -73,6 +73,14 @@ export const del = (path) => api(path, { method: "DELETE" });
 
 export const requestOtp = (phone) => post("/auth/otp/request", { phone });
 export const verifyOtp = (phone, code, name) => post("/auth/otp/verify", { phone, code, name });
+
+// Inbound sign-in: the mobed messages US a code, so we never send anything
+// and never ask for their number - the webhook learns it from Meta. start()
+// mints the code and sets an httpOnly cookie; poll() matches on that cookie,
+// never on the code, which is public by the time it reaches WhatsApp.
+export const waLoginStart = () => post("/auth/wa/start", {});
+export const waLoginPoll = () => get("/auth/wa/poll");
+export const waLoginComplete = (name) => post("/auth/wa/complete", { name });
 export const logout = () => post("/auth/logout");
 export const getMe = () => get("/auth/me");
 export const updateMyName = (name) => patch("/auth/me", { name });

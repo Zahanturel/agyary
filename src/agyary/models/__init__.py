@@ -18,6 +18,7 @@ from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
 from agyary.models.user import AgyaryUser, User
 from agyary.models.user_customer import UserCustomer
+from agyary.models.wa_login import WaLoginAttempt
 
 __all__ = [
     "Agyary",
@@ -38,4 +39,5 @@ __all__ = [
     "User",
     "UserCustomer",
     "UserPreferences",
+    "WaLoginAttempt",
 ]

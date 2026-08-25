@@ -78,6 +78,23 @@ class Settings(BaseSettings):
     # a second time as a button component. Templates without one reject it.
     whatsapp_otp_template_has_copy_code: bool = True
 
+    # --- Inbound WhatsApp sign-in -------------------------------------------
+    # The mobed messages US a code instead of us texting one to them, so
+    # nothing is business-initiated: no template, no business verification,
+    # and no per-message cost. What it does need is a real WhatsApp Business
+    # Account, which means a number that was not already on WhatsApp.
+    #
+    # The E.164 number the wa.me deep link points at, e.g. "+919800000000".
+    # Distinct from whatsapp_otp_phone_number_id, which is Meta's opaque id
+    # for the same number and is what the SEND endpoint addresses; a wa.me
+    # link needs the dialable number itself.
+    whatsapp_signin_number: str = ""
+    # Longer than otp_ttl_seconds because this flow makes the user leave the
+    # browser, find the message in WhatsApp and send it. Five minutes is
+    # enough to type a code you are looking at; it is not enough to switch
+    # apps on a phone that decides to show you six notifications on the way.
+    wa_login_ttl_seconds: int = 600
+
 
     def validate_runtime_secrets(self) -> None:
         """Refuse to serve with a blank JWT signing key.
