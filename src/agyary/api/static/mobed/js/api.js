@@ -87,6 +87,11 @@ export const createAgyary = (body) => post("/agyaries", body);
 
 
 export const myDay = () => get("/my-day");
+
+// The mobed's half of the behdin-facing WhatsApp bot: a behdin requests a
+// ceremony, the assigned mobed accepts or declines it. The bot is not
+// switched on yet, so nothing calls these - the endpoints behind them are
+// live and tested, and this is the client side waiting for a screen.
 export const pendingRequests = () => get("/pending-requests");
 export const acceptBooking = (id) => post(`/bookings/${id}/accept`);
 export const declineBooking = (id) => post(`/bookings/${id}/decline`);
@@ -97,19 +102,15 @@ export const machiBoard = (aid, from, to, { mine = true } = {}) =>
   get(`/agyaries/${aid}/machi-board?from=${from}&to=${to}${mine ? "&mine=true" : ""}`);
 export const bookableGehs = (aid, on) => get(`/agyaries/${aid}/bookable-gehs?on=${on}`);
 
-export const formOptions = (aid) => get(`/agyaries/${aid}/form-options`);
 export const calendarOptions = () => get("/reference/calendar-options");
 export const listServices = (aid) => get(`/agyaries/${aid}/services`);
 export const createService = (aid, name, offsite_capable) =>
   post(`/agyaries/${aid}/services`, { name, offsite_capable });
-export const setServiceActive = (aid, sid, is_active) =>
-  patch(`/agyaries/${aid}/services/${sid}`, { is_active });
-
-export const searchCustomers = (q) => get(`/customers/search?q=${encodeURIComponent(q || "")}`);
 export const customerHistory = (id) => get(`/customers/${id}/history`);
 
 /** THIS mobed's own behdins - scoped server-side, and unlike
- *  searchCustomers it includes people registered but not yet booked for. */
+ *  the old booking-derived customer search it includes people registered
+ *  but not yet booked for. */
 export const listBehdins = (aid, q) => get(`/agyaries/${aid}/behdins?q=${encodeURIComponent(q || "")}`);
 export const createBehdin = (aid, name, phone) => post(`/agyaries/${aid}/behdins`, { name, phone });
 export const getBehdin = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}`);

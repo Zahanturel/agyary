@@ -180,20 +180,18 @@ async def test_known_phone_links_instead_of_duplicating(db, client, seeded):
 
 
 async def test_register_lists_behdins_who_have_never_booked(db, client, seeded):
-    """The register has to include someone added a minute ago. The
-    booking-derived /customers/search cannot see them, which makes it
-    useless for the one moment it's most needed - looking up the behdin you
-    just registered in order to book for them."""
+    """The register has to include someone added a minute ago.
+
+    This is why the register exists at all: the old booking-derived
+    customer search could only see people who already had a ceremony on
+    file, which made it useless at the one moment it was most needed -
+    looking up the behdin you just registered in order to book for them."""
     aid = seeded["agyary_id"]
     headers = await _member_headers(client, seeded)
     created = await _behdin(client, aid, headers)
 
     listed = (await client.get(f"/api/mobed/agyaries/{aid}/behdins", headers=headers)).json()
     assert created["id"] in [b["id"] for b in listed]
-    # ...and they are invisible in the personal, booking-derived list.
-    assert created["id"] not in [
-        b["customer_id"] for b in (await client.get("/api/mobed/customers/search", headers=headers)).json()
-    ]
 
     filtered = (
         await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": "Jaidev"}, headers=headers)

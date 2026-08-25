@@ -268,77 +268,10 @@ async def is_active_member(db: AsyncSession, agyary_id: int, user_id: int) -> bo
     return result.scalar_one_or_none() is not None
 
 
-async def search_my_customers(
-    db: AsyncSession, user_id: int, query: str, limit: int = 20
-) -> list[dict]:
-    """A mobed's own customer base: the behdins behind machis/bookings THIS
-    mobed personally manually-entered, not the fire temple's shared
-    customer pool and not another mobed's relationship with the same
-    person. Backs the add-machi/add-booking form's search-and-autofill -
-    behdins tend to book the same names (departed pairs, farmayeshne)
-    every time, so recalling the last-used names saves the mobed re-typing
-    them. Most-recently-entered customer first."""
-    q = query.strip().lower()
-
-    machi_rows = (
-        await db.execute(
-            select(Machi.customer_id, Machi.id, Machi.created_at).where(
-                Machi.created_by_user_id == user_id
-            )
-        )
-    ).all()
-    booking_rows = (
-        await db.execute(
-            select(Booking.customer_id, Booking.id, Booking.created_at).where(
-                Booking.created_by_user_id == user_id
-            )
-        )
-    ).all()
-
-    # Most recent record (machi or booking) per customer - that record's
-    # names are what gets offered as the autofill.
-    latest: dict[int, tuple[datetime, str, int]] = {}
-    for customer_id, row_id, created_at in machi_rows:
-        if customer_id not in latest or created_at > latest[customer_id][0]:
-            latest[customer_id] = (created_at, "machi", row_id)
-    for customer_id, row_id, created_at in booking_rows:
-        if customer_id not in latest or created_at > latest[customer_id][0]:
-            latest[customer_id] = (created_at, "booking", row_id)
-    if not latest:
-        return []
-
-    customers = {
-        c.id: c
-        for c in (
-            await db.execute(select(Customer).where(Customer.id.in_(latest.keys())))
-        ).scalars()
-    }
-
-    matches = [
-        (created_at, customer_id, kind, row_id)
-        for customer_id, (created_at, kind, row_id) in latest.items()
-        if not q or q in customers[customer_id].name.lower() or q in customers[customer_id].phone.lower()
-    ]
-    matches.sort(key=lambda m: m[0], reverse=True)
-
-    results = []
-    for _created_at, customer_id, kind, row_id in matches[:limit]:
-        customer = customers[customer_id]
-        names = await _names_as_dicts(
-            db,
-            machi_id=row_id if kind == "machi" else None,
-            booking_id=row_id if kind == "booking" else None,
-        )
-        results.append(
-            {"customer_id": customer.id, "name": customer.name, "phone": customer.phone, "last_names": names}
-        )
-    return results
-
-
 async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int) -> dict | None:
     """A mobed's full history with one of his own behdins - every machi and
     service HE personally entered for them, most recent first. Same
-    created_by_user_id scoping as search_my_customers: this is the mobed's
+    created_by_user_id scoping as the behdin register: this is the mobed's
     own record of the relationship, not the fire temple's shared board."""
     customer = await db.get(Customer, customer_id)
     if customer is None:

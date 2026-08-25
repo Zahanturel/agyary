@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.api import rate_limit
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.messaging import booking_service, wa_flows
+from agyary.messaging import wa_flows
 from agyary.messaging.flows.approval import handle_pwa_booking_action
 from agyary.models import (
     Agyary,
@@ -472,26 +472,9 @@ async def calendar_options() -> dict:
     }
 
 
-@router.get("/agyaries/{agyary_id}/form-options")
-async def form_options(
-    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-) -> dict:
-    """Services and priests at this agyari, for the add-event form's
-    dropdowns - same rule, same reasoning. Machi is excluded from the
-    services list: it has its own dedicated "Type: Machi" path through
-    book_machi_slot, not the generic booking flow."""
-    await _require_membership(db, agyary_id, user)
-    services = await booking_service.list_services(db, agyary_id, exclude_machi=True)
-    priests = await booking_service.get_active_agyary_users(db, agyary_id)
-    return {
-        "services": [{"id": s.id, "name": s.name} for s in services],
-        "priests": [{"id": p.id, "name": p.name} for p in priests],
-    }
-
-
 # ---------------------------------------------------------------------------
-# Services catalog management (add / activate / deactivate) - reachable from
-# the event form's "+ Add a new service" and from the Profile screen.
+# Services catalog: list and add. Reachable from the event form's
+# "+ Add a new service"; there is no deactivate path and no UI for one.
 # ---------------------------------------------------------------------------
 def _service_summary(s: Service) -> dict:
     return {"id": s.id, "name": s.name, "is_active": s.is_active, "offsite_capable": s.offsite_capable}
@@ -501,9 +484,11 @@ def _service_summary(s: Service) -> dict:
 async def list_all_services(
     agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[dict]:
-    """Every service including inactive ones, for the Profile management
-    view - unlike form-options (which only offers active ones to book
-    against), a mobed needs to see what's deactivated to reactivate it."""
+    """Every service at this agyari, active or not.
+
+    The event form filters to active ones itself. Inactive rows are still
+    returned so a past event that used one can render its name rather than
+    a blank - they are history, not options."""
     await _require_membership(db, agyary_id, user)
     result = await db.execute(
         select(Service)
@@ -533,31 +518,6 @@ async def create_service(
         raise HTTPException(status_code=400, detail="Machi has its own booking flow, not a service entry")
     service = Service(agyary_id=agyary_id, name=name, offsite_capable=payload.offsite_capable, display_order=999)
     db.add(service)
-    await db.commit()
-    return _service_summary(service)
-
-
-class SetServiceActiveIn(BaseModel):
-    is_active: bool
-
-
-@router.patch("/agyaries/{agyary_id}/services/{service_id}")
-async def set_service_active(
-    agyary_id: int,
-    service_id: int,
-    payload: SetServiceActiveIn,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> dict:
-    """Activate/deactivate a service - the mobed's own catalog management.
-    Deactivating doesn't delete it or touch past bookings that used it, it
-    just stops offering it for new ones (list_services already filters to
-    active-only)."""
-    await _require_membership(db, agyary_id, user)
-    service = await db.get(Service, service_id)
-    if service is None or service.agyary_id != agyary_id:
-        raise HTTPException(status_code=404, detail="Unknown service")
-    service.is_active = payload.is_active
     await db.commit()
     return _service_summary(service)
 
@@ -657,13 +617,6 @@ async def booking_slip(
 # mobed's own behdins, not the fire temple's shared customer pool and not
 # another mobed's relationship with the same person.
 # ---------------------------------------------------------------------------
-@router.get("/customers/search")
-async def search_customers(
-    q: str = Query(default=""), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-) -> list[dict]:
-    return await mobed_dashboard.search_my_customers(db, user.id, q)
-
-
 @router.get("/customers/{customer_id}/history")
 async def customer_history(
     customer_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
@@ -708,9 +661,10 @@ async def list_behdins(
     Scoped server-side, because a list filtered in the client is not a
     permission.
 
-    Unlike /customers/search this is not derived from bookings, so it
-    includes someone registered moments ago and never booked for - exactly
-    who you are looking for right after adding them.
+    Unlike the old booking-derived customer search, this reads the
+    register itself, so it includes someone registered moments ago and
+    never booked for - exactly who you are looking for right after
+    adding them.
     """
     await _require_membership(db, agyary_id, user)
     rows = await behdin_directory.search_mine(db, agyary_id, user.id, q)
