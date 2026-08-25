@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
@@ -378,65 +378,186 @@ async def manual_add_machi(
         result.machi.created_by_user_id = actor_user_id
         await db.flush()
         if recurring and mah <= 12:
-            await _create_recurring_machis(
-                db, agyary, customer, result.machi, actor_user_id,
-                roj=roj, geh=geh, purpose=purpose, names=names,
-            )
+            await _create_recurring_machis(db, agyary, result.machi)
     return result
+
+
+# Recurrence horizon. Instances are materialised rather than computed on
+# read, because a machi occupies a real slot - the uniqueness constraint is
+# one machi per geh per day per agyary, and a slot nobody has written down
+# is a slot somebody else will take.
+RECURRENCE_HORIZON_MONTHS = 3
+# Ceiling on how far a single request may generate. Without it, opening the
+# calendar on a date years out would materialise hundreds of rows inside one
+# page load.
+MAX_GENERATE_MONTHS = 36
+
+
+def _next_parsi_month(mah: int, year: int) -> tuple[int, int]:
+    """Month 12 rolls to month 1 of the next year. Mah 13 is the Gatha days
+    and is never produced here - a recurrence cannot start on one (a machi
+    cannot be booked then) and so never lands on one."""
+    return (1, year + 1) if mah >= 12 else (mah + 1, year)
+
+
+async def generate_recurrence_instances(
+    db: AsyncSession, agyary: Agyary, rule: RecurrenceRule, *, through: date
+) -> int:
+    """Materialise this rule's machis up to and including ``through``.
+
+    Idempotent and resumable: generation always starts from the month after
+    ``last_generated_until``, and that marker advances for every month
+    ATTEMPTED, not every month successfully booked. A month whose geh was
+    already taken is done with - somebody else holds that slot, and retrying
+    it on every calendar render would be pointless churn.
+
+    Everything the instances need is read back off the source machi rather
+    than copied into the rule: the roj, the geh, the purpose, the behdin and
+    the names. One source of truth, so a rule cannot drift from the machi it
+    describes. If that machi is gone the rule has nothing left to say and is
+    deactivated.
+    """
+    if rule.source_machi_id is None:
+        # A booking-sourced rule, which this does not generate. Not ours to
+        # deactivate either - leave it exactly as found.
+        return 0
+
+    source = await db.get(Machi, rule.source_machi_id)
+    customer = await db.get(Customer, source.customer_id) if source else None
+    if source is None or customer is None:
+        # Defensive: a foreign key protects both today, so this is reachable
+        # only if one is ever hard-deleted. A rule that cannot name what it
+        # repeats has nothing left to say.
+        rule.is_active = False
+        await db.flush()
+        return 0
+
+    system = CalendarSystem(agyary.calendar_system)
+    if rule.end_date is not None and rule.end_date < through:
+        through = rule.end_date
+
+    anchor = rule.last_generated_until or source.gregorian_date
+    if anchor >= through:
+        return 0
+
+    # Where we got to, in Parsi terms. The marker round-trips exactly: it is
+    # always the gregorian of (source roj, some mah, some year).
+    roj, mah, year = parsi_slot_fields(gregorian_to_parsi(anchor, system))
+    roj = source.parsi_roj
+
+    names = await _names_as_dicts(db, machi_id=source.id)
+    created = 0
+    attempted_through = anchor
+
+    for _ in range(MAX_GENERATE_MONTHS):
+        mah, year = _next_parsi_month(mah, year)
+        try:
+            greg = parsi_to_gregorian(year, system, mah=mah, roj=roj)
+        except ValueError:
+            # Not a date in this system; the month is still handled, so the
+            # marker moves past it rather than retrying it forever.
+            continue
+
+        result = await booking_service.book_machi_slot(
+            db, agyary, customer, roj=roj, mah=mah, year=year,
+            geh=source.geh, gregorian=greg, purpose=source.purpose, names=names,
+        )
+        if result.machi is not None:
+            result.machi.created_by_user_id = source.created_by_user_id
+            result.machi.recurrence_rule_id = rule.id
+            result.machi.is_recurring_instance = True
+            created += 1
+
+        attempted_through = greg
+        if greg >= through:
+            break
+
+    rule.last_generated_until = attempted_through
+    await db.flush()
+    return created
+
+
+async def ensure_recurrences_generated(
+    db: AsyncSession, agyary_id: int, *, through: date
+) -> int:
+    """Top up every active recurrence at this agyary so the board through
+    ``through`` is complete. Returns how many instances were created.
+
+    Called on the read path because there is no scheduler here to do it -
+    generation at creation time only reached three months out, so a mobed
+    who stepped the calendar into a fourth month saw a standing arrangement
+    simply stop. Normally this is one indexed SELECT that matches nothing.
+    """
+    rules = (
+        await db.execute(
+            select(RecurrenceRule).where(
+                RecurrenceRule.agyary_id == agyary_id,
+                RecurrenceRule.is_active.is_(True),
+                # Machi-sourced rules only. The schema permits a rule
+                # sourced from a booking instead (exactly_one_source), and
+                # nothing creates those yet - but this generator cannot
+                # service one, and picking it up would leave it looking
+                # like a rule with a missing source.
+                RecurrenceRule.source_machi_id.is_not(None),
+                or_(
+                    RecurrenceRule.last_generated_until.is_(None),
+                    RecurrenceRule.last_generated_until < through,
+                ),
+            )
+        )
+    ).scalars().all()
+    if not rules:
+        return 0
+
+    agyary = await db.get(Agyary, agyary_id)
+    if agyary is None:
+        return 0
+
+    total = 0
+    for rule in rules:
+        total += await generate_recurrence_instances(db, agyary, rule, through=through)
+    return total
 
 
 async def _create_recurring_machis(
     db: AsyncSession,
     agyary: Agyary,
-    customer: Customer,
     source_machi: Machi,
-    actor_user_id: int,
     *,
-    roj: int,
-    geh: int,
-    purpose: str,
-    names: list[dict],
-    horizon_months: int = 3,
+    horizon_months: int = RECURRENCE_HORIZON_MONTHS,
 ) -> None:
-    """Generate recurring machi instances for the next N months on the same
-    roj+geh. Creates a RecurrenceRule linking back to the source machi, then
-    books each future slot that is still open (skips taken ones silently)."""
-    system = CalendarSystem(agyary.calendar_system)
+    """Start a monthly recurrence from ``source_machi`` and generate the
+    first few months of it.
+
+    A machi kept for a departed relative is usually kept every month on the
+    same Roj, indefinitely. Only the rule is durable; the instances beyond
+    the horizon are generated on demand by ensure_recurrences_generated, so
+    the arrangement does not quietly stop at whatever the horizon happened
+    to be on the day it was created.
+    """
     rule = RecurrenceRule(
         agyary_id=agyary.id,
         source_machi_id=source_machi.id,
         pattern="same_roj_every_mah",
         end_type="indefinite",
         generation_horizon_months=horizon_months,
+        last_generated_until=source_machi.gregorian_date,
     )
     db.add(rule)
     await db.flush()
-
     source_machi.recurrence_rule_id = rule.id
 
-    start_mah = source_machi.parsi_mah
-    start_year = source_machi.parsi_year
-    for i in range(1, horizon_months + 1):
-        next_mah = start_mah + i
-        next_year = start_year
-        while next_mah > 12:
-            next_mah -= 12
-            next_year += 1
-        try:
-            greg = parsi_to_gregorian(next_year, system, mah=next_mah, roj=roj)
-        except ValueError:
-            continue
-        result = await booking_service.book_machi_slot(
-            db, agyary, customer, roj=roj, mah=next_mah, year=next_year,
-            geh=geh, gregorian=greg, purpose=purpose, names=names,
-        )
-        if result.machi is not None:
-            result.machi.created_by_user_id = actor_user_id
-            result.machi.recurrence_rule_id = rule.id
-            result.machi.is_recurring_instance = True
-
-    rule.last_generated_until = greg
-    await db.flush()
+    # Walk the months rather than adding days. A Parsi month is exactly 30
+    # days, but a Parsi YEAR is 12 x 30 plus the five Gatha days, so two
+    # same-Roj dates either side of a year boundary are 35 days apart and
+    # any day-count horizon silently lands in the wrong month there.
+    mah, year = source_machi.parsi_mah, source_machi.parsi_year
+    for _ in range(horizon_months):
+        mah, year = _next_parsi_month(mah, year)
+    through = parsi_to_gregorian(
+        year, CalendarSystem(agyary.calendar_system), mah=mah, roj=source_machi.parsi_roj
+    )
+    await generate_recurrence_instances(db, agyary, rule, through=through)
 
 
 @dataclass(frozen=True)

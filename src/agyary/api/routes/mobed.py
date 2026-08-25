@@ -660,8 +660,17 @@ async def machi_board(
     machi at their fire temple, and the unfiltered response carries other
     mobeds' behdin names. The unfiltered form remains for the agyari
     management surface that will come later.
+
+    Recurring machis are topped up here before reading. There is no
+    scheduler in this deployment, so if nothing generated them on the way
+    past, a standing monthly arrangement would simply stop at whatever
+    horizon it was created with - the mobed steps into a fourth month and
+    the machi is not there. Committed only when something was actually
+    written, so an ordinary read stays a read.
     """
     await _require_membership(db, agyary_id, user)
+    if await mobed_dashboard.ensure_recurrences_generated(db, agyary_id, through=to):
+        await db.commit()
     try:
         entries = await mobed_dashboard.list_machi_board(
             db, agyary_id, from_, to, created_by_user_id=user.id if mine else None
