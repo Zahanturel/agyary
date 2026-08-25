@@ -1,21 +1,18 @@
-"""Transport-agnostic messaging layer.
+"""Booking core, shared by whatever ends up talking to it.
 
-All booking logic, ceremony selection and name parsing live behind one
-entry point::
+This package started as the behdin-facing WhatsApp bot: conversation
+flows, a text handler and a send worker. Those are gone. What is left is
+the part that was never really about messaging at all - creating a
+booking, holding a machi slot, working out which Gehs are free, and
+formatting a Parsi date - and it is what the mobed app runs on.
 
-    handle_message(db, agyary_id, phone_number, text) -> list[OutgoingMessage]
+The name is now a historical accident rather than a description. It stays
+for the moment because renaming it touches every import in the app for no
+behavioural gain; it is worth doing when something else brings us here.
 
-Transports are thin adapters around it:
-
-- The web chat simulator POSTs the typed text (or a tapped option's id) and
-  renders the returned messages.
-- The future WhatsApp adapter resolves the webhook's phone_number_id to an
-  agyary_id, passes button/list reply ids as ``text``, and converts each
-  OutgoingMessage into a Cloud API send (buttons -> interactive button
-  message, sections -> interactive list message, otherwise plain text).
+- booking_service - create/update bookings, book_machi_slot, services
+- availability     - which Gehs are free on a given Parsi day
+- mobed_calendar   - a mobed's own calendar conflicts
+- formatting       - Parsi date, Geh and name-block rendering
+- geh_times        - Geh boundaries in IST
 """
-
-from agyary.messaging.handler import handle_message
-from agyary.messaging.types import Button, ListRow, ListSection, OutgoingMessage
-
-__all__ = ["Button", "ListRow", "ListSection", "OutgoingMessage", "handle_message"]

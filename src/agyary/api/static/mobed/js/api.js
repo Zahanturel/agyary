@@ -88,14 +88,6 @@ export const createAgyary = (body) => post("/agyaries", body);
 
 export const myDay = () => get("/my-day");
 
-// The mobed's half of the behdin-facing WhatsApp bot: a behdin requests a
-// ceremony, the assigned mobed accepts or declines it. The bot is not
-// switched on yet, so nothing calls these - the endpoints behind them are
-// live and tested, and this is the client side waiting for a screen.
-export const pendingRequests = () => get("/pending-requests");
-export const acceptBooking = (id) => post(`/bookings/${id}/accept`);
-export const declineBooking = (id) => post(`/bookings/${id}/decline`);
-
 /** Machis in a bounded window. The mobed app passes `mine=true` to see
  *  only their own; the machi board app omits it to see the full board. */
 export const machiBoard = (aid, from, to, { mine = true } = {}) =>

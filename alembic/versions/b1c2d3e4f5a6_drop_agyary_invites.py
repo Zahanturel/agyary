@@ -38,9 +38,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.drop_index("idx_agyary_invites_phone", table_name="agyary_invites")
-    op.drop_index("uq_agyary_invites_pending", table_name="agyary_invites")
-    op.drop_table("agyary_invites")
+    # IF EXISTS rather than op.drop_index/op.drop_table: this table was also
+    # removed by hand on developer machines while the feature was being torn
+    # out, and a migration that dies on an already-absent index leaves the
+    # chain wedged for no good reason. Dropping something twice is fine;
+    # refusing to start because it is already gone is not.
+    op.execute("DROP INDEX IF EXISTS idx_agyary_invites_phone")
+    op.execute("DROP INDEX IF EXISTS uq_agyary_invites_pending")
+    op.execute("DROP TABLE IF EXISTS agyary_invites")
 
 
 def downgrade() -> None:

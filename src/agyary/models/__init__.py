@@ -9,7 +9,6 @@ from agyary.models.auth import AuthOtp
 from agyary.models.booking import Booking, BookingMobed
 from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
-from agyary.models.conversation import ConversationState
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName
 from agyary.models.machi import Machi
 from agyary.models.notification import Notification
@@ -19,7 +18,6 @@ from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
 from agyary.models.user import AgyaryUser, User
 from agyary.models.user_customer import UserCustomer
-from agyary.models.whatsapp import WhatsAppMessage
 
 __all__ = [
     "Agyary",
@@ -30,7 +28,6 @@ __all__ = [
     "BookingMobed",
     "BulkBatch",
     "CeremonyName",
-    "ConversationState",
     "Customer",
     "CustomerSavedName",
     "Machi",
@@ -41,5 +38,4 @@ __all__ = [
     "User",
     "UserCustomer",
     "UserPreferences",
-    "WhatsAppMessage",
 ]

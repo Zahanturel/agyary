@@ -1,52 +1,19 @@
-import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from pathlib import Path
 
-import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from agyary.api.routes.calendar import router as calendar_router
-from agyary.api.routes.chat import router as chat_router
 from agyary.api.routes.mobed import router as mobed_router
-from agyary.api.routes.whatsapp import router as whatsapp_router
 from agyary.core.config import get_settings
-from agyary.core.database import async_session_factory
-from agyary.messaging import send_worker
 
 settings = get_settings()
 settings.validate_runtime_secrets()
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    http_client = httpx.AsyncClient()
-    semaphore = asyncio.Semaphore(send_worker.DEFAULT_MAX_CONCURRENT_SENDS)
-
-    # Pick up anything left "pending" from an earlier ungraceful shutdown
-    # before doing anything else - this machine reboots unattended.
-    await send_worker.run_startup_sweep(async_session_factory, http_client, semaphore)
-
-    worker_task = asyncio.create_task(
-        send_worker.worker_loop(async_session_factory, http_client, semaphore)
-    )
-    sweep_task = asyncio.create_task(
-        send_worker.sweep_loop(async_session_factory, http_client, semaphore)
-    )
-    try:
-        yield
-    finally:
-        worker_task.cancel()
-        sweep_task.cancel()
-        await asyncio.gather(worker_task, sweep_task, return_exceptions=True)
-        await http_client.aclose()
-
-
 app = FastAPI(
     title=settings.app_name,
-    lifespan=lifespan,
     # The interactive API explorer/schema is a map of every endpoint and
     # payload shape - useful in dev, a gift to an attacker in production.
     # Hide it outside debug mode; debug is the same flag that already gates
@@ -76,17 +43,7 @@ async def security_headers(request, call_next):
 
 
 app.include_router(calendar_router)
-# The web-chat simulator is a development tool, not a customer-facing
-# surface: it has no auth at all, takes the behdin's phone number as a
-# request parameter, and will happily drive that person's whole
-# conversation - read their upcoming bookings and saved names, book for
-# them, cancel on them - for any number the caller cares to type. It also
-# lists every agyari's admin names and phone numbers. Registered only in
-# debug mode, the same gate already applied to docs_url/openapi_url above.
-if settings.app_debug:
-    app.include_router(chat_router)
 app.include_router(mobed_router)
-app.include_router(whatsapp_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _MOBED_DIR = _STATIC_DIR / "mobed"
@@ -100,19 +57,6 @@ def root() -> RedirectResponse:
     which is exactly what people hit when a shared link doesn't include
     the path."""
     return RedirectResponse(url="/mobed")
-
-
-@app.get("/chat", include_in_schema=False)
-def chat_ui() -> FileResponse:
-    """The WhatsApp-conversation simulator (vanilla HTML/JS).
-
-    Debug-only, matching the /api/chat router gate above - serving the page
-    without its API would just be a broken screen, and the page itself
-    displays the admin phone numbers it fetches.
-    """
-    if not settings.app_debug:
-        raise HTTPException(status_code=404)
-    return FileResponse(_STATIC_DIR / "chat.html", media_type="text/html")
 
 
 @app.get("/mobed", include_in_schema=False)

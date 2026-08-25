@@ -1,5 +1,5 @@
-"""Mobed PWA API: onboarding/auth, agyari search, My Day, Machi Board,
-manual add, accept/decline. See services/mobed_auth.py and
+"""Mobed PWA API: onboarding/auth, agyari search, the mobed's own day and
+machi board, and manual event entry. See services/mobed_auth.py and
 services/mobed_dashboard.py for the business logic - this module is the
 HTTP/JWT/request-response layer on top of it.
 """
@@ -16,12 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.api import rate_limit
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.messaging import wa_flows
-from agyary.messaging.flows.approval import handle_pwa_booking_action
+from agyary.calendar.options import geh_options, mah_options, roj_options
 from agyary.models import (
     Agyary,
     AgyaryUser,
-    Booking,
     Customer,
     Service,
     User,
@@ -451,24 +449,15 @@ async def my_day(db: AsyncSession = Depends(get_db), user: User = Depends(get_cu
     return [_booking_summary(e) for e in entries]
 
 
-@router.get("/pending-requests")
-async def pending_requests(
-    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-) -> list[dict]:
-    entries = await mobed_dashboard.list_pending_requests(db, user.id)
-    return [_booking_summary(e) for e in entries]
-
-
 @router.get("/reference/calendar-options")
 async def calendar_options() -> dict:
-    """Roj/Mah/Geh option lists for the add-event form's <select> dropdowns
-    - closed-vocabulary fields are never free text (07-predefined-input-
-    decision.md), and this reads from the exact same canonical source
-    (wa_flows.py) the WhatsApp static Flows use, not a second copy."""
+    """Roj/Mah/Geh option lists for the add-event form's <select>
+    dropdowns. Closed vocabularies are tap-to-select, never free text, and
+    these read from the canonical name lists rather than a second copy."""
     return {
-        "roj": wa_flows.roj_options(),
-        "mah": wa_flows.mah_options(),
-        "geh": wa_flows.geh_options(),
+        "roj": roj_options(),
+        "mah": mah_options(),
+        "geh": geh_options(),
     }
 
 
@@ -1009,34 +998,3 @@ async def edit_booking(
     return {"booking_id": result.booking.id, "calendar_conflict": result.calendar_conflict}
 
 
-# ---------------------------------------------------------------------------
-# Accept / decline (second entry point, same idempotent core as WhatsApp)
-# ---------------------------------------------------------------------------
-async def _do_booking_action(
-    booking_id: int, action: str, db: AsyncSession, user: User
-) -> dict:
-    booking = await db.get(Booking, booking_id)
-    if booking is None:
-        raise HTTPException(status_code=404, detail="Unknown booking")
-    agyary = await db.get(Agyary, booking.agyary_id)
-    outcome = await handle_pwa_booking_action(db, agyary, user.id, booking_id, action)
-    if outcome.status == "unauthorized":
-        raise HTTPException(status_code=403, detail="Not the assigned priest for this booking")
-    await db.commit()
-    if outcome.status == "already_resolved":
-        return {"status": outcome.status, "previous_status": outcome.previous_status}
-    return {"status": outcome.status, "what": outcome.what, "when": outcome.when}
-
-
-@router.post("/bookings/{booking_id}/accept")
-async def accept_booking(
-    booking_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-) -> dict:
-    return await _do_booking_action(booking_id, "approve", db, user)
-
-
-@router.post("/bookings/{booking_id}/decline")
-async def decline_booking(
-    booking_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-) -> dict:
-    return await _do_booking_action(booking_id, "decline", db, user)

@@ -172,19 +172,6 @@ async def list_my_day(db: AsyncSession, user_id: int) -> list[MyDayEntry]:
     return _my_day_entries((await db.execute(stmt)).all())
 
 
-async def list_pending_requests(db: AsyncSession, user_id: int) -> list[MyDayEntry]:
-    """Service requests waiting on this mobed's own accept/decline - the
-    PWA's entry point for the same action a WhatsApp button already
-    offers (doc 06: idempotent, actionable from more than one place).
-    Merged across agyaries, same as My Day."""
-    stmt = (
-        _my_day_select()
-        .where(BookingMobed.user_id == user_id, BookingMobed.status == "assigned")
-        .order_by(Booking.ceremony_datetime)
-    )
-    return _my_day_entries((await db.execute(stmt)).all())
-
-
 @dataclass(frozen=True)
 class MachiBoardEntry:
     machi: Machi

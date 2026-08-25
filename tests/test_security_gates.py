@@ -1,11 +1,14 @@
 """Security gates that must hold regardless of what the app otherwise does.
 
-Three separate holes, one theme - something that only ever made sense as a
-development affordance was reachable (or silently forgiving) in production:
+One theme - something that only ever made sense as a development
+affordance being reachable, or silently forgiving, in production:
 
-  * the web-chat simulator's unauthenticated API,
   * a blank JWT signing key signing real session tokens,
   * an edit path that quietly dropped fields it didn't render.
+
+A third gate lived here, covering the web-chat simulator's unauthenticated
+API. The simulator was deleted along with the rest of the behdin bot, so
+the gate went with it - there is no endpoint left to reach.
 """
 
 from __future__ import annotations
@@ -33,14 +36,14 @@ def test_real_jwt_secret_passes():
 
 
 # ---------------------------------------------------------------------------
-# Web-chat simulator gate (1a)
+# Debug-gated app construction
 # ---------------------------------------------------------------------------
 def _reload_app(monkeypatch, *, debug: bool):
     """Rebuild the FastAPI app under a different APP_DEBUG.
 
     Router registration happens at import time (it has to - it decides
     whether the routes exist at all, not whether a request is allowed), so
-    exercising the gate means re-importing the module with the setting
+    exercising a debug gate means re-importing the module with the setting
     changed and the settings cache cleared.
     """
     from agyary.core import config
@@ -81,34 +84,6 @@ async def _client_for(app, db):
             yield ac
     finally:
         app.dependency_overrides.clear()
-
-
-async def test_chat_endpoints_gone_in_production(db, seeded, app_factory):
-    """The two concrete holes: an unauthenticated caller could list every
-    agyari's admin names + phone numbers, and drive the whole behdin
-    conversation (read bookings, read saved names, book, cancel) for any
-    phone number they typed."""
-    async with _client_for(app_factory(False).app, db) as ac:
-        assert (await ac.get("/api/chat/agyaries")).status_code == 404
-        r = await ac.post(
-            "/api/chat/messages",
-            json={"agyary_id": seeded["agyary_id"], "phone_number": "+919800000009", "text": "hi"},
-        )
-        assert r.status_code == 404
-        assert (await ac.get("/chat")).status_code == 404
-
-
-async def test_chat_endpoints_still_work_in_debug(db, seeded, app_factory):
-    """The simulator has to keep working where it belongs - this gate is
-    about where it's reachable, not about deleting the dev tool."""
-    async with _client_for(app_factory(True).app, db) as ac:
-        assert (await ac.get("/api/chat/agyaries")).status_code == 200
-        r = await ac.post(
-            "/api/chat/messages",
-            json={"agyary_id": seeded["agyary_id"], "phone_number": "+919800000009", "text": "hi"},
-        )
-        assert r.status_code == 200
-        assert (await ac.get("/chat")).status_code == 200
 
 
 async def test_mobed_api_still_served_in_production(db, app_factory):

@@ -1,8 +1,6 @@
 """Mobed PWA API: phone+OTP login, agyari search/join/activate/create, My
-Day, Machi Board, manual add, edit (through the shared slot-check /
-conflict core), and the PWA half of accept/decline (the second required
-entry point sharing the exact idempotent core the WhatsApp path uses - see
-messaging/flows/approval.py)."""
+Day, Machi Board, manual add, and edit - the last through the shared
+slot-check / conflict core."""
 
 from __future__ import annotations
 
@@ -359,59 +357,3 @@ async def test_edit_booking_round_trips_location_and_offsite(db, client, seeded)
     # My Day still shows the offsite tag afterwards.
     entry = [e for e in (await client.get("/api/mobed/my-day", headers=headers)).json() if e["booking_id"] == bid][0]
     assert entry["is_offsite"] is True and entry["location"] == "14 Cusrow Baug, Colaba"
-
-
-# ---------------------------------------------------------------------------
-# Accept / decline: same idempotent core as WhatsApp
-# ---------------------------------------------------------------------------
-async def test_pwa_accept_shares_idempotent_core_with_whatsapp(db, client, seeded):
-    from tests.test_chat_flow import onboard, send
-
-    await onboard(db, seeded)
-    await send(db, seeded, "book_service")
-    await send(db, seeded, "Jashan")
-    await send(db, seeded, "purpose_khushali_nu")
-    await send(db, seeded, "1 January")
-    await send(db, seeded, "date_confirm")
-    await send(db, seeded, "10:30 am")
-    await send(db, seeded, "loc_agyary")
-    await send(db, seeded, "Er. Zahan, Er. Meherzad\ndone")
-    await send(db, seeded, "Behdin Jaidev\ndone")
-    await send(db, seeded, "priest_1")
-    await send(db, seeded, "confirm_booking")
-
-    booking = (await db.execute(select(Booking))).scalar_one()
-    headers = await _headers(client, name="Er. Hormuz Dadachanji", phone=seeded["panthaky_phone"])
-
-    r = await client.post(f"/api/mobed/bookings/{booking.id}/accept", headers=headers)
-    assert r.status_code == 200 and r.json()["status"] == "approved"
-    await db.refresh(booking)
-    assert booking.status == "approved"
-
-    r2 = await client.post(f"/api/mobed/bookings/{booking.id}/accept", headers=headers)
-    assert r2.json()["status"] == "already_resolved"
-
-    wa_replies = await send(db, seeded, f"approve_booking_{booking.id}", phone=seeded["panthaky_phone"])
-    assert any("already" in reply.text for reply in wa_replies)
-
-
-async def test_pwa_accept_rejects_non_assigned_priest(db, client, seeded):
-    from tests.test_chat_flow import onboard, send
-
-    await onboard(db, seeded)
-    await send(db, seeded, "book_service")
-    await send(db, seeded, "Jashan")
-    await send(db, seeded, "purpose_khushali_nu")
-    await send(db, seeded, "1 January")
-    await send(db, seeded, "date_confirm")
-    await send(db, seeded, "10:30 am")
-    await send(db, seeded, "loc_agyary")
-    await send(db, seeded, "Er. Zahan, Er. Meherzad\ndone")
-    await send(db, seeded, "Behdin Jaidev\ndone")
-    await send(db, seeded, "priest_1")
-    await send(db, seeded, "confirm_booking")
-
-    booking = (await db.execute(select(Booking))).scalar_one()
-    headers = await _headers(client, name="Er. Pervez Kias", phone=seeded["mobed_phone"])
-    r = await client.post(f"/api/mobed/bookings/{booking.id}/accept", headers=headers)
-    assert r.status_code == 403
