@@ -9,7 +9,7 @@
  */
 
 import { myDay, machiBoard } from "../api.js";
-import { state, GEH_NAME_BY_NUM } from "../state.js";
+import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
 import { esc, istYmd, istTime, todayIst } from "../util.js";
@@ -41,7 +41,9 @@ function machiItems(rows) {
     day: m.gregorian_date,
     time: null,
     geh: m.geh,
-    label: `Machi (${m.purpose})`,
+    // Not `Machi (${display})` - the display names carry their own
+    // parenthetical gloss, which would nest.
+    label: `Machi · ${MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose}`,
     sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }

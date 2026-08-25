@@ -25,7 +25,9 @@ function machiItems(rows) {
     day: m.gregorian_date,
     time: null,
     geh: m.geh,
-    label: `Machi (${m.purpose})`,
+    // Not `Machi (${display})` - the display names carry their own
+    // parenthetical gloss, which would nest.
+    label: `Machi · ${MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose}`,
     sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }
