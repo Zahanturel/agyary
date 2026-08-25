@@ -11,7 +11,6 @@ from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
 from agyary.models.conversation import ConversationState
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName
-from agyary.models.invite import AgyaryInvite
 from agyary.models.machi import Machi
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
@@ -25,7 +24,6 @@ from agyary.models.whatsapp import WhatsAppMessage
 __all__ = [
     "Agyary",
     "AgyaryCustomer",
-    "AgyaryInvite",
     "AgyaryUser",
     "AuthOtp",
     "Booking",

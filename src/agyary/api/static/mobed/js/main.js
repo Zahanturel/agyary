@@ -4,7 +4,7 @@
  * Wiring: the route table, the guard, and boot.
  *
  * The mobed app is five screens. Anything not listed here does not exist
- * as far as this app is concerned - notably invites, service-catalog
+ * as far as this app is concerned - notably service-catalog
  * editing and fire-temple editing, whose screens remain in the tree but
  * have no route into them. They belong to the agyari management system,
  * which will be designed after talking to panthakies rather than guessed

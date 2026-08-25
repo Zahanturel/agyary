@@ -85,9 +85,6 @@ export const joinAgyary = (id) => post(`/agyaries/${id}/join`);
 export const activateAgyary = (id, body) => post(`/agyaries/${id}/activate`, body);
 export const createAgyary = (body) => post("/agyaries", body);
 
-export const listInvites = (aid) => get(`/agyaries/${aid}/invites`);
-export const createInvite = (aid, phone, role) => post(`/agyaries/${aid}/invites`, { phone, role });
-export const revokeInvite = (aid, id) => del(`/agyaries/${aid}/invites/${id}`);
 
 export const myDay = () => get("/my-day");
 export const pendingRequests = () => get("/pending-requests");

@@ -1,4 +1,4 @@
-"""Mobed sign-in: WhatsApp OTP, and the invites that carry a role with them.
+"""Mobed sign-in: WhatsApp OTP, and the membership it creates.
 
 The property under test throughout is that knowing a phone number is not
 enough - you have to hold it. And that self-serve sign-in can only ever
@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from agyary.models import AgyaryInvite, AgyaryUser, AuthOtp, User
+from agyary.models import AgyaryUser, AuthOtp, User
 from agyary.services import mobed_auth
 from tests.conftest import SENT_OTPS
 
@@ -275,7 +275,7 @@ def test_delivery_refuses_to_no_op_in_production(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Invites: the only route to panthaky / caretaker
+# Membership: self-serve join, and what it may and may not change
 # ---------------------------------------------------------------------------
 async def _headers(client, phone=PHONE, name="Er. Test Mobed") -> dict:
     return {"Authorization": f"Bearer {(await _sign_in(client, phone, name))['access_token']}"}
@@ -288,137 +288,14 @@ async def _joined_headers(client, seeded, phone=PHONE, name="Er. Test Mobed") ->
     return headers
 
 
-async def _admin_headers(client, seeded) -> dict:
-    """The seeded agyari's panthaky - an already-privileged member, which is
-    the normal case for issuing invites."""
-    return await _headers(client, phone=seeded["panthaky_phone"], name="Er. Hormuz Dadachanji")
-
-
-async def _invite(client, aid, headers, phone=OTHER_PHONE, role="panthaky"):
-    return await client.post(
-        f"/api/mobed/agyaries/{aid}/invites", json={"phone": phone, "role": role}, headers=headers
-    )
-
-
-async def test_self_serve_join_is_always_plain_mobed(db, client, seeded):
-    await _joined_headers(client, seeded)
-    user = (await db.execute(select(User).where(User.phone == PHONE))).scalar_one()
-    membership = await mobed_auth.get_membership(db, seeded["agyary_id"], user.id)
-    assert membership.role == "mobed"
-
-
-async def test_invited_role_is_applied_at_signin(db, client, seeded):
-    """The full hand-off: an admin invites a phone, that phone signs in, and
-    lands already a member at the invited role - no search-and-join step."""
-    aid = seeded["agyary_id"]
-    r = await _invite(client, aid, await _admin_headers(client, seeded))
-    assert r.status_code == 200, r.text
-    assert r.json()["role"] == "panthaky" and r.json()["redeemed_at"] is None
-
-    body = await _sign_in(client, phone=OTHER_PHONE, name="Er. Invited Panthaky")
-    assert [a["id"] for a in body["user"]["agyaries"]] == [aid]
-    assert body["user"]["agyaries"][0]["role"] == "panthaky"
-
-    invited = (await db.execute(select(User).where(User.phone == OTHER_PHONE))).scalar_one()
-    assert (await mobed_auth.get_membership(db, aid, invited.id)).role == "panthaky"
-
-    invite = (await db.execute(select(AgyaryInvite))).scalar_one()
-    assert invite.redeemed_at is not None and invite.redeemed_by_user_id == invited.id
-
-
-async def test_invite_also_redeems_on_manual_join(db, client, seeded):
-    """Someone already signed in when the invite arrives shouldn't have to
-    wait for their session to lapse to pick up the role."""
-    aid = seeded["agyary_id"]
-    invitee = await _headers(client, phone=OTHER_PHONE, name="Er. Later Joiner")
-    await _invite(client, aid, await _admin_headers(client, seeded), role="caretaker")
-
-    r = await client.post(f"/api/mobed/agyaries/{aid}/join", headers=invitee)
-    assert r.json()["user"]["agyaries"][0]["role"] == "caretaker"
-
-
-async def test_reinviting_replaces_rather_than_stacks(db, client, seeded):
-    aid = seeded["agyary_id"]
-    admin = await _admin_headers(client, seeded)
-    for role in ("caretaker", "panthaky"):
-        assert (await _invite(client, aid, admin, role=role)).status_code == 200
-
-    invites = (await db.execute(select(AgyaryInvite))).scalars().all()
-    assert len(invites) == 1 and invites[0].role == "panthaky"
-
-    body = await _sign_in(client, phone=OTHER_PHONE, name="Er. Reinvited")
-    assert body["user"]["agyaries"][0]["role"] == "panthaky"
-
-
-async def test_revoked_invite_does_not_apply(db, client, seeded):
-    aid = seeded["agyary_id"]
-    admin = await _admin_headers(client, seeded)
-    invite_id = (await _invite(client, aid, admin)).json()["id"]
-
-    assert (
-        await client.delete(f"/api/mobed/agyaries/{aid}/invites/{invite_id}", headers=admin)
-    ).status_code == 200
-    assert (await client.get(f"/api/mobed/agyaries/{aid}/invites", headers=admin)).json() == []
-
-    body = await _sign_in(client, phone=OTHER_PHONE, name="Er. Revoked")
-    assert body["user"]["agyaries"] == []  # not carried in at all
-
-
-async def test_expired_invite_does_not_apply(db, client, seeded):
-    aid = seeded["agyary_id"]
-    await _invite(client, aid, await _admin_headers(client, seeded))
-    invite = (await db.execute(select(AgyaryInvite))).scalar_one()
-    invite.expires_at = datetime.now(UTC) - timedelta(days=1)
-    await db.commit()
-
-    body = await _sign_in(client, phone=OTHER_PHONE, name="Er. Too Late")
-    assert body["user"]["agyaries"] == []
-
-
-async def test_plain_mobed_cannot_invite_when_an_admin_exists(db, client, seeded):
-    """The seeded agyari already has a panthaky, so the bootstrap is closed."""
-    mobed = await _joined_headers(client, seeded)
-    r = await _invite(client, seeded["agyary_id"], mobed)
-    assert r.status_code == 403
-
-
-async def test_bootstrap_lets_the_first_member_appoint_a_panthaky(db, client, seeded):
-    """An agyari a mobed just created has no admin at all - without this,
-    nobody could ever issue its first invite and the role would be
-    unreachable there forever."""
-    headers = await _headers(client)
-    aid = (
-        await client.post(
-            "/api/mobed/agyaries",
-            json={"name": "Bootstrap Agiary", "city": "Pune", "address": None, "contact_phone": None},
-            headers=headers,
-        )
-    ).json()["agyary"]["id"]
-
-    creator = (await db.execute(select(User).where(User.phone == PHONE))).scalar_one()
-    assert (await mobed_auth.get_membership(db, aid, creator.id)).role == "mobed"
-
-    assert (await _invite(client, aid, headers)).status_code == 200
-    body = await _sign_in(client, phone=OTHER_PHONE, name="Er. First Panthaky")
-    assert body["user"]["agyaries"][0]["role"] == "panthaky"
-
-    # Bootstrap closes now that an admin exists.
-    assert (await _invite(client, aid, headers, phone="+919911100088")).status_code == 403
-
-
-async def test_invites_require_membership(db, client, seeded):
-    non_member = await _headers(client)
-    assert (await _invite(client, seeded["agyary_id"], non_member)).status_code == 403
-
-
-async def test_invite_rejects_unknown_role(db, client, seeded):
-    admin = await _admin_headers(client, seeded)
-    r = await _invite(client, seeded["agyary_id"], admin, role="administrator")
-    assert r.status_code == 400
-
-
 async def test_existing_admin_is_not_demoted_by_a_plain_join(db, client, seeded):
-    """ensure_agyary_membership promotes and reactivates, never demotes."""
+    """ensure_agyary_membership reactivates, but never demotes.
+
+    Nothing in this app grants panthaky any more, so the only privileged
+    memberships are the ones seed data and the WhatsApp flows created. A
+    plain re-join must leave them alone - silently resetting one to 'mobed'
+    would take away the booking-flow rights that role carries.
+    """
     aid = seeded["agyary_id"]
     user = (await db.execute(select(User).where(User.phone == seeded["panthaky_phone"]))).scalar_one()
     assert (await mobed_auth.get_membership(db, aid, user.id)).role == "panthaky"

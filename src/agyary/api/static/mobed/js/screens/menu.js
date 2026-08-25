@@ -4,7 +4,7 @@
  * The menu, behind the header icon. Three sections and nothing else:
  * who you are, which calendar you read in, and your behdins.
  *
- * Everything management-shaped - invites, the fire temple's own details,
+ * Everything management-shaped - the fire temple's own details,
  * the service catalog - is deliberately absent. Those belong to the agyari
  * management system, which does not exist yet and will be designed after
  * talking to actual panthakies.

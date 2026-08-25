@@ -79,8 +79,6 @@ class Settings(BaseSettings):
     # a second time as a button component. Templates without one reject it.
     whatsapp_otp_template_has_copy_code: bool = True
 
-    # How long an issued role invite stays redeemable (models/invite.py).
-    invite_ttl_days: int = 14
 
     def validate_runtime_secrets(self) -> None:
         """Refuse to serve with a blank JWT signing key.

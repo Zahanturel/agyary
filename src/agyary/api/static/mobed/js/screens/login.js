@@ -3,11 +3,9 @@
 /**
  * Two-step sign-in: phone -> code sent over WhatsApp -> session.
  *
- * There is no invite token to carry here, by design. Invites are addressed
- * to a phone number, and the server redeems every live invite for that
- * number inside /auth/otp/verify itself. So an invited panthaky just signs
- * in normally and finds they are already a member at the right role - the
- * client neither knows nor needs to know an invite was involved.
+ * Nothing but the phone number and the code is carried here. Signing in
+ * neither creates nor raises a role: every membership this app makes is a
+ * plain 'mobed'.
  */
 
 import { requestOtp, verifyOtp, getMe, ApiError } from "../api.js";
