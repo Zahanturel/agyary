@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -52,13 +52,49 @@ _MOBED_DIR = _STATIC_DIR / "mobed"
 _MACHI_DIR = _STATIC_DIR / "machi"
 
 
+# Which PWA a bare hostname belongs to, keyed on the leftmost DNS label.
+# Deliberately not the full domain: this then works identically on
+# gotiadarian.com, a staging domain, or a machine name, and there is no
+# production hostname buried in the app.
+#
+# The alternative was a Cloudflare Transform Rule rewriting the path in the
+# dashboard. Same result, but it is invisible from the repo - when routing
+# misbehaves later, nothing in the code would explain why. A tunnel ingress
+# rule cannot do this itself: it matches on hostname and path, it does not
+# prepend one, so every hostname arrives here at "/".
+_HOST_APPS = {"mobed": "/mobed", "machi": "/machi"}
+_DEFAULT_APP = "/mobed"
+
+
+def app_path_for_host(host: str | None) -> str:
+    """The app a request to "/" on ``host`` should land in.
+
+    Anything unrecognised - an IP, localhost, the apex domain, a missing
+    Host header - falls back to the mobed app, which is the product.
+    """
+    if not host:
+        return _DEFAULT_APP
+    label = host.split(":")[0].split(".")[0].lower()
+    return _HOST_APPS.get(label, _DEFAULT_APP)
+
+
 @app.get("/", include_in_schema=False)
-def root() -> RedirectResponse:
-    """mobed.gotiadarian.com and machi.gotiadarian.com are dedicated to
-    their respective PWAs - the bare domain root would otherwise 404,
-    which is exactly what people hit when a shared link doesn't include
-    the path."""
-    return RedirectResponse(url="/mobed")
+def root(host: str | None = Header(default=None)) -> RedirectResponse:
+    """Send a bare hostname to the PWA that hostname is for.
+
+    mobed.gotiadarian.com and machi.gotiadarian.com are the same app behind
+    the same tunnel, so the Host header is the only thing distinguishing
+    them. Without this, "/" would 404 - which is exactly what someone hits
+    when a shared link drops the path.
+
+    307, never 301: a permanent redirect is cached by browsers indefinitely
+    and would outlive any change to this mapping. Vary: Host because the
+    response genuinely differs by it, and a shared cache that missed that
+    would serve one app's users the other app.
+    """
+    response = RedirectResponse(url=app_path_for_host(host), status_code=307)
+    response.headers["Vary"] = "Host"
+    return response
 
 
 @app.get("/mobed", include_in_schema=False)

@@ -88,12 +88,24 @@ on the VM, and without buying/managing a TLS certificate yourself.
    use a cheap/free subdomain provider, or a domain you already own).
 2. Go to **Zero Trust → Networks → Tunnels → Create a tunnel**, choose
    "Cloudflared", name it (e.g. `agyary-alpha`).
-3. Add a **Public Hostname** pointing at the tunnel: hostname
-   `mobed.<your-domain>` (or similar), service type `HTTP`, service URL
-   `app:8000` — that hostname is the `app` service name from
-   `docker-compose.yml`, resolved over the Docker network the compose file
-   already sets up, not `localhost`.
-4. Copy the tunnel token shown during setup into `.env` as
+3. Add **two Public Hostnames**, both pointing at the same tunnel and the
+   same service — `mobed.<your-domain>` and `machi.<your-domain>`, service
+   type `HTTP`, service URL `app:8000`. That hostname is the `app` service
+   name from `docker-compose.yml`, resolved over the Docker network the
+   compose file already sets up, not `localhost`. Cloudflare creates the
+   CNAME for each.
+
+   Both hostnames are deliberately the same service. A tunnel ingress rule
+   matches on hostname and path but cannot prepend one, so both arrive at
+   `/`; the app reads the `Host` header and redirects to `/mobed` or
+   `/machi` (see `app_path_for_host` in `api/main.py`). Nothing needs
+   configuring in the dashboard for that, and nothing about the routing
+   lives outside the repo.
+
+4. The WhatsApp webhook is the same app on every hostname. Point Meta at
+   `https://mobed.<your-domain>/webhooks/whatsapp` and subscribe it to the
+   `messages` field.
+5. Copy the tunnel token shown during setup into `.env` as
    `CLOUDFLARE_TUNNEL_TOKEN`.
 
 ## 5. Bring it up
