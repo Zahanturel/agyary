@@ -161,6 +161,17 @@ def machi_service_worker() -> FileResponse:
     return FileResponse(_STATIC_DIR / "machi-sw.js", media_type="application/javascript")
 
 
+# --- Privacy policy ----------------------------------------------------------
+# Served by both apps on every hostname, deliberately unauthenticated and
+# JS-free: Meta will not publish the app without a policy URL its reviewer
+# can fetch, and a reviewer is not going to sign in with WhatsApp to read it.
+# A flat file rather than a PWA route for the same reason - it has to render
+# with no session, no service worker and no JavaScript at all.
+@app.get("/privacy", include_in_schema=False)
+def privacy_policy() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "privacy.html", media_type="text/html")
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}

@@ -39,6 +39,10 @@ export function renderLogin() {
         Send it and you're in - there's nothing to type.
       </p>
       <div style="margin-top:14px"><button id="waStart">Sign in with WhatsApp</button></div>
+      <p class="meta" style="margin-top:18px">
+        We learn your number from the message you send, and never send you one.
+        <a href="/privacy" target="_blank" rel="noopener">What we store</a>
+      </p>
     </div>`;
 
   document.getElementById("waStart").onclick = startWaLogin;

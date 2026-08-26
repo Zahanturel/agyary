@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy - Mobed Diary</title>
+<style>
+  @font-face { font-family:"Geist Sans"; src:url("/mobed-fonts/geist-sans.woff2") format("woff2");
+               font-weight:100 900; font-display:swap; }
+  :root {
+    --ink-900:#171923; --ink-700:#3D4354; --ink-400:#8B92A3; --ink-200:#DDE1E8; --ink-50:#F7F8FA;
+    --indigo-700:#232A4D; --amber-100:#FFF1D9; --amber-600:#B8790E;
+    --font-sans:"Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:var(--font-sans); background:var(--ink-50); color:var(--ink-900);
+         font-size:16px; line-height:1.6; }
+  header { background:var(--indigo-700); color:#fff; padding:24px 20px; }
+  header h1 { margin:0; font-size:20px; font-weight:600; }
+  header p { margin:6px 0 0; font-size:13px; opacity:.85; }
+  main { max-width:720px; margin:0 auto; padding:28px 20px 64px; }
+  h2 { font-size:17px; margin:32px 0 10px; font-weight:600; }
+  h2:first-child { margin-top:0; }
+  p, li { color:var(--ink-700); }
+  ul { padding-left:20px; }
+  li { margin:6px 0; }
+  strong { color:var(--ink-900); }
+  a { color:var(--indigo-700); }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--ink-200); vertical-align:top; }
+  th { color:var(--ink-900); font-weight:600; }
+  .note { background:var(--amber-100); border-left:3px solid var(--amber-600);
+          padding:12px 14px; border-radius:0 6px 6px 0; margin:16px 0; font-size:14px; }
+  footer { border-top:1px solid var(--ink-200); margin-top:40px; padding-top:16px;
+           font-size:13px; color:var(--ink-400); }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink-50:#14161d; --ink-200:#2c313c; --ink-700:#c2c7d2; --ink-900:#f2f4f8; --ink-400:#8B92A3; }
+    a { color:#9fb0ff; }
+    .note { background:rgba(184,121,14,.14); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Privacy Policy</h1>
+  <p>Mobed Diary &middot; last updated 26 August 2026</p>
+</header>
+<main>
+
+<p>Mobed Diary is a calendar and record-keeping tool for Zoroastrian priests
+(mobeds) managing ceremonies at a fire temple (agyari). This page explains
+exactly what it stores, who can see it, and how to get it removed.</p>
+
+<div class="note">
+  <strong>This is an alpha.</strong> A small number of invited mobeds are using
+  it while it is being built. Treat it accordingly: keep your own records, and
+  do not put anything in it you could not afford to lose.
+</div>
+
+<h2>How signing in works</h2>
+
+<p>You are never asked to type a phone number. You tap <em>Sign in with
+WhatsApp</em>, we generate a one-time code, and you send that code to our
+WhatsApp Business number from your own WhatsApp. Your number reaches us inside
+the message that Meta delivers, cryptographically signed by Meta.</p>
+
+<p>This matters for your privacy in two ways. Because nobody types a number,
+nobody can use this app to test whether a given number belongs to a mobed here.
+And because we only ever <em>receive</em>, we never send you a WhatsApp message
+of any kind: no codes, no marketing, no reminders over WhatsApp.</p>
+
+<p><strong>Meta sees that message,</strong> because it travels through WhatsApp.
+It is governed by WhatsApp's own privacy policy, not this one. The message
+contains only a random sign-in code.</p>
+
+<h2>What is stored</h2>
+
+<table>
+  <tr><th>About you</th><th>Why</th></tr>
+  <tr><td>Your phone number, in international format</td>
+      <td>It is your identity here. It is how a returning sign-in finds your account.</td></tr>
+  <tr><td>Your display name</td>
+      <td>You supply it once, on first sign-in. It appears on ceremony slips you print.</td></tr>
+  <tr><td>Which agyari you belong to, and your role there</td>
+      <td>Decides what you can see and edit.</td></tr>
+  <tr><td>Your display preferences</td>
+      <td>Which calendar systems and language the app shows you.</td></tr>
+</table>
+
+<table>
+  <tr><th>What you enter about others</th><th>Why</th></tr>
+  <tr><td>Behdin names and phone numbers</td>
+      <td>So a ceremony can be attributed to the family that requested it, and so you
+          can find them again next year.</td></tr>
+  <tr><td>Ceremony records: date, geh, Parsi calendar date, purpose, location,
+          any amount and payment status, and your notes</td>
+      <td>These are the diary. They are the reason the app exists.</td></tr>
+  <tr><td>Names recited in a ceremony, including whether each person is living or
+          departed</td>
+      <td>So a slip can be printed correctly and the same names offered next time.</td></tr>
+</table>
+
+<div class="note">
+  <strong>Please read this part.</strong> The details of behdins and of named
+  family members are entered <em>by mobeds</em>. Those people do not use this
+  app, are not asked, and cannot see or correct what is recorded about them. If
+  you enter someone's name or number here, you are the one who owes them that
+  transparency. Record what the ceremony needs and no more.
+</div>
+
+<h2>What is never collected</h2>
+
+<ul>
+  <li><strong>No card, bank or UPI details.</strong> Where a ceremony has a fee,
+      the app records an amount and whether it was paid. It never touches the
+      payment itself and stores no payment instrument.</li>
+  <li><strong>No location tracking.</strong> A ceremony can have a location
+      because you typed one. Your device is never asked where it is.</li>
+  <li><strong>No analytics, trackers, advertising or third-party scripts.</strong>
+      The app loads nothing from anyone else's servers. Fonts are served from
+      ours. Nothing here profiles you and nothing is sold or shared for
+      marketing, ever.</li>
+  <li><strong>No contact list access</strong>, no microphone, no camera, no
+      photos.</li>
+</ul>
+
+<h2>Who else handles it</h2>
+
+<ul>
+  <li><strong>Meta (WhatsApp)</strong> carries your sign-in message, as described
+      above.</li>
+  <li><strong>Cloudflare</strong> terminates the HTTPS connection and passes
+      traffic to the app.</li>
+  <li><strong>The hosting provider</strong> running the virtual server the app
+      and its database sit on.</li>
+</ul>
+
+<p>Nobody else. There is no third party we hand this data to, and there is no
+arrangement under which anyone pays for access to it.</p>
+
+<h2>Retention</h2>
+
+<ul>
+  <li><strong>Sign-in attempts</strong> are deleted within minutes. They are
+      swept automatically and carry no identity until claimed.</li>
+  <li><strong>Ceremony records</strong> are kept for as long as the agyari uses
+      the app. A diary is only useful with its history intact.</li>
+  <li><strong>Your account</strong> is kept until you ask for it to be removed.</li>
+</ul>
+
+<h2>Security</h2>
+
+<p>Traffic is HTTPS end to end. The database is not reachable from the internet
+at all: it accepts connections only from the app, over a private network. Your
+session is a signed token that expires. Every message received from Meta has its
+signature verified before it is read, and one that cannot be verified is
+rejected. We are working to encrypt stored phone numbers at rest.</p>
+
+<h2>Getting your data, or getting it deleted</h2>
+
+<p>Write to <a href="mailto:turelzahan10@gmail.com">turelzahan10@gmail.com</a> from a mail account
+we can tie to your record, and say what you want: a copy of what is held about
+you, a correction, or deletion. Deletion of your account removes you and your
+preferences. Ceremony records that other mobeds at your agyari also rely on are
+handled case by case, and we will tell you plainly what can and cannot go.</p>
+
+<p>If you are <em>not</em> a user of this app and believe a mobed has recorded
+your details here, write to the same address and say so. You do not need an
+account to ask.</p>
+
+<h2>Changes</h2>
+
+<p>If this policy changes in a way that affects what is collected or who sees
+it, the date at the top changes and users are told in the app. Old versions are
+in the project's public git history.</p>
+
+<footer>
+  Mobed Diary &middot; <a href="/mobed">Back to the app</a>
+</footer>
+
+</main>
+</body>
+</html>

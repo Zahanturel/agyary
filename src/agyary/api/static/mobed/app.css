@@ -285,5 +285,7 @@ button.icon-add { background: var(--primary); color: #fff; border: none;
 .fact .fv { font-size: var(--text-base); }
 
 /* A phone number that dials when tapped. */
+.meta a { color: var(--primary); text-decoration: underline;
+  text-underline-offset: 2px; text-decoration-thickness: 1px; }
 a.tel { color: var(--primary); text-decoration: none; font-weight: 500; }
 a.tel:active { text-decoration: underline; }

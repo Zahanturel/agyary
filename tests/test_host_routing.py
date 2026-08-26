@@ -67,6 +67,21 @@ async def test_redirect_is_temporary_and_varies_on_host(client):
     assert r.headers.get("vary") == "Host"
 
 
+async def test_privacy_policy_is_public_on_every_host(client):
+    """Meta will not publish the app without a policy URL, and its reviewer
+    is not going to sign in with WhatsApp to reach one. So this has to answer
+    200 with no session, no cookie and no JavaScript, on whichever hostname
+    the reviewer happens to use."""
+    for host in ("machi.gotiadarian.com", "mobed.gotiadarian.com", "gotiadarian.com"):
+        r = await client.get("/privacy", headers={"Host": host})
+        assert r.status_code == 200, host
+        assert r.headers["content-type"].startswith("text/html")
+        body = r.text
+        assert "<script" not in body.lower(), "must render without JavaScript"
+        # The two disclosures that make it a policy rather than a page.
+        assert "Meta" in body and "mailto:" in body
+
+
 async def test_both_shells_are_still_reachable_by_path_on_any_host(client):
     """The redirect is a convenience for a bare hostname, not the only way
     in. An installed PWA opens its start_url directly."""
