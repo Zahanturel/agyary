@@ -1,0 +1,13 @@
+# Everything is LF, in the repo and in the working tree, on every OS.
+# Without this a Windows checkout can rewrite whole files to CRLF and
+# every one of them shows up as a full-file diff that is pure noise.
+* text=auto eol=lf
+
+# Binary assets git must never translate.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
