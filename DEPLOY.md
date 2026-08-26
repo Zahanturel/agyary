@@ -173,3 +173,80 @@ docker compose logs -f app          # this app's logs
 docker compose logs -f cloudflared  # tunnel connection status
 docker compose ps                   # confirm all three services are healthy
 ```
+
+## Who is using it
+
+```bash
+docker compose exec app uv run python -m agyary.scripts.stats
+```
+
+Signups and the temple each mobed joined, which temples have members, what was
+entered in the last seven days, and sign-in attempts in flight. Read-only, and
+phone numbers are masked unless you add `--full`.
+
+The **sign-in attempts** section is the one to watch during a launch. An
+attempt row is created the moment somebody taps the button, and claimed only
+when their WhatsApp message reaches the webhook. So a pile of unclaimed
+attempts means the webhook is not delivering, and the usual causes in order
+are: the number was ownership-verified but never **registered**, the Meta app
+is still unpublished (an unpublished app receives no production webhooks at
+all), or `WHATSAPP_APP_SECRET` is blank. Each of those presents identically —
+sign-in hangs on "Waiting for your message..." with nothing in `docker compose
+logs`, because the request never arrived.
+
+## Resetting the database
+
+Back up first, off the server, and check the backup restores before you destroy
+anything. Every step below was rehearsed end to end.
+
+```bash
+# 0. See what you would be destroying.
+docker compose exec app uv run python -m agyary.scripts.stats
+
+# 1. Dump, with the date in the name.
+docker compose exec -T db pg_dump -U agyary -d agyary -Fc \
+  > ~/agyary-$(date +%Y%m%d-%H%M).dump
+ls -lh ~/agyary-*.dump
+
+# 2. Prove it is readable. A dump you have not listed is not a backup.
+docker compose exec -T db pg_restore -l < ~/agyary-<stamp>.dump | grep -c "TABLE DATA"
+
+# 3. Get it OFF this machine. A backup that only exists on the server it
+#    protects is not a backup. From your laptop:
+#      scp <user>@<server>:~/agyary-<stamp>.dump .
+
+# 4. Stop the app so nothing holds locks or writes mid-wipe.
+docker compose stop app
+
+# 5. Wipe. This is the irreversible one.
+docker compose exec -T db psql -U agyary -d agyary -c \
+  "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO agyary;"
+
+# 6. Rebuild the schema. NOTE: step 5 also dropped the pg_trgm extension,
+#    which the trigram indexes on agyary and customer name need. The initial
+#    migration recreates it (CREATE EXTENSION IF NOT EXISTS pg_trgm), which is
+#    why the migration has to run before anything else touches the database.
+docker compose start app
+docker compose exec app uv run alembic upgrade head
+
+# 7. Reseed the fire temples. NOT optional: without it the onboarding screen
+#    has an empty list and a new mobed cannot pick a temple.
+docker compose exec app uv run python -m agyary.scripts.seed_fire_temples
+
+# 8. Confirm: 0 mobeds, 0 of 167 temples claimed.
+docker compose exec app uv run python -m agyary.scripts.stats
+```
+
+To restore a dump into an empty database instead:
+
+```bash
+docker compose stop app
+docker compose exec -T db psql -U agyary -d agyary -c \
+  "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO agyary;"
+docker compose exec -T db pg_restore -U agyary -d agyary < ~/agyary-<stamp>.dump
+docker compose start app
+```
+
+The dump carries the `alembic_version` row with it, so a restore lands on the
+revision it was taken at — no migration needed afterwards, and running one
+would be wrong.
