@@ -1,11 +1,11 @@
-"""Inbound-WhatsApp sign-in: the mobed messages us, not the other way round.
+"""Sign-in: the mobed messages us, not the other way round.
 
-Outbound OTP (services/otp_delivery.py) needs a pre-approved Authentication
-template, a real WhatsApp Business Account and a billable conversation per
-send. This path needs none of those: the mobed sends US a message, so
-nothing is business-initiated. It still needs a real WABA number for the
-webhook to receive on, but no template, no verification and no per-send
-cost.
+The path this replaced sent a code out, which needs a pre-approved
+Authentication template, an API token and a billable conversation per
+send. This one needs none of those, because the mobed sends US a message
+and nothing is business-initiated. It still needs a real WABA number for
+the webhook to receive on - added, ownership-verified and registered - but
+no template, no System User token and no per-send cost.
 
 The security shape is better than outbound, not merely cheaper. Outbound
 starts from a phone number the caller typed, which we then have to be
@@ -49,7 +49,7 @@ _ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ0123456789"
 CODE_LENGTH = 10
 
 # Ten characters of a 32-symbol alphabet is about 2^50. The code is not
-# delivered to one known phone the way an OTP is - it is a token anyone can
+# delivered to one known phone the way a texted code is - it is a token anyone can
 # send to a number they can look up - so it has to survive being sprayed at,
 # which six digits would not.
 _CODE_RE = re.compile(f"[{_ALPHABET}]{{{CODE_LENGTH}}}")

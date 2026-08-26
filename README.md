@@ -50,12 +50,17 @@ It is registered only when `APP_DEBUG` is true; in production `/chat` and
 ## Mobed PWA
 
 The priest-facing calendar tool lives at `/mobed` (a no-build vanilla PWA).
-Sign in with your phone number and the code sent to you on WhatsApp, search
-for your agyari, and you land in a day/week calendar (My Day) and a
-per-agyari Machi Board; both open a shared print-ready slip with Edit.
+Tap "Sign in with WhatsApp" and send the pre-filled code to our number —
+you never type a phone number, because we learn it from the message Meta
+delivers. Then search for your agyari, and you land in a day/week calendar
+(My Day) and a per-agyari Machi Board; both open a shared print-ready slip
+with Edit.
 
-Locally, leave `WHATSAPP_OTP_PHONE_NUMBER_ID` blank — sign-in codes are
-written to the server log instead of sent, so you can read yours from there.
+Locally there is no WhatsApp to send from, so with `APP_DEBUG=true` you can
+close the loop yourself — the code is on screen, and
+`POST /webhooks/whatsapp/simulate` with `{"code": ..., "phone": ...}` stands
+in for Meta. That endpoint 404s whenever `APP_DEBUG` is false, and it must:
+it hands out a session for any number the caller names.
 
 Set `JWT_SECRET_KEY` in `.env` first (`openssl rand -hex 32`) — the app won't
 start without it. Then seed the worldwide fire-temple reference list

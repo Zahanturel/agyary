@@ -12,35 +12,24 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://agyary:agyary@localhost:5432/agyary"
 
-    # WhatsApp Cloud API: one Meta app/System User token sends on behalf of
-    # every registered agyary (Agyary.wa_phone_number_id is the per-tenant
-    # bit, there is no per-tenant token).
-    whatsapp_api_token: str = ""
+    # WhatsApp Cloud API. Both of these are read by the webhook and nothing
+    # else: this deployment receives from Meta and never sends to it, so
+    # there is deliberately no API token here. Anything that needs one is a
+    # business-initiated message, which needs an approved template and costs
+    # money per conversation - see services/wa_login.py for why sign-in
+    # avoids all of that by having the mobed message us instead.
+    #
+    # verify_token is a string you invent and paste into Meta's webhook
+    # configuration; app_secret is the Meta App's own secret, and the
+    # webhook verifies every payload's HMAC against it and fails closed
+    # when it is blank rather than comparing against b"" and accepting
+    # everything.
     whatsapp_verify_token: str = ""
     whatsapp_app_secret: str = ""
 
-    # WhatsApp Flows: the RSA keypair Meta encrypts the data-exchange AES
-    # key against. Private key stays here (server-side, PEM, unencrypted -
-    # matches how whatsapp_app_secret is already handled); the public key
-    # is uploaded to Meta separately at Flow-registration time (a manual,
-    # one-off operational step - see wa_flows.py's module docstring).
-    whatsapp_flows_private_key_pem: str = ""
-
-    # Flow ids assigned by Meta on registration (one static Flow per
-    # picker: Roj/Mah/Geh never change; the priest-picker and
-    # per-agyari-services Flows are dynamic but still each get one
-    # registered Flow id - the per-tenant part lives in the data-exchange
-    # response, not in a separate Flow per agyari).
-    whatsapp_flow_id_roj: str = ""
-    whatsapp_flow_id_mah: str = ""
-    whatsapp_flow_id_geh: str = ""
-    whatsapp_flow_id_priest_picker: str = ""
-    whatsapp_flow_id_services_picker: str = ""
-
-    # Mobed PWA auth: WhatsApp OTP (existing AuthOtp table/precedent, no
-    # send/verify logic previously existed) + JWT, per the pattern already
-    # established for the earlier API's auth routes. No passwords, no
-    # OAuth - priests don't want another login to remember.
+    # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
+    # another login to remember, and the WhatsApp number is already the
+    # identity.
     jwt_secret_key: str = ""
     jwt_access_token_minutes: int = 60
     # Sliding window (see routes/mobed.py's /auth/refresh - it reissues this
@@ -49,52 +38,23 @@ class Settings(BaseSettings):
     # again." Pinning this too low would silently log people out mid-season.
     jwt_refresh_token_days: int = 180
 
-    # Login OTP (services/mobed_auth.py). A 6-digit code is only safe
-    # because of the other two numbers: it dies in five minutes and after
-    # three wrong guesses.
-    otp_length: int = 6
-    otp_ttl_seconds: int = 300
-    otp_max_attempts: int = 3
-    # The Meta phone_number_id login OTPs are sent FROM. Separate from the
-    # per-agyari Agyary.wa_phone_number_id: someone signing in for the first
-    # time has no agyari yet, so there is no per-tenant number to send from.
-    whatsapp_otp_phone_number_id: str = ""
-
-    # The approved Authentication template the code is sent in. WhatsApp
-    # rejects free-text business-initiated messages, so without this nothing
-    # can be delivered at all.
-    #
-    # The language is the template's OWN code, not a display label: "en" and
-    # "en_US" are different templates to the API, and a mismatch fails at
-    # send time with an unhelpful error.
-    #
-    # otp_ttl_seconds above must stay in step with the expiry the template
-    # states in its footer - the template's text is fixed at approval time,
-    # so changing the TTL here alone would make the message tell users
-    # something untrue.
-    whatsapp_otp_template_name: str = ""
-    whatsapp_otp_template_language: str = "en"
-    # Authentication templates with a copy-code button need the code passed
-    # a second time as a button component. Templates without one reject it.
-    whatsapp_otp_template_has_copy_code: bool = True
-
     # --- Inbound WhatsApp sign-in -------------------------------------------
-    # The mobed messages US a code instead of us texting one to them, so
-    # nothing is business-initiated: no template, no business verification,
-    # and no per-message cost. What it does need is a real WhatsApp Business
-    # Account, which means a number that was not already on WhatsApp.
+    # The mobed messages US a code rather than us texting one to them, so
+    # nothing is business-initiated: no template, no per-message cost, and
+    # no phone number typed by the caller. What it does need is a real
+    # WhatsApp Business Account, which means a number that was not already
+    # active on WhatsApp or WhatsApp Business.
     #
-    # The E.164 number the wa.me deep link points at, e.g. "+919800000000".
-    # Distinct from whatsapp_otp_phone_number_id, which is Meta's opaque id
-    # for the same number and is what the SEND endpoint addresses; a wa.me
-    # link needs the dialable number itself.
+    # The dialable E.164 number the wa.me deep link points at, e.g.
+    # "+919800000000" - a wa.me link needs the number itself, not Meta's
+    # opaque phone_number_id.
     whatsapp_signin_number: str = ""
-    # Longer than otp_ttl_seconds because this flow makes the user leave the
-    # browser, find the message in WhatsApp and send it. Five minutes is
-    # enough to type a code you are looking at; it is not enough to switch
-    # apps on a phone that decides to show you six notifications on the way.
+    # How long a started sign-in stays claimable. Generous because this flow
+    # makes the user leave the browser, find the message in WhatsApp and send
+    # it. Five minutes is enough to type a code you are looking at; it is not
+    # enough to switch apps on a phone that decides to show you six
+    # notifications on the way.
     wa_login_ttl_seconds: int = 600
-
 
     def validate_runtime_secrets(self) -> None:
         """Refuse to serve with a blank JWT signing key.

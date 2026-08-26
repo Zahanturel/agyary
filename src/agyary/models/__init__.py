@@ -5,7 +5,6 @@ Alembic autogeneration and metadata.create_all depend on.
 """
 
 from agyary.models.agyary import Agyary
-from agyary.models.auth import AuthOtp
 from agyary.models.booking import Booking, BookingMobed
 from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
@@ -24,7 +23,6 @@ __all__ = [
     "Agyary",
     "AgyaryCustomer",
     "AgyaryUser",
-    "AuthOtp",
     "Booking",
     "BookingMobed",
     "BulkBatch",

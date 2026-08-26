@@ -1,37 +1,29 @@
-"""Mobed PWA authentication: phone + WhatsApp OTP -> JWT session.
+"""Mobed PWA authentication: a proven WhatsApp number -> JWT session.
 
-Login is two steps. The caller submits a phone number; a short numeric
-code goes to it over WhatsApp (services/otp_delivery.py); the caller
-submits phone + code and gets the session back. The phone is the natural
-unique key for the User row and the same key WhatsApp already uses, so
-proving possession of it is the whole of the identity claim - there is no
-password to remember, and priests were never going to want one.
+There is one way in. The mobed opens the app, gets a one-time code, and
+sends it to us from their own WhatsApp; the webhook hands us the number
+off a payload Meta signed (see services/wa_login.py). This module turns
+that proven number into a User row and a pair of JWTs.
 
-This replaces an earlier name+phone step with no verification at all,
-whose stated accepted risk was that anyone who knew a mobed's number could
-type it in and read that mobed's calendar. The OTP is what turns "knows
-the number" into "holds the phone".
-
-Codes are hashed at rest (salted with the phone, so one stolen hash can't
-be matched against another row), expire in minutes, and are capped at a
-few attempts - a 6-digit code is only safe while all three hold.
+The number is never typed by the caller, which is the point. An earlier
+design had the caller claim a number and us text a code to it, and that
+shape has to work hard to avoid confirming whether a given number belongs
+to anyone here. Learning the number from Meta instead removes the claim,
+and with it the enumeration surface, the approved Authentication
+template, and the per-conversation cost.
 
 Roles: every membership this app creates is a plain 'mobed'. The
-panthaky/caretaker roles still exist in the schema and still gate the
-WhatsApp booking flows, but nothing in this app can grant them - the
-invite mechanism that used to do so was removed, since this app has no
-role management and an unreachable endpoint that hands out privilege is
-worse than no endpoint at all.
+panthaky/caretaker roles still exist in the schema, but nothing in this
+app can grant them - the invite mechanism that used to do so was removed,
+since an unreachable endpoint that hands out privilege is worse than no
+endpoint at all.
 
-JWT pattern is unchanged: a short-lived access token plus a
-longer-lived refresh token in an httpOnly cookie.
+JWT pattern: a short-lived access token plus a longer-lived refresh token
+in an httpOnly cookie.
 """
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import secrets
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -39,7 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
-from agyary.models import AgyaryUser, AuthOtp, User
+from agyary.models import AgyaryUser, User
 
 JWT_ALGORITHM = "HS256"
 
@@ -50,96 +42,14 @@ class TokenError(Exception):
     """Invalid, expired, or wrong-type JWT - message is safe to show the caller."""
 
 
-class OtpError(Exception):
-    """OTP missing, expired, wrong, or out of attempts - safe to show the caller."""
-
-
-# ---------------------------------------------------------------------------
-# OTP issue / verify
-# ---------------------------------------------------------------------------
-def _hash_code(phone: str, code: str) -> str:
-    """Salted with the phone so the stored digest is only meaningful for the
-    row it sits in. A bare digest of a 6-digit code is a million-entry
-    lookup table; per-phone salting makes each row its own problem, and the
-    expiry plus attempt cap do the rest of the work."""
-    return hashlib.sha256(f"{phone}:{code}".encode()).hexdigest()
-
-
-def generate_code(length: int) -> str:
-    """A uniformly random numeric code, leading zeros preserved."""
-    return "".join(secrets.choice("0123456789") for _ in range(length))
-
-
-async def issue_otp(db: AsyncSession, phone: str) -> str:
-    """Mint a fresh code for ``phone`` and return the plaintext for sending.
-
-    One live code per phone: requesting again replaces whatever was there,
-    which both resets the attempt counter for an honest user who mistyped
-    three times and stops a caller from farming a pile of simultaneously
-    valid codes.
-    """
-    settings = get_settings()
-    code = generate_code(settings.otp_length)
-    expires_at = datetime.now(UTC) + timedelta(seconds=settings.otp_ttl_seconds)
-
-    row = await db.get(AuthOtp, phone)
-    if row is None:
-        row = AuthOtp(phone=phone, code_hash=_hash_code(phone, code), expires_at=expires_at, attempts=0)
-        db.add(row)
-    else:
-        row.code_hash = _hash_code(phone, code)
-        row.expires_at = expires_at
-        row.attempts = 0
-    await db.flush()
-    return code
-
-
-async def verify_otp(db: AsyncSession, phone: str, code: str) -> None:
-    """Consume the live code for ``phone``; raise OtpError if it isn't valid.
-
-    A correct code is deleted on use, so it is good exactly once. A wrong
-    one burns an attempt, and running out invalidates the code entirely
-    rather than merely refusing this guess - otherwise the cap would only
-    slow an attacker down between fresh requests instead of stopping them.
-    """
-    settings = get_settings()
-    row = await db.get(AuthOtp, phone)
-    if row is None:
-        raise OtpError("No sign-in code was requested for this number. Please request one.")
-
-    expires_at = row.expires_at
-    if expires_at.tzinfo is None:  # tz-naive only if a caller wrote it that way
-        expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at < datetime.now(UTC):
-        await db.delete(row)
-        await db.flush()
-        raise OtpError("That sign-in code has expired. Please request a new one.")
-
-    if row.attempts >= settings.otp_max_attempts:
-        await db.delete(row)
-        await db.flush()
-        raise OtpError("Too many incorrect attempts. Please request a new code.")
-
-    if not hmac.compare_digest(row.code_hash, _hash_code(phone, code.strip())):
-        row.attempts += 1
-        remaining = settings.otp_max_attempts - row.attempts
-        await db.flush()
-        if remaining <= 0:
-            raise OtpError("Too many incorrect attempts. Please request a new code.")
-        raise OtpError(
-            f"That code isn't right. {remaining} attempt{'s' if remaining != 1 else ''} left."
-        )
-
-    await db.delete(row)
-    await db.flush()
-
-
 async def login_user(db: AsyncSession, phone: str, name: str) -> User:
-    """Resolve (or create) the mobed's User row for an OTP-verified phone.
+    """Resolve (or create) the mobed's User row for a proven phone.
 
-    First verified sign-in creates it; a later one refreshes the display
-    name if the caller supplied a different one. Only ever called after
-    verify_otp has passed - this function itself proves nothing.
+    First sign-in creates it; a later one refreshes the display name if
+    the caller supplied a different one. Only ever called once wa_login
+    has bound the number to a claimed attempt - this function itself
+    proves nothing, so calling it with an unproven number would hand out
+    a session for it.
     """
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
@@ -169,8 +79,7 @@ async def ensure_agyary_membership(
 ) -> AgyaryUser:
     """Join ``user`` to an agyari as a plain 'mobed'.
 
-    Self-service join stays open (doc 05: "OTP only, nothing more, for v1")
-    and always lands on DEFAULT_ROLE. Nothing in this app raises that -
+    Self-service join stays open and always lands on DEFAULT_ROLE. Nothing in this app raises that -
     see the module docstring.
 
     An existing membership keeps whatever role it already has: this

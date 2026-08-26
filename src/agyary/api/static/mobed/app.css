@@ -242,8 +242,6 @@ a.button:hover { opacity: .92; }
   text-align: center; background: var(--ink-50); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: var(--space-3); margin-top: var(--space-2);
   overflow-wrap: break-word; }
-.otp-input { letter-spacing: .5em; text-align: center; font-size: var(--text-lg); font-family: var(--font-mono); }
-.countdown { font-variant-numeric: tabular-nums; }
 
 .list-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }

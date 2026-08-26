@@ -5,6 +5,9 @@ Each test gets a clean schema (truncate-all) and a seeded demo agyary.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import os
 
 # The mobed auth layer signs JWTs with jwt_secret_key; the repo ships it empty.
@@ -18,7 +21,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 import agyary.models  # noqa: F401 - register models on Base.metadata
+from agyary.core import config
 from agyary.core.database import Base
+from agyary.services import wa_login
 
 TEST_DATABASE_URL = "postgresql+asyncpg://agyary:agyary@localhost:5432/agyary_test"
 
@@ -58,27 +63,68 @@ async def seeded(db):
     }
 
 
-# Codes captured from the last OTP send, keyed by phone. The login helpers
-# read this instead of a real WhatsApp inbox.
-SENT_OTPS: dict[str, str] = {}
+# --- Sign-in ----------------------------------------------------------------
+# There is one way in: the mobed messages us a code and the webhook learns
+# their number off a payload Meta signed. The helpers below drive that whole
+# path rather than minting a JWT directly, so every test that logs in also
+# proves sign-in still works - which matters more now that it is the only
+# door and there is no fallback behind it.
+WA_SIGNIN_NUMBER = "+919800000000"
+WA_APP_SECRET = "test-app-secret"
+WA_VERIFY_TOKEN = "verify-me"
 
 
 @pytest.fixture(autouse=True)
-def _capture_otps(monkeypatch):
-    """Intercept OTP delivery so tests can read the code that was sent.
+def _whatsapp_configured(monkeypatch):
+    """The webhook fails closed on a blank app secret, so every test that
+    signs in needs these set. Cleared both sides because get_settings is
+    lru_cached and would otherwise leak one test's config into the next."""
+    monkeypatch.setenv("WHATSAPP_SIGNIN_NUMBER", WA_SIGNIN_NUMBER)
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_APP_SECRET)
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", WA_VERIFY_TOKEN)
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
 
-    Patched at the delivery boundary rather than stubbing issue_otp, so
-    everything the endpoint actually does - generating, hashing, storing,
-    expiring, counting attempts - runs for real in every test that logs in.
+
+def signed_inbound(code: str, phone: str) -> tuple[bytes, dict]:
+    """A webhook delivery shaped and signed the way Meta sends one.
+
+    The sender's number lives in the body, not in anything the caller
+    supplied - which is the whole security claim of this path, so the
+    helper never lets a test hand the number in by another route.
     """
+    message = {
+        "type": "text",
+        "from": phone.lstrip("+"),
+        "text": {"body": f"{wa_login.MESSAGE_PREFIX} {code}"},
+    }
+    raw = json.dumps({"entry": [{"changes": [{"value": {"messages": [message]}}]}]}).encode()
+    digest = hmac.new(WA_APP_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    return raw, {"x-hub-signature-256": f"sha256={digest}", "content-type": "application/json"}
 
-    async def fake_send(phone: str, code: str, client=None) -> None:
-        SENT_OTPS[phone] = code
 
-    SENT_OTPS.clear()
-    monkeypatch.setattr("agyary.services.otp_delivery.send_login_otp", fake_send)
-    yield SENT_OTPS
-    SENT_OTPS.clear()
+async def sign_in(client, phone: str, name: str = "Er. Test Mobed") -> dict:
+    """Full sign-in: start, signed webhook delivery, poll, name if new.
+
+    Returns the session body. ``name`` is only used on a phone's first ever
+    sign-in - a returning one keeps the stored name, and changing it is a
+    PATCH /auth/me, not a side effect of logging in.
+    """
+    started = await client.post("/api/mobed/auth/wa/start")
+    assert started.status_code == 200, started.text
+
+    raw, headers = signed_inbound(started.json()["code"], phone)
+    hook = await client.post("/webhooks/whatsapp", content=raw, headers=headers)
+    assert hook.status_code == 200, hook.text
+
+    body = (await client.get("/api/mobed/auth/wa/poll")).json()
+    if body.get("status") == "needs_name":
+        done = await client.post("/api/mobed/auth/wa/complete", json={"name": name})
+        assert done.status_code == 200, done.text
+        body = done.json()
+    assert body.get("status") == "signed_in", body
+    return body
 
 
 @pytest.fixture(autouse=True)

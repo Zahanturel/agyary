@@ -65,11 +65,21 @@ Edit `.env`:
   set. That is deliberate: an empty key doesn't disable auth, it signs every
   session token with the empty string, so anyone could mint a token for any
   user while the app looked perfectly healthy.
-- **`WHATSAPP_OTP_PHONE_NUMBER_ID`** — the Meta phone number sign-in codes
-  are sent from. Required in production: sign-in is phone + WhatsApp OTP, and
-  with this unset `/api/mobed/auth/otp/request` returns 503 rather than
-  accepting codes nobody can receive. In local development it can stay blank
-  (the code is written to the log instead of sent).
+- **`APP_DEBUG`** — must be `false`. `POST /webhooks/whatsapp/simulate`
+  exists so sign-in can be exercised on a laptop Meta cannot reach, and it
+  grants a session for any phone number the caller names. It 404s when
+  debug is off. Leaving debug on in production is a complete authentication
+  bypass, not a verbosity setting.
+- **`WHATSAPP_APP_SECRET`** — the Meta App's secret (App Settings → Basic).
+  The webhook verifies every payload's HMAC against it and returns 503 while
+  it is blank, rather than comparing against an empty key and accepting
+  anything.
+- **`WHATSAPP_VERIFY_TOKEN`** — a string you invent (`openssl rand -hex 16`).
+  The same value goes into Meta's webhook configuration.
+- **`WHATSAPP_SIGNIN_NUMBER`** — the dialable E.164 number the wa.me link
+  points at. Note what is *not* here: no API token and no `phone_number_id`.
+  This deployment only ever receives from Meta, so it needs no System User
+  token and no approved message template.
 - Leave `DATABASE_URL` as the `.env.example` default
   (`postgresql+asyncpg://agyary:agyary@db:5432/agyary`) — `docker-compose.yml`
   overrides it to the in-network Postgres hostname regardless, so the exact
@@ -104,7 +114,15 @@ on the VM, and without buying/managing a TLS certificate yourself.
 
 4. The WhatsApp webhook is the same app on every hostname. Point Meta at
    `https://mobed.<your-domain>/webhooks/whatsapp` and subscribe it to the
-   `messages` field.
+   `messages` field. Nothing else needs subscribing.
+
+   The number itself needs three things done to it in WhatsApp Manager, not
+   two: added to the WABA, **ownership-verified** by SMS or call, and then
+   **registered** (a 6-digit two-step-verification PIN). A number that is
+   added and verified but never registered looks correct in the dashboard
+   and silently receives no webhooks at all — which presents as sign-in
+   hanging on "Waiting for your message...". Registration attempts are
+   capped at 10 per number per 72 hours, so do not retry it blindly.
 5. Copy the tunnel token shown during setup into `.env` as
    `CLOUDFLARE_TUNNEL_TOKEN`.
 

@@ -1,9 +1,11 @@
-"""Inbound WhatsApp sign-in: the mobed messages us instead of us texting them.
+"""Inbound WhatsApp sign-in: the mobed messages us, and that is the only door.
 
-The properties worth pinning down are the ones that differ from the OTP
-path: the caller never supplies a phone number, the code is a bearer token
-that must not be enough to collect a session on its own, and the webhook
-must refuse anything it cannot prove came from Meta.
+Three properties carry the whole design. The caller never supplies a phone
+number, so there is nothing here to enumerate. The code is a bearer token
+by construction - it travels through the user's own WhatsApp - so holding
+it must not be enough to collect the session it created. And the webhook
+must refuse anything it cannot prove came from Meta, including when the
+app secret is missing entirely.
 """
 
 from __future__ import annotations

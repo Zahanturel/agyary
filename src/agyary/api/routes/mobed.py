@@ -34,7 +34,7 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
-from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, otp_delivery, wa_login
+from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, wa_login
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -69,7 +69,7 @@ async def _require_membership(db: AsyncSession, agyary_id: int, user: User) -> A
 
 
 # ---------------------------------------------------------------------------
-# Auth: phone + WhatsApp OTP (see services/mobed_auth.py), refresh, me
+# Auth: session cookies, refresh, me (see services/mobed_auth.py)
 # ---------------------------------------------------------------------------
 def _set_refresh_cookie(response: Response, user_id: int) -> None:
     settings = get_settings()
@@ -88,91 +88,13 @@ def _set_refresh_cookie(response: Response, user_id: int) -> None:
     )
 
 
-class OtpRequestIn(BaseModel):
-    phone: Phone
-
-
-@router.post("/auth/otp/request")
-async def request_otp(
-    payload: OtpRequestIn, request: Request, db: AsyncSession = Depends(get_db)
-) -> dict:
-    """Step 1 of sign-in: send a code to the phone over WhatsApp.
-
-    Deliberately says nothing about whether the number is already known to
-    us. The response is identical for a registered mobed and a stranger, so
-    this endpoint can't be used to test whether a given number belongs to
-    someone here.
-
-    Two rate limits, because they stop different things: per-IP caps how
-    fast one caller can work through a list of numbers, per-phone stops
-    anyone using us to bombard a single person's WhatsApp.
-    """
-    phone = payload.phone.strip()
-    rate_limit.enforce(request, "otp_request", max_requests=10, window_seconds=300)
-    rate_limit.enforce_key(f"otp_phone:{phone}", max_requests=3, window_seconds=300)
-
-    code = await mobed_auth.issue_otp(db, phone)
-    try:
-        await otp_delivery.send_login_otp(phone, code)
-    except otp_delivery.OtpDeliveryError as exc:
-        # Don't leave a live code stranded behind an undelivered message -
-        # the next request would otherwise be rejected by the per-phone
-        # limiter while the user has nothing to type.
-        await db.rollback()
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    await db.commit()
-    return {"expires_in_seconds": get_settings().otp_ttl_seconds}
-
-
-class OtpVerifyIn(BaseModel):
-    phone: Phone
-    code: str
-    # Only used the first time a phone signs in; a returning user may send
-    # it to correct their display name, or omit it to keep the stored one.
-    name: str = ""
-
-
-@router.post("/auth/otp/verify")
-async def verify_otp(
-    payload: OtpVerifyIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)
-) -> dict:
-    """Step 2 of sign-in: exchange a valid code for a session.
-
-    Rate-limited on top of the OTP's own attempt cap - the cap protects one
-    issued code, this protects against churning through fresh codes.
-
-    """
-    rate_limit.enforce(request, "otp_verify", max_requests=20, window_seconds=300)
-    phone = payload.phone.strip()
-
-    try:
-        await mobed_auth.verify_otp(db, phone, payload.code)
-    except mobed_auth.OtpError as exc:
-        await db.commit()  # persist the burnt attempt / expiry cleanup
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-
-    user = await mobed_auth.login_user(db, phone, payload.name.strip())
-    if not user.name:
-        # A brand-new phone that sent no name has nothing to display; ask
-        # the client for one rather than creating a nameless mobed.
-        await db.rollback()
-        raise HTTPException(status_code=400, detail="Name is required for a first sign-in")
-    await db.commit()
-
-    _set_refresh_cookie(response, user.id)
-    return {
-        "access_token": mobed_auth.issue_access_token(user.id),
-        "user": await _serialize_user(db, user),
-    }
-
-
 # ---------------------------------------------------------------------------
-# Inbound WhatsApp sign-in
+# Sign-in: the mobed messages us
 #
-# The reverse of the OTP pair above. Nothing is sent, so nothing needs an
-# approved template and nothing is billable; the mobed messages us instead.
-# The old path stays as a fallback until this one is proven against a real
-# number - see services/wa_login.py.
+# The only sign-in path. Nothing is sent, so nothing needs an approved
+# template and nothing is billable, and the caller never types a phone
+# number at all - we learn it from a payload Meta signed, which is why
+# there is nothing here to enumerate. See services/wa_login.py.
 # ---------------------------------------------------------------------------
 async def _wa_login_session(
     db: AsyncSession, response: Response, poll_secret: str, phone: str, name: str
@@ -377,8 +299,10 @@ async def update_me(
     payload: UpdateMeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     """Let a mobed correct their own display name from the profile screen.
-    Phone stays read-only here - it's the sign-in identity (see mobed_auth's
-    no-OTP login), so changing it is a bigger decision than a quick edit."""
+    Phone stays read-only here - it is the sign-in identity, and it is the
+    one field the mobed never typed: it came off a WhatsApp payload Meta
+    signed. Letting the profile screen overwrite that would let someone
+    move their proven number to an unproven one."""
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")

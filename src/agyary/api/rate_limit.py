@@ -4,11 +4,12 @@ No Redis, no external state - the app runs as a single uvicorn process
 (Dockerfile has no --workers flag), so an in-memory counter is consistent
 and sufficient at alpha scale.
 
-Guards the OTP login endpoints (services/mobed_auth.py). The OTP's own
-attempt cap protects a single issued code; this protects against the
-volume attacks that sit outside any one code - scripting through phone
-numbers to see which ones exist, churning fresh codes to widen the guess
-space, or using our sender to flood one person's WhatsApp.
+Guards the unauthenticated sign-in endpoints (routes/mobed.py's
+/auth/wa/*). Sign-in asks the caller for no phone number at all, so there
+is no number list to walk here - what is left to cap is volume: minting
+attempts faster than a human could send them, and polling. The poll limit
+is deliberately loose (the browser polls every two seconds by design) and
+the start limit tight.
 """
 
 from __future__ import annotations
@@ -39,10 +40,9 @@ def enforce(request: Request, scope: str, *, max_requests: int, window_seconds: 
 def enforce_key(key: str, *, max_requests: int, window_seconds: int) -> None:
     """Rate-limit on an arbitrary key rather than the caller's IP.
 
-    Used for per-phone OTP limits: an IP limit alone stops one caller
-    walking a list of numbers, but not a distributed handful of callers all
-    aimed at the same person's WhatsApp. The subject being protected there
-    is the phone, so the phone has to be the key.
+    An IP limit stops one caller doing something many times; keying on
+    the subject instead stops many callers doing it to one subject. Use
+    this whenever the thing being protected is not the caller.
     """
     now = time.monotonic()
     cutoff = now - window_seconds

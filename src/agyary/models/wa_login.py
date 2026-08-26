@@ -9,11 +9,12 @@ from agyary.core.database import Base
 class WaLoginAttempt(Base):
     """One inbound-WhatsApp sign-in in progress.
 
-    The reverse of AuthOtp. There, the caller claims a phone number and we
-    send a code to it. Here we mint a code first, with no phone attached at
-    all, and learn the number only when WhatsApp delivers the message -
-    which means the number is proven by Meta rather than asserted by the
-    caller. Nothing in this table identifies anyone until it is claimed.
+    The inverse of the usual OTP shape, which this replaced. There, the
+    caller claims a phone number and the server sends a code to it. Here
+    the code is minted first with no phone attached at all, and the number
+    arrives only when WhatsApp delivers the message - so it is proven by
+    Meta rather than asserted by the caller. Nothing in this table
+    identifies anyone until it is claimed.
 
     Two secrets, doing different jobs:
 

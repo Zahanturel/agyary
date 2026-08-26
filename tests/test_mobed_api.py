@@ -1,6 +1,6 @@
-"""Mobed PWA API: phone+OTP login, agyari search/join/activate/create, My
-Day, Machi Board, manual add, and edit - the last through the shared
-slot-check / conflict core."""
+"""Mobed PWA API: sign-in, agyari search/join/activate/create, My Day,
+Machi Board, manual add, and edit - the last through the shared slot-check
+/ conflict core."""
 
 from __future__ import annotations
 
@@ -10,22 +10,14 @@ from sqlalchemy import func, select
 
 from agyary.messaging.geh_times import to_ist
 from agyary.models import Agyary, Booking, BookingMobed, Machi, Service, User
-from tests.conftest import SENT_OTPS
+from tests.conftest import sign_in
 
 NEW_MOBED_PHONE = "+919911100001"
 
 
 async def _login(client, name="New Mobed", phone=NEW_MOBED_PHONE) -> dict:
-    """Full two-step sign-in, reading the code out of the captured send
-    (conftest's _capture_otps) the way a mobed reads it off WhatsApp."""
-    r = await client.post("/api/mobed/auth/otp/request", json={"phone": phone})
-    assert r.status_code == 200, r.text
-    r = await client.post(
-        "/api/mobed/auth/otp/verify",
-        json={"phone": phone, "code": SENT_OTPS[phone], "name": name},
-    )
-    assert r.status_code == 200, r.text
-    return r.json()
+    """Full sign-in through the real inbound path - see conftest.sign_in."""
+    return await sign_in(client, phone, name)
 
 
 async def _headers(client, name="New Mobed", phone=NEW_MOBED_PHONE) -> dict:
@@ -41,7 +33,7 @@ async def _member_headers(client, seeded, name="New Mobed", phone=NEW_MOBED_PHON
 
 
 # ---------------------------------------------------------------------------
-# Auth: phone + WhatsApp OTP (see test_mobed_auth.py for the OTP mechanics)
+# Auth (see test_wa_login.py for the sign-in mechanics themselves)
 # ---------------------------------------------------------------------------
 async def test_login_creates_user_and_returns_session(db, client, seeded):
     body = await _login(client)
@@ -60,13 +52,20 @@ async def test_login_creates_user_and_returns_session(db, client, seeded):
     assert r.status_code == 200 and r.json()["access_token"]
 
 
-async def test_login_returning_visit_updates_name_no_duplicate(db, client, seeded):
-    await _login(client, name="Old Name")
-    await _login(client, name="New Name")  # re-enter, different display name
+async def test_login_returning_visit_reuses_the_user_and_keeps_the_name(db, client, seeded):
+    """A second sign-in from the same number is the same mobed, not a new
+    one - and it does not rename them. The name step only runs on a phone's
+    first ever sign-in; changing it afterwards is PATCH /auth/me, so a
+    returning visit cannot overwrite the name on their slips by accident."""
+    first = await _login(client, name="Old Name")
+    again = await _login(client, name="Ignored On A Return Visit")
+    assert again["user"]["id"] == first["user"]["id"]
+    assert again["user"]["name"] == "Old Name"
+
     users = (
         await db.execute(select(User).where(User.phone == NEW_MOBED_PHONE))
     ).scalars().all()
-    assert len(users) == 1 and users[0].name == "New Name"
+    assert len(users) == 1 and users[0].name == "Old Name"
 
 
 async def test_join_reports_membership(client, seeded):

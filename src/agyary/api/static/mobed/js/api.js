@@ -71,11 +71,8 @@ export const del = (path) => api(path, { method: "DELETE" });
 // required parameters in the backend pass (machi-board's window, from-parsi's
 // optional year) and a screen shouldn't be able to forget one.
 
-export const requestOtp = (phone) => post("/auth/otp/request", { phone });
-export const verifyOtp = (phone, code, name) => post("/auth/otp/verify", { phone, code, name });
-
-// Inbound sign-in: the mobed messages US a code, so we never send anything
-// and never ask for their number - the webhook learns it from Meta. start()
+// Sign-in: the mobed messages US a code, so we never send anything and
+// never ask for their number - the webhook learns it from Meta. start()
 // mints the code and sets an httpOnly cookie; poll() matches on that cookie,
 // never on the code, which is public by the time it reaches WhatsApp.
 export const waLoginStart = () => post("/auth/wa/start", {});

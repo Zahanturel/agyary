@@ -34,9 +34,9 @@ export async function loadSessionExtras() {
   }
 }
 
-/** Called after a successful OTP verify. A returning mobed already has a
- *  membership, so this lands them straight in the app; a first-time one
- *  goes to fire-temple search. */
+/** Called once a sign-in has produced a session. A returning mobed
+ *  already has a membership, so this lands them straight in the app; a
+ *  first-time one goes to fire-temple search. */
 export async function afterSignIn() {
   state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
   await loadSessionExtras();

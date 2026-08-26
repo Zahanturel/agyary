@@ -125,13 +125,15 @@ async def simulate_inbound(
 ) -> dict:
     """Stand in for Meta on a machine Meta cannot reach.
 
-    Inbound sign-in has no outbound leg, so there is no code written to the
-    log the way the OTP path does when WhatsApp is unconfigured - the code
-    is on screen, and the thing that cannot happen locally is the message
-    coming BACK. This closes that loop without a tunnel.
+    Sign-in has no outbound leg at all, so the code is already on screen -
+    the thing that cannot happen on a laptop is the message coming BACK.
+    This closes that loop without standing up a tunnel.
 
-    Debug-only and registered nowhere in the schema. In production the
-    signed webhook above is the only way to claim an attempt.
+    Debug-only and registered nowhere in the schema. It grants a session
+    for any number the caller names, so APP_DEBUG=false in production is
+    load-bearing: with it true this endpoint is a complete authentication
+    bypass. The signed webhook above is the only way to claim an attempt
+    once debug is off.
     """
     if not get_settings().app_debug:
         raise HTTPException(status_code=404)
