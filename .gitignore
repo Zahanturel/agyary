@@ -44,3 +44,6 @@ Thumbs.db
 
 # Local, throwaway: filter-repo replacement rules
 .git-scrub-rules.txt
+
+# Quarantined for manual deletion (agent cannot unlink on this mount)
+_to_delete/
