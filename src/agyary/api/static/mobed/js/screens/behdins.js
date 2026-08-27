@@ -91,7 +91,9 @@ function openAddPanel() {
   // Reachable from the FAB too, which can be tapped from anywhere on the
   // page - so scroll the form into view rather than opening it off-screen.
   if (!panel) return navigate("#/behdins");
+  const typed = (document.getElementById("bhFilter") || {}).value || "";
   renderAddBehdin(panel, {
+    prefill: { name: typed.trim() },
     onCreated: (behdin) => navigate(`#/behdins/${behdin.id}`),
   });
   panel.scrollIntoView({ block: "nearest" });

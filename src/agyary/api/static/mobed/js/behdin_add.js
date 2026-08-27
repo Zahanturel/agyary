@@ -41,9 +41,11 @@ export function renderAddBehdin(container, { onCreated, onCancel, prefill } = {}
         <button class="secondary" id="abImport" style="margin-bottom:12px">
           Import from contacts
         </button>` : ""}
-      <label>Name</label>
-      <input type="text" id="abName" placeholder="e.g. Behdin Jaidev Mistry"
-             autocomplete="off" value="${esc(pf.name || "")}">
+      <div id="abNameRow">
+        <label>Name</label>
+        <input type="text" id="abName" placeholder="e.g. Behdin Jaidev Mistry"
+               autocomplete="off" value="${esc(pf.name || "")}">
+      </div>
       <label>WhatsApp number</label>
       ${phoneField("abPhone", pf.phone || "")}
       <div class="row tight" style="margin-top:12px">

@@ -220,7 +220,9 @@ async function render(draft) {
   } else {
     wireSearch(draft);
     document.getElementById("bhNew").onclick = () => {
+      const typed = (document.getElementById("bhSearch") || {}).value || "";
       renderAddBehdin(document.getElementById("bhNewPanel"), {
+        prefill: { name: typed.trim() },
         onCreated: (created) => choose(draft, created),
       });
     };
@@ -349,25 +351,72 @@ function wireNames(draft) {
 function wireSearch(draft) {
   const input = document.getElementById("bhSearch");
   const results = document.getElementById("bhResults");
+  const panel = document.getElementById("bhNewPanel");
   if (!input) return;
   let timer, token = 0;
+
+  /**
+   * Booking for someone new is the common case, not the exception, and the
+   * name has already been typed once by the time we know they aren't on
+   * file. So the add form opens by itself with that name in it - no
+   * "Nobody matching" dead end, no button to find, and nothing typed twice.
+   */
+  const openAdd = (name) => {
+    const open = document.getElementById("abName");
+    if (open) {
+      // Already showing. Track the search box as he keeps typing, but never
+      // clobber a name he has corrected by hand in the form itself.
+      open.value = name;
+      return;
+    }
+    renderAddBehdin(panel, {
+      prefill: { name },
+      onCreated: (created) => choose(draft, created),
+      onCancel: () => { showNewBtn(true); input.focus(); },
+    });
+    // The name is already on screen in the search box directly above, so the
+    // form does not ask for it a second time - the box above IS the name
+    // field. And the button that opens this form is meaningless while the
+    // form is open.
+    const row = document.getElementById("abNameRow");
+    if (row) row.style.display = "none";
+    showNewBtn(false);
+  };
+
+  const showNewBtn = (show) => {
+    const btn = document.getElementById("bhNew");
+    if (btn) btn.style.display = show ? "" : "none";
+  };
+
+  const closeAdd = () => { panel.innerHTML = ""; showNewBtn(true); };
+
   input.oninput = () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const mine = ++token;
+      const q = input.value.trim();
       let matches = [];
-      try { matches = await listBehdins(state.currentAgyaryId, input.value.trim()); }
+      try { matches = await listBehdins(state.currentAgyaryId, q); }
       catch (e) { return; }
       if (mine !== token) return;
-      results.innerHTML = matches.length
-        ? matches.map((m, i) => `
+
+      if (matches.length) {
+        // Somebody matched, so the add form is moot - drop it rather than
+        // leaving a half-filled form under a list he is about to tap.
+        closeAdd();
+        results.innerHTML = matches.map((m, i) => `
             <div class="search-result" data-i="${i}">
               <div>${esc(m.name)}</div><div class="addr">${esc(m.phone)}</div>
-            </div>`).join("")
-        : '<p class="meta">Nobody matching. Add them below.</p>';
-      results.querySelectorAll(".search-result").forEach(el => {
-        el.onclick = () => choose(draft, matches[Number(el.dataset.i)]);
-      });
+            </div>`).join("");
+        results.querySelectorAll(".search-result").forEach(el => {
+          el.onclick = () => choose(draft, matches[Number(el.dataset.i)]);
+        });
+        return;
+      }
+
+      results.innerHTML = "";
+      // Two characters, so a single stray keystroke doesn't throw a form up.
+      if (q.length >= 2) openAdd(q); else closeAdd();
     }, 220);
   };
   input.focus();
