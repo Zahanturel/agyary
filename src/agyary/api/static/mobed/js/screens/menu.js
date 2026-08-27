@@ -11,8 +11,7 @@
  */
 
 import { updateMyName, getPreferences, putPreferences, logout } from "../api.js";
-import { state, currentAgyary, primarySystem } from "../state.js";
-import { renderAddBehdin } from "../behdin_add.js";
+import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
 } from "../ui.js";
@@ -84,7 +83,6 @@ export async function renderMenu() {
           <span class="chev">&rsaquo;</span>
         </div>
       </div>
-      <div id="mAddPanel"></div>
     </div>
 
     <div class="card">
@@ -129,11 +127,14 @@ export async function renderMenu() {
     if (e.target.closest("#mAddBehdin")) return;
     navigate("#/behdins");
   };
+  // Straight to the one-page add screen - name, number, import-from-contacts
+  // and the saved names all in one place. It used to unfold a second panel
+  // here that could only do name and number, so adding saved names meant
+  // saving, opening the behdin, and editing them in: three steps for one
+  // job, and the reason this shortcut existed at all was to avoid steps.
   document.getElementById("mAddBehdin").onclick = (e) => {
     e.stopPropagation();
-    renderAddBehdin(document.getElementById("mAddPanel"), {
-      onCreated: (behdin) => navigate(`#/behdins/${behdin.id}`),
-    });
+    navigate("#/behdins/new");
   };
 
   document.getElementById("mSignOut").onclick = async () => {
@@ -141,8 +142,10 @@ export async function renderMenu() {
     // dropping the in-memory token alone would sign you back in on the
     // next load.
     try { await logout(); } catch (e) { /* clear locally regardless */ }
+    clearSession();
     state.accessToken = null;
     state.user = null;
+    state.offline = false;
     state.preferences = null;
     location.hash = "#/login";
     location.reload();
