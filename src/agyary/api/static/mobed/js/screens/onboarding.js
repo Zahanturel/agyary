@@ -20,7 +20,7 @@ export function renderOnboarding() {
   mainEl.innerHTML = `
     <div class="card">
       <h2>Which fire temple do you work at?</h2>
-      <p class="meta">Search by name or city, then select it below.</p>
+      <p class="meta">Search by name or city. Tap yours when you see it.</p>
       <input type="text" id="agySearch" placeholder="Start typing..." autocomplete="off">
       <div id="agyResults" style="margin-top:8px"></div>
     </div>`;
@@ -83,13 +83,14 @@ function renderActivate(a) {
   chrome(false);
   mainEl.innerHTML = `
     <div class="card">
-      <h2>Set up ${esc(a.name)}</h2>
-      <p class="meta">Please confirm or correct these details before this fire temple goes live.</p>
+      <h2>Please help us set up ${esc(a.name)}</h2>
+      <p class="meta">These are the details we have on file, but nobody has checked
+        them in years. You would know best - please correct anything that's wrong.</p>
       <label>Name</label><input type="text" id="acName" value="${esc(a.name)}">
       <label>City</label><input type="text" id="acCity" value="${esc(a.city || "")}">
       <label>Address</label><input type="text" id="acAddr" value="${esc(a.address || "")}">
       <label>Contact phone (optional)</label>${phoneField("acPhone")}
-      <div style="margin-top:14px"><button id="acGo">Confirm &amp; activate</button></div>
+      <div style="margin-top:14px"><button id="acGo">Looks right - set it up</button></div>
     </div>`;
   document.getElementById("acGo").onclick = async () => {
     const phoneRes = readOptionalPhone("acPhone");
@@ -117,14 +118,14 @@ function renderCreate(prefillName) {
   chrome(false);
   mainEl.innerHTML = `
     <div class="card">
-      <h2>Add a new fire temple</h2>
-      <p class="meta">Enter its details - it will be set up and ready to use.</p>
+      <h2>Tell us about your fire temple</h2>
+      <p class="meta">Just a few details and it's ready to use.</p>
       <label>Name</label><input type="text" id="crName" value="${esc(prefillName || "")}">
       <label>City</label><input type="text" id="crCity">
       <label>Address</label><input type="text" id="crAddr">
       <label>Contact phone (optional)</label>${phoneField("crPhone")}
       <div style="margin-top:14px" class="row tight">
-        <button id="crGo">Create</button>
+        <button id="crGo">Add it</button>
         <button class="ghost" id="crBack">Back to search</button></div>
     </div>`;
   document.getElementById("crBack").onclick = () => renderOnboarding();

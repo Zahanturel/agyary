@@ -119,7 +119,7 @@ function renderWaNameStep() {
     <div class="card">
       <h2>What should we call you?</h2>
       <p class="meta">
-        Your first time here. This is the name that appears on your slips.
+        This is the name that will appear on your slips.
       </p>
       <label>Name</label>
       <input type="text" id="waName" placeholder="e.g. Er. Pervez Kias" autocomplete="name">
