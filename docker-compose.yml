@@ -33,6 +33,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # No curl or wget in python:3.12-slim, and /health touches no database,
+    # so this reports on the web server alone and won't flap on a DB blip.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./src:/app/src
 
@@ -42,7 +51,11 @@ services:
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       app:
-        condition: service_started
+        # service_started only waits for the container, not for uvicorn to
+        # be answering. After a reboot that opened the tunnel to an app
+        # still booting, and the public site served 502s until it caught
+        # up. Waiting on health closes that window.
+        condition: service_healthy
 
 volumes:
   agyary_pgdata:
