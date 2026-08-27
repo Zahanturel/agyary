@@ -21,8 +21,27 @@ function normalizeContactPhone(raw) {
   return "+" + digits.replace(/^0+/, "");
 }
 
-function canPickContacts() {
+export function canPickContacts() {
   return "contacts" in navigator && "ContactsManager" in window;
+}
+
+/**
+ * Read contacts from the device and hand them back normalised.
+ * Returns [] if the picker is unavailable or the mobed cancelled, so a
+ * caller can treat "nothing to do" and "said no" the same way.
+ */
+export async function pickContacts() {
+  if (!canPickContacts()) return [];
+  let picked;
+  try {
+    picked = await navigator.contacts.select(["name", "tel"], { multiple: true });
+  } catch (e) {
+    return [];   // cancelled
+  }
+  return (picked || []).map(c => ({
+    name: (c.name && c.name[0]) || "",
+    phone: (c.tel && c.tel[0]) ? normalizeContactPhone(c.tel[0]) : "",
+  })).filter(c => c.name && c.phone);
 }
 
 /**

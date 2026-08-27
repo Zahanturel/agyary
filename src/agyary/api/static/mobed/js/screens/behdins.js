@@ -16,17 +16,17 @@
  */
 
 import {
-  listBehdins, customerHistory, getBehdin, updateBehdin,
+  listBehdins, customerHistory, getBehdin, updateBehdin, createBehdin,
   getSavedNames, putSavedNames,
 } from "../api.js";
 import { state } from "../state.js";
-import { renderAddBehdin } from "../behdin_add.js";
+import { canPickContacts, pickContacts } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
   chrome, mainEl, showFab, showError, showInfo,
   refreshHeader, loading, backBar, wireAll,
 } from "../ui.js";
-import { esc, phoneField, readPhone } from "../util.js";
+import { esc, phoneField, readPhone, setPhoneField } from "../util.js";
 import { navigate } from "../router.js";
 
 export async function renderBehdinList() {
@@ -53,7 +53,6 @@ export async function renderBehdinList() {
       </div>
       <p class="meta">The behdins you look after.</p>
       <input type="text" id="bhFilter" placeholder="Search by name or phone" autocomplete="off">
-      <div id="bhAddPanel"></div>
       <div id="bhRows" style="margin-top:8px"></div>
     </div>`;
 
@@ -83,20 +82,122 @@ export async function renderBehdinList() {
     }, 220);
   };
 
-  document.getElementById("bhAdd").onclick = () => openAddPanel();
+  document.getElementById("bhAdd").onclick = () => navigate("#/behdins/new");
 }
 
-function openAddPanel() {
-  const panel = document.getElementById("bhAddPanel");
-  // Reachable from the FAB too, which can be tapped from anywhere on the
-  // page - so scroll the form into view rather than opening it off-screen.
-  if (!panel) return navigate("#/behdins");
-  const typed = (document.getElementById("bhFilter") || {}).value || "";
-  renderAddBehdin(panel, {
-    prefill: { name: typed.trim() },
-    onCreated: (behdin) => navigate(`#/behdins/${behdin.id}`),
-  });
-  panel.scrollIntoView({ block: "nearest" });
+/**
+ * Adding a behdin is the same page as looking at one, minus the history
+ * nobody has yet. It used to be a cramped name-and-number panel that, once
+ * saved, threw you onto this very layout to do the saved names - two
+ * screens and two saves for one person. Now it is one screen and one save,
+ * and importing from the phone's own contacts sits where you would look
+ * for it rather than one step earlier.
+ */
+export function renderBehdinNew() {
+  chrome(true);
+  refreshHeader();
+  showFab(false);
+
+  mainEl.innerHTML = `
+    <div class="card">
+      ${backBar("New behdin", "#/behdins")}
+      ${canPickContacts() ? `
+        <button class="secondary" id="bnImport" style="margin-bottom:12px">
+          Import from contacts
+        </button>` : ""}
+      <label>Name</label>
+      <input type="text" id="bnName" placeholder="e.g. Behdin Jaidev Mistry" autocomplete="off">
+      <label>WhatsApp number</label>${phoneField("bnPhone")}
+    </div>
+
+    <div class="card">
+      <h2>Saved names</h2>
+      <p class="meta">Reused whenever this behdin books - here or over
+        WhatsApp. Leave it for later if you don't have them to hand.</p>
+      <div id="savedRegion"></div>
+    </div>
+
+    <div class="wizard-nav" style="margin-top:4px">
+      <button class="ghost" id="bnCancel">Cancel</button>
+      <button id="bnSave">Add behdin</button>
+    </div>`;
+
+  wireAll("[data-back]", (el) => navigate(el.dataset.back));
+  document.getElementById("bnCancel").onclick = () => navigate("#/behdins");
+  document.getElementById("bnName").focus();
+
+  const region = document.getElementById("savedRegion");
+  renderNamesEditor(region, false, "gujrela_nu", []);
+
+  if (canPickContacts()) {
+    document.getElementById("bnImport").onclick = async () => {
+      const btn = document.getElementById("bnImport");
+      const picked = await pickContacts();
+      if (!picked.length) return;
+
+      // One contact fills the form so the saved names below can be added in
+      // the same pass. Several is a different intent - a bulk import - and
+      // saved names make no sense per-person there.
+      if (picked.length === 1) {
+        document.getElementById("bnName").value = picked[0].name;
+        setPhoneField("bnPhone", picked[0].phone);
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Importing...";
+      let added = 0, skipped = 0;
+      for (const c of picked) {
+        try {
+          const r = await createBehdin(state.currentAgyaryId, c.name, c.phone);
+          r.created ? added++ : skipped++;
+        } catch (e) { skipped++; }
+      }
+      showInfo(added
+        ? `${added} behdin${added > 1 ? "s" : ""} added` + (skipped ? `, ${skipped} already on file` : "")
+        : "All of those were already on file");
+      navigate("#/behdins");
+    };
+  }
+
+  document.getElementById("bnSave").onclick = async () => {
+    const name = document.getElementById("bnName").value.trim();
+    const phone = readPhone("bnPhone");
+    if (!name) return showError("Please enter the behdin's name.");
+    if (!phone) return showError("Please enter a valid phone number.");
+
+    const rows = collectNames(region, false, "gujrela_nu");
+    // Check the names BEFORE creating anybody, or a bad pair leaves a
+    // half-made behdin behind and the mobed retypes the lot.
+    if (rows.length) {
+      const problem = validateNames(rows);
+      if (problem) return showError(problem);
+    }
+
+    const btn = document.getElementById("bnSave");
+    btn.disabled = true;
+    let created;
+    try {
+      created = await createBehdin(state.currentAgyaryId, name, phone);
+    } catch (e) {
+      btn.disabled = false;
+      return showError(e.message);
+    }
+    if (!created.created) showInfo(`${created.name} was already on file - opening their record.`);
+
+    if (rows.length) {
+      try {
+        await putSavedNames(state.currentAgyaryId, created.id, "pair",
+                            rows.filter(n => n.section === "pair"));
+        await putSavedNames(state.currentAgyaryId, created.id, "farmayeshne",
+                            rows.filter(n => n.section === "farmayeshne"));
+      } catch (e) {
+        // The behdin exists either way - say so rather than losing them.
+        navigate(`#/behdins/${created.id}`);
+        return showError(`${created.name} was added, but the names didn't save: ${e.message}`);
+      }
+    }
+    navigate(`#/behdins/${created.id}`);
+  };
 }
 
 export async function renderBehdinDetail({ id }) {

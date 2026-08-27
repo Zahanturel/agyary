@@ -20,7 +20,7 @@ import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
 import { renderCalendarScreen } from "./screens/calendar.js";
 import { renderNewEvent, renderEditEvent } from "./screens/event.js";
-import { renderBehdinList, renderBehdinDetail } from "./screens/behdins.js";
+import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
 
@@ -38,6 +38,9 @@ route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }));
 route("#/booking/:aid/:id", (p) => renderSlip({ kind: "booking", ...p }));
 
 route("#/behdins", renderBehdinList);
+// Before :id - the router matches in registration order, and "new"
+// would otherwise be read as a behdin id and looked up as NaN.
+route("#/behdins/new", renderBehdinNew);
 route("#/behdins/:id", renderBehdinDetail);
 
 // The calendar is home; anything unrecognised lands there.
