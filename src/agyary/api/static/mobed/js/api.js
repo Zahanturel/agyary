@@ -31,7 +31,9 @@ export async function api(path, opts = {}) {
   // sliding, so a 60-minute access token expiring mid-session should be
   // invisible rather than a surprise logout.
   if (res.status === 401 && !opts._retried) {
-    if (await tryRefresh()) return api(path, Object.assign({}, opts, { _retried: true }));
+    // Strictly true: REFRESH_OFFLINE is truthy but means "ask again later",
+    // and retrying the call on it would just fail the same way.
+    if (await tryRefresh() === true) return api(path, Object.assign({}, opts, { _retried: true }));
   }
 
   if (!res.ok) {
@@ -49,15 +51,35 @@ export async function api(path, opts = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+/** tryRefresh() returned neither a session nor a refusal - there was no
+ *  network. The session may well still be perfectly good. */
+export const REFRESH_OFFLINE = "offline";
+
+/**
+ * Three outcomes, and keeping them apart is the difference between a
+ * session that survives a tunnel and one that doesn't:
+ *
+ *   true            - refreshed, `state.accessToken` is live
+ *   false           - the SERVER refused: cookie missing, expired, revoked.
+ *                     This is the only outcome that means "signed out".
+ *   REFRESH_OFFLINE - the request never landed. Says nothing about the
+ *                     session; treating it as a refusal is what used to
+ *                     make a lost connection look like a logout.
+ */
 export async function tryRefresh() {
+  let res;
   try {
-    const res = await fetch(MOBED_BASE + "/auth/refresh", { method: "POST", credentials: "include" });
-    if (!res.ok) return false;
-    state.accessToken = (await res.json()).access_token;
-    return true;
+    res = await fetch(MOBED_BASE + "/auth/refresh", { method: "POST", credentials: "include" });
   } catch (e) {
-    return false;
+    return REFRESH_OFFLINE;
   }
+  if (!res.ok) return false;
+  try {
+    state.accessToken = (await res.json()).access_token;
+  } catch (e) {
+    return REFRESH_OFFLINE;
+  }
+  return true;
 }
 
 export const get = (path) => api(path);

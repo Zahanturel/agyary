@@ -7,7 +7,7 @@
  */
 
 import { getPreferences, calendarOptions } from "./api.js";
-import { state } from "./state.js";
+import { state, saveSession } from "./state.js";
 import { refreshHeader, chrome } from "./ui.js";
 import { navigate } from "./router.js";
 
@@ -42,9 +42,14 @@ export async function afterSignIn() {
   await loadSessionExtras();
   chrome(true);
   refreshHeader();
+  saveSession();
   navigate(state.user.agyaries.length ? "#/calendar" : "#/onboarding");
 }
 
+/** Signed in, which is not the same as "holding a live access token".
+ *  An offline boot has a known user and no token; sending them to the
+ *  sign-in screen would be wrong, because their session is fine - the
+ *  network isn't. */
 export function signedIn() {
-  return !!(state.accessToken && state.user);
+  return !!(state.user && (state.accessToken || state.offline));
 }

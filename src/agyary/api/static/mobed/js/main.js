@@ -12,8 +12,8 @@
  */
 
 import { route, setGuard, setNotFound, start, navigate } from "./router.js";
-import { state } from "./state.js";
-import { tryRefresh, getMe } from "./api.js";
+import { state, saveSession, restoreSession, clearSession } from "./state.js";
+import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
 import { chrome, refreshHeader, menuBtn, setDefaultFabAction } from "./ui.js";
 import { loadSessionExtras, signedIn } from "./session.js";
 import { renderLogin } from "./screens/login.js";
@@ -98,23 +98,55 @@ async function boot() {
   chrome(false);
   // The refresh cookie is httpOnly and sliding, so a returning mobed is
   // signed in again without touching the login screen.
-  if (await tryRefresh()) {
+  const refreshed = await tryRefresh();
+  if (refreshed === true) {
     try {
       state.user = await getMe();
       state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
       await loadSessionExtras();
+      saveSession();
       chrome(true);
       refreshHeader();
     } catch (e) {
       state.accessToken = null;
       state.user = null;
     }
+  } else if (refreshed === REFRESH_OFFLINE) {
+    // No network - which says nothing about whether the session is good.
+    // Come up from the remembered one rather than demanding a fresh
+    // WhatsApp sign-in for what is almost always a passing dead spot.
+    if (restoreSession()) {
+      state.offline = true;
+      chrome(true);
+      refreshHeader();
+    }
+  } else {
+    // The server refused the cookie. This is the one case that really is
+    // a logout, so forget the device.
+    clearSession();
   }
   if (!signedIn() && !location.hash.startsWith("#/login")) {
     location.replace("#/login");
   }
   await start();
 }
+
+// Signal came back after an offline boot. Take the session live and
+// re-render whatever is on screen, so the app heals itself instead of
+// sitting there signed-in-but-empty until the mobed thinks to reload.
+window.addEventListener("online", async () => {
+  if (!state.offline) return;
+  if (await tryRefresh() !== true) return;
+  try {
+    state.user = await getMe();
+    state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
+    await loadSessionExtras();
+    state.offline = false;
+    saveSession();
+    refreshHeader();
+    navigate(location.hash || "#/calendar");
+  } catch (e) { /* still not really back; the next online event retries */ }
+});
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/mobed-sw.js").catch(() => {});

@@ -33,10 +33,14 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""
     jwt_access_token_minutes: int = 60
     # Sliding window (see routes/mobed.py's /auth/refresh - it reissues this
-    # cookie on every use): a mobed who opens the app at least once every 180
-    # days is never re-prompted to log in, matching "log in once, never
-    # again." Pinning this too low would silently log people out mid-season.
-    jwt_refresh_token_days: int = 180
+    # cookie on every use): ten years, which for a device opened every few
+    # weeks means "signed in once, on this phone, forever". That is the
+    # intent - there is no password to fall back on, and re-signing-in costs
+    # a trip out to WhatsApp and back. The sliding window is what makes the
+    # number almost irrelevant in practice: it only bites on a device left
+    # untouched for the whole period. Sign out on the menu screen is the way
+    # to end a session deliberately; it clears this cookie server-side.
+    jwt_refresh_token_days: int = 3650
 
     # --- Inbound WhatsApp sign-in -------------------------------------------
     # The mobed messages US a code rather than us texting one to them, so

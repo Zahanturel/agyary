@@ -6,6 +6,9 @@
 export const state = {
   accessToken: null,
   user: null,
+  // True when we booted from the remembered session because the network
+  // was down. Signed in, but nothing server-backed will answer yet.
+  offline: false,
   currentAgyaryId: null,
   preferences: null,          // GET /me/preferences, loaded once at boot
   calendarOptions: null,      // roj/mah/geh option lists
@@ -84,4 +87,49 @@ export function visibleParsiSystems() {
   // The primary always appears, even if it somehow fell out of the
   // visible list, and it always leads.
   return [primary, ...parsi.filter(s => s !== primary)];
+}
+
+// --- Remembered session -----------------------------------------------------
+// The refresh cookie is httpOnly, so the client cannot read it and cannot
+// tell "my session is gone" from "I have no signal". That distinction is the
+// whole point of this cache: it lets a boot with no network render the app
+// the mobed was already signed in to, instead of throwing them back to the
+// sign-in screen. It holds no token - only who we last knew we were, which
+// is worthless without the cookie the browser still has.
+const SESSION_KEY = "mobed.session.v1";
+
+export function saveSession() {
+  if (!state.user) return;
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      user: state.user,
+      currentAgyaryId: state.currentAgyaryId,
+      preferences: state.preferences,
+      calendarOptions: state.calendarOptions,
+    }));
+  } catch (e) { /* private mode, or the quota is full - not worth failing over */ }
+}
+
+/** Repopulates state from the last known-good session. Returns false if
+ *  there isn't one, which means this really is a first sign-in. */
+export function restoreSession() {
+  let raw = null;
+  try { raw = localStorage.getItem(SESSION_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  try {
+    const s = JSON.parse(raw);
+    if (!s || !s.user) return false;
+    state.user = s.user;
+    state.currentAgyaryId = s.currentAgyaryId;
+    state.preferences = s.preferences;
+    state.calendarOptions = s.calendarOptions;
+    return true;
+  } catch (e) { return false; }
+}
+
+/** Only ever call this when the SERVER rejected the session. A network
+ *  failure must not reach here - that is exactly the bug this file exists
+ *  to prevent. */
+export function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* nothing to clear */ }
 }
