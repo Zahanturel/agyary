@@ -1,7 +1,7 @@
 // Machi app shell cache — same strategy as the mobed SW (network-first,
 // cache-fallback for offline launch). Shares CSS, fonts, and most JS
 // modules with the mobed app; only the entry points differ.
-const CACHE_NAME = "machi-shell-v1";
+const CACHE_NAME = "machi-shell-v2";
 const SHELL_FILES = [
   "/machi",
   "/machi-manifest.json",
@@ -47,13 +47,25 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
   if (event.request.method === "GET" && SHELL_FILES.includes(url.pathname)) {
+    // `cache: "no-cache"` forces a revalidation against the origin instead
+    // of letting the browser answer from its own HTTP cache. Necessary
+    // because Cloudflare rewrites our "Cache-Control: no-cache" into a
+    // 4-hour max-age on the way out (its Browser Cache TTL setting), so
+    // without this a phone can keep serving a pre-deploy module for hours
+    // and no amount of reloading shifts it. The revalidation is cheap: the
+    // ETag is unchanged for anything we didn't just ship, so it is a 304.
+    const fresh = new Request(event.request.url, {
+      cache: "no-cache",
+      credentials: "same-origin",
+    });
     event.respondWith(
-      fetch(event.request)
+      fetch(fresh)
         .then(response => {
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           return response;
         })
+        // Offline: whatever we cached last is exactly what should show.
         .catch(() => caches.match(event.request))
     );
   }
