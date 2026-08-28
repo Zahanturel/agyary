@@ -25,6 +25,20 @@ app = FastAPI(
 )
 
 
+# Every path that makes up a PWA shell, as opposed to its data. These must
+# always be revalidated: there is no build step and so no hashed filenames to
+# make a stale copy harmless.
+_NO_CACHE_PATHS = frozenset({
+    "/mobed",
+    "/machi",
+    "/mobed-sw.js",
+    "/machi-sw.js",
+    "/mobed-manifest.json",
+    "/machi-manifest.json",
+    "/privacy",
+})
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     response = await call_next(request)
@@ -37,8 +51,20 @@ async def security_headers(request, call_next):
     # others fresh - a half-updated app, which fails in ways far stranger
     # than being wholly out of date. "no-cache" means revalidate, not
     # don't store: the usual answer is a cheap 304.
+    #
+    # This has to cover the service workers and manifests too, not just the
+    # modules. A worker served from a stale edge cache is worse than a stale
+    # module: it is the thing that decides how everything else is fetched, so
+    # an old one keeps serving old modules and no reload can escape it. Miss
+    # one path here and Cloudflare caches that path for four hours on its own
+    # authority - which is exactly how a shipped deploy stayed invisible on a
+    # phone while every server-side check passed.
     path = request.url.path
-    if path == "/mobed" or path.startswith("/mobed-app") or path == "/machi":
+    if (
+        path in _NO_CACHE_PATHS
+        or path.startswith("/mobed-app")
+        or path.startswith("/machi-app")
+    ):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
