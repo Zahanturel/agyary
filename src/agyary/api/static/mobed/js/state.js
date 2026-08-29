@@ -19,13 +19,14 @@ export const state = {
   // Calendar view state, shared by the calendar screen and My Day.
   calendar: { mode: "day", focus: null, parsiMonth: null, selectedDay: null },
 
-  // In-flight New Event wizard, so a mid-flow navigation doesn't lose it.
+  // In-flight New Event / New Machi wizard, so a mid-flow navigation
+  // doesn't lose it.
   draft: null,
 
-  // Set just before navigating to #/behdins/new from the New Event screen's
-  // "+ Add a new behdin" button, so that page knows to hand the finished
-  // behdin back to the draft instead of opening the behdin's own record.
-  // Read once and cleared by the screen that consumes it.
+  // Set to "event" or "machi" just before navigating to #/behdins/new from
+  // that screen's "+ Add a new behdin" button, so that page knows to hand
+  // the finished behdin back to the draft instead of opening the behdin's
+  // own record. Read once and cleared by the screen that consumes it.
   behdinReturnTo: null,
   behdinPrefillName: null,
 };

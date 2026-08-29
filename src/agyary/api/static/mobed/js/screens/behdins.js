@@ -100,11 +100,15 @@ export function renderBehdinNew() {
 
   // Read once, up front - a fresh visit to this same URL later (Settings)
   // must not accidentally inherit a stale flag from an earlier detour.
-  const returnToEvent = state.behdinReturnTo === "event";
+  // "event" is the mobed app's New Event screen, "machi" is the Machi
+  // Board's New Machi screen - both share this page rather than their own
+  // cramped inline form.
+  const RETURN_TARGETS = { event: "#/event/new", machi: "#/machi/new" };
+  const returnTo = RETURN_TARGETS[state.behdinReturnTo] ? state.behdinReturnTo : null;
   const prefillName = state.behdinPrefillName || "";
   state.behdinReturnTo = null;
   state.behdinPrefillName = null;
-  const backTarget = returnToEvent ? "#/event/new" : "#/behdins";
+  const backTarget = returnTo ? RETURN_TARGETS[returnTo] : "#/behdins";
 
   mainEl.innerHTML = `
     <div class="card">
@@ -194,16 +198,17 @@ export function renderBehdinNew() {
       btn.disabled = false;
       return showError(e.message);
     }
-    if (!created.created && !returnToEvent) {
+    if (!created.created && !returnTo) {
       showInfo(`${created.name} was already on file - opening their record.`);
     }
 
-    // Back to the event with this behdin chosen, rather than their own
-    // record - that record has nothing to do with the ceremony being booked.
+    // Back to the event/machi draft with this behdin chosen, rather than
+    // their own record - that record has nothing to do with what's being
+    // booked.
     const landing = () => {
-      if (returnToEvent && state.draft) {
+      if (returnTo && state.draft) {
         state.draft.behdin = { id: created.id, name: created.name, phone: created.phone };
-        navigate("#/event/new");
+        navigate(RETURN_TARGETS[returnTo]);
       } else {
         navigate(`#/behdins/${created.id}`);
       }
