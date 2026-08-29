@@ -47,5 +47,10 @@ export async function renderSlip({ kind, aid, id }) {
 
   document.getElementById("slipBack").onclick = () => navigate("#/calendar");
   document.getElementById("slipPrint").onclick = () => window.print();
-  document.getElementById("slipEdit").onclick = () => navigate(`#/event/${kind}/${id}/edit`);
+  // A machi's edit screen is its own route (Geh/slot picker, not the
+  // generic event form) - #/event/machi/:id/edit is not a real page in
+  // either app and used to silently bounce back to the calendar.
+  document.getElementById("slipEdit").onclick = () => {
+    navigate(kind === "machi" ? `#/machi/${id}/edit` : `#/event/${kind}/${id}/edit`);
+  };
 }

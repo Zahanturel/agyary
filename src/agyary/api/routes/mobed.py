@@ -911,7 +911,9 @@ class ManualAddMachiIn(BaseModel):
     geh: int
     gregorian: date
     purpose: str
-    names: list[ManualAddNameIn]
+    # Left out (the PWA never sends it), the behdin's saved names are
+    # auto-attached server-side - see manual_add_machi.
+    names: list[ManualAddNameIn] | None = None
     # Monthly: same Roj every Mah, for a departed relative. Yearly: same Roj
     # AND Mah every Parsi year, for a birthday or anniversary. None: a
     # one-off, the common case.
@@ -926,12 +928,13 @@ async def manual_add_machi(
     user: User = Depends(get_current_user),
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
+    names = [n.model_dump() for n in payload.names] if payload.names is not None else None
     result = await mobed_dashboard.manual_add_machi(
         db, agyary, user.id,
         behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
         roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
         gregorian=payload.gregorian, purpose=payload.purpose,
-        names=[n.model_dump() for n in payload.names],
+        names=names,
         recurring=payload.recurring,
     )
     await db.commit()
@@ -1019,7 +1022,9 @@ class EditMachiIn(BaseModel):
     geh: int
     gregorian: date
     purpose: str
-    names: list[ManualAddNameIn]
+    # Left out, re-pulls the (possibly just-edited) behdin's current saved
+    # names - see edit_machi.
+    names: list[ManualAddNameIn] | None = None
 
 
 @router.put("/agyaries/{agyary_id}/machis/{machi_id}")
@@ -1031,12 +1036,13 @@ async def edit_machi(
     user: User = Depends(get_current_user),
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
+    names = [n.model_dump() for n in payload.names] if payload.names is not None else None
     result = await mobed_dashboard.edit_machi(
         db, agyary, machi_id, user.id,
         behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
         roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
         gregorian=payload.gregorian, purpose=payload.purpose,
-        names=[n.model_dump() for n in payload.names],
+        names=names,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Unknown machi")

@@ -518,6 +518,91 @@ async def test_editing_a_machi_normalises_too(db, client, seeded):
     assert [(n.section, n.pair_group) for n in rows] == [("farmayeshne", None)]
 
 
+async def test_machi_omitted_names_auto_pulls_the_saved_pool(db, client, seeded):
+    """The New Machi screen never sends a names key at all - same contract
+    as manual_add_booking. Patet pulls the saved pair, tandarosti would
+    pull living-only."""
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    phone = "+919944400099"
+    behdin = await _behdin(client, aid, headers, name="Auto Pull Behdin", phone=phone)
+
+    await client.put(
+        f"/api/mobed/agyaries/{aid}/behdins/{behdin['id']}/saved-names/pair",
+        json={"names": [
+            {"title": "ervad", "name": "Saved One", "status": "departed", "pair_group": 1},
+            {"title": "ervad", "name": "Saved Two", "status": "departed", "pair_group": 1},
+        ]},
+        headers=headers,
+    )
+
+    r = await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/machi",
+        json={
+            "behdin_phone": phone, "behdin_name": "Auto Pull Behdin",
+            "roj": 4, "mah": 6, "year": 1396, "geh": 1, "gregorian": "2027-07-10",
+            "purpose": "patet",
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+
+    rows = (await db.execute(select(CeremonyName))).scalars().all()
+    assert sorted(n.name for n in rows) == ["Saved One", "Saved Two"]
+
+
+async def test_editing_a_machi_without_names_repulls_the_saved_pool(db, client, seeded):
+    """Editing is not the place to notice the saved pool has moved on since
+    creation and keep serving the stale copy - same contract as
+    edit_booking."""
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    phone = "+919944400098"
+    await _behdin(client, aid, headers, name="Repull Behdin", phone=phone)
+
+    r = await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/machi",
+        json={
+            "behdin_phone": phone, "behdin_name": "Repull Behdin",
+            "roj": 5, "mah": 6, "year": 1396, "geh": 2, "gregorian": "2027-07-11",
+            "purpose": "patet",
+            "names": [
+                {"section": "pair", "title": "ervad", "name": "Old A", "status": "departed", "pair_group": 1},
+                {"section": "pair", "title": "ervad", "name": "Old B", "status": "departed", "pair_group": 1},
+            ],
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+    mid = r.json()["machi_id"]
+
+    # The saved pool changes after creation - editing should pick up the
+    # current pool rather than keeping the original "Old A"/"Old B".
+    behdin = (await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": phone}, headers=headers)).json()[0]
+    await client.put(
+        f"/api/mobed/agyaries/{aid}/behdins/{behdin['id']}/saved-names/pair",
+        json={"names": [
+            {"title": "ervad", "name": "New A", "status": "departed", "pair_group": 1},
+            {"title": "ervad", "name": "New B", "status": "departed", "pair_group": 1},
+        ]},
+        headers=headers,
+    )
+
+    r2 = await client.put(
+        f"/api/mobed/agyaries/{aid}/machis/{mid}",
+        json={
+            "behdin_phone": phone, "behdin_name": "Repull Behdin",
+            "roj": 5, "mah": 6, "year": 1396, "geh": 2, "gregorian": "2027-07-11",
+            "purpose": "patet",
+        },
+        headers=headers,
+    )
+    assert r2.status_code == 200 and r2.json()["confirmed"] is True
+
+    rows = (await db.execute(select(CeremonyName).where(CeremonyName.machi_id == mid))).scalars().all()
+    assert sorted(n.name for n in rows) == ["New A", "New B"]
+
+
 # ---------------------------------------------------------------------------
 # Machi board bounds (3f)
 # ---------------------------------------------------------------------------

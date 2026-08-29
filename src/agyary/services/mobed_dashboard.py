@@ -346,24 +346,31 @@ async def _resolve_customer(
     return customer
 
 
-async def _auto_names(db: AsyncSession, customer_id: int, service_name: str) -> list[dict]:
+async def _saved_names_for(db: AsyncSession, customer_id: int, *, living_only: bool) -> list[dict]:
     """Pull the behdin's saved names for auto-attach at booking time.
 
-    Pairs first, then farmayeshne. If the service is tandarosti, only
-    living names are included. Returns an empty list if the behdin has
-    no saved names — events save fine without them.
+    Pairs first, then farmayeshne, unless only living names are wanted (the
+    tandarosti/patet-equivalent case, however the caller identifies it).
+    Returns an empty list if the behdin has no saved names — events save
+    fine without them.
     """
     from agyary.services.behdin_directory import list_saved_names
 
     all_names = await list_saved_names(db, customer_id)
-    is_tandarosti = service_name.strip().lower() == "tandarosti"
-    if is_tandarosti:
-        all_names = [n for n in all_names if n.get("status") == "living"]
-    else:
-        pairs = [n for n in all_names if n.get("section") == "pair"]
-        farm = [n for n in all_names if n.get("section") == "farmayeshne"]
-        all_names = pairs + farm
-    return all_names
+    if living_only:
+        return [n for n in all_names if n.get("status") == "living"]
+    pairs = [n for n in all_names if n.get("section") == "pair"]
+    farm = [n for n in all_names if n.get("section") == "farmayeshne"]
+    return pairs + farm
+
+
+async def _auto_names(db: AsyncSession, customer_id: int, service_name: str) -> list[dict]:
+    """Booking-flow wrapper: "living only" is decided by the service being
+    named Tandarosti, since a generic Booking has no purpose enum for it
+    the way Machi does."""
+    return await _saved_names_for(
+        db, customer_id, living_only=service_name.strip().lower() == "tandarosti"
+    )
 
 
 async def manual_add_machi(
@@ -379,7 +386,7 @@ async def manual_add_machi(
     geh: int,
     gregorian,
     purpose: str,
-    names: list[dict],
+    names: list[dict] | None = None,
     recurring: str | None = None,
 ) -> MachiBookingResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
@@ -389,10 +396,16 @@ async def manual_add_machi(
     threading it into book_machi_slot itself - that function is shared
     with the WhatsApp path and shouldn't grow a PWA-only parameter.
 
+    ``names`` follows the same auto-pull rule as manual_add_booking: leave
+    it out and the behdin's saved names are attached automatically, keyed
+    on purpose instead of service name. The PWA screen never sends it.
+
     ``recurring`` is one of RECURRENCE_PATTERN_CHOICES (currently "monthly"
     or "yearly") or None for a one-off. The API boundary is what actually
     restricts it to those values - here it is trusted."""
     customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
+    if names is None:
+        names = await _saved_names_for(db, customer.id, living_only=purpose == "tandarosti")
     result = await booking_service.book_machi_slot(
         db, agyary, customer, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
@@ -740,16 +753,23 @@ async def edit_machi(
     geh: int,
     gregorian,
     purpose: str,
-    names: list[dict],
+    names: list[dict] | None = None,
 ) -> MachiBookingResult | None:
     """Edit a machi via the shared slot-check core (rebook_machi_slot). Returns
     None if the machi doesn't belong to this agyari; otherwise a
     MachiBookingResult whose .machi is None (with .alternatives set) when the
-    new slot is taken - exactly the create contract."""
+    new slot is taken - exactly the create contract.
+
+    ``names`` left out re-pulls the (possibly just-changed) behdin's current
+    saved names, same as edit_booking - an edit is not the place to notice
+    the pool has drifted since this machi was created and silently keep
+    the stale copy."""
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary.id:
         return None
     await _apply_behdin_edit(db, machi, behdin_phone, behdin_name, actor_user_id)
+    if names is None:
+        names = await _saved_names_for(db, machi.customer_id, living_only=purpose == "tandarosti")
     return await booking_service.rebook_machi_slot(
         db, agyary, machi, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,

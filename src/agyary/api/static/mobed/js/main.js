@@ -20,6 +20,7 @@ import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
 import { renderCalendarScreen } from "./screens/calendar.js";
 import { renderNewEvent, renderEditEvent } from "./screens/event.js";
+import { renderEditMachi } from "./screens/machi_event.js";
 import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
@@ -34,6 +35,10 @@ route("#/menu", renderMenu);
 
 route("#/event/new", renderNewEvent);
 route("#/event/:kind/:id/edit", renderEditEvent);
+// Before :aid/:id below - the router matches in registration order, and
+// that pattern would otherwise read "edit" as an id. A machi needs its own
+// Geh/slot-picker editor; the generic event form can't touch those fields.
+route("#/machi/:id/edit", renderEditMachi);
 route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }));
 route("#/booking/:aid/:id", (p) => renderSlip({ kind: "booking", ...p }));
 

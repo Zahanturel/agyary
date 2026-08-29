@@ -4,15 +4,18 @@
  * Add / edit a machi — one screen.
  *
  * Behdin, purpose (patet/tandarosti), date with Roj/Mah sync, geh picker
- * with live availability, names inline (one pair for patet, multiple
- * singles for tandarosti).
+ * with live availability. Names are not entered here at all - same as the
+ * mobed app's New Event screen, they're auto-pulled from the behdin's
+ * saved-names pool at save time (server-side), keyed on purpose the same
+ * way _auto_names keys on service. Get them onto a behdin via the full
+ * behdin page (Settings, or "+ Add a new behdin" here), not per-machi.
  */
 
 import {
   listBehdins, convertDate, fromParsi, bookableGehs,
   addMachi, machiDetail, editMachi,
 } from "../api.js";
-import { state, primarySystem, GEHS, GEH_NAME_BY_NUM, NAME_TITLES, TITLE_DISPLAY } from "../state.js";
+import { state, primarySystem, GEHS } from "../state.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
 import { esc, todayIst } from "../util.js";
@@ -35,22 +38,9 @@ function blankDraft(prefill = {}) {
     parsiLabel: "",
     isGatha: false,
     availableGehs: [],
-    names: null,
     // null (don't repeat), "monthly" or "yearly" - see the picker below.
     recurring: null,
   };
-}
-
-function defaultNames(purpose) {
-  if (purpose === "patet") {
-    return [
-      { section: "pair", title: "ervad", name: "", status: "departed", pair_group: 1 },
-      { section: "pair", title: "ervad", name: "", status: "departed", pair_group: 1 },
-    ];
-  }
-  return [
-    { section: "farmayeshne", title: "ervad", name: "", status: "living" },
-  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +54,6 @@ export async function renderNewMachi() {
   if (!state.draft || state.draft.edit || state.draft.prefill) {
     const prefill = (state.draft && state.draft.prefill) || {};
     state.draft = blankDraft(prefill);
-    state.draft.names = defaultNames(state.draft.purpose);
   }
   await syncFromGregorian(state.draft);
   await loadAvailableGehs(state.draft);
@@ -94,7 +83,6 @@ export async function renderEditMachi({ id }) {
   draft.roj = detail.roj;
   draft.mah = detail.mah;
   draft.year = detail.year;
-  draft.names = detail.names && detail.names.length ? detail.names : defaultNames(detail.purpose);
   await syncFromGregorian(draft);
   await loadAvailableGehs(draft);
   state.draft = draft;
@@ -198,10 +186,6 @@ async function render(draft) {
         }).join("")}
       </div>
 
-      <!-- Names -->
-      <label style="margin-top:16px">Names</label>
-      <div id="namesRegion">${renderNames(draft)}</div>
-
       ${!draft.edit ? `<!-- Recurring -->
       <label style="margin-top:16px">Repeat</label>
       <select id="mcRecur">
@@ -236,9 +220,6 @@ async function render(draft) {
   // --- Purpose wiring ---
   document.getElementById("mcPurpose").onchange = (e) => {
     draft.purpose = e.target.value;
-    draft.names = defaultNames(draft.purpose);
-    document.getElementById("namesRegion").innerHTML = renderNames(draft);
-    wireNames(draft);
   };
 
   // --- Date wiring ---
@@ -278,9 +259,6 @@ async function render(draft) {
     };
   });
 
-  // --- Names wiring ---
-  wireNames(draft);
-
   // --- Recurring wiring ---
   const recurEl = document.getElementById("mcRecur");
   if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.value || null; };
@@ -288,66 +266,6 @@ async function render(draft) {
   // --- Cancel / Save ---
   document.getElementById("mcCancel").onclick = () => { state.draft = null; navigate("#/calendar"); };
   document.getElementById("mcSave").onclick = () => save(draft);
-}
-
-// ---------------------------------------------------------------------------
-// Names rendering (inline, not the full names.js editor)
-// ---------------------------------------------------------------------------
-function renderNames(draft) {
-  const names = draft.names || [];
-  if (draft.purpose === "patet") {
-    return `
-      <div class="names-inline">
-        <p class="meta">One pair of names for patet</p>
-        ${names.map((n, i) => nameRow(n, i, false)).join("")}
-      </div>`;
-  }
-  return `
-    <div class="names-inline">
-      <p class="meta">Names for tandarosti (living only)</p>
-      ${names.map((n, i) => nameRow(n, i, true)).join("")}
-      <button class="ghost small" id="nameAdd" type="button" style="margin-top:8px">+ Add name</button>
-    </div>`;
-}
-
-function nameRow(n, idx, removable) {
-  const titleOpts = NAME_TITLES.map(t =>
-    `<option value="${t}" ${n.title === t ? "selected" : ""}>${TITLE_DISPLAY[t]}</option>`
-  ).join("");
-  return `
-    <div class="name-row" data-idx="${idx}">
-      <select class="t" data-idx="${idx}">${titleOpts}</select>
-      <input type="text" data-idx="${idx}" placeholder="Name" value="${esc(n.name)}">
-      ${removable ? `<button class="rm" data-idx="${idx}" type="button">&times;</button>` : ""}
-    </div>`;
-}
-
-function wireNames(draft) {
-  const region = document.getElementById("namesRegion");
-  if (!region) return;
-
-  region.querySelectorAll(".name-row select.t").forEach(el => {
-    el.onchange = () => { draft.names[Number(el.dataset.idx)].title = el.value; };
-  });
-  region.querySelectorAll(".name-row input").forEach(el => {
-    el.oninput = () => { draft.names[Number(el.dataset.idx)].name = el.value.trim(); };
-  });
-  region.querySelectorAll(".name-row button.rm").forEach(el => {
-    el.onclick = () => {
-      draft.names.splice(Number(el.dataset.idx), 1);
-      region.innerHTML = renderNames(draft);
-      wireNames(draft);
-    };
-  });
-
-  const addBtn = document.getElementById("nameAdd");
-  if (addBtn) {
-    addBtn.onclick = () => {
-      draft.names.push({ section: "farmayeshne", title: "ervad", name: "", status: "living" });
-      region.innerHTML = renderNames(draft);
-      wireNames(draft);
-    };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -442,11 +360,6 @@ async function save(draft) {
   if (!draft.gregorian) return showError("Please select a date.");
   if (!draft.geh) return showError("Please select a geh.");
 
-  const namesList = (draft.names || []).filter(n => n.name.trim());
-  if (draft.purpose === "patet" && namesList.length < 2) {
-    return showError("Patet requires a pair of names.");
-  }
-
   const btn = document.getElementById("mcSave");
   btn.disabled = true;
 
@@ -461,13 +374,8 @@ async function save(draft) {
       geh: draft.geh,
       gregorian: draft.gregorian,
       purpose: draft.purpose,
-      names: namesList.map(n => ({
-        section: draft.purpose === "patet" ? "pair" : "farmayeshne",
-        title: n.title,
-        name: n.name.trim(),
-        status: draft.purpose === "patet" ? "departed" : "living",
-        pair_group: draft.purpose === "patet" ? 1 : null,
-      })),
+      // No names key - the server auto-pulls the behdin's saved names,
+      // same as the mobed app's booking flow.
     };
 
     if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
