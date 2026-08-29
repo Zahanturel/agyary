@@ -1,9 +1,11 @@
-"""Monthly recurring machis: generation at creation, and top-up on read.
+"""Recurring machis: generation at creation, and top-up on read.
 
 A machi kept for a departed relative is usually kept every month on the
-same Roj, indefinitely. There is no scheduler in this deployment, so the
-board tops the arrangement up when it is looked at - otherwise it would
-stop dead at whatever horizon it happened to be created with.
+same Roj, indefinitely (monthly). One kept for a birthday or anniversary
+instead wants the same Roj and Mah, one Parsi year later each time
+(yearly). There is no scheduler in this deployment, so the board tops the
+arrangement up when it is looked at - otherwise it would stop dead at
+whatever horizon it happened to be created with.
 
 Instances are real rows rather than something computed on read, because a
 machi occupies a real slot: one machi per geh per day per agyary, and a
@@ -35,7 +37,7 @@ def _greg(agyary: Agyary, mah: int, year: int = YEAR, roj: int = ROJ) -> date:
     return parsi_to_gregorian(year, CalendarSystem(agyary.calendar_system), mah=mah, roj=roj)
 
 
-async def _start_recurring(db, seeded, *, mah: int = START_MAH, roj: int = ROJ, geh: int = GEH):
+async def _start_recurring(db, seeded, *, mah: int = START_MAH, roj: int = ROJ, geh: int = GEH, recurring: str = "monthly"):
     agyary = await _agyary(db, seeded)
     result = await mobed_dashboard.manual_add_machi(
         db,
@@ -53,7 +55,7 @@ async def _start_recurring(db, seeded, *, mah: int = START_MAH, roj: int = ROJ, 
             {"section": "pair", "title": "ervad", "name": "Kaikhushru", "status": "departed", "pair_group": 1},
             {"section": "pair", "title": "ervad", "name": "Hormazd", "status": "departed", "pair_group": 1},
         ],
-        recurring=True,
+        recurring=recurring,
     )
     assert result.machi is not None, "source machi should book cleanly"
     rule = (await db.execute(select(RecurrenceRule))).scalar_one()
@@ -78,7 +80,7 @@ async def test_creating_a_recurrence_generates_the_first_few_months(db, seeded):
     agyary, source, rule = await _start_recurring(db, seeded)
 
     instances = await _instances(db, rule)
-    assert len(instances) == mobed_dashboard.RECURRENCE_HORIZON_MONTHS
+    assert len(instances) == mobed_dashboard.RECURRENCE_HORIZON_PERIODS
 
     # Same Roj and Geh every month, which is the whole point of the pattern.
     assert {m.parsi_roj for m in instances} == {ROJ}
@@ -95,7 +97,7 @@ async def test_the_marker_is_the_last_month_attempted(db, seeded):
     left it stale - or unbound, if the very first one did."""
     agyary, _source, rule = await _start_recurring(db, seeded)
 
-    expected = _greg(agyary, START_MAH + mobed_dashboard.RECURRENCE_HORIZON_MONTHS)
+    expected = _greg(agyary, START_MAH + mobed_dashboard.RECURRENCE_HORIZON_PERIODS)
     assert rule.last_generated_until == expected
 
 
@@ -150,7 +152,7 @@ async def test_a_taken_slot_is_skipped_without_stalling_the_marker(db, seeded):
     agyary, _source, rule = await _start_recurring(db, seeded)
 
     # Occupy the month after the horizon, before the recurrence reaches it.
-    blocked_mah = START_MAH + mobed_dashboard.RECURRENCE_HORIZON_MONTHS + 1
+    blocked_mah = START_MAH + mobed_dashboard.RECURRENCE_HORIZON_PERIODS + 1
     other = await booking_service.create_customer(db, "+919900055555", "Behdin Other")
     taken = await booking_service.book_machi_slot(
         db, agyary, other, roj=ROJ, mah=blocked_mah, year=YEAR, geh=GEH,
@@ -196,6 +198,36 @@ async def test_the_year_rolls_over_after_mah_twelve(db, seeded):
         (1, YEAR + 1),
         (2, YEAR + 1),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Yearly pattern (birthdays / anniversaries)
+# ---------------------------------------------------------------------------
+async def test_yearly_recurrence_steps_by_parsi_year_not_month(db, seeded):
+    agyary, source, rule = await _start_recurring(db, seeded, recurring="yearly")
+
+    assert rule.pattern == "same_roj_mah_every_year"
+    instances = await _instances(db, rule)
+    assert len(instances) == mobed_dashboard.RECURRENCE_HORIZON_PERIODS
+    # Same Roj AND Mah every time - only the year moves, unlike monthly
+    # where the Mah cycles and the Roj stays fixed.
+    assert [(m.parsi_roj, m.parsi_mah, m.parsi_year) for m in instances] == [
+        (ROJ, START_MAH, YEAR + 1),
+        (ROJ, START_MAH, YEAR + 2),
+        (ROJ, START_MAH, YEAR + 3),
+    ]
+
+
+async def test_yearly_recurrence_tops_up_past_its_horizon(db, seeded):
+    agyary, _source, rule = await _start_recurring(db, seeded, recurring="yearly")
+
+    through = _greg(agyary, START_MAH, year=YEAR + 6)
+    created = await mobed_dashboard.ensure_recurrences_generated(db, agyary.id, through=through)
+
+    assert created > 0
+    instances = await _instances(db, rule)
+    assert instances[-1].parsi_year >= YEAR + 6
+    assert {m.parsi_mah for m in instances} == {START_MAH}
 
 
 async def test_an_end_date_stops_generation(db, seeded):

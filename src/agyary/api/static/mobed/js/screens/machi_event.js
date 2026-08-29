@@ -36,7 +36,8 @@ function blankDraft(prefill = {}) {
     isGatha: false,
     availableGehs: [],
     names: null,
-    recurring: false,
+    // null (don't repeat), "monthly" or "yearly" - see the picker below.
+    recurring: null,
   };
 }
 
@@ -202,10 +203,12 @@ async function render(draft) {
       <div id="namesRegion">${renderNames(draft)}</div>
 
       ${!draft.edit ? `<!-- Recurring -->
-      <label class="check-row" style="margin-top:16px">
-        <input type="checkbox" id="mcRecur" ${draft.recurring ? "checked" : ""}>
-        Repeat every month on this Roj
-      </label>` : ""}
+      <label style="margin-top:16px">Repeat</label>
+      <select id="mcRecur">
+        <option value="" ${!draft.recurring ? "selected" : ""}>Don't repeat</option>
+        <option value="monthly" ${draft.recurring === "monthly" ? "selected" : ""}>Every month, same Roj</option>
+        <option value="yearly" ${draft.recurring === "yearly" ? "selected" : ""}>Every year, same Roj &amp; Mah - for a birthday or anniversary</option>
+      </select>` : ""}
 
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
@@ -280,7 +283,7 @@ async function render(draft) {
 
   // --- Recurring wiring ---
   const recurEl = document.getElementById("mcRecur");
-  if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.checked; };
+  if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.value || null; };
 
   // --- Cancel / Save ---
   document.getElementById("mcCancel").onclick = () => { state.draft = null; navigate("#/calendar"); };
@@ -467,7 +470,7 @@ async function save(draft) {
       })),
     };
 
-    if (draft.recurring && !draft.edit) body.recurring = true;
+    if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
 
     let res;
     if (draft.edit) {

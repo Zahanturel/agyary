@@ -7,6 +7,7 @@ HTTP/JWT/request-response layer on top of it.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -911,7 +912,10 @@ class ManualAddMachiIn(BaseModel):
     gregorian: date
     purpose: str
     names: list[ManualAddNameIn]
-    recurring: bool = False
+    # Monthly: same Roj every Mah, for a departed relative. Yearly: same Roj
+    # AND Mah every Parsi year, for a birthday or anniversary. None: a
+    # one-off, the common case.
+    recurring: Literal["monthly", "yearly"] | None = None
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/machi")

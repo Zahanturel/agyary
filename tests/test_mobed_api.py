@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import delete, func, select
 
 from agyary.messaging.geh_times import to_ist
-from agyary.models import Agyary, Booking, BookingMobed, Machi, Service, User
+from agyary.models import Agyary, Booking, BookingMobed, Machi, RecurrenceRule, Service, User
 from tests.conftest import sign_in
 
 NEW_MOBED_PHONE = "+919911100001"
@@ -183,6 +183,35 @@ async def test_manual_add_machi_confirms_and_detects_taken_slot(db, client, seed
     r2 = await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/manual-add/machi", json=payload, headers=headers)
     assert r2.status_code == 200 and r2.json()["confirmed"] is False
     assert 1 not in r2.json()["alternatives"]["same_day_gehs"]
+
+
+async def test_manual_add_machi_yearly_recurrence(db, client, seeded):
+    """The birthday/anniversary shape: same Roj and Mah, a Parsi year later
+    each time - see tests/test_recurrence.py for the generation logic
+    itself, this just checks the API accepts the option and wires it up."""
+    headers = await _member_headers(client, seeded)
+    payload = {
+        "behdin_phone": "+919922200002",
+        "behdin_name": "Birthday Behdin",
+        "roj": 6, "mah": 3, "year": 1396, "geh": 2,
+        "gregorian": "2027-11-08",
+        "purpose": "tandarosti",
+        "names": [{"section": "farmayeshne", "title": "ervad", "name": "A", "status": "living"}],
+        "recurring": "yearly",
+    }
+    r = await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/manual-add/machi", json=payload, headers=headers)
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+
+    rule = (
+        await db.execute(select(RecurrenceRule).where(RecurrenceRule.agyary_id == seeded["agyary_id"]))
+    ).scalar_one()
+    assert rule.pattern == "same_roj_mah_every_year"
+
+    # An unrecognised value is rejected rather than silently ignored.
+    payload["recurring"] = "weekly"
+    payload["gregorian"] = "2027-11-09"
+    r = await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/manual-add/machi", json=payload, headers=headers)
+    assert r.status_code == 422
 
 
 async def test_manual_add_machi_requires_membership(client, seeded):

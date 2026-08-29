@@ -380,14 +380,18 @@ async def manual_add_machi(
     gregorian,
     purpose: str,
     names: list[dict],
-    recurring: bool = False,
+    recurring: str | None = None,
 ) -> MachiBookingResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
     the exact same shared function the WhatsApp flow uses (module 1) -
     never a second slot-check implementation. created_by_user_id is set
     here, after the shared core hands back a real row, rather than
     threading it into book_machi_slot itself - that function is shared
-    with the WhatsApp path and shouldn't grow a PWA-only parameter."""
+    with the WhatsApp path and shouldn't grow a PWA-only parameter.
+
+    ``recurring`` is one of RECURRENCE_PATTERN_CHOICES (currently "monthly"
+    or "yearly") or None for a one-off. The API boundary is what actually
+    restricts it to those values - here it is trusted."""
     customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
     result = await booking_service.book_machi_slot(
         db, agyary, customer, roj=roj, mah=mah, year=year, geh=geh,
@@ -397,19 +401,35 @@ async def manual_add_machi(
         result.machi.created_by_user_id = actor_user_id
         await db.flush()
         if recurring and mah <= 12:
-            await _create_recurring_machis(db, agyary, result.machi)
+            await _create_recurring_machis(
+                db, agyary, result.machi, pattern=RECURRENCE_PATTERN_CHOICES[recurring]
+            )
     return result
 
 
-# Recurrence horizon. Instances are materialised rather than computed on
-# read, because a machi occupies a real slot - the uniqueness constraint is
-# one machi per geh per day per agyary, and a slot nobody has written down
-# is a slot somebody else will take.
-RECURRENCE_HORIZON_MONTHS = 3
-# Ceiling on how far a single request may generate. Without it, opening the
-# calendar on a date years out would materialise hundreds of rows inside one
-# page load.
+# Recurrence horizon, in periods of whatever the pattern steps by (months
+# for the monthly pattern, years for the yearly one). Instances are
+# materialised rather than computed on read, because a machi occupies a
+# real slot - the uniqueness constraint is one machi per geh per day per
+# agyary, and a slot nobody has written down is a slot somebody else will
+# take.
+RECURRENCE_HORIZON_PERIODS = 3
+# Ceiling on how many periods a single request may generate. Without it,
+# opening the calendar on a date years out would materialise hundreds of
+# rows inside one page load. The loop this bounds always breaks early once
+# it reaches the requested date, so this is a safety cap, not a target -
+# for the yearly pattern in particular, reaching it would mean stepping 36
+# years past the last generated one in one request.
 MAX_GENERATE_MONTHS = 36
+
+# What a mobed picks in the New Machi form, mapped to the RecurrenceRule
+# pattern it creates. Monthly is the departed-relative case (same Roj every
+# Mah); yearly is the birthday/anniversary case (same Roj AND Mah, one
+# Parsi year later).
+RECURRENCE_PATTERN_CHOICES = {
+    "monthly": "same_roj_every_mah",
+    "yearly": "same_roj_mah_every_year",
+}
 
 
 def _next_parsi_month(mah: int, year: int) -> tuple[int, int]:
@@ -417,6 +437,16 @@ def _next_parsi_month(mah: int, year: int) -> tuple[int, int]:
     and is never produced here - a recurrence cannot start on one (a machi
     cannot be booked then) and so never lands on one."""
     return (1, year + 1) if mah >= 12 else (mah + 1, year)
+
+
+def _next_parsi_year(mah: int, year: int) -> tuple[int, int]:
+    """Same Mah, one Parsi year later - the birthday/anniversary pattern.
+    No rollover to worry about, unlike the monthly step."""
+    return (mah, year + 1)
+
+
+def _step_for(pattern: str):
+    return _next_parsi_year if pattern == "same_roj_mah_every_year" else _next_parsi_month
 
 
 async def generate_recurrence_instances(
@@ -467,9 +497,10 @@ async def generate_recurrence_instances(
     names = await _names_as_dicts(db, machi_id=source.id)
     created = 0
     attempted_through = anchor
+    step = _step_for(rule.pattern)
 
     for _ in range(MAX_GENERATE_MONTHS):
-        mah, year = _next_parsi_month(mah, year)
+        mah, year = step(mah, year)
         try:
             greg = parsi_to_gregorian(year, system, mah=mah, roj=roj)
         except ValueError:
@@ -543,36 +574,42 @@ async def _create_recurring_machis(
     agyary: Agyary,
     source_machi: Machi,
     *,
-    horizon_months: int = RECURRENCE_HORIZON_MONTHS,
+    pattern: str = "same_roj_every_mah",
+    horizon_periods: int = RECURRENCE_HORIZON_PERIODS,
 ) -> None:
-    """Start a monthly recurrence from ``source_machi`` and generate the
-    first few months of it.
+    """Start a recurrence from ``source_machi`` and generate the first few
+    periods of it.
 
     A machi kept for a departed relative is usually kept every month on the
-    same Roj, indefinitely. Only the rule is durable; the instances beyond
-    the horizon are generated on demand by ensure_recurrences_generated, so
-    the arrangement does not quietly stop at whatever the horizon happened
-    to be on the day it was created.
+    same Roj, indefinitely (``same_roj_every_mah``). One kept for a birthday
+    or anniversary instead wants the same Roj AND Mah, a year later each
+    time (``same_roj_mah_every_year``) - stepping by month there would land
+    it on 12 unrelated dates a year instead of the one day being marked.
+    Only the rule is durable either way; the instances beyond the horizon
+    are generated on demand by ensure_recurrences_generated, so the
+    arrangement does not quietly stop at whatever horizon it happened to be
+    created with.
     """
     rule = RecurrenceRule(
         agyary_id=agyary.id,
         source_machi_id=source_machi.id,
-        pattern="same_roj_every_mah",
+        pattern=pattern,
         end_type="indefinite",
-        generation_horizon_months=horizon_months,
+        generation_horizon_months=horizon_periods,
         last_generated_until=source_machi.gregorian_date,
     )
     db.add(rule)
     await db.flush()
     source_machi.recurrence_rule_id = rule.id
 
-    # Walk the months rather than adding days. A Parsi month is exactly 30
+    # Walk periods rather than adding days. A Parsi month is exactly 30
     # days, but a Parsi YEAR is 12 x 30 plus the five Gatha days, so two
     # same-Roj dates either side of a year boundary are 35 days apart and
     # any day-count horizon silently lands in the wrong month there.
+    step = _step_for(pattern)
     mah, year = source_machi.parsi_mah, source_machi.parsi_year
-    for _ in range(horizon_months):
-        mah, year = _next_parsi_month(mah, year)
+    for _ in range(horizon_periods):
+        mah, year = step(mah, year)
     through = parsi_to_gregorian(
         year, CalendarSystem(agyary.calendar_system), mah=mah, roj=source_machi.parsi_roj
     )
