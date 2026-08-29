@@ -197,7 +197,7 @@ async function render(draft) {
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
         <button class="ghost" id="evCancel">Cancel</button>
-        <button id="evSave">${draft.edit ? "Save changes" : "Book it"}</button>
+        <button id="evSave">${draft.edit ? "Save changes" : "Add event"}</button>
       </div>
     </div>`;
 
