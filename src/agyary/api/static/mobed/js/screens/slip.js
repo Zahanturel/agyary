@@ -6,8 +6,8 @@
  * ceremony, when, and the names. No prices anywhere.
  */
 
-import { machiSlip, bookingSlip } from "../api.js";
-import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
+import { machiSlip, bookingSlip, deleteMachi, deleteBooking } from "../api.js";
+import { chrome, mainEl, showFab, showError, refreshHeader, loading, flashInfo } from "../ui.js";
 import { esc } from "../util.js";
 import { navigate } from "../router.js";
 
@@ -18,9 +18,10 @@ export async function renderSlip({ kind, aid, id }) {
   loading();
 
   const agyaryId = Number(aid);
+  const numId = Number(id);
   let slip;
   try {
-    slip = kind === "machi" ? await machiSlip(agyaryId, Number(id)) : await bookingSlip(agyaryId, Number(id));
+    slip = kind === "machi" ? await machiSlip(agyaryId, numId) : await bookingSlip(agyaryId, numId);
   } catch (e) {
     mainEl.innerHTML = "";
     return showError("Couldn't load the slip: " + e.message);
@@ -43,6 +44,10 @@ export async function renderSlip({ kind, aid, id }) {
       <hr class="slip-rule">
       <pre>${esc(slip.names_text)}</pre>
       <hr class="slip-rule">
+    </div>
+    <div class="card no-print">
+      <button class="ghost small" id="slipDeleteOpen">Delete</button>
+      <div id="slipDeleteConfirm" style="margin-top:12px"></div>
     </div>`;
 
   document.getElementById("slipBack").onclick = () => navigate("#/calendar");
@@ -52,5 +57,40 @@ export async function renderSlip({ kind, aid, id }) {
   // either app and used to silently bounce back to the calendar.
   document.getElementById("slipEdit").onclick = () => {
     navigate(kind === "machi" ? `#/machi/${id}/edit` : `#/event/${kind}/${id}/edit`);
+  };
+
+  const doDelete = async (future) => {
+    const panel = document.getElementById("slipDeleteConfirm");
+    panel.innerHTML = "";
+    try {
+      if (kind === "machi") await deleteMachi(agyaryId, numId, future);
+      else await deleteBooking(agyaryId, numId);
+    } catch (e) {
+      return showError("Couldn't delete: " + e.message);
+    }
+    flashInfo("Deleted.");
+    navigate("#/calendar");
+  };
+
+  document.getElementById("slipDeleteOpen").onclick = () => {
+    const panel = document.getElementById("slipDeleteConfirm");
+    // Only a machi can be part of a recurring series - a booking never
+    // repeats, so there is nothing to choose between there.
+    panel.innerHTML = slip.is_recurring
+      ? `<p class="meta">This is part of a recurring arrangement.</p>
+         <div class="row tight">
+           <button class="danger small" id="delOne">Just this one</button>
+           <button class="danger small" id="delFuture">This and every future one</button>
+           <button class="ghost small" id="delCancel">Cancel</button>
+         </div>`
+      : `<p class="meta">Delete this? This can't be undone.</p>
+         <div class="row tight">
+           <button class="danger small" id="delOne">Delete</button>
+           <button class="ghost small" id="delCancel">Cancel</button>
+         </div>`;
+    document.getElementById("delOne").onclick = () => doDelete(false);
+    document.getElementById("delCancel").onclick = () => { panel.innerHTML = ""; };
+    const delFuture = document.getElementById("delFuture");
+    if (delFuture) delFuture.onclick = () => doDelete(true);
   };
 }

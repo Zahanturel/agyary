@@ -278,7 +278,15 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
     """A mobed's full history with one of his own behdins - every machi and
     service HE personally entered for them, most recent first. Same
     created_by_user_id scoping as the behdin register: this is the mobed's
-    own record of the relationship, not the fire temple's shared board."""
+    own record of the relationship, not the fire temple's shared board.
+
+    A standing monthly or yearly machi generates one row per occurrence,
+    which left unchecked buries every other entry under however many months
+    or years the arrangement has run - so rows sharing a recurrence_rule_id
+    collapse into a single entry here. The individual dates are still real
+    rows on the calendar/Machi board; this is a relationship summary, not a
+    second copy of the schedule.
+    """
     customer = await db.get(Customer, customer_id)
     if customer is None:
         return None
@@ -287,7 +295,7 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
         await db.execute(
             select(Machi).where(Machi.customer_id == customer_id, Machi.created_by_user_id == user_id)
         )
-    ).scalars()
+    ).scalars().all()
     booking_rows = (
         await db.execute(
             select(Booking, Service)
@@ -296,8 +304,12 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
         )
     ).all()
 
-    entries = []
+    standalone, grouped = [], {}
     for m in machis:
+        (grouped.setdefault(m.recurrence_rule_id, []) if m.recurrence_rule_id else standalone).append(m)
+
+    entries = []
+    for m in standalone:
         entries.append(
             {
                 "kind": "machi",
@@ -307,6 +319,27 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
                 "sort_key": m.ceremony_datetime,
             }
         )
+    if grouped:
+        rules = (
+            await db.execute(select(RecurrenceRule).where(RecurrenceRule.id.in_(grouped.keys())))
+        ).scalars()
+        pattern_by_rule = {r.id: r.pattern for r in rules}
+        for rule_id, rows in grouped.items():
+            rows.sort(key=lambda m: m.ceremony_datetime, reverse=True)
+            latest = rows[0]
+            cadence = RECURRENCE_PATTERN_LABELS.get(pattern_by_rule.get(rule_id), "recurring")
+            entries.append(
+                {
+                    "kind": "machi",
+                    "id": latest.id,
+                    "event": (
+                        f"Machi ({PURPOSE_SHORT.get(latest.purpose, latest.purpose)}) "
+                        f"· {cadence} · {len(rows)} occurrences"
+                    ),
+                    "when": f"latest {date_label(latest.parsi_roj, latest.parsi_mah, latest.gregorian_date)}",
+                    "sort_key": latest.ceremony_datetime,
+                }
+            )
     for b, service in booking_rows:
         local = to_ist(b.date_time)
         entries.append(
@@ -443,6 +476,9 @@ RECURRENCE_PATTERN_CHOICES = {
     "monthly": "same_roj_every_mah",
     "yearly": "same_roj_mah_every_year",
 }
+# The reverse, for display - e.g. collapsing a recurring machi's many rows
+# into one history entry.
+RECURRENCE_PATTERN_LABELS = {v: k for k, v in RECURRENCE_PATTERN_CHOICES.items()}
 
 
 def _next_parsi_month(mah: int, year: int) -> tuple[int, int]:
@@ -815,6 +851,85 @@ async def edit_booking(
 
 
 # ---------------------------------------------------------------------------
+# Delete
+# ---------------------------------------------------------------------------
+async def delete_booking(db: AsyncSession, agyary: Agyary, booking_id: int) -> bool:
+    """A booking never recurs, so this is a plain delete - CeremonyName and
+    BookingMobed rows cascade at the DB level."""
+    booking = await db.get(Booking, booking_id)
+    if booking is None or booking.agyary_id != agyary.id:
+        return False
+    await db.delete(booking)
+    await db.flush()
+    return True
+
+
+async def delete_machi(
+    db: AsyncSession, agyary: Agyary, machi_id: int, *, delete_future: bool = False
+) -> bool:
+    """Delete a machi. ``delete_future`` also removes every later occurrence
+    in its recurring series (if any) and stops the series; without it, only
+    this one instance goes and the series keeps generating around the gap.
+
+    RecurrenceRule.source_machi_id and Machi.recurrence_rule_id point at
+    each other, neither with ondelete, and the rule's side is required
+    non-null (exactly_one_source) - so deleting an instance the rule points
+    to needs care: re-point to a surviving instance, or - if none survive -
+    the rule has nothing left to say and goes too.
+    """
+    machi = await db.get(Machi, machi_id)
+    if machi is None or machi.agyary_id != agyary.id:
+        return False
+
+    rule_id = machi.recurrence_rule_id
+    if rule_id is None:
+        await db.delete(machi)
+        await db.flush()
+        return True
+
+    rule = await db.get(RecurrenceRule, rule_id)
+    siblings = (
+        await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule_id))
+    ).scalars().all()
+
+    if delete_future:
+        victims = [m for m in siblings if m.gregorian_date >= machi.gregorian_date]
+        survivors = [m for m in siblings if m.gregorian_date < machi.gregorian_date]
+    else:
+        victims = [machi]
+        survivors = [m for m in siblings if m.id != machi.id]
+
+    rule_gone = False
+    if rule is not None and rule.source_machi_id in {v.id for v in victims}:
+        # There's no ORM relationship() between Machi and RecurrenceRule, so
+        # the unit of work has no idea these rows are linked - land the
+        # repoint (or the rule's own deletion) in its own flush BEFORE
+        # deleting the machi it currently points to, or the FK (no
+        # ondelete, RESTRICT by default) blocks that delete.
+        if survivors:
+            rule.source_machi_id = min(survivors, key=lambda m: m.gregorian_date).id
+            await db.flush()
+        else:
+            # Nothing left to repeat - the arrangement ends with this delete.
+            # The victims point AT the rule too (machis.recurrence_rule_id,
+            # also no ondelete), so the rule can't go first either - clear
+            # that side before deleting it, then the victims are free.
+            for v in victims:
+                v.recurrence_rule_id = None
+            await db.flush()
+            await db.delete(rule)
+            await db.flush()
+            rule_gone = True
+
+    if delete_future and rule is not None and not rule_gone:
+        rule.is_active = False
+    for v in victims:
+        await db.delete(v)
+    await db.flush()
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Slip (module 7): five fields only - agyari name, behdin name + contact,
 # event, roj/mah/geh-or-time, names. No price, anywhere.
 # ---------------------------------------------------------------------------
@@ -826,6 +941,10 @@ class SlipData:
     event: str
     when: str
     names_text: str
+    # Whether deleting this needs the "just this one, or this and every
+    # future occurrence" choice. Always False for a Booking - only Machi
+    # recurs.
+    is_recurring: bool = False
 
 
 async def _names_as_dicts(db: AsyncSession, *, machi_id: int | None = None, booking_id: int | None = None) -> list[dict]:
@@ -882,6 +1001,7 @@ async def get_machi_slip(
         event=f"Machi ({machi.purpose})",
         when=f"{date_label(roj, mah, machi.gregorian_date)}, {geh_label(machi.geh)}",
         names_text=names_block(names),
+        is_recurring=machi.recurrence_rule_id is not None,
     )
 
 

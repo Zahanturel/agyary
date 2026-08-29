@@ -152,6 +152,8 @@ export const editMachi = (aid, id, body) => put(`/agyaries/${aid}/machis/${id}`,
 export const editBooking = (aid, id, body) => put(`/agyaries/${aid}/bookings/${id}`, body);
 export const machiSlip = (aid, id) => get(`/agyaries/${aid}/machis/${id}/slip`);
 export const bookingSlip = (aid, id) => get(`/agyaries/${aid}/bookings/${id}/slip`);
+export const deleteMachi = (aid, id, future) => del(`/agyaries/${aid}/machis/${id}${future ? "?future=true" : ""}`);
+export const deleteBooking = (aid, id) => del(`/agyaries/${aid}/bookings/${id}`);
 
 // --- Calendar (outside the /api/mobed prefix) -------------------------------
 export const convertDate = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);

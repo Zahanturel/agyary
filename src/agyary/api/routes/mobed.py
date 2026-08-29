@@ -664,6 +664,7 @@ def _slip_response(slip: mobed_dashboard.SlipData) -> dict:
         "event": slip.event,
         "when": slip.when,
         "names_text": slip.names_text,
+        "is_recurring": slip.is_recurring,
     }
 
 
@@ -1093,5 +1094,39 @@ async def edit_booking(
         raise HTTPException(status_code=404, detail="Unknown booking or service")
     await db.commit()
     return {"booking_id": result.booking.id, "calendar_conflict": result.calendar_conflict}
+
+
+@router.delete("/agyaries/{agyary_id}/machis/{machi_id}")
+async def delete_machi(
+    agyary_id: int,
+    machi_id: int,
+    future: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """``future=true`` also removes every later occurrence in this machi's
+    recurring series and stops it; the slip only offers that choice when
+    ``is_recurring`` said there was a series to begin with."""
+    agyary = await _require_membership(db, agyary_id, user)
+    deleted = await mobed_dashboard.delete_machi(db, agyary, machi_id, delete_future=future)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Unknown machi")
+    await db.commit()
+    return {"deleted": True}
+
+
+@router.delete("/agyaries/{agyary_id}/bookings/{booking_id}")
+async def delete_booking(
+    agyary_id: int,
+    booking_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    agyary = await _require_membership(db, agyary_id, user)
+    deleted = await mobed_dashboard.delete_booking(db, agyary, booking_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Unknown booking")
+    await db.commit()
+    return {"deleted": True}
 
 

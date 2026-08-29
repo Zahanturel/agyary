@@ -7,12 +7,16 @@ from datetime import date
 
 from sqlalchemy import select
 
+from agyary.calendar import CalendarSystem, parsi_to_gregorian
 from agyary.models import (
+    Agyary,
     AgyaryCustomer,
+    Booking,
     CeremonyName,
     Customer,
     CustomerSavedName,
     Machi,
+    RecurrenceRule,
     UserPreferences,
 )
 from tests.test_mobed_api import _member_headers
@@ -82,8 +86,6 @@ async def test_preferences_reject_unknown_values(db, client, seeded):
 async def test_preferences_do_not_touch_agyary_calendar_system(db, client, seeded):
     """The per-user view setting and the field that stamps ceremony records
     are separate concerns and must stay that way."""
-    from agyary.models import Agyary
-
     headers = await _member_headers(client, seeded)
     before = (await db.get(Agyary, seeded["agyary_id"])).calendar_system
     await client.put(
@@ -267,8 +269,6 @@ async def test_serving_a_behdin_adds_them_to_your_book(db, client, seeded):
 
 
 async def test_register_is_scoped_to_the_agyari(db, client, seeded):
-    from agyary.models import Agyary
-
     aid = seeded["agyary_id"]
     headers = await _member_headers(client, seeded)
     mine = await _behdin(client, aid, headers)
@@ -319,8 +319,6 @@ async def test_update_refuses_to_merge_two_behdins(db, client, seeded):
 async def test_behdin_endpoints_are_scoped_to_the_agyari(db, client, seeded):
     """A behdin registered at another temple is a 404 here - whether a given
     person is on file elsewhere is not this caller's business."""
-    from agyary.models import Agyary
-
     aid = seeded["agyary_id"]
     headers = await _member_headers(client, seeded)
     created = await _behdin(client, aid, headers)
@@ -601,6 +599,165 @@ async def test_editing_a_machi_without_names_repulls_the_saved_pool(db, client, 
 
     rows = (await db.execute(select(CeremonyName).where(CeremonyName.machi_id == mid))).scalars().all()
     assert sorted(n.name for n in rows) == ["New A", "New B"]
+
+
+# ---------------------------------------------------------------------------
+# History grouping and delete
+# ---------------------------------------------------------------------------
+async def _start_recurring_machi(db, client, aid, headers, phone, name, *, roj=6, mah=1, year=1396, geh=3):
+    agyary = await db.get(Agyary, aid)
+    gregorian = parsi_to_gregorian(year, CalendarSystem(agyary.calendar_system), mah=mah, roj=roj)
+    r = await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/machi",
+        json={
+            "behdin_phone": phone, "behdin_name": name,
+            "roj": roj, "mah": mah, "year": year, "geh": geh, "gregorian": gregorian.isoformat(),
+            "purpose": "patet", "recurring": "monthly",
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+    return r.json()["machi_id"]
+
+
+async def test_history_collapses_a_recurring_machis_instances(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    phone = "+919944400097"
+    behdin = await _behdin(client, aid, headers, name="History Behdin", phone=phone)
+    await _start_recurring_machi(db, client, aid, headers, phone, "History Behdin")
+    # A one-off machi for the same behdin, which must stay a row of its own.
+    await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/machi",
+        json={
+            "behdin_phone": phone, "behdin_name": "History Behdin",
+            "roj": 7, "mah": 2, "year": 1396, "geh": 1, "gregorian": "2027-05-02",
+            "purpose": "tandarosti",
+        },
+        headers=headers,
+    )
+
+    r = await client.get(f"/api/mobed/customers/{behdin['id']}/history", headers=headers)
+    assert r.status_code == 200
+    machi_entries = [e for e in r.json()["history"] if e["kind"] == "machi"]
+    assert len(machi_entries) == 2  # one collapsed group, one standalone
+    recurring_entry = next(e for e in machi_entries if "occurrences" in e["event"])
+    assert "monthly" in recurring_entry["event"] and "4 occurrences" in recurring_entry["event"]
+
+
+async def test_delete_booking(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    r = await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/booking",
+        json={
+            "behdin_phone": "+919944400096", "behdin_name": "Delete Booking Behdin",
+            "service_id": 2, "ceremony_datetime": "2027-08-01T10:00:00",
+            "purpose": "khushali_nu", "names": [],
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200
+    bid = r.json()["booking_id"]
+
+    r2 = await client.delete(f"/api/mobed/agyaries/{aid}/bookings/{bid}", headers=headers)
+    assert r2.status_code == 200 and r2.json()["deleted"] is True
+    assert await db.get(Booking, bid) is None
+    assert (await client.get(f"/api/mobed/agyaries/{aid}/bookings/{bid}/slip", headers=headers)).status_code == 404
+
+
+async def test_delete_a_non_recurring_machi(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    r = await _add_machi(
+        client, aid, headers, "patet",
+        [{"section": "pair", "title": "ervad", "name": "A", "status": "departed", "pair_group": 1},
+         {"section": "pair", "title": "ervad", "name": "B", "status": "departed", "pair_group": 1}],
+        geh=5,
+    )
+    mid = r.json()["machi_id"]
+
+    r2 = await client.delete(f"/api/mobed/agyaries/{aid}/machis/{mid}", headers=headers)
+    assert r2.status_code == 200 and r2.json()["deleted"] is True
+    assert await db.get(Machi, mid) is None
+
+
+async def test_delete_one_recurring_instance_keeps_the_series_alive(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    source_id = await _start_recurring_machi(db, client, aid, headers, "+919944400095", "Keep Alive Behdin")
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_machi_id == source_id))).scalar_one()
+    instances = (
+        await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule.id).order_by(Machi.gregorian_date))
+    ).scalars().all()
+    assert len(instances) == 4  # source + 3, per RECURRENCE_HORIZON_PERIODS
+    victim = instances[1]  # a generated instance, not the source
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/machis/{victim.id}", headers=headers)
+    assert r.status_code == 200 and r.json()["deleted"] is True
+
+    await db.refresh(rule)
+    assert rule.is_active is True
+    assert rule.source_machi_id == source_id
+    remaining = (
+        await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule.id))
+    ).scalars().all()
+    assert len(remaining) == 3 and victim.id not in {m.id for m in remaining}
+
+
+async def test_deleting_the_source_instance_repoints_the_rule(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    source_id = await _start_recurring_machi(db, client, aid, headers, "+919944400094", "Repoint Behdin")
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_machi_id == source_id))).scalar_one()
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/machis/{source_id}", headers=headers)
+    assert r.status_code == 200 and r.json()["deleted"] is True
+
+    await db.refresh(rule)
+    assert rule.is_active is True
+    assert rule.source_machi_id is not None and rule.source_machi_id != source_id
+    remaining = (
+        await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule.id))
+    ).scalars().all()
+    assert len(remaining) == 3
+
+
+async def test_delete_future_stops_the_series_but_keeps_the_past(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    source_id = await _start_recurring_machi(db, client, aid, headers, "+919944400093", "Future Behdin")
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_machi_id == source_id))).scalar_one()
+    instances = (
+        await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule.id).order_by(Machi.gregorian_date))
+    ).scalars().all()
+    cutoff = instances[2]  # delete this one and everything after; source stays
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/machis/{cutoff.id}?future=true", headers=headers)
+    assert r.status_code == 200 and r.json()["deleted"] is True
+
+    await db.refresh(rule)
+    assert rule.is_active is False
+    remaining = (
+        await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule.id))
+    ).scalars().all()
+    assert {m.id for m in remaining} == {instances[0].id, instances[1].id}
+
+
+async def test_delete_future_from_the_source_removes_the_whole_series(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    source_id = await _start_recurring_machi(db, client, aid, headers, "+919944400092", "Whole Series Behdin")
+    rule_id = (
+        await db.execute(select(RecurrenceRule.id).where(RecurrenceRule.source_machi_id == source_id))
+    ).scalar_one()
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/machis/{source_id}?future=true", headers=headers)
+    assert r.status_code == 200 and r.json()["deleted"] is True
+
+    assert await db.get(RecurrenceRule, rule_id) is None
+    remaining = (await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule_id))).scalars().all()
+    assert remaining == []
 
 
 # ---------------------------------------------------------------------------
