@@ -118,8 +118,8 @@ async def get_active_agyary_users(db: AsyncSession, agyary_id: int) -> list[User
 # The standard service catalog a freshly set-up agyari starts with, so the
 # manual-add booking path works the moment a mobed activates it. Name +
 # min_mobeds + offsite_capable only - NO default price (money is parked this
-# pass, doc 05). Machi is included so it exists as a Service row, but the
-# booking flows exclude it by name (it has its own slot-based path).
+# pass, doc 05). Machi is included and bookable here like any other service,
+# alongside its own dedicated slot-based Machi board flow.
 DEFAULT_SERVICE_SPECS = [
     ("Machi", 1, False),
     ("Jashan", 1, True),

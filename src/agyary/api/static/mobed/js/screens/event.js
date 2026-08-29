@@ -4,7 +4,9 @@
  * Add / edit an event — one screen, not a wizard.
  *
  * Behdin, service, date, time. Names are auto-pulled from the behdin's
- * saved pool at save time (server-side). Machi is not part of this flow.
+ * saved pool at save time (server-side). Machi is selectable here like any
+ * other service - doing so skips the dedicated Machi board's slot/Geh
+ * logic entirely, since this path only ever creates a plain Booking.
  */
 
 import {

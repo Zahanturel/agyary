@@ -555,14 +555,16 @@ async def list_all_services(
 
     The event form filters to active ones itself. Inactive rows are still
     returned so a past event that used one can render its name rather than
-    a blank - they are history, not options."""
+    a blank - they are history, not options. Machi is included: mobeds book
+    it as an ordinary service here same as any other, alongside the
+    dedicated Machi board's slot-based flow."""
     await _require_membership(db, agyary_id, user)
     result = await db.execute(
         select(Service)
         .where(Service.agyary_id == agyary_id)
         .order_by(Service.display_order, Service.id)
     )
-    return [_service_summary(s) for s in result.scalars() if s.name.strip().lower() != "machi"]
+    return [_service_summary(s) for s in result.scalars()]
 
 
 class CreateServiceIn(BaseModel):
@@ -581,8 +583,6 @@ async def create_service(
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Service name is required")
-    if name.strip().lower() == "machi":
-        raise HTTPException(status_code=400, detail="Machi has its own booking flow, not a service entry")
     service = Service(agyary_id=agyary_id, name=name, offsite_capable=payload.offsite_capable, display_order=999)
     db.add(service)
     await db.commit()

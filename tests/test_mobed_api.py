@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from agyary.messaging.geh_times import to_ist
 from agyary.models import Agyary, Booking, BookingMobed, Machi, Service, User
@@ -135,6 +135,28 @@ async def test_create_agyari_fallback(db, client, seeded):
         await db.execute(select(func.count()).select_from(Service).where(Service.agyary_id == new_id))
     ).scalar()
     assert svc_count > 0
+
+
+async def test_machi_is_a_selectable_service(db, client, seeded):
+    """Machi also has its own slot-based board, but a mobed can book it as
+    an ordinary service through the ordinary event form - nothing here
+    should treat the name as reserved."""
+    headers = await _member_headers(client, seeded)
+    r = await client.get(f"/api/mobed/agyaries/{seeded['agyary_id']}/services", headers=headers)
+    assert r.status_code == 200
+    assert any(s["name"] == "Machi" for s in r.json())
+
+    # Creating one is unrestricted too - drop the seeded row first since the
+    # name is unique per agyari, same as any other service name would be.
+    await db.execute(delete(Service).where(Service.agyary_id == seeded["agyary_id"], Service.name == "Machi"))
+    await db.commit()
+
+    r = await client.post(
+        f"/api/mobed/agyaries/{seeded['agyary_id']}/services",
+        json={"name": "Machi"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
 
 
 # ---------------------------------------------------------------------------
