@@ -496,8 +496,34 @@ def _booking_summary(entry: mobed_dashboard.MyDayEntry) -> dict:
 
 
 @router.get("/my-day")
-async def my_day(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
-    entries = await mobed_dashboard.list_my_day(db, user.id)
+async def my_day(
+    from_: date | None = Query(default=None, alias="from"),
+    to: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    """This mobed's services, across every fire temple they belong to.
+
+    ``from``/``to`` (IST calendar days, inclusive) ask for a window and get
+    exactly that window, past days included - which is what the calendar
+    needs, since it can be scrolled to any month. Omit both and it is the
+    upcoming list from the 12-hour horizon, unchanged.
+
+    Both or neither: a half-open window is a client bug, and quietly
+    answering it with the upcoming list is how this went unnoticed the
+    first time.
+    """
+    if (from_ is None) != (to is None):
+        raise HTTPException(status_code=400, detail="Pass both from and to, or neither")
+    if from_ is not None and to is not None:
+        if to < from_:
+            raise HTTPException(status_code=400, detail="`to` is before `from`")
+        if (to - from_).days + 1 > mobed_dashboard.MAX_MY_DAY_RANGE_DAYS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Range too wide (max {mobed_dashboard.MAX_MY_DAY_RANGE_DAYS} days)",
+            )
+    entries = await mobed_dashboard.list_my_day(db, user.id, from_, to)
     return [_booking_summary(e) for e in entries]
 
 

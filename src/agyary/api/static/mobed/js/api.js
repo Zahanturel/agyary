@@ -113,7 +113,12 @@ export const activateAgyary = (id, body) => post(`/agyaries/${id}/activate`, bod
 export const createAgyary = (body) => post("/agyaries", body);
 
 
-export const myDay = () => get("/my-day");
+/** This mobed's services. With a window it is that window, past days
+ *  included; without one it is the upcoming list. The calendar always
+ *  passes one - it scrolls to any month, and asking without a window got
+ *  back "upcoming", which is why past events looked deleted. */
+export const myDay = (from, to) =>
+  get(from && to ? `/my-day?from=${from}&to=${to}` : "/my-day");
 
 /** Machis in a bounded window. The mobed app passes `mine=true` to see
  *  only their own; the machi board app omits it to see the full board. */

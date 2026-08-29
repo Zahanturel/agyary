@@ -6,7 +6,7 @@ testable without FastAPI, matching this repo's stated services/ layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ from agyary.messaging import booking_service
 from agyary.messaging.availability import available_gehs, drop_elapsed_gehs, parsi_slot_fields
 from agyary.messaging.booking_service import MachiBookingResult
 from agyary.messaging.formatting import PURPOSE_SHORT, date_label, geh_label, names_block
-from agyary.messaging.geh_times import to_ist
+from agyary.messaging.geh_times import IST, to_ist
 from agyary.messaging.mobed_calendar import has_calendar_conflict
 from agyary.models import (
     Agyary,
@@ -153,22 +153,41 @@ def _my_day_select():
     )
 
 
-async def list_my_day(db: AsyncSession, user_id: int) -> list[MyDayEntry]:
+MAX_MY_DAY_RANGE_DAYS = 366
+
+
+async def list_my_day(
+    db: AsyncSession,
+    user_id: int,
+    start: date | None = None,
+    end: date | None = None,
+) -> list[MyDayEntry]:
     """Merged across every agyari the mobed belongs to - their day doesn't
     care about tenant boundaries, only we do (doc 05). Never includes
     machi (no mobed assignment, ever, not even here). Confirmed
     (BookingMobed.status == "accepted") bookings only. Includes the service
-    name and booked-by name for the calendar cards."""
-    horizon = datetime.now(UTC) - MY_DAY_HORIZON
-    stmt = (
-        _my_day_select()
-        .where(
-            BookingMobed.user_id == user_id,
-            BookingMobed.status == "accepted",
-            Booking.ceremony_datetime >= horizon,
+    name and booked-by name for the calendar cards.
+
+    With ``start``/``end`` this is the bookings whose IST calendar day falls
+    in [start, end] inclusive - past days included. The calendar asks for an
+    arbitrary window and this used to ignore it and answer with the
+    12-hour-horizon "upcoming" list instead, so every service a mobed had
+    already performed vanished from their own calendar (and this morning's
+    disappeared out from under them by evening). The window is anchored in
+    IST because that is the day the mobed means - the column is tz-aware, so
+    a naive date comparison would land the boundary 5h30 off.
+
+    Without a window it stays the upcoming list, which is what the
+    horizon was always for."""
+    conds = [BookingMobed.user_id == user_id, BookingMobed.status == "accepted"]
+    if start is not None and end is not None:
+        conds.append(Booking.ceremony_datetime >= datetime.combine(start, time.min, IST))
+        conds.append(
+            Booking.ceremony_datetime < datetime.combine(end + timedelta(days=1), time.min, IST)
         )
-        .order_by(Booking.ceremony_datetime)
-    )
+    else:
+        conds.append(Booking.ceremony_datetime >= datetime.now(UTC) - MY_DAY_HORIZON)
+    stmt = _my_day_select().where(*conds).order_by(Booking.ceremony_datetime)
     return _my_day_entries((await db.execute(stmt)).all())
 
 

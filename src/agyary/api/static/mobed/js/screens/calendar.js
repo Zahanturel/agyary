@@ -51,7 +51,7 @@ function machiItems(rows) {
 async function loadItems({ from, to }) {
   const agyaryId = state.currentAgyaryId;
   const [services, machis] = await Promise.all([
-    myDay().catch(() => []),
+    myDay(from, to).catch(() => []),
     agyaryId ? machiBoard(agyaryId, from, to).catch(() => []) : Promise.resolve([]),
   ]);
   const inRange = (d) => d >= from && d <= to;
