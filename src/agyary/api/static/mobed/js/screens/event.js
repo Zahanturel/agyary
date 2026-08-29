@@ -204,12 +204,14 @@ async function render(draft) {
     document.getElementById("bhChange").onclick = () => { draft.behdin = null; render(draft); };
   } else {
     wireSearch(draft);
+    // A deliberate tap, not the mid-typing "nobody matched" fallback below -
+    // send them to the full behdin page (saved names and all), the same one
+    // Settings uses, rather than the compact inline form.
     document.getElementById("bhNew").onclick = () => {
       const typed = (document.getElementById("bhSearch") || {}).value || "";
-      renderAddBehdin(document.getElementById("bhNewPanel"), {
-        prefill: { name: typed.trim() },
-        onCreated: (created) => choose(draft, created),
-      });
+      state.behdinReturnTo = "event";
+      state.behdinPrefillName = typed.trim();
+      navigate("#/behdins/new");
     };
   }
 

@@ -21,6 +21,13 @@ export const state = {
 
   // In-flight New Event wizard, so a mid-flow navigation doesn't lose it.
   draft: null,
+
+  // Set just before navigating to #/behdins/new from the New Event screen's
+  // "+ Add a new behdin" button, so that page knows to hand the finished
+  // behdin back to the draft instead of opening the behdin's own record.
+  // Read once and cleared by the screen that consumes it.
+  behdinReturnTo: null,
+  behdinPrefillName: null,
 };
 
 export const GEHS = [[1, "Havan"], [2, "Rapithwin"], [3, "Uziran"], [4, "Aiwisruthrem"], [5, "Ushahin"]];

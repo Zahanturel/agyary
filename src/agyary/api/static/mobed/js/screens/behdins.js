@@ -98,15 +98,24 @@ export function renderBehdinNew() {
   refreshHeader();
   showFab(false);
 
+  // Read once, up front - a fresh visit to this same URL later (Settings)
+  // must not accidentally inherit a stale flag from an earlier detour.
+  const returnToEvent = state.behdinReturnTo === "event";
+  const prefillName = state.behdinPrefillName || "";
+  state.behdinReturnTo = null;
+  state.behdinPrefillName = null;
+  const backTarget = returnToEvent ? "#/event/new" : "#/behdins";
+
   mainEl.innerHTML = `
     <div class="card">
-      ${backBar("New behdin", "#/behdins")}
+      ${backBar("New behdin", backTarget)}
       ${canPickContacts() ? `
         <button class="secondary" id="bnImport" style="margin-bottom:12px">
           Import from contacts
         </button>` : ""}
       <label>Name</label>
-      <input type="text" id="bnName" placeholder="e.g. Behdin Jaidev Mistry" autocomplete="off">
+      <input type="text" id="bnName" placeholder="e.g. Behdin Jaidev Mistry"
+             autocomplete="off" value="${esc(prefillName)}">
       <label>WhatsApp number</label>${phoneField("bnPhone")}
     </div>
 
@@ -123,7 +132,7 @@ export function renderBehdinNew() {
     </div>`;
 
   wireAll("[data-back]", (el) => navigate(el.dataset.back));
-  document.getElementById("bnCancel").onclick = () => navigate("#/behdins");
+  document.getElementById("bnCancel").onclick = () => navigate(backTarget);
   document.getElementById("bnName").focus();
 
   const region = document.getElementById("savedRegion");
@@ -155,7 +164,10 @@ export function renderBehdinNew() {
       showInfo(added
         ? `${added} behdin${added > 1 ? "s" : ""} added` + (skipped ? `, ${skipped} already on file` : "")
         : "All of those were already on file");
-      navigate("#/behdins");
+      // A batch has no single behdin to hand back to the event - land on
+      // the same place either way, and the event flow's search will find
+      // whichever of these he needs.
+      navigate(backTarget);
     };
   }
 
@@ -182,7 +194,20 @@ export function renderBehdinNew() {
       btn.disabled = false;
       return showError(e.message);
     }
-    if (!created.created) showInfo(`${created.name} was already on file - opening their record.`);
+    if (!created.created && !returnToEvent) {
+      showInfo(`${created.name} was already on file - opening their record.`);
+    }
+
+    // Back to the event with this behdin chosen, rather than their own
+    // record - that record has nothing to do with the ceremony being booked.
+    const landing = () => {
+      if (returnToEvent && state.draft) {
+        state.draft.behdin = { id: created.id, name: created.name, phone: created.phone };
+        navigate("#/event/new");
+      } else {
+        navigate(`#/behdins/${created.id}`);
+      }
+    };
 
     if (rows.length) {
       try {
@@ -192,11 +217,11 @@ export function renderBehdinNew() {
                             rows.filter(n => n.section === "farmayeshne"));
       } catch (e) {
         // The behdin exists either way - say so rather than losing them.
-        navigate(`#/behdins/${created.id}`);
+        landing();
         return showError(`${created.name} was added, but the names didn't save: ${e.message}`);
       }
     }
-    navigate(`#/behdins/${created.id}`);
+    landing();
   };
 }
 
