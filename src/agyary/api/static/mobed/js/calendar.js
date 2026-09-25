@@ -1,21 +1,21 @@
 "use strict";
 
 /**
- * The one calendar. Renders Day/Week/Month, and is used both as the app's
- * home screen and as the date picker inside New Event. There is no second
- * grid implementation anywhere.
+ * The one calendar. Renders Month (the default) and Day, and is used both as
+ * the app's home screen and as the date picker inside New Event. There is no
+ * second grid implementation anywhere.
  *
  * Labelling rule: the top line of every cell is the Gregorian date, with
  * the mobed's PRIMARY calendar reading beneath it. Their other calendars
- * are revealed by tapping a day rather than stacked into every cell -
- * four date labels per cell is unreadable.
+ * are shown on the Day view rather than stacked into every cell - four date
+ * labels per cell is unreadable. Tapping a date opens that day.
  */
 
-import { parsiMonth as fetchParsiMonth, convertDate, calendarRange } from "./api.js";
+import { parsiMonth as fetchParsiMonth, convertDate } from "./api.js";
 import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
 import { navigate } from "./router.js";
 import {
-  esc, todayIst, shiftYmd, weekDays, gregLabel, gregShort,
+  esc, todayIst, shiftYmd, gregLabel, gregShort,
   parsiLabel, stepParsiMonth, monthYearLabel,
 } from "./util.js";
 
@@ -29,7 +29,7 @@ export async function parsiMonthDays(mah, year, system) {
   return state.parsiMonthCache[key];
 }
 
-const MODES = ["day", "week", "month"];
+const MODES = ["day", "month"];
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The URL of a calendar view. The view lives in the address - not just in
@@ -45,7 +45,9 @@ export function calendarHash(view) {
  *  redirect to when the params are missing or malformed, else null. */
 export function applyCalendarRoute(view, { mode, date } = {}) {
   if (!MODES.includes(mode) || !YMD.test(date || "")) {
-    return calendarHash({ mode: MODES.includes(view.mode) ? view.mode : "day", focus: view.focus });
+    // Includes an old #/calendar/week/... link: there is no Week view any
+    // more, so it lands on the month rather than a dead page.
+    return calendarHash({ mode: MODES.includes(view.mode) ? view.mode : "month", focus: view.focus });
   }
   view.mode = mode;
   view.focus = date;
@@ -57,10 +59,6 @@ export function applyCalendarRoute(view, { mode, date } = {}) {
  *  of events must be bounded by. */
 export async function viewRange(view, system) {
   if (view.mode === "day") return { days: [view.focus], from: view.focus, to: view.focus };
-  if (view.mode === "week") {
-    const days = weekDays(view.focus);
-    return { days, from: days[0], to: days[days.length - 1] };
-  }
   if (!view.parsiMonth) {
     try {
       const p = await convertDate(view.focus, system);
@@ -75,14 +73,14 @@ export async function viewRange(view, system) {
   return { days, from: days[0], to: days[days.length - 1], monthDays };
 }
 
-function chromeHtml(view, label, secondaryLabel) {
+function chromeHtml(view, label, secondaryLabel, picker) {
   const isMonth = view.mode === "month";
+  // The date picker inside New Event only ever wants a month to pick from.
   return `
-    <div class="toggle" style="margin-bottom:8px">
+    ${picker ? "" : `<div class="toggle" style="margin-bottom:8px">
       <button data-cal-mode="day" class="${view.mode === "day" ? "active" : ""}">Day</button>
-      <button data-cal-mode="week" class="${view.mode === "week" ? "active" : ""}">Week</button>
       <button data-cal-mode="month" class="${view.mode === "month" ? "active" : ""}">Month</button>
-    </div>
+    </div>`}
     <div class="datebar">
       <button class="ghost small" data-cal-prev>&lsaquo;</button>
       <div class="dlabel" ${isMonth ? 'data-cal-monthjump style="cursor:pointer"' : ""}>
@@ -122,24 +120,6 @@ function monthGridHtml(monthDays, items, secondaryByDay, selectedDay) {
   return html + "</div>";
 }
 
-/** The week's seven Parsi readings, fetched as one range rather than seven
- *  conversions, and cached like every other reading. */
-async function weekReadings(range, system) {
-  const out = {};
-  const missing = range.days.filter(d => !state.parsiCache[`${d}|short|${system}`]);
-  if (missing.length) {
-    try {
-      const rows = await calendarRange(range.from, range.to, system);
-      for (const p of rows) {
-        const label = p.is_gatha ? p.gatha_name : `Roj ${p.roj_name}`;
-        state.parsiCache[`${p.gregorian_date}|short|${system}`] = label;
-      }
-    } catch (e) { /* fall through: the week renders without readings */ }
-  }
-  for (const d of range.days) out[d] = state.parsiCache[`${d}|short|${system}`] || "";
-  return out;
-}
-
 function itemCardHtml(it) {
   const when = it.time ? `${it.time} · ` : it.geh ? `${GEH_NAME_BY_NUM[it.geh]} Geh · ` : "";
   return `<div class="event ${it.kind === "machi" ? "machi" : ""}" data-cal-item="${it.kind}:${it.id}">
@@ -164,41 +144,18 @@ function dayHtml(items) {
     .join("");
 }
 
-function weekHtml(days, items, readings) {
-  let html = "";
-  for (const day of days) {
-    const dayItems = items.filter(it => it.day === day)
-      .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-    // Every date carries its primary-calendar reading, week view included -
-    // a mobed scanning the week needs the Roj as much as the weekday.
-    const reading = readings[day] ? ` <span class="wk-parsi">${esc(readings[day])}</span>` : "";
-    html += `<div class="daysection"><h3 data-cal-day="${day}" style="cursor:pointer">${gregLabel(day)}${reading}</h3>`;
-    html += dayItems.length
-      ? dayItems.map(itemCardHtml).join("")
-      : `<div class="meta" style="padding:2px 2px 8px">Nothing.</div>`;
-    html += `</div>`;
-  }
-  return html;
-}
-
-/** The tapped day's reading in every system the user chose to see. This is
- *  where Kadmi/Fasli live: on demand, not in every cell. */
-async function cellDetailHtml(ymd) {
+/** The day's reading in every calendar system the mobed keeps visible. This is
+ *  where Kadmi/Fasli live: on the Day view, not in every month cell. Nothing
+ *  is added when the primary is the only one - the header already says it. */
+async function dayReadingsHtml(ymd) {
   const systems = visibleParsiSystems();
+  if (systems.length < 2) return "";
   const rows = await Promise.all(systems.map(async (sys) => {
     const label = await parsiLabel(ymd, sys);
     return `<div class="cd-row"><span class="cd-sys">${esc(sys)}</span>
       <span class="cd-val">${esc(label || "-")}</span></div>`;
   }));
-  return `<div class="cell-detail">
-    <div class="cd-row"><span class="cd-sys">Gregorian</span>
-      <span class="cd-val">${esc(gregLabel(ymd))}</span></div>
-    ${rows.join("")}
-    <div class="row tight" style="margin-top:8px">
-      <button class="small" data-cal-open="${ymd}">Open this day</button>
-      <button class="ghost small" data-cal-closedetail>Close</button>
-    </div>
-  </div>`;
+  return `<div class="cell-detail" style="margin-bottom:12px">${rows.join("")}</div>`;
 }
 
 /**
@@ -227,11 +184,10 @@ export async function renderCalendar(container, opts) {
   }
 
   const label = view.mode === "day" ? gregLabel(view.focus)
-    : view.mode === "week" ? "Week of " + gregLabel(range.days[0])
-      : monthYearLabel(view.parsiMonth.mah, view.parsiMonth.year);
+    : monthYearLabel(view.parsiMonth.mah, view.parsiMonth.year);
   const secondaryLabel = view.mode === "day"
     ? await parsiLabel(view.focus, system)
-    : view.mode === "month" ? "Tap the title to jump to a month" : "";
+    : "Tap the title to jump to a month";
 
   let body;
   if (view.mode === "month") {
@@ -240,13 +196,12 @@ export async function renderCalendar(container, opts) {
     // name is sitting in the data we just fetched. Asking the server again
     // per cell was 30 extra round trips for something already in hand.
     body = monthGridHtml(range.monthDays, items, {}, view.selectedDay);
-  } else if (view.mode === "week") {
-    body = weekHtml(range.days, items, await weekReadings(range, system));
   } else {
-    body = opts.renderDay ? await opts.renderDay(items, view) : dayHtml(items);
+    body = (await dayReadingsHtml(view.focus))
+      + (opts.renderDay ? await opts.renderDay(items, view) : dayHtml(items));
   }
 
-  container.innerHTML = chromeHtml(view, label, secondaryLabel) + body;
+  container.innerHTML = chromeHtml(view, label, secondaryLabel, !!opts.onDayPick) + body;
   if (opts.wireDay && view.mode === "day") opts.wireDay(container);
   wireChrome(container, view, system, opts);
 }
@@ -260,7 +215,8 @@ function wireChrome(container, view, system, opts) {
   // a walk through every day visited. The date picker inside New Event has
   // no URL and simply redraws.
   const go = (patch, { push = false } = {}) => {
-    Object.assign(view, patch);
+    // The picker only has a month to show; never let a jump strand it on a day.
+    Object.assign(view, opts.onDayPick ? { ...patch, mode: "month" } : patch);
     if (opts.viewHash) navigate(opts.viewHash(view), { replace: !push });
     else opts.rerender();
   };
@@ -275,39 +231,30 @@ function wireChrome(container, view, system, opts) {
       const days = await parsiMonthDays(pm.mah, pm.year, system);
       return go({ focus: days[0].gregorian_date, parsiMonth: null });
     }
-    go({ focus: shiftYmd(view.focus, (view.mode === "day" ? 1 : 7) * delta), parsiMonth: null });
+    go({ focus: shiftYmd(view.focus, delta), parsiMonth: null });
   };
   container.querySelector("[data-cal-prev]").onclick = () => step(-1);
   container.querySelector("[data-cal-next]").onclick = () => step(1);
+  // Today keeps the view you are in: the month containing today, or today.
   container.querySelector("[data-cal-today]").onclick = () => {
-    go({ focus: todayIst(), parsiMonth: null, mode: "day" });
+    go({ focus: todayIst(), parsiMonth: null });
   };
   container.querySelector("[data-cal-jump]").onclick = () => renderJumpPanel(panel, view, system, go);
   const monthJump = container.querySelector("[data-cal-monthjump]");
   if (monthJump) monthJump.onclick = () => renderMonthJumpPanel(panel, view, system, go);
 
-  // Tapping a day in Month/Week reveals that day's other calendar systems
-  // rather than navigating immediately - the reveal IS the multi-calendar
-  // feature, and "open this day" is one more tap from there.
+  // Tapping a date opens that day - one tap, no intermediate panel.
   //
-  // Except in picker mode (New Event's date step), where a tap means
-  // "this is the date I want" and anything else would be an extra step.
+  // In picker mode (New Event's date step) a tap means "this is the date I
+  // want" instead.
   container.querySelectorAll("[data-cal-day]").forEach(cell => {
-    cell.onclick = async () => {
+    cell.onclick = () => {
       const day = cell.dataset.calDay;
       if (opts.onDayPick) {
         view.selectedDay = day;
         return opts.onDayPick(day);
       }
-      view.selectedDay = day;
-      panel.innerHTML = await cellDetailHtml(day);
-      panel.querySelector("[data-cal-open]").onclick = () => {
-        go({ mode: "day", focus: day, selectedDay: null, parsiMonth: null }, { push: true });
-      };
-      panel.querySelector("[data-cal-closedetail]").onclick = () => {
-        view.selectedDay = null; panel.innerHTML = "";
-      };
-      panel.scrollIntoView({ block: "nearest" });
+      go({ mode: "day", focus: day, parsiMonth: null }, { push: true });
     };
   });
 

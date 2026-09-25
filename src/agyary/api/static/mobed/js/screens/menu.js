@@ -65,7 +65,7 @@ export async function renderMenu() {
           `<option value="${key}" ${primarySystem() === key ? "selected" : ""}>${label}</option>`).join("")}
       </select>
       <div class="names-group-label" style="margin-top:16px"><b>Also available</b>
-        <span>shown when you tap a day</span></div>
+        <span>shown on each day</span></div>
       ${PARSI_SYSTEMS.map(([key, label]) => `
         <div class="check-row">
           <input type="checkbox" id="cs_${key}" data-sys="${key}" ${visible.includes(key) ? "checked" : ""}>

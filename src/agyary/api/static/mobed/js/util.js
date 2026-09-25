@@ -32,13 +32,6 @@ export function shiftYmd(ymd, delta) {
   dt.setUTCDate(dt.getUTCDate() + delta);
   return dt.toISOString().slice(0, 10);
 }
-export function weekDays(ymd) {  // Mon..Sun containing ymd
-  const [y, m, d] = ymd.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  const dow = (dt.getUTCDay() + 6) % 7; // Mon=0
-  const start = shiftYmd(ymd, -dow);
-  return Array.from({ length: 7 }, (_, i) => shiftYmd(start, i));
-}
 export function gregLabel(ymd) {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString([], {

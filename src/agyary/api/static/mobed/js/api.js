@@ -157,10 +157,6 @@ export const deleteBooking = (aid, id) => del(`/agyaries/${aid}/bookings/${id}`)
 
 // --- Calendar (outside the /api/mobed prefix) -------------------------------
 export const convertDate = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);
-/** Every day in [start, end] with its Parsi reading, in one call - the
- *  week view needs seven and shouldn't make seven round trips. */
-export const calendarRange = (start, end, system) =>
-  get(`/../calendar/range?start=${start}&end=${end}&system=${system}`);
 export const parsiMonth = (mah, year, system) =>
   get(`/../calendar/parsi-month?mah=${mah}&year=${year}&system=${system}`);
 

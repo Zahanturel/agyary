@@ -142,8 +142,6 @@ button:disabled { opacity: .5; cursor: default; }
 .event.machi { border-left-color: var(--accent); }
 .event .t { font-weight: 600; font-size: var(--text-sm); }
 .event .s { font-size: var(--text-sm); color: var(--text); }
-.daysection h3 { font-size: var(--text-sm); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-weight: 600; }
-.daysection h3 .wk-parsi { font-weight: 400; opacity: .8; }
 
 /* Day view geh blocks: the machi board's slot affordance, now living
    inside the shared calendar rather than a separate screen. */

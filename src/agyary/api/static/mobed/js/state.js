@@ -17,7 +17,7 @@ export const state = {
   parsiMonthCache: {},        // "system-mah-year" -> day list
 
   // Calendar view state, shared by the calendar screen and My Day.
-  calendar: { mode: "day", focus: null, parsiMonth: null, selectedDay: null },
+  calendar: { mode: "month", focus: null, parsiMonth: null, selectedDay: null },
 
   // In-flight New Event / New Machi wizard, so a mid-flow navigation
   // doesn't lose it.
