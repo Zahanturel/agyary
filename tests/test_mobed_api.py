@@ -280,7 +280,7 @@ async def test_manual_add_booking_ist_time_and_no_conflict_crash(db, seeded):
     dt = datetime.fromisoformat("2027-08-01T10:00:00")  # naive == 10:00 IST intended
     names = [{"section": "farmayeshne", "title": "behdin", "name": "A", "status": "living", "pair_group": None}]
     r1 = await mobed_dashboard.manual_add_booking(
-        db, agyary, 2, behdin_phone="+915551", behdin_name="A", service_id=2,
+        db, agyary, 2, behdin_phone="+919955510001", behdin_name="A", service_id=2,
         ceremony_dt_local=dt, purpose="khushali_nu", names=names, location=None, is_offsite=False,
     )
     await db.commit()
@@ -289,7 +289,7 @@ async def test_manual_add_booking_ist_time_and_no_conflict_crash(db, seeded):
 
     db.expire(r1.booking)  # force the conflict query to reload it tz-aware from DB
     r2 = await mobed_dashboard.manual_add_booking(
-        db, agyary, 2, behdin_phone="+915552", behdin_name="B", service_id=2,
+        db, agyary, 2, behdin_phone="+919955510002", behdin_name="B", service_id=2,
         ceremony_dt_local=dt, purpose="khushali_nu", names=names, location=None, is_offsite=False,
     )
     assert r2.calendar_conflict is True  # G1 part a: flagged, not crashed
@@ -363,11 +363,11 @@ async def test_edit_booking_updates_time(db, client, seeded):
     booking = await db.get(Booking, bid)
     await db.refresh(booking)
     assert to_ist(booking.ceremony_datetime).strftime("%H:%M") == "16:30"
-    # Behdin is editable from the PWA - the rename persists on the customer.
+    # The event form no longer renames the behdin (see test_behdin_identity.py).
     from agyary.models import Customer
     customer = await db.get(Customer, booking.customer_id)
     await db.refresh(customer)
-    assert customer.name == "Edited Family Name"
+    assert customer.name == "Edit Family"
 
 
 async def test_edit_booking_round_trips_location_and_offsite(db, client, seeded):

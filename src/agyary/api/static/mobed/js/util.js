@@ -134,10 +134,17 @@ export function phoneField(id, existingValue) {
       placeholder="98765 43210" value="${esc(local)}"></div>`;
 }
 
+/** A national number never starts with 0 in E.164 - that is the trunk prefix
+ *  people dial locally ("098765 43210"), and keeping it would store the same
+ *  person under a second number. */
+function nationalDigits(raw) {
+  return raw.replace(/\D/g, "").replace(/^0+/, "");
+}
+
 /** Required fields: null means "not a valid phone number". */
 export function readPhone(id) {
   const cc = document.getElementById(id + "_cc").value.replace(/\D/g, "");
-  const digits = document.getElementById(id).value.replace(/\D/g, "");
+  const digits = nationalDigits(document.getElementById(id).value);
   return cc && digits.length >= 4 ? "+" + cc + digits : null;
 }
 
@@ -146,7 +153,7 @@ export function readOptionalPhone(id) {
   const raw = document.getElementById(id).value.trim();
   if (!raw) return { ok: true, value: null };
   const cc = document.getElementById(id + "_cc").value.replace(/\D/g, "");
-  const digits = raw.replace(/\D/g, "");
+  const digits = nationalDigits(raw);
   return cc && digits.length >= 4 ? { ok: true, value: "+" + cc + digits } : { ok: false, value: null };
 }
 

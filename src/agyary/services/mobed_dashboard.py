@@ -797,16 +797,17 @@ async def _apply_behdin_edit(
     actor_user_id: int | None = None,
 ) -> None:
     """Re-point a ceremony to the customer identified by (possibly edited)
-    phone, creating them if new and updating their display name - the PWA
-    gives the mobed the flexibility to correct a walk-in's name/number."""
+    phone, creating them if new - the PWA
+    gives the mobed the flexibility to correct a walk-in's number."""
     phone, name = behdin_phone.strip(), behdin_name.strip()
     if not phone:
         return
     customer = await booking_service.get_customer_by_phone(db, phone)
     if customer is None:
         customer = await booking_service.create_customer(db, phone, name)
-    elif name and customer.name != name:
-        customer.name = name
+    # An existing behdin keeps the name they have. Renaming happens in behdin
+    # management and nowhere else: this row is shared, so an event form that
+    # rewrote it would rename the person for every mobed who knows them.
     ceremony.customer_id = customer.id
     if actor_user_id is not None:
         from agyary.services import behdin_directory

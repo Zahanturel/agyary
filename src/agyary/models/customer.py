@@ -39,6 +39,9 @@ class Customer(Base):
     )
 
     __table_args__ = (
+        # The number is the behdin's identity, so its shape is enforced where
+        # every writer has to pass it, not just in the API's validator.
+        CheckConstraint(r"phone ~ '^\+[1-9][0-9]{7,14}$'", name="phone_e164"),
         Index(
             "idx_customers_name_trgm",
             "name",
