@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
@@ -26,11 +26,13 @@ from agyary.models import (
     CeremonyName,
     Customer,
     Machi,
+    Notification,
+    Payment,
     RecurrenceRule,
     Service,
     UserPreferences,
 )
-from agyary.models.enums import DEFAULT_SECONDARY_CALENDAR_SYSTEM, SLOT_RELEASING_STATUSES
+from agyary.models.enums import ADMIN_ROLES, DEFAULT_SECONDARY_CALENDAR_SYSTEM, SLOT_RELEASING_STATUSES
 
 MY_DAY_HORIZON = timedelta(hours=12)  # mirrors my_bookings.py's past-cutoff
 AGYARI_SEARCH_MIN_SIMILARITY = 0.2
@@ -272,6 +274,40 @@ async def is_active_member(db: AsyncSession, agyary_id: int, user_id: int) -> bo
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+async def is_admin(db: AsyncSession, agyary_id: int, user_id: int) -> bool:
+    """Panthaky or caretaker at this agyari."""
+    result = await db.execute(
+        select(AgyaryUser.role).where(
+            AgyaryUser.agyary_id == agyary_id,
+            AgyaryUser.user_id == user_id,
+            AgyaryUser.is_active.is_(True),
+        )
+    )
+    return result.scalar_one_or_none() in ADMIN_ROLES
+
+
+async def may_touch_booking(db: AsyncSession, booking: Booking, user_id: int) -> bool:
+    """A booking is its mobed's own business: the one who entered it, one
+    assigned to it, or an admin of the agyari. Membership alone is not
+    enough - it would let any colleague read another mobed's behdin names
+    and numbers off the slip just by counting up booking ids."""
+    if booking.created_by_user_id == user_id:
+        return True
+    assigned = await db.get(BookingMobed, (booking.id, user_id))
+    if assigned is not None:
+        return True
+    return await is_admin(db, booking.agyary_id, user_id)
+
+
+async def may_modify_machi(db: AsyncSession, machi: Machi, user_id: int) -> bool:
+    """Editing or deleting a machi: its creator, the mobed assigned to it,
+    or an admin. Reading stays agyari-wide - the Machi Board is a shared slot
+    board by design - but changing someone else's entry is not."""
+    if machi.created_by_user_id == user_id or machi.assigned_mobed_id == user_id:
+        return True
+    return await is_admin(db, machi.agyary_id, user_id)
 
 
 async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int) -> dict | None:
@@ -734,9 +770,13 @@ async def get_machi_detail(db: AsyncSession, agyary_id: int, machi_id: int) -> d
     }
 
 
-async def get_booking_detail(db: AsyncSession, agyary_id: int, booking_id: int) -> dict | None:
+async def get_booking_detail(
+    db: AsyncSession, agyary_id: int, booking_id: int, user_id: int | None = None
+) -> dict | None:
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary_id:
+        return None
+    if user_id is not None and not await may_touch_booking(db, booking, user_id):
         return None
     customer = await db.get(Customer, booking.customer_id)
     return {
@@ -803,6 +843,8 @@ async def edit_machi(
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary.id:
         return None
+    if not await may_modify_machi(db, machi, actor_user_id):
+        return None
     await _apply_behdin_edit(db, machi, behdin_phone, behdin_name, actor_user_id)
     if names is None:
         names = await _saved_names_for(db, machi.customer_id, living_only=purpose == "tandarosti")
@@ -830,6 +872,8 @@ async def edit_booking(
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary.id:
         return None
+    if not await may_touch_booking(db, booking, actor_user_id):
+        return None
     service = await booking_service.get_service_by_id(db, agyary.id, service_id)
     if service is None:
         return None
@@ -853,19 +897,53 @@ async def edit_booking(
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------
-async def delete_booking(db: AsyncSession, agyary: Agyary, booking_id: int) -> bool:
+class DeleteBlocked(Exception):
+    """A delete refused because something the mobed cannot see depends on it.
+    The message is safe to show."""
+
+
+async def _clear_dependents(db: AsyncSession, *, machi_ids: list[int] = (), booking_ids: list[int] = ()) -> None:
+    """Remove what hangs off an event and would otherwise make the database
+    refuse the delete (payments and notifications point at events with no
+    ON DELETE). Notifications are a send log and go with the event. A payment
+    that is still pending never became money and goes too; one that was
+    received or refunded is a financial record, so the event is kept instead
+    of quietly erasing it."""
+    for column, ids in ((Payment.machi_id, list(machi_ids)), (Payment.booking_id, list(booking_ids))):
+        if not ids:
+            continue
+        settled = (
+            await db.execute(
+                select(func.count()).select_from(Payment).where(column.in_(ids), Payment.status != "pending")
+            )
+        ).scalar_one()
+        if settled:
+            raise DeleteBlocked("This has a recorded payment, so it can't be deleted.")
+        await db.execute(delete(Payment).where(column.in_(ids)))
+    for column, ids in ((Notification.machi_id, list(machi_ids)), (Notification.booking_id, list(booking_ids))):
+        if ids:
+            await db.execute(delete(Notification).where(column.in_(ids)))
+
+
+async def delete_booking(
+    db: AsyncSession, agyary: Agyary, booking_id: int, actor_user_id: int
+) -> bool:
     """A booking never recurs, so this is a plain delete - CeremonyName and
-    BookingMobed rows cascade at the DB level."""
+    BookingMobed rows cascade at the DB level. False means "not found, or not
+    yours": the two are deliberately indistinguishable to the caller."""
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary.id:
         return False
+    if not await may_touch_booking(db, booking, actor_user_id):
+        return False
+    await _clear_dependents(db, booking_ids=[booking.id])
     await db.delete(booking)
     await db.flush()
     return True
 
 
 async def delete_machi(
-    db: AsyncSession, agyary: Agyary, machi_id: int, *, delete_future: bool = False
+    db: AsyncSession, agyary: Agyary, machi_id: int, actor_user_id: int, *, delete_future: bool = False
 ) -> bool:
     """Delete a machi. ``delete_future`` also removes every later occurrence
     in its recurring series (if any) and stops the series; without it, only
@@ -880,9 +958,12 @@ async def delete_machi(
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary.id:
         return False
+    if not await may_modify_machi(db, machi, actor_user_id):
+        return False
 
     rule_id = machi.recurrence_rule_id
     if rule_id is None:
+        await _clear_dependents(db, machi_ids=[machi.id])
         await db.delete(machi)
         await db.flush()
         return True
@@ -898,6 +979,8 @@ async def delete_machi(
     else:
         victims = [machi]
         survivors = [m for m in siblings if m.id != machi.id]
+
+    await _clear_dependents(db, machi_ids=[v.id for v in victims])
 
     rule_gone = False
     if rule is not None and rule.source_machi_id in {v.id for v in victims}:
@@ -1010,6 +1093,8 @@ async def get_booking_slip(
 ) -> SlipData | None:
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary_id:
+        return None
+    if reader_user_id is not None and not await may_touch_booking(db, booking, reader_user_id):
         return None
     agyary = await db.get(Agyary, agyary_id)
     customer = await db.get(Customer, booking.customer_id)

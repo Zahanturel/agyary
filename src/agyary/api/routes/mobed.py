@@ -1008,7 +1008,7 @@ async def booking_detail(
     agyary_id: int, booking_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     await _require_membership(db, agyary_id, user)
-    detail = await mobed_dashboard.get_booking_detail(db, agyary_id, booking_id)
+    detail = await mobed_dashboard.get_booking_detail(db, agyary_id, booking_id, user.id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Unknown booking")
     return detail
@@ -1108,7 +1108,12 @@ async def delete_machi(
     recurring series and stops it; the slip only offers that choice when
     ``is_recurring`` said there was a series to begin with."""
     agyary = await _require_membership(db, agyary_id, user)
-    deleted = await mobed_dashboard.delete_machi(db, agyary, machi_id, delete_future=future)
+    try:
+        deleted = await mobed_dashboard.delete_machi(
+            db, agyary, machi_id, user.id, delete_future=future
+        )
+    except mobed_dashboard.DeleteBlocked as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Unknown machi")
     await db.commit()
@@ -1123,7 +1128,10 @@ async def delete_booking(
     user: User = Depends(get_current_user),
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
-    deleted = await mobed_dashboard.delete_booking(db, agyary, booking_id)
+    try:
+        deleted = await mobed_dashboard.delete_booking(db, agyary, booking_id, user.id)
+    except mobed_dashboard.DeleteBlocked as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Unknown booking")
     await db.commit()
