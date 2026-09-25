@@ -146,6 +146,8 @@ export const deleteSavedName = (aid, cid, rowId) => del(`/agyaries/${aid}/behdin
 
 export const addMachi = (aid, body) => post(`/agyaries/${aid}/manual-add/machi`, body);
 export const addBooking = (aid, body) => post(`/agyaries/${aid}/manual-add/booking`, body);
+export const previewBooking = (aid, body) => post(`/agyaries/${aid}/slip-preview/booking`, body);
+export const previewMachi = (aid, body) => post(`/agyaries/${aid}/slip-preview/machi`, body);
 export const machiDetail = (aid, id) => get(`/agyaries/${aid}/machis/${id}/detail`);
 export const bookingDetail = (aid, id) => get(`/agyaries/${aid}/bookings/${id}/detail`);
 export const editMachi = (aid, id, body) => put(`/agyaries/${aid}/machis/${id}`, body);

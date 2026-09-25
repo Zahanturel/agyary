@@ -56,6 +56,13 @@ function pairCard(status, m1, m2, removable = true) {
     ${memberRow(m1)}${memberRow(m2)}</div>`;
 }
 
+/** Tell whoever is watching (the review screen redraws its slip) that the
+ *  names changed by something other than typing - typing already fires
+ *  `input`. */
+function notify(el) {
+  el.dispatchEvent(new CustomEvent("names-changed", { bubbles: true }));
+}
+
 /** Enable/disable the move buttons to match where each pair now sits. */
 function refreshPairControls(box) {
   if (!box) return;
@@ -104,6 +111,7 @@ function wireDrag(box) {
       document.removeEventListener("pointercancel", end);
       card.classList.remove("dragging");
       refreshPairControls(box);
+      notify(box);
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", end);
@@ -138,7 +146,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
       <button class="secondary small" id="addSingle" type="button">+ Add name</button>`;
     const box = region.querySelector("#fSingles");
     (singles.length ? singles : [null]).forEach(n => box.insertAdjacentHTML("beforeend", singleRow(n)));
-    region.querySelector("#addSingle").onclick = () => box.insertAdjacentHTML("beforeend", singleRow(null));
+    region.querySelector("#addSingle").onclick = () => { box.insertAdjacentHTML("beforeend", singleRow(null)); notify(region); };
 
   } else if (isMachi) {
     // Patet: exactly one departed pair, fixed. No add, no remove.
@@ -166,10 +174,10 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
     };
     (pairs.length ? pairs : [null]).forEach(addPair);
     (farm.length ? farm : [null]).forEach(n => farmBox.insertAdjacentHTML("beforeend", singleRow(n)));
-    region.querySelector("#addPair").onclick = () => { addPair(null); refreshPairControls(pairsBox); };
+    region.querySelector("#addPair").onclick = () => { addPair(null); refreshPairControls(pairsBox); notify(region); };
     wireDrag(pairsBox);
     refreshPairControls(pairsBox);
-    region.querySelector("#addFarm").onclick = () => farmBox.insertAdjacentHTML("beforeend", singleRow(null));
+    region.querySelector("#addFarm").onclick = () => { farmBox.insertAdjacentHTML("beforeend", singleRow(null)); notify(region); };
   }
 
   // Delegated remove for singles and (service) pair cards, and the move
@@ -182,6 +190,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
       if (mv.classList.contains("up") && card.previousElementSibling) box.insertBefore(card, card.previousElementSibling);
       else if (mv.classList.contains("dn") && card.nextElementSibling) box.insertBefore(card.nextElementSibling, card);
       refreshPairControls(box);
+      notify(region);
       return;
     }
     const btn = e.target.closest("button.rm");
@@ -195,6 +204,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
       const row = btn.closest(".name-row");
       if (row) row.remove();
     }
+    notify(region);
   };
 }
 

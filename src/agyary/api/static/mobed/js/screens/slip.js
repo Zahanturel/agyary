@@ -11,6 +11,21 @@ import { chrome, mainEl, showFab, showError, refreshHeader, loading, flashInfo }
 import { esc } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
+/** The slip itself - the same markup whether it is the saved slip or the
+ *  review step's preview of one, so the two cannot look different. */
+export function slipCardHtml(slip) {
+  return `<div class="slip">
+      <div class="slip-agyary">${esc(slip.agyary_name)}</div>
+      <hr class="slip-rule">
+      <div>${esc(slip.event)}</div>
+      <div>${esc(slip.when)}</div>
+      <div class="slip-behdin">${esc(slip.behdin_name)} (${esc(slip.behdin_phone)})</div>
+      <hr class="slip-rule">
+      <pre>${esc(slip.names_text)}</pre>
+      <hr class="slip-rule">
+    </div>`;
+}
+
 export async function renderSlip({ kind, aid, id }) {
   chrome(true);
   refreshHeader();
@@ -39,16 +54,7 @@ export async function renderSlip({ kind, aid, id }) {
         <button class="small" id="slipPrint">Print</button>
       </div>
     </div>
-    <div class="slip">
-      <div class="slip-agyary">${esc(slip.agyary_name)}</div>
-      <hr class="slip-rule">
-      <div>${esc(slip.event)}</div>
-      <div>${esc(slip.when)}</div>
-      <div class="slip-behdin">${esc(slip.behdin_name)} (${esc(slip.behdin_phone)})</div>
-      <hr class="slip-rule">
-      <pre>${esc(slip.names_text)}</pre>
-      <hr class="slip-rule">
-    </div>
+    ${slipCardHtml(slip)}
     <div class="card no-print">
       <button class="ghost small" id="slipDeleteOpen">Delete</button>
       <div id="slipDeleteConfirm" style="margin-top:12px"></div>

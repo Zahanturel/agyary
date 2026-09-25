@@ -11,15 +11,15 @@
 
 import {
   listServices, createService, listBehdins,
-  convertDate, fromParsi, addBooking,
-  bookingDetail, editBooking,
+  convertDate, fromParsi,
+  bookingDetail,
 } from "../api.js";
 import { state, primarySystem } from "../state.js";
 import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
 import { esc, istYmd, istTime, todayIst, gregLabel } from "../util.js";
-import { navigate, back, returnTo, navGuard } from "../router.js";
+import { navigate, back, navGuard } from "../router.js";
 
 function system() {
   return primarySystem();
@@ -27,6 +27,10 @@ function system() {
 
 function blankDraft(prefill = {}) {
   return {
+    kind: "booking",
+    // null = "whatever the behdin has saved", resolved by the review step; an
+    // array once the mobed has seen and possibly changed them.
+    names: null,
     edit: null,
     behdin: null,
     service_id: null,
@@ -82,6 +86,7 @@ export async function renderEditEvent({ kind, id }) {
   const draft = blankDraft();
   draft.edit = { kind, id: Number(id) };
   draft.behdin = { id: null, name: detail.behdin_name, phone: detail.behdin_phone };
+  draft.names = detail.names;   // the event's own, as saved
   draft.service_id = detail.service_id;
   draft.gregorian = istYmd(detail.ceremony_datetime);
   draft.time = istTime(detail.ceremony_datetime).replace(/\s?[AP]M/i, "");
@@ -200,13 +205,13 @@ async function render(draft) {
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
         <button class="ghost" id="evCancel">Cancel</button>
-        <button id="evSave">${draft.edit ? "Save changes" : "Add event"}</button>
+        <button id="evSave">Review</button>
       </div>
     </div>`;
 
   // --- Behdin wiring ---
   if (chosen) {
-    document.getElementById("bhChange").onclick = () => { draft.behdin = null; render(draft); };
+    document.getElementById("bhChange").onclick = () => { draft.behdin = null; draft.names = null; render(draft); };
   } else {
     wireSearch(draft);
     // A deliberate tap, not the mid-typing "nobody matched" fallback below -
@@ -227,6 +232,7 @@ async function render(draft) {
     const svc = opts.services.find(s => String(s.id) === sel.value);
     draft.service_id = svc ? svc.id : null;
     draft.service_name = svc ? svc.name : "";
+    draft.names = null;   // the default names depend on the service
   };
 
   // --- Date wiring ---
@@ -363,6 +369,7 @@ function wireSearch(draft) {
 function choose(draft, match) {
   const id = match.id != null ? match.id : match.customer_id;
   draft.behdin = { id, name: match.name, phone: match.phone };
+  draft.names = null;   // a different behdin has different saved names
   render(draft);
 }
 
@@ -397,43 +404,14 @@ function renderNewServicePanel(selectEl, draft) {
 }
 
 // ---------------------------------------------------------------------------
-// Save
+// Next: review. Saving happens there, after the mobed has seen the slip.
 // ---------------------------------------------------------------------------
-async function save(draft) {
+function save(draft) {
   if (!draft.behdin) return showError("Please select a behdin.");
   if (!draft.service_id) return showError("Please select a service.");
   if (!draft.gregorian) return showError("Please select a date.");
   if (!draft.time) return showError("Please select a time.");
-
-  const btn = document.getElementById("evSave");
-  btn.disabled = true;
-
-  try {
-    const aid = state.currentAgyaryId;
-    const body = {
-      behdin_phone: draft.behdin.phone,
-      behdin_name: draft.behdin.name,
-      service_id: draft.service_id,
-      ceremony_datetime: `${draft.gregorian}T${draft.time}:00`,
-    };
-
-    let res;
-    if (draft.edit) {
-      res = await editBooking(aid, draft.edit.id, body);
-    } else {
-      res = await addBooking(aid, body);
-    }
-
-    state.calendar.focus = draft.gregorian;
-    state.calendar.mode = "day";
-    state.draft = null;
-    // The form must not stay behind the slip in history: Back from the slip
-    // would otherwise land on a blank New Event form.
-    const slip = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
-    if (draft.edit) returnTo(slip);
-    else navigate(slip, { replace: true });
-  } catch (e) {
-    btn.disabled = false;
-    showError(e.message);
-  }
+  // Replace, so the form and the review are two steps of one screen: Back
+  // from the finished slip goes to the calendar, not back through them.
+  navigate("#/event/review", { replace: true });
 }

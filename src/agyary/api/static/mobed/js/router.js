@@ -29,6 +29,10 @@ const trail = [];
  * opts.parent: where Back goes when there is nothing behind us - a hash, or
  * a function of the route params. A route WITH a parent shows the header
  * Back control; the roots (calendar, login, onboarding) have none.
+ *
+ * opts.stepBack: the parent is the PREVIOUS STEP of a flow, not merely an
+ * earlier screen - Back swaps to it in place instead of walking history.
+ * The review step uses this: Back returns to the form it came from.
  */
 export function route(pattern, handler, opts = {}) {
   const names = [];
@@ -38,6 +42,7 @@ export function route(pattern, handler, opts = {}) {
   routes.push({
     pattern, regex, names, handler,
     manage: !!opts.manage, open: !!opts.open, parent: opts.parent || null,
+    stepBack: !!opts.stepBack,
   });
 }
 
@@ -130,7 +135,9 @@ export async function resolve() {
   current = { hash, ...found };
   const parent = typeof found.route.parent === "function"
     ? found.route.parent(found.params) : found.route.parent;
-  showBack(parent ? () => back(parent) : null);
+  showBack(parent
+    ? () => (found.route.stepBack ? navigate(parent, { replace: true }) : back(parent))
+    : null);
   window.scrollTo(0, 0);
   await found.route.handler(found.params);
   // Any message queued by a guard (or by the screen we just left) is shown

@@ -4,22 +4,20 @@
  * Add / edit a machi — one screen.
  *
  * Behdin, purpose (patet/tandarosti), date with Roj/Mah sync, geh picker
- * with live availability. Names are not entered here at all - same as the
- * mobed app's New Event screen, they're auto-pulled from the behdin's
- * saved-names pool at save time (server-side), keyed on purpose the same
- * way _auto_names keys on service. Get them onto a behdin via the full
- * behdin page (Settings, or "+ Add a new behdin" here), not per-machi.
+ * with live availability. Names are not entered here: the next step (see
+ * review.js) shows the slip with the behdin's saved names, keyed on purpose,
+ * for the mobed to check and correct before anything is saved.
  */
 
 import {
   listBehdins, convertDate, fromParsi, bookableGehs,
-  addMachi, machiDetail, editMachi,
+  machiDetail,
 } from "../api.js";
 import { state, primarySystem, GEHS } from "../state.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
 import { esc, todayIst } from "../util.js";
-import { navigate, back, returnTo, navGuard } from "../router.js";
+import { navigate, back, navGuard } from "../router.js";
 
 function system() {
   return primarySystem();
@@ -27,6 +25,8 @@ function system() {
 
 function blankDraft(prefill = {}) {
   return {
+    kind: "machi",
+    names: null,   // see event.js: null = the behdin's saved names, chosen at review
     edit: null,
     behdin: null,
     purpose: "patet",
@@ -80,6 +80,7 @@ export async function renderEditMachi({ id }) {
   const draft = blankDraft();
   draft.edit = { id: Number(id) };
   draft.behdin = { id: null, name: detail.behdin_name, phone: detail.behdin_phone };
+  draft.names = detail.names;   // the machi's own, as saved
   draft.purpose = detail.purpose;
   draft.geh = detail.geh;
   draft.gregorian = detail.gregorian;
@@ -200,13 +201,13 @@ async function render(draft) {
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
         <button class="ghost" id="mcCancel">Cancel</button>
-        <button id="mcSave">${draft.edit ? "Save changes" : "Add machi"}</button>
+        <button id="mcSave">Review</button>
       </div>
     </div>`;
 
   // --- Behdin wiring ---
   if (chosen) {
-    document.getElementById("bhChange").onclick = () => { draft.behdin = null; render(draft); };
+    document.getElementById("bhChange").onclick = () => { draft.behdin = null; draft.names = null; render(draft); };
   } else {
     wireSearch(draft);
     // A deliberate tap, not the mid-typing "nobody matched" fallback below -
@@ -223,6 +224,7 @@ async function render(draft) {
   // --- Purpose wiring ---
   document.getElementById("mcPurpose").onchange = (e) => {
     draft.purpose = e.target.value;
+    draft.names = null;   // patet and tandarosti take different names
   };
 
   // --- Date wiring ---
@@ -354,54 +356,17 @@ function wireSearch(draft) {
 function choose(draft, match) {
   const id = match.id != null ? match.id : match.customer_id;
   draft.behdin = { id, name: match.name, phone: match.phone };
+  draft.names = null;   // a different behdin has different saved names
   render(draft);
 }
 
 // ---------------------------------------------------------------------------
-// Save
+// Next: review. Saving happens there, after the mobed has seen the slip.
 // ---------------------------------------------------------------------------
-async function save(draft) {
+function save(draft) {
   if (!draft.behdin) return showError("Please select a behdin.");
   if (!draft.purpose) return showError("Please select a purpose.");
   if (!draft.gregorian) return showError("Please select a date.");
   if (!draft.geh) return showError("Please select a geh.");
-
-  const btn = document.getElementById("mcSave");
-  btn.disabled = true;
-
-  try {
-    const aid = state.currentAgyaryId;
-    const body = {
-      behdin_phone: draft.behdin.phone,
-      behdin_name: draft.behdin.name,
-      roj: draft.roj,
-      mah: draft.mah,
-      year: draft.year,
-      geh: draft.geh,
-      gregorian: draft.gregorian,
-      purpose: draft.purpose,
-      // No names key - the server auto-pulls the behdin's saved names,
-      // same as the mobed app's booking flow.
-    };
-
-    if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
-
-    let res;
-    if (draft.edit) {
-      res = await editMachi(aid, draft.edit.id, body);
-    } else {
-      res = await addMachi(aid, body);
-    }
-
-    state.calendar.focus = draft.gregorian;
-    state.calendar.mode = "day";
-    state.draft = null;
-    const mid = draft.edit ? draft.edit.id : (res.machi_id || res.id);
-    const slip = `#/machi/${aid}/${mid}`;
-    if (draft.edit) returnTo(slip);
-    else navigate(slip, { replace: true });
-  } catch (e) {
-    btn.disabled = false;
-    showError(e.message);
-  }
+  navigate("#/machi/review", { replace: true });
 }

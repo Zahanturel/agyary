@@ -24,6 +24,7 @@ import { renderEditMachi } from "./screens/machi_event.js";
 import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
+import { renderReview, formFor } from "./screens/review.js";
 
 // --- Routes -----------------------------------------------------------------
 // `open: true` needs no session.
@@ -40,6 +41,9 @@ route("#/menu", renderMenu, { parent: "#/calendar" });
 // header Back control.
 const slipOf = (kind) => (p) => `#/${kind}/${state.currentAgyaryId}/${p.id}`;
 route("#/event/new", renderNewEvent, { parent: "#/calendar" });
+// Review is the step after the form: its Back is that form, swapped in place.
+route("#/event/review", renderReview("booking"), { parent: () => formFor("booking"), stepBack: true });
+route("#/machi/review", renderReview("machi"), { parent: () => formFor("machi"), stepBack: true });
 route("#/event/:kind/:id/edit", renderEditEvent, { parent: slipOf("booking") });
 // Before :aid/:id below - the router matches in registration order, and
 // that pattern would otherwise read "edit" as an id. A machi needs its own

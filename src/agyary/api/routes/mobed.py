@@ -990,6 +990,63 @@ async def manual_add_booking(
 
 
 # ---------------------------------------------------------------------------
+# Review before saving: the slip as it will print, nothing written
+# ---------------------------------------------------------------------------
+def _preview_response(result: dict) -> dict:
+    return {**result, "slip": _slip_response(result["slip"])}
+
+
+@router.post("/agyaries/{agyary_id}/slip-preview/booking")
+async def preview_booking(
+    agyary_id: int,
+    payload: ManualAddBookingIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """What the slip would say if this were saved now. Writes nothing, so the
+    review screen can call it on every change to the names. Same payload as
+    saving; ``names`` left out returns the behdin's saved names as the
+    starting point."""
+    agyary = await _require_membership(db, agyary_id, user)
+    names = [n.model_dump() for n in payload.names] if payload.names is not None else None
+    result = await mobed_dashboard.preview_booking_slip(
+        db, agyary, user.id,
+        behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
+        service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime, names=names,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Unknown service")
+    return _preview_response(result)
+
+
+class PreviewMachiIn(ManualAddMachiIn):
+    # Set when reviewing an EDIT, so a machi that already holds its slot is not
+    # reported as clashing with itself.
+    editing_machi_id: int | None = None
+
+
+@router.post("/agyaries/{agyary_id}/slip-preview/machi")
+async def preview_machi(
+    agyary_id: int,
+    payload: PreviewMachiIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """As preview_booking, plus ``slot_available``: whether confirming would
+    still get the geh."""
+    agyary = await _require_membership(db, agyary_id, user)
+    names = [n.model_dump() for n in payload.names] if payload.names is not None else None
+    result = await mobed_dashboard.preview_machi_slip(
+        db, agyary, user.id,
+        behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
+        roj=payload.roj, mah=payload.mah, year=payload.year,
+        gregorian=payload.gregorian, geh=payload.geh, purpose=payload.purpose,
+        names=names, editing_machi_id=payload.editing_machi_id,
+    )
+    return _preview_response(result)
+
+
+# ---------------------------------------------------------------------------
 # Edit (pre-fill detail + save through the shared slot-check / conflict core)
 # ---------------------------------------------------------------------------
 @router.get("/agyaries/{agyary_id}/machis/{machi_id}/detail")

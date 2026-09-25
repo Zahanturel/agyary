@@ -16,7 +16,7 @@ from agyary.messaging import booking_service
 from agyary.messaging.availability import available_gehs, drop_elapsed_gehs, parsi_slot_fields
 from agyary.messaging.booking_service import MachiBookingResult
 from agyary.messaging.formatting import PURPOSE_SHORT, date_label, geh_label, names_block
-from agyary.messaging.geh_times import IST, to_ist
+from agyary.messaging.geh_times import IST, ensure_ist, to_ist
 from agyary.messaging.mobed_calendar import has_calendar_conflict
 from agyary.models import (
     Agyary,
@@ -846,9 +846,16 @@ async def edit_machi(
         return None
     if not await may_modify_machi(db, machi, actor_user_id):
         return None
+    previous_customer = machi.customer_id
     await _apply_behdin_edit(db, machi, behdin_phone, behdin_name, actor_user_id)
     if names is None:
-        names = await _saved_names_for(db, machi.customer_id, living_only=purpose == "tandarosti")
+        if machi.customer_id == previous_customer:
+            # Same behdin: the event's own names stand. They are a snapshot the
+            # mobed may have reviewed, edited and reordered; re-pulling the
+            # saved pool here would quietly undo all of that.
+            names = await _names_as_dicts(db, machi_id=machi.id)
+        else:
+            names = await _saved_names_for(db, machi.customer_id, living_only=purpose == "tandarosti")
     return await booking_service.rebook_machi_slot(
         db, agyary, machi, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
@@ -878,10 +885,14 @@ async def edit_booking(
     service = await booking_service.get_service_by_id(db, agyary.id, service_id)
     if service is None:
         return None
+    previous_customer = booking.customer_id
     await _apply_behdin_edit(db, booking, behdin_phone, behdin_name, actor_user_id)
     if names is None:
-        customer = await db.get(Customer, booking.customer_id)
-        names = await _auto_names(db, customer.id, service.name) if customer else []
+        if booking.customer_id == previous_customer:
+            names = await _names_as_dicts(db, booking_id=booking.id)   # see edit_machi
+        else:
+            customer = await db.get(Customer, booking.customer_id)
+            names = await _auto_names(db, customer.id, service.name) if customer else []
     await booking_service.update_booking(
         db, agyary, booking, service,
         ceremony_dt_local=ceremony_dt_local, purpose=purpose, names=names,
@@ -1065,6 +1076,39 @@ def _reading(gregorian: date, system: CalendarSystem) -> tuple[int, int]:
     return roj, mah
 
 
+def build_machi_slip(
+    *, agyary_name: str, behdin_name: str, behdin_phone: str, purpose: str,
+    gregorian: date, geh: int, roj: int, mah: int, names: list[dict], is_recurring: bool = False,
+) -> SlipData:
+    """The machi slip, from plain values. The real slip and the review-before-
+    saving preview both come through here, so what the mobed is shown before
+    confirming is what prints - not a second rendering that can drift."""
+    return SlipData(
+        agyary_name=agyary_name,
+        behdin_name=behdin_name,
+        behdin_phone=behdin_phone,
+        event=f"Machi ({purpose})",
+        when=f"{date_label(roj, mah, gregorian)}, {geh_label(geh)}",
+        names_text=names_block(names),
+        is_recurring=is_recurring,
+    )
+
+
+def build_booking_slip(
+    *, agyary_name: str, behdin_name: str, behdin_phone: str, service_name: str,
+    local: datetime, roj: int, mah: int, names: list[dict],
+) -> SlipData:
+    when = f"{date_label(roj, mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}"
+    return SlipData(
+        agyary_name=agyary_name,
+        behdin_name=behdin_name,
+        behdin_phone=behdin_phone,
+        event=service_name,
+        when=when,
+        names_text=names_block(names),
+    )
+
+
 async def get_machi_slip(
     db: AsyncSession, agyary_id: int, machi_id: int, reader_user_id: int | None = None
 ) -> SlipData | None:
@@ -1078,14 +1122,10 @@ async def get_machi_slip(
         roj, mah = machi.parsi_roj, machi.parsi_mah
     else:
         roj, mah = _reading(machi.gregorian_date, await reading_system(db, reader_user_id))
-    return SlipData(
-        agyary_name=agyary.name,
-        behdin_name=customer.name,
-        behdin_phone=customer.phone,
-        event=f"Machi ({machi.purpose})",
-        when=f"{date_label(roj, mah, machi.gregorian_date)}, {geh_label(machi.geh)}",
-        names_text=names_block(names),
-        is_recurring=machi.recurrence_rule_id is not None,
+    return build_machi_slip(
+        agyary_name=agyary.name, behdin_name=customer.name, behdin_phone=customer.phone,
+        purpose=machi.purpose, gregorian=machi.gregorian_date, geh=machi.geh, roj=roj, mah=mah,
+        names=names, is_recurring=machi.recurrence_rule_id is not None,
     )
 
 
@@ -1106,12 +1146,84 @@ async def get_booking_slip(
         roj, mah = booking.parsi_roj, booking.parsi_mah
     else:
         roj, mah = _reading(local.date(), await reading_system(db, reader_user_id))
-    when = f"{date_label(roj, mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}"
-    return SlipData(
-        agyary_name=agyary.name,
-        behdin_name=customer.name,
-        behdin_phone=customer.phone,
-        event=service.name if service else "Service",
-        when=when,
-        names_text=names_block(names),
+    return build_booking_slip(
+        agyary_name=agyary.name, behdin_name=customer.name, behdin_phone=customer.phone,
+        service_name=service.name if service else "Service", local=local, roj=roj, mah=mah, names=names,
     )
+
+
+# ---------------------------------------------------------------------------
+# Preview: the slip as it WILL print, before anything is saved
+# ---------------------------------------------------------------------------
+async def _preview_customer(db: AsyncSession, phone: str, typed_name: str) -> tuple[str, str, Customer | None]:
+    """Who the slip will name. A number already on file keeps its stored name
+    (the same rule saving applies); one that isn't yet shows what was typed."""
+    customer = await booking_service.get_customer_by_phone(db, phone)
+    return (customer.name if customer else typed_name.strip()), phone, customer
+
+
+async def _pool_is_empty(db: AsyncSession, customer: Customer | None) -> bool:
+    from agyary.services.behdin_directory import list_saved_names
+
+    return customer is None or not await list_saved_names(db, customer.id)
+
+
+async def preview_booking_slip(
+    db: AsyncSession, agyary: Agyary, reader_user_id: int, *,
+    behdin_phone: str, behdin_name: str, service_id: int, ceremony_dt_local: datetime,
+    names: list[dict] | None,
+) -> dict | None:
+    """Nothing is written. ``names`` left out means "what saving would attach
+    by default" (the behdin's saved names), and the response carries the names
+    used either way so the review screen edits exactly what will be saved."""
+    service = await booking_service.get_service_by_id(db, agyary.id, service_id)
+    if service is None:
+        return None
+    name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name)
+    pool_empty = await _pool_is_empty(db, customer)
+    if names is None:
+        names = await _auto_names(db, customer.id, service.name) if customer else []
+    local = ensure_ist(ceremony_dt_local)
+    roj, mah = _reading(local.date(), await reading_system(db, reader_user_id))
+    slip = build_booking_slip(
+        agyary_name=agyary.name, behdin_name=name, behdin_phone=phone,
+        service_name=service.name, local=local, roj=roj, mah=mah, names=names,
+    )
+    return {"slip": slip, "names": names, "pool_empty": pool_empty}
+
+
+async def preview_machi_slip(
+    db: AsyncSession, agyary: Agyary, reader_user_id: int, *,
+    behdin_phone: str, behdin_name: str, roj: int, mah: int, year: int, gregorian: date,
+    geh: int, purpose: str, names: list[dict] | None, editing_machi_id: int | None = None,
+) -> dict:
+    name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name)
+    pool_empty = await _pool_is_empty(db, customer)
+    if names is None:
+        names = (
+            await _saved_names_for(db, customer.id, living_only=purpose == "tandarosti")
+            if customer else []
+        )
+    names = booking_service.normalize_machi_names(purpose, names)
+    # The slip reads in the mobed's calendar; the slot below is checked in the
+    # Roj/Mah/Year the event is stored under. Different things - keep them apart.
+    read_roj, read_mah = _reading(gregorian, await reading_system(db, reader_user_id))
+    slip = build_machi_slip(
+        agyary_name=agyary.name, behdin_name=name, behdin_phone=phone, purpose=purpose,
+        gregorian=gregorian, geh=geh, roj=read_roj, mah=read_mah, names=names,
+    )
+
+    # Whether confirming would actually get the slot. An edit that leaves the
+    # day and geh alone is trivially fine - the machi already holds it.
+    # Asked the way saving asks it: by the slot's Roj/Mah/Year, through the
+    # same availability core, so the answer cannot differ from what confirming
+    # would find.
+    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+    available = geh in free
+    if not available and editing_machi_id is not None:
+        machi = await db.get(Machi, editing_machi_id)
+        available = bool(
+            machi and machi.agyary_id == agyary.id
+            and (machi.parsi_roj, machi.parsi_mah, machi.parsi_year, machi.geh) == (roj, mah, year, geh)
+        )
+    return {"slip": slip, "names": names, "pool_empty": pool_empty, "slot_available": available}

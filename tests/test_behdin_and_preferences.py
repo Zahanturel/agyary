@@ -549,10 +549,12 @@ async def test_machi_omitted_names_auto_pulls_the_saved_pool(db, client, seeded)
     assert sorted(n.name for n in rows) == ["Saved One", "Saved Two"]
 
 
-async def test_editing_a_machi_without_names_repulls_the_saved_pool(db, client, seeded):
-    """Editing is not the place to notice the saved pool has moved on since
-    creation and keep serving the stale copy - same contract as
-    edit_booking."""
+async def test_editing_a_machi_without_names_keeps_its_own_names(db, client, seeded):
+    """A machi's names are a snapshot the mobed reviewed at creation (and may
+    have reordered), so an edit that says nothing about names keeps them even
+    though the behdin's saved pool has since changed - re-pulling the pool
+    would silently undo that review. Same contract as edit_booking. (Changing
+    the behdin is different; see test_slip_preview.py.)"""
     aid = seeded["agyary_id"]
     headers = await _member_headers(client, seeded)
     phone = "+919944400098"
@@ -574,8 +576,7 @@ async def test_editing_a_machi_without_names_repulls_the_saved_pool(db, client, 
     assert r.status_code == 200 and r.json()["confirmed"] is True
     mid = r.json()["machi_id"]
 
-    # The saved pool changes after creation - editing should pick up the
-    # current pool rather than keeping the original "Old A"/"Old B".
+    # The saved pool changes after creation - the machi keeps "Old A"/"Old B".
     behdin = (await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": phone}, headers=headers)).json()[0]
     await client.put(
         f"/api/mobed/agyaries/{aid}/behdins/{behdin['id']}/saved-names/pair",
@@ -598,7 +599,7 @@ async def test_editing_a_machi_without_names_repulls_the_saved_pool(db, client, 
     assert r2.status_code == 200 and r2.json()["confirmed"] is True
 
     rows = (await db.execute(select(CeremonyName).where(CeremonyName.machi_id == mid))).scalars().all()
-    assert sorted(n.name for n in rows) == ["New A", "New B"]
+    assert sorted(n.name for n in rows) == ["Old A", "Old B"]
 
 
 # ---------------------------------------------------------------------------

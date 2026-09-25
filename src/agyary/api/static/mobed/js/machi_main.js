@@ -20,6 +20,7 @@ import { renderNewMachi, renderEditMachi } from "./screens/machi_event.js";
 import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
+import { renderReview, formFor } from "./screens/review.js";
 
 // --- Routes -----------------------------------------------------------------
 route("#/login", renderLogin, { open: true });
@@ -30,6 +31,7 @@ route("#/calendar/:mode/:date", renderMachiCalendarScreen);
 route("#/menu", renderMenu, { parent: "#/calendar" });
 
 route("#/machi/new", renderNewMachi, { parent: "#/calendar" });
+route("#/machi/review", renderReview("machi"), { parent: () => formFor("machi"), stepBack: true });
 route("#/machi/:id/edit", renderEditMachi, { parent: (p) => `#/machi/${state.currentAgyaryId}/${p.id}` });
 route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }), { parent: "#/calendar" });
 
