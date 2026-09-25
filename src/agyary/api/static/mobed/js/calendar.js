@@ -13,6 +13,7 @@
 
 import { parsiMonth as fetchParsiMonth, convertDate, calendarRange } from "./api.js";
 import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
+import { navigate } from "./router.js";
 import {
   esc, todayIst, shiftYmd, weekDays, gregLabel, gregShort,
   parsiLabel, stepParsiMonth, monthYearLabel,
@@ -26,6 +27,30 @@ export async function parsiMonthDays(mah, year, system) {
     state.parsiMonthCache[key] = await fetchParsiMonth(mah, year, system);
   }
   return state.parsiMonthCache[key];
+}
+
+const MODES = ["day", "week", "month"];
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The URL of a calendar view. The view lives in the address - not just in
+ *  memory - so Back undoes a drill-down (Month -> Day) and a reload, or a
+ *  shared link, lands on the same view. Month is identified by any day inside
+ *  it; the Parsi month is derived from that, never stored separately, which is
+ *  what kept a stale month on screen after paging days. */
+export function calendarHash(view) {
+  return `#/calendar/${view.mode}/${view.focus || todayIst()}`;
+}
+
+/** Load the route's params into the view. Returns the canonical hash to
+ *  redirect to when the params are missing or malformed, else null. */
+export function applyCalendarRoute(view, { mode, date } = {}) {
+  if (!MODES.includes(mode) || !YMD.test(date || "")) {
+    return calendarHash({ mode: MODES.includes(view.mode) ? view.mode : "day", focus: view.focus });
+  }
+  view.mode = mode;
+  view.focus = date;
+  view.parsiMonth = null;
+  return null;
 }
 
 /** The Gregorian days a view covers - and therefore the window any fetch
@@ -227,31 +252,39 @@ export async function renderCalendar(container, opts) {
 }
 
 function wireChrome(container, view, system, opts) {
-  const rerender = opts.rerender;
   const panel = container.querySelector("[data-cal-panel]");
 
+  // Every change of what is showing goes through here. On the app's own
+  // screens that is a navigation (opts.viewHash): a drill-down pushes an
+  // entry so Back undoes it, paging replaces the current one so Back is not
+  // a walk through every day visited. The date picker inside New Event has
+  // no URL and simply redraws.
+  const go = (patch, { push = false } = {}) => {
+    Object.assign(view, patch);
+    if (opts.viewHash) navigate(opts.viewHash(view), { replace: !push });
+    else opts.rerender();
+  };
+
   container.querySelectorAll("[data-cal-mode]").forEach(b => {
-    b.onclick = () => { view.mode = b.dataset.calMode; rerender(); };
+    b.onclick = () => go({ mode: b.dataset.calMode, parsiMonth: null }, { push: true });
   });
-  container.querySelector("[data-cal-prev]").onclick = () => {
-    if (view.mode === "month") view.parsiMonth = stepParsiMonth(view.parsiMonth.mah, view.parsiMonth.year, -1);
-    else view.focus = shiftYmd(view.focus, view.mode === "day" ? -1 : -7);
-    rerender();
+
+  const step = async (delta) => {
+    if (view.mode === "month") {
+      const pm = stepParsiMonth(view.parsiMonth.mah, view.parsiMonth.year, delta);
+      const days = await parsiMonthDays(pm.mah, pm.year, system);
+      return go({ focus: days[0].gregorian_date, parsiMonth: null });
+    }
+    go({ focus: shiftYmd(view.focus, (view.mode === "day" ? 1 : 7) * delta), parsiMonth: null });
   };
-  container.querySelector("[data-cal-next]").onclick = () => {
-    if (view.mode === "month") view.parsiMonth = stepParsiMonth(view.parsiMonth.mah, view.parsiMonth.year, 1);
-    else view.focus = shiftYmd(view.focus, view.mode === "day" ? 1 : 7);
-    rerender();
-  };
+  container.querySelector("[data-cal-prev]").onclick = () => step(-1);
+  container.querySelector("[data-cal-next]").onclick = () => step(1);
   container.querySelector("[data-cal-today]").onclick = () => {
-    view.focus = todayIst();
-    view.parsiMonth = null;
-    view.mode = "day";
-    rerender();
+    go({ focus: todayIst(), parsiMonth: null, mode: "day" });
   };
-  container.querySelector("[data-cal-jump]").onclick = () => renderJumpPanel(panel, view, system, rerender);
+  container.querySelector("[data-cal-jump]").onclick = () => renderJumpPanel(panel, view, system, go);
   const monthJump = container.querySelector("[data-cal-monthjump]");
-  if (monthJump) monthJump.onclick = () => renderMonthJumpPanel(panel, view, rerender);
+  if (monthJump) monthJump.onclick = () => renderMonthJumpPanel(panel, view, system, go);
 
   // Tapping a day in Month/Week reveals that day's other calendar systems
   // rather than navigating immediately - the reveal IS the multi-calendar
@@ -269,7 +302,7 @@ function wireChrome(container, view, system, opts) {
       view.selectedDay = day;
       panel.innerHTML = await cellDetailHtml(day);
       panel.querySelector("[data-cal-open]").onclick = () => {
-        view.mode = "day"; view.focus = day; view.selectedDay = null; rerender();
+        go({ mode: "day", focus: day, selectedDay: null, parsiMonth: null }, { push: true });
       };
       panel.querySelector("[data-cal-closedetail]").onclick = () => {
         view.selectedDay = null; panel.innerHTML = "";
@@ -286,7 +319,7 @@ function wireChrome(container, view, system, opts) {
   });
 }
 
-function renderMonthJumpPanel(panel, view, rerender) {
+function renderMonthJumpPanel(panel, view, system, go) {
   const mahOptions = [
     ...Array.from({ length: 12 }, (_, i) =>
       `<option value="${i + 1}" ${view.parsiMonth.mah === i + 1 ? "selected" : ""}>${
@@ -304,12 +337,15 @@ function renderMonthJumpPanel(panel, view, rerender) {
       <button class="ghost small" id="calMonthCancel">Cancel</button>
     </div></div>`;
   document.getElementById("calMonthCancel").onclick = () => { panel.innerHTML = ""; };
-  document.getElementById("calMonthGo").onclick = () => {
-    view.parsiMonth = {
-      mah: Number(document.getElementById("calMah").value),
-      year: Number(document.getElementById("calYear").value),
-    };
-    rerender();
+  document.getElementById("calMonthGo").onclick = async () => {
+    const mah = Number(document.getElementById("calMah").value);
+    const year = Number(document.getElementById("calYear").value);
+    try {
+      const days = await parsiMonthDays(mah, year, system);
+      go({ focus: days[0].gregorian_date, parsiMonth: null }, { push: true });
+    } catch (e) {
+      panel.innerHTML = `<div class="error-banner">${esc(e.message)}</div>`;
+    }
   };
 }
 
@@ -317,7 +353,7 @@ function renderMonthJumpPanel(panel, view, rerender) {
  *  the server resolves the nearest occurrence. The old build asked for a
  *  YZ year here and pre-filled it with `getUTCFullYear() - 630`, which is
  *  wrong for every date between January 1st and Navroze. */
-async function renderJumpPanel(panel, view, system, rerender) {
+async function renderJumpPanel(panel, view, system, go) {
   const opts = state.calendarOptions;
   panel.innerHTML = `<div class="card">
     <div class="names-group-label"><b>By date</b></div>
@@ -340,7 +376,7 @@ async function renderJumpPanel(panel, view, system, rerender) {
   document.getElementById("calJumpDateGo").onclick = () => {
     const d = document.getElementById("calJumpDate").value;
     if (!d) return;
-    view.mode = "day"; view.focus = d; view.parsiMonth = null; rerender();
+    go({ mode: "day", focus: d, parsiMonth: null }, { push: true });
   };
   document.getElementById("calJumpRojGo").onclick = async () => {
     const roj = document.getElementById("calJumpRoj").value;
@@ -348,7 +384,7 @@ async function renderJumpPanel(panel, view, system, rerender) {
     const { fromParsi } = await import("./api.js");
     try {
       const p = await fromParsi(roj, mah, system);   // no year: server resolves
-      view.mode = "day"; view.focus = p.gregorian_date; view.parsiMonth = null; rerender();
+      go({ mode: "day", focus: p.gregorian_date, parsiMonth: null }, { push: true });
     } catch (e) {
       panel.innerHTML = `<div class="error-banner">${esc(e.message)}</div>`;
     }

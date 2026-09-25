@@ -73,7 +73,7 @@ async function pick(a) {
     // An unclaimed seed entry still has 2012-era details nobody has
     // vouched for - confirm them before it goes live.
     if (a.status === "unclaimed") renderActivate(a);
-    else { refreshHeader(); navigate("#/calendar"); }
+    else { refreshHeader(); navigate("#/calendar", { replace: true }); }
   } catch (e) {
     showError(e.message);
   }
@@ -107,7 +107,7 @@ function renderActivate(a) {
       state.user = res.user;
       state.currentAgyaryId = a.id;
       refreshHeader();
-      navigate("#/calendar");
+      navigate("#/calendar", { replace: true });
     } catch (e) {
       showError(e.message);
     }
@@ -144,7 +144,7 @@ function renderCreate(prefillName) {
       state.user = res.user;
       state.currentAgyaryId = res.agyary.id;
       refreshHeader();
-      navigate("#/calendar");
+      navigate("#/calendar", { replace: true });
     } catch (e) {
       showError(e.message);
     }

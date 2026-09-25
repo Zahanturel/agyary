@@ -31,22 +31,28 @@ route("#/login", renderLogin, { open: true });
 route("#/onboarding", renderOnboarding);
 
 route("#/calendar", renderCalendarScreen);
-route("#/menu", renderMenu);
+// The calendar's view is part of the address: #/calendar/day/2026-09-25.
+route("#/calendar/:mode/:date", renderCalendarScreen);
+route("#/menu", renderMenu, { parent: "#/calendar" });
 
-route("#/event/new", renderNewEvent);
-route("#/event/:kind/:id/edit", renderEditEvent);
+// `parent` is where Back goes when there is nothing behind the screen (a
+// reload, a shared link) - see router.back(). Screens with a parent get the
+// header Back control.
+const slipOf = (kind) => (p) => `#/${kind}/${state.currentAgyaryId}/${p.id}`;
+route("#/event/new", renderNewEvent, { parent: "#/calendar" });
+route("#/event/:kind/:id/edit", renderEditEvent, { parent: slipOf("booking") });
 // Before :aid/:id below - the router matches in registration order, and
 // that pattern would otherwise read "edit" as an id. A machi needs its own
 // Geh/slot-picker editor; the generic event form can't touch those fields.
-route("#/machi/:id/edit", renderEditMachi);
-route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }));
-route("#/booking/:aid/:id", (p) => renderSlip({ kind: "booking", ...p }));
+route("#/machi/:id/edit", renderEditMachi, { parent: slipOf("machi") });
+route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }), { parent: "#/calendar" });
+route("#/booking/:aid/:id", (p) => renderSlip({ kind: "booking", ...p }), { parent: "#/calendar" });
 
-route("#/behdins", renderBehdinList);
+route("#/behdins", renderBehdinList, { parent: "#/menu" });
 // Before :id - the router matches in registration order, and "new"
 // would otherwise be read as a behdin id and looked up as NaN.
-route("#/behdins/new", renderBehdinNew);
-route("#/behdins/:id", renderBehdinDetail);
+route("#/behdins/new", renderBehdinNew, { parent: "#/behdins" });
+route("#/behdins/:id", renderBehdinDetail, { parent: "#/behdins" });
 
 // The calendar is home; anything unrecognised lands there.
 setNotFound(() => navigate("#/calendar", { replace: true }));

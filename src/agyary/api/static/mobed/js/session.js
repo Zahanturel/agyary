@@ -43,7 +43,9 @@ export async function afterSignIn() {
   chrome(true);
   refreshHeader();
   saveSession();
-  navigate(state.user.agyaries.length ? "#/calendar" : "#/onboarding");
+  // Replace, not push: the login screen must not be a step Back can return to
+  // (it would bounce straight forward again and look like Back did nothing).
+  navigate(state.user.agyaries.length ? "#/calendar" : "#/onboarding", { replace: true });
 }
 
 /** Signed in, which is not the same as "holding a live access token".

@@ -19,7 +19,7 @@ import { state, primarySystem, GEHS } from "../state.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
 import { esc, todayIst } from "../util.js";
-import { navigate } from "../router.js";
+import { navigate, back, returnTo, navGuard } from "../router.js";
 
 function system() {
   return primarySystem();
@@ -65,14 +65,17 @@ export async function renderEditMachi({ id }) {
   refreshHeader();
   showFab(false);
   loading();
+  const alive = navGuard();
 
   const aid = state.currentAgyaryId;
   let detail;
   try {
     detail = await machiDetail(aid, Number(id));
   } catch (e) {
+    if (!alive()) return;
     return showError(e.message);
   }
+  if (!alive()) return;
 
   const draft = blankDraft();
   draft.edit = { id: Number(id) };
@@ -264,7 +267,10 @@ async function render(draft) {
   if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.value || null; };
 
   // --- Cancel / Save ---
-  document.getElementById("mcCancel").onclick = () => { state.draft = null; navigate("#/calendar"); };
+  document.getElementById("mcCancel").onclick = () => {
+    state.draft = null;
+    back(draft.edit ? `#/machi/${state.currentAgyaryId}/${draft.edit.id}` : "#/calendar");
+  };
   document.getElementById("mcSave").onclick = () => save(draft);
 }
 
@@ -391,7 +397,9 @@ async function save(draft) {
     state.calendar.mode = "day";
     state.draft = null;
     const mid = draft.edit ? draft.edit.id : (res.machi_id || res.id);
-    navigate(`#/machi/${aid}/${mid}`);
+    const slip = `#/machi/${aid}/${mid}`;
+    if (draft.edit) returnTo(slip);
+    else navigate(slip, { replace: true });
   } catch (e) {
     btn.disabled = false;
     showError(e.message);

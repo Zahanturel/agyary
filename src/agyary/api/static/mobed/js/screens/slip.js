@@ -9,13 +9,14 @@
 import { machiSlip, bookingSlip, deleteMachi, deleteBooking } from "../api.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading, flashInfo } from "../ui.js";
 import { esc } from "../util.js";
-import { navigate } from "../router.js";
+import { navigate, back, navGuard } from "../router.js";
 
 export async function renderSlip({ kind, aid, id }) {
   chrome(true);
   refreshHeader();
   showFab(false);
   loading();
+  const alive = navGuard();
 
   const agyaryId = Number(aid);
   const numId = Number(id);
@@ -23,13 +24,16 @@ export async function renderSlip({ kind, aid, id }) {
   try {
     slip = kind === "machi" ? await machiSlip(agyaryId, numId) : await bookingSlip(agyaryId, numId);
   } catch (e) {
+    if (!alive()) return;
     mainEl.innerHTML = "";
     return showError("Couldn't load the slip: " + e.message);
   }
+  // Navigated away while this was loading: writing now would put the slip on
+  // top of whatever screen the mobed is actually on.
+  if (!alive()) return;
 
   mainEl.innerHTML = `
-    <div class="card no-print row tight" style="justify-content:space-between">
-      <button class="ghost small" id="slipBack">&lsaquo; Back</button>
+    <div class="card no-print row tight" style="justify-content:flex-end">
       <div class="row tight">
         <button class="secondary small" id="slipEdit">Edit</button>
         <button class="small" id="slipPrint">Print</button>
@@ -50,7 +54,6 @@ export async function renderSlip({ kind, aid, id }) {
       <div id="slipDeleteConfirm" style="margin-top:12px"></div>
     </div>`;
 
-  document.getElementById("slipBack").onclick = () => navigate("#/calendar");
   document.getElementById("slipPrint").onclick = () => window.print();
   // A machi's edit screen is its own route (Geh/slot picker, not the
   // generic event form) - #/event/machi/:id/edit is not a real page in
@@ -69,7 +72,9 @@ export async function renderSlip({ kind, aid, id }) {
       return showError("Couldn't delete: " + e.message);
     }
     flashInfo("Deleted.");
-    navigate("#/calendar");
+    // Back, not a fresh push: the slip is gone, so it must not stay behind us
+    // in history as a page that can only say "couldn't load".
+    back("#/calendar");
   };
 
   document.getElementById("slipDeleteOpen").onclick = () => {

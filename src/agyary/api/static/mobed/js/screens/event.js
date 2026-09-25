@@ -19,7 +19,7 @@ import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
 import { esc, istYmd, istTime, todayIst, gregLabel } from "../util.js";
-import { navigate } from "../router.js";
+import { navigate, back, returnTo, navGuard } from "../router.js";
 
 function system() {
   return primarySystem();
@@ -62,10 +62,11 @@ export async function renderEditEvent({ kind, id }) {
   refreshHeader();
   showFab(false);
   loading();
+  const alive = navGuard();
 
   if (kind === "machi") {
     showError("Machi editing is not available in this view.");
-    return navigate("#/calendar");
+    return navigate("#/calendar", { replace: true });
   }
 
   const aid = state.currentAgyaryId;
@@ -73,8 +74,10 @@ export async function renderEditEvent({ kind, id }) {
   try {
     detail = await bookingDetail(aid, Number(id));
   } catch (e) {
+    if (!alive()) return;
     return showError(e.message);
   }
+  if (!alive()) return;
 
   const draft = blankDraft();
   draft.edit = { kind, id: Number(id) };
@@ -273,7 +276,10 @@ async function render(draft) {
   document.getElementById("evTime").onchange = (e) => { draft.time = e.target.value; };
 
   // --- Cancel / Save ---
-  document.getElementById("evCancel").onclick = () => { state.draft = null; navigate("#/calendar"); };
+  document.getElementById("evCancel").onclick = () => {
+    state.draft = null;
+    back(draft.edit ? `#/booking/${aid}/${draft.edit.id}` : "#/calendar");
+  };
   document.getElementById("evSave").onclick = () => save(draft);
 }
 
@@ -421,7 +427,11 @@ async function save(draft) {
     state.calendar.focus = draft.gregorian;
     state.calendar.mode = "day";
     state.draft = null;
-    navigate(`#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`);
+    // The form must not stay behind the slip in history: Back from the slip
+    // would otherwise land on a blank New Event form.
+    const slip = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
+    if (draft.edit) returnTo(slip);
+    else navigate(slip, { replace: true });
   } catch (e) {
     btn.disabled = false;
     showError(e.message);

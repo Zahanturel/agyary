@@ -24,10 +24,10 @@ import { canPickContacts, pickContacts } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
   chrome, mainEl, showFab, showError, showInfo,
-  refreshHeader, loading, backBar, wireAll,
+  refreshHeader, loading, backBar,
 } from "../ui.js";
 import { esc, phoneField, readPhone, setPhoneField } from "../util.js";
-import { navigate } from "../router.js";
+import { navigate, back, navGuard } from "../router.js";
 
 export async function renderBehdinList() {
   chrome(true);
@@ -36,14 +36,17 @@ export async function renderBehdinList() {
   // No floating button as well.
   showFab(false);
   loading();
+  const alive = navGuard();
 
   let rows = [];
   try {
     rows = await listBehdins(state.currentAgyaryId, "");
   } catch (e) {
+    if (!alive()) return;
     mainEl.innerHTML = "";
     return showError(e.message);
   }
+  if (!alive()) return;
 
   mainEl.innerHTML = `
     <div class="card">
@@ -112,7 +115,7 @@ export function renderBehdinNew() {
 
   mainEl.innerHTML = `
     <div class="card">
-      ${backBar("New behdin", backTarget)}
+      ${backBar("New behdin")}
       ${canPickContacts() ? `
         <button class="secondary" id="bnImport" style="margin-bottom:12px">
           Import from contacts
@@ -135,8 +138,7 @@ export function renderBehdinNew() {
       <button id="bnSave">Add behdin</button>
     </div>`;
 
-  wireAll("[data-back]", (el) => navigate(el.dataset.back));
-  document.getElementById("bnCancel").onclick = () => navigate(backTarget);
+  document.getElementById("bnCancel").onclick = () => back(backTarget);
   document.getElementById("bnName").focus();
 
   const region = document.getElementById("savedRegion");
@@ -171,7 +173,7 @@ export function renderBehdinNew() {
       // A batch has no single behdin to hand back to the event - land on
       // the same place either way, and the event flow's search will find
       // whichever of these he needs.
-      navigate(backTarget);
+      back(backTarget);
     };
   }
 
@@ -208,9 +210,10 @@ export function renderBehdinNew() {
     const landing = () => {
       if (returnTo && state.draft) {
         state.draft.behdin = { id: created.id, name: created.name, phone: created.phone };
-        navigate(RETURN_TARGETS[returnTo]);
+        back(RETURN_TARGETS[returnTo]);
       } else {
-        navigate(`#/behdins/${created.id}`);
+        // The add form is finished; their record takes its place in history.
+        navigate(`#/behdins/${created.id}`, { replace: true });
       }
     };
 
@@ -238,6 +241,7 @@ export async function renderBehdinDetail({ id }) {
 
   const aid = state.currentAgyaryId;
   const cid = Number(id);
+  const alive = navGuard();
 
   let record = null, history = null, saved = [];
   try {
@@ -249,9 +253,11 @@ export async function renderBehdinDetail({ id }) {
       getSavedNames(aid, cid).catch(() => []),
     ]);
   } catch (e) {
+    if (!alive()) return;
     mainEl.innerHTML = "";
     return showError(e.message);
   }
+  if (!alive()) return;
   if (!record) {
     mainEl.innerHTML = "";
     return showError("That behdin isn't on file at this fire temple.");
@@ -259,7 +265,7 @@ export async function renderBehdinDetail({ id }) {
 
   mainEl.innerHTML = `
     <div class="card">
-      ${backBar(esc(record.name), "#/behdins")}
+      ${backBar(esc(record.name))}
       <label>Name</label><input type="text" id="bdName" value="${esc(record.name)}">
       <label>WhatsApp number</label>${phoneField("bdPhone", record.phone)}
       <p class="meta" style="margin-top:6px">
@@ -280,8 +286,6 @@ export async function renderBehdinDetail({ id }) {
         <div class="list-row"><div class="lr-main"><b>${esc(h.event)}</b><span>${esc(h.when)}</span></div></div>
       `).join("") : '<p class="meta">Nothing you have booked for this behdin yet.</p>'}
     </div>`;
-
-  wireAll("[data-back]", (el) => navigate(el.dataset.back));
 
   document.getElementById("bdSave").onclick = async () => {
     const name = document.getElementById("bdName").value.trim();

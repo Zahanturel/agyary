@@ -6,6 +6,7 @@ export const mainEl = document.getElementById("main");
 export const fabEl = document.getElementById("fab");
 export const headerTitle = document.getElementById("headerTitle");
 export const menuBtn = document.getElementById("menuBtn");
+export const backEl = document.getElementById("backBtn");
 
 export function setMain(html) { mainEl.innerHTML = html; }
 export function loading() { mainEl.innerHTML = `<div class="empty-state">Loading...</div>`; }
@@ -14,7 +15,7 @@ export function loading() { mainEl.innerHTML = `<div class="empty-state">Loading
  *  full-screen login and onboarding flows. */
 export function chrome(show) {
   menuBtn.classList.toggle("hidden", !show);
-  if (!show) fabEl.classList.add("hidden");
+  if (!show) { fabEl.classList.add("hidden"); showBack(null); }
 }
 
 /**
@@ -35,6 +36,16 @@ export function showFab(show, title = "Add", handler = null) {
 }
 
 export function setHeader(text) { headerTitle.textContent = text; }
+
+/** The header Back control. The router owns it: it is shown on every screen
+ *  that has somewhere to go back to - including a screen that failed to load,
+ *  which is exactly where a mobed with no browser Back button used to be
+ *  stranded. Pass null to hide it. */
+export function showBack(handler) {
+  if (!backEl) return;
+  backEl.classList.toggle("hidden", !handler);
+  backEl.onclick = handler;
+}
 
 function banner(cls, msg) {
   // Only one banner at a time - a second failed attempt on the same screen
@@ -80,16 +91,13 @@ export function wireAll(sel, fn) {
   mainEl.querySelectorAll(sel).forEach(el => { el.onclick = () => fn(el); });
 }
 
-export function backBar(title, backHash, extraHtml = "") {
+/** A screen's title row. Going back is the header's job (see showBack), so
+ *  there is no second Back button here. */
+export function backBar(title, extraHtml = "") {
   return `<div class="row tight" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">${title}</h2>
-    <div class="row tight">${extraHtml}
-      <button class="ghost small" data-back="${backHash}">Back</button></div>
+    <div class="row tight">${extraHtml}</div>
   </div>`;
-}
-
-export function wireBack(navigate) {
-  wireAll("[data-back]", (el) => navigate(el.dataset.back));
 }
 
 /** A short way to address someone, given names like "Er. Hormuz

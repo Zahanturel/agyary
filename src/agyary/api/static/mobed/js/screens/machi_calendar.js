@@ -10,7 +10,7 @@
 
 import { machiBoard, bookableGehs } from "../api.js";
 import { state, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
-import { renderCalendar } from "../calendar.js";
+import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
 import { esc, todayIst } from "../util.js";
 import { navigate } from "../router.js";
@@ -93,12 +93,14 @@ function wireSlots(container) {
   });
 }
 
-export async function renderMachiCalendarScreen() {
+export async function renderMachiCalendarScreen(params) {
   chrome(true);
   refreshHeader();
   showFab(true, "Add a machi");
-  mainEl.innerHTML = `<div id="cal"></div>`;
   state.calendar.focus = state.calendar.focus || todayIst();
+  const redirect = applyCalendarRoute(state.calendar, params);
+  if (redirect) return navigate(redirect, { replace: true });
+  mainEl.innerHTML = `<div id="cal"></div>`;
   await draw();
 }
 
@@ -110,6 +112,7 @@ async function draw() {
       view: state.calendar,
       loadItems,
       rerender: draw,
+      viewHash: calendarHash,
       renderDay: gehSlotHtml,
       wireDay: wireSlots,
       onItem: (kind, id) => {

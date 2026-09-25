@@ -10,7 +10,7 @@
 
 import { myDay, machiBoard } from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
-import { renderCalendar } from "../calendar.js";
+import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
 import { esc, istYmd, istTime, todayIst } from "../util.js";
 import { navigate } from "../router.js";
@@ -61,12 +61,16 @@ async function loadItems({ from, to }) {
   ];
 }
 
-export async function renderCalendarScreen() {
+export async function renderCalendarScreen(params) {
   chrome(true);
   refreshHeader();
   showFab(true, "Add an event");
-  mainEl.innerHTML = `<div id="cal"></div>`;
+  // The view is in the URL; a bare or malformed one is normalised to the
+  // last view (replacing, so Back never lands on the un-normalised entry).
   state.calendar.focus = state.calendar.focus || todayIst();
+  const redirect = applyCalendarRoute(state.calendar, params);
+  if (redirect) return navigate(redirect, { replace: true });
+  mainEl.innerHTML = `<div id="cal"></div>`;
   await draw();
 }
 
@@ -78,6 +82,7 @@ async function draw() {
       view: state.calendar,
       loadItems,
       rerender: draw,
+      viewHash: calendarHash,
       onItem: (kind, id) => {
         const aid = state.currentAgyaryId;
         navigate(kind === "machi" ? `#/machi/${aid}/${id}` : `#/booking/${aid}/${id}`);

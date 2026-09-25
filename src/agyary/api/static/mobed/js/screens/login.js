@@ -156,7 +156,7 @@ async function finishSignIn(res) {
 /** Signed in but not a member of any fire temple yet. */
 export async function ensureMembership() {
   if (state.user && (state.user.agyaries || []).length) return true;
-  navigate("#/onboarding");
+  navigate("#/onboarding", { replace: true });
   return false;
 }
 

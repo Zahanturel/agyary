@@ -26,17 +26,18 @@ route("#/login", renderLogin, { open: true });
 route("#/onboarding", renderOnboarding);
 
 route("#/calendar", renderMachiCalendarScreen);
-route("#/menu", renderMenu);
+route("#/calendar/:mode/:date", renderMachiCalendarScreen);
+route("#/menu", renderMenu, { parent: "#/calendar" });
 
-route("#/machi/new", renderNewMachi);
-route("#/machi/:id/edit", renderEditMachi);
-route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }));
+route("#/machi/new", renderNewMachi, { parent: "#/calendar" });
+route("#/machi/:id/edit", renderEditMachi, { parent: (p) => `#/machi/${state.currentAgyaryId}/${p.id}` });
+route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }), { parent: "#/calendar" });
 
-route("#/behdins", renderBehdinList);
+route("#/behdins", renderBehdinList, { parent: "#/menu" });
 // Before :id - the router matches in registration order, and "new"
 // would otherwise be read as a behdin id and looked up as NaN.
-route("#/behdins/new", renderBehdinNew);
-route("#/behdins/:id", renderBehdinDetail);
+route("#/behdins/new", renderBehdinNew, { parent: "#/behdins" });
+route("#/behdins/:id", renderBehdinDetail, { parent: "#/behdins" });
 
 setNotFound(() => navigate("#/calendar", { replace: true }));
 
