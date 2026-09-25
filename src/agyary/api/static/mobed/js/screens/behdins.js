@@ -16,14 +16,14 @@
  */
 
 import {
-  listBehdins, customerHistory, getBehdin, updateBehdin, createBehdin,
+  listBehdins, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
   getSavedNames, putSavedNames,
 } from "../api.js";
 import { state } from "../state.js";
 import { canPickContacts, pickContacts } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo,
+  chrome, mainEl, showFab, showError, showInfo, flashInfo,
   refreshHeader, loading, backBar,
 } from "../ui.js";
 import { esc, phoneField, readPhone, setPhoneField } from "../util.js";
@@ -285,6 +285,11 @@ export async function renderBehdinDetail({ id }) {
       ${history && history.history.length ? history.history.map(h => `
         <div class="list-row"><div class="lr-main"><b>${esc(h.event)}</b><span>${esc(h.when)}</span></div></div>
       `).join("") : '<p class="meta">Nothing you have booked for this behdin yet.</p>'}
+    </div>
+
+    <div class="card">
+      <button class="ghost small" id="bdDeleteOpen">Delete behdin</button>
+      <div id="bdDeleteConfirm" style="margin-top:12px"></div>
     </div>`;
 
   document.getElementById("bdSave").onclick = async () => {
@@ -298,6 +303,30 @@ export async function renderBehdinDetail({ id }) {
     } catch (e) {
       showError(e.message);
     }
+  };
+
+  document.getElementById("bdDeleteOpen").onclick = () => {
+    const panel = document.getElementById("bdDeleteConfirm");
+    const n = history && history.history ? history.history.length : 0;
+    panel.innerHTML = `
+      <p class="meta">Remove ${esc(record.name)} from your behdins?
+        ${n ? `Their ${n} event${n > 1 ? "s" : ""} stay on your calendar and slips.` : ""}
+        Adding the same number again brings them back.</p>
+      <div class="row tight">
+        <button class="danger small" id="bdDelOne">Delete</button>
+        <button class="ghost small" id="bdDelCancel">Cancel</button>
+      </div>`;
+    document.getElementById("bdDelCancel").onclick = () => { panel.innerHTML = ""; };
+    document.getElementById("bdDelOne").onclick = async () => {
+      try {
+        await deleteBehdin(aid, cid);
+      } catch (e) {
+        return showError("Couldn't delete: " + e.message);
+      }
+      flashInfo(`${record.name} removed.`);
+      // Their record is gone from the list; do not leave it behind us in history.
+      back("#/behdins");
+    };
   };
 
   // The same editor the New Event wizard uses. Rendered in "service" shape

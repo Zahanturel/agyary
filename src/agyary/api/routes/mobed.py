@@ -816,6 +816,22 @@ async def update_behdin(
     return behdin_directory.customer_summary(customer)
 
 
+@router.delete("/agyaries/{agyary_id}/behdins/{customer_id}")
+async def delete_behdin(
+    agyary_id: int,
+    customer_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Remove a behdin from this mobed's book. Their events stay - see
+    behdin_directory.remove_from_book. ``erased`` says whether the record
+    itself went too, or only their place in this mobed's list."""
+    customer = await _require_behdin(db, agyary_id, customer_id, user)
+    erased = await behdin_directory.remove_from_book(db, user.id, customer)
+    await db.commit()
+    return {"deleted": True, "erased": erased}
+
+
 # --- Saved name pool (the same rows the WhatsApp flows read/write) ---------
 @router.get("/agyaries/{agyary_id}/behdins/{customer_id}/saved-names")
 async def list_saved_names(

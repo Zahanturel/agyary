@@ -138,6 +138,7 @@ export const customerHistory = (id) => get(`/customers/${id}/history`);
 export const listBehdins = (aid, q) => get(`/agyaries/${aid}/behdins?q=${encodeURIComponent(q || "")}`);
 export const createBehdin = (aid, name, phone) => post(`/agyaries/${aid}/behdins`, { name, phone });
 export const getBehdin = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}`);
+export const deleteBehdin = (aid, cid) => del(`/agyaries/${aid}/behdins/${cid}`);
 export const updateBehdin = (aid, cid, body) => patch(`/agyaries/${aid}/behdins/${cid}`, body);
 export const getSavedNames = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/saved-names`);
 export const putSavedNames = (aid, cid, section, names) =>

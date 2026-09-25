@@ -22,11 +22,19 @@ back to them, and vice versa.
 
 from __future__ import annotations
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.messaging import booking_service
-from agyary.models import AgyaryCustomer, Customer, CustomerSavedName, UserCustomer
+from agyary.models import (
+    AgyaryCustomer,
+    Booking,
+    Customer,
+    CustomerSavedName,
+    Machi,
+    Payment,
+    UserCustomer,
+)
 
 
 class BehdinError(Exception):
@@ -180,6 +188,51 @@ async def update(
 
     await db.flush()
     return customer
+
+
+async def remove_from_book(
+    db: AsyncSession, user_id: int, customer: Customer
+) -> bool:
+    """Delete a behdin from THIS mobed's book. Returns True if the person's
+    record was erased outright, False if it was only taken out of this book.
+
+    Their events are kept either way - a ceremony that was performed is
+    history, and a slip must still print after the behdin is gone from the
+    list. That is also why the record often cannot go: bookings and machis
+    point at it (customer_id is required), so it stays, unlisted, holding the
+    number. Adding the same number again links them straight back in, history
+    and all, which is the right outcome for an accidental delete.
+
+    The record itself is erased only when nothing is left that needs it: no
+    other mobed has them in their book, and no event or payment refers to
+    them. Then the number is genuinely free again, and their saved names go
+    with them (those cascade).
+    """
+    await db.execute(
+        delete(UserCustomer).where(
+            UserCustomer.user_id == user_id, UserCustomer.customer_id == customer.id
+        )
+    )
+    other_owners = (
+        await db.execute(
+            select(func.count()).select_from(UserCustomer).where(UserCustomer.customer_id == customer.id)
+        )
+    ).scalar_one()
+    references = 0
+    for model in (Booking, Machi, Payment):
+        references += (
+            await db.execute(
+                select(func.count()).select_from(model).where(model.customer_id == customer.id)
+            )
+        ).scalar_one()
+    if other_owners or references:
+        await db.flush()
+        return False
+
+    await db.execute(delete(AgyaryCustomer).where(AgyaryCustomer.customer_id == customer.id))
+    await db.delete(customer)
+    await db.flush()
+    return True
 
 
 # ---------------------------------------------------------------------------
