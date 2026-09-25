@@ -96,26 +96,52 @@ function chromeHtml(view, label, secondaryLabel, picker) {
     <div data-cal-panel></div>`;
 }
 
-/** The Parsi-native month grid: exactly 30 Roj (or the Gatha days), so
- *  unlike a Gregorian month it needs no leading/trailing filler. */
-function monthGridHtml(monthDays, items, secondaryByDay, selectedDay) {
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function weekdayIndex(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();   // Sun = 0
+}
+
+/** The month, laid out like the wall calendar on the fire temple's wall.
+ *
+ * A Parsi month is 30 Roj (or the Gatha days) and starts on whatever weekday
+ * Roj 1 falls on, so the grid is weekday-aligned: the seven weekdays run down
+ * the left, each week is a column, and the month simply starts in the row of
+ * its first day, with blanks above it. Weekday labels sit once at the edge
+ * instead of inside every cell, which is what keeps the cells uncramped.
+ *
+ * A cell is the date, the Roj, and a dot per event - no event titles. Tapping
+ * a date opens its day, which is where the details are. */
+function monthGridHtml(monthDays, items, selectedDay) {
   const today = todayIst();
-  let html = '<div class="parsi-grid">';
-  for (const p of monthDays) {
-    const day = p.gregorian_date;
-    const dayItems = items.filter(it => it.day === day);
-    const cls = ["pg-cell", day === today ? "pg-today" : "", day === selectedDay ? "pg-selected" : ""]
-      .filter(Boolean).join(" ");
-    let inner = `<div class="pg-greg-day">${gregShort(day)}</div>`;
-    inner += `<div class="pg-secondary">${esc(secondaryByDay[day] || (p.is_gatha ? p.gatha_name : p.roj_name) || "")}</div>`;
-    const shown = dayItems.slice(0, 2);
-    for (const it of shown) {
-      inner += `<div class="pg-event ${it.kind === "machi" ? "machi" : ""}">${esc(it.label)}</div>`;
+  const lead = weekdayIndex(monthDays[0].gregorian_date);
+  const cols = Math.ceil((lead + monthDays.length) / 7);
+  let html = `<div class="parsi-grid" style="--cols:${cols}">`;
+  for (let row = 0; row < 7; row++) {
+    html += `<div class="pg-wd${row === 0 ? " sun" : ""}">${WEEKDAYS[row]}</div>`;
+    for (let col = 0; col < cols; col++) {
+      const idx = col * 7 + row - lead;
+      const p = monthDays[idx];
+      if (idx < 0 || !p) { html += `<div class="pg-blank"></div>`; continue; }
+
+      const day = p.gregorian_date;
+      const n = items.filter(it => it.day === day).length;
+      const roj = (p.is_gatha ? p.gatha_name : p.roj_name) || "";
+      const cls = ["pg-cell", day === today ? "pg-today" : "", day === selectedDay ? "pg-selected" : ""]
+        .filter(Boolean).join(" ");
+      // The day number alone, except where the Gregorian month turns over.
+      const dayNo = Number(day.slice(8));
+      const numLabel = idx === 0 || dayNo === 1 ? gregShort(day) : String(dayNo);
+      const dots = items.filter(it => it.day === day).slice(0, 3)
+        .map(it => `<i class="${it.kind === "machi" ? "machi" : ""}"></i>`).join("")
+        + (n > 3 ? `<b>+${n - 3}</b>` : "");
+      html += `<div class="${cls}" data-cal-day="${day}" role="button" tabindex="0"
+        aria-label="${esc(gregLabel(day))}, ${esc(roj)}${n ? `, ${n} event${n > 1 ? "s" : ""}` : ""}">
+        <span class="pg-greg-day">${esc(numLabel)}</span>
+        <span class="pg-roj">${esc(roj)}</span>
+        <span class="pg-dots">${dots}</span></div>`;
     }
-    if (dayItems.length > shown.length) {
-      inner += `<div class="pg-more">+${dayItems.length - shown.length} more</div>`;
-    }
-    html += `<div class="${cls}" data-cal-day="${day}">${inner}</div>`;
   }
   return html + "</div>";
 }
@@ -187,15 +213,14 @@ export async function renderCalendar(container, opts) {
     : monthYearLabel(view.parsiMonth.mah, view.parsiMonth.year);
   const secondaryLabel = view.mode === "day"
     ? await parsiLabel(view.focus, system)
-    : "Tap the title to jump to a month";
+    : `${gregShort(range.from)} - ${gregShort(range.to)} ${range.to.slice(0, 4)}`;
 
   let body;
   if (view.mode === "month") {
     // No per-day lookups: the month grid is already built FROM the
-    // secondary system's own month payload, so every cell's Roj (or Gatha)
-    // name is sitting in the data we just fetched. Asking the server again
-    // per cell was 30 extra round trips for something already in hand.
-    body = monthGridHtml(range.monthDays, items, {}, view.selectedDay);
+    // primary system's own month payload, so every cell's Roj (or Gatha)
+    // name is sitting in the data we just fetched.
+    body = monthGridHtml(range.monthDays, items, view.selectedDay);
   } else {
     body = (await dayReadingsHtml(view.focus))
       + (opts.renderDay ? await opts.renderDay(items, view) : dayHtml(items));

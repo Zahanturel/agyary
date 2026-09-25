@@ -42,7 +42,9 @@ def parsi_label(roj: int, mah: int) -> str:
 
 
 def gregorian_label(d: date) -> str:
-    return d.strftime("%d %b %Y")
+    """With the weekday - it is what a mobed checks a date against, and it
+    is on the printed slip, so it has to be readable there."""
+    return d.strftime("%a %d %b %Y")
 
 
 def date_label(roj: int, mah: int, gregorian: date) -> str:
