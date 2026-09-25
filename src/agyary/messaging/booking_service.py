@@ -200,7 +200,7 @@ async def saved_pairs(db: AsyncSession, customer_id: int, departed_only: bool = 
     stmt = (
         select(CustomerSavedName)
         .where(CustomerSavedName.customer_id == customer_id, CustomerSavedName.section == "pair")
-        .order_by(CustomerSavedName.pair_group, CustomerSavedName.display_order)
+        .order_by(CustomerSavedName.display_order)
     )
     rows = list((await db.execute(stmt)).scalars())
     if departed_only:
@@ -219,8 +219,10 @@ def complete_pairs(rows: list[CustomerSavedName]) -> list[CustomerSavedName]:
         if row.pair_group is not None:
             grouped.setdefault(row.pair_group, []).append(row)
     result: list[CustomerSavedName] = []
-    for group in sorted(grouped):
-        members = grouped[group]
+    # In the order the groups first appear - rows arrive by display_order, and
+    # that is the order the mobed put the pairs in. Sorting by group number
+    # here would put them back in the order they were created.
+    for members in grouped.values():
         if len(members) == 2 and members[0].status == members[1].status:
             result.extend(members)
     return result

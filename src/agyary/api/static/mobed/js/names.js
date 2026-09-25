@@ -7,11 +7,16 @@
  * Shapes it produces match what the API takes in both places:
  *   { section: "pair"|"farmayeshne", title, name, status, pair_group }
  *
- * Two rules the UI enforces because the data means something:
+ * Rules the UI enforces because the data means something:
  *   - a pair is exactly two people, so pair rows come in twos and share a
  *     pair_group. The backend refuses a half-pair outright;
  *   - Patet is one departed pair by definition, so that case renders a
- *     single fixed pair with no add or remove.
+ *     single fixed pair with no add, remove or reorder;
+ *   - pairs are reorderable as units (the first pair is prayed first) and the
+ *     two names inside a pair are not; single names are only added or removed.
+ *
+ * The order on screen IS the order that is saved: collectNames reads the DOM
+ * top to bottom and numbers the groups in that order.
  */
 
 import { esc } from "./util.js";
@@ -36,12 +41,74 @@ function singleRow(n) {
 }
 
 /** `removable` is false for Patet's single fixed pair - the button used to
- *  render there and do nothing at all when clicked. */
+ *  render there and do nothing at all when clicked. It also means there is
+ *  nothing to reorder. The drag handle is the touch/mouse affordance; the
+ *  up/down buttons are the one that always works (keyboard, screen readers,
+ *  and any browser where a drag misbehaves). */
 function pairCard(status, m1, m2, removable = true) {
   return `<div class="pair-card" data-status="${status}">
     <div class="phead"><span class="ptitle">Pair</span>
-      ${removable ? '<button type="button" class="rm" title="Remove pair">&times;</button>' : ""}</div>
+      ${removable ? `<span class="pctl">
+        <button type="button" class="mv up" title="Move up" aria-label="Move pair up">&#9650;</button>
+        <button type="button" class="mv dn" title="Move down" aria-label="Move pair down">&#9660;</button>
+        <span class="drag" title="Drag to reorder" aria-label="Drag to reorder">&#8942;&#8942;</span>
+        <button type="button" class="rm" title="Remove pair">&times;</button></span>` : ""}</div>
     ${memberRow(m1)}${memberRow(m2)}</div>`;
+}
+
+/** Enable/disable the move buttons to match where each pair now sits. */
+function refreshPairControls(box) {
+  if (!box) return;
+  const cards = [...box.querySelectorAll(".pair-card")];
+  cards.forEach((card, i) => {
+    const up = card.querySelector("button.up"), dn = card.querySelector("button.dn");
+    if (up) up.disabled = i === 0;
+    if (dn) dn.disabled = i === cards.length - 1;
+  });
+}
+
+/** Drag a pair by its handle. Pointer events, not HTML5 drag-and-drop: the
+ *  latter does not fire on touch screens, which is where this is used.
+ *  `touch-action: none` on the handle (see app.css) is what stops the page
+ *  scrolling under the finger while it is held; the rest of the card still
+ *  scrolls normally. */
+function wireDrag(box) {
+  box.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest(".drag");
+    if (!handle || !box.contains(handle)) return;
+    const card = handle.closest(".pair-card");
+    e.preventDefault();
+    // Capture keeps the events coming if the finger leaves the handle; the
+    // listeners below are on the document anyway, so a browser that refuses
+    // capture still drags.
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+    card.classList.add("dragging");
+
+    const onMove = (ev) => {
+      // Near the top/bottom edge, keep the page moving so a long list can be
+      // dragged across more than one screen.
+      if (ev.clientY < 70) window.scrollBy(0, -12);
+      else if (ev.clientY > window.innerHeight - 70) window.scrollBy(0, 12);
+
+      const others = [...box.querySelectorAll(".pair-card")].filter(c => c !== card);
+      const before = others.find(c => {
+        const r = c.getBoundingClientRect();
+        return ev.clientY < r.top + r.height / 2;
+      });
+      if (before) { if (card.nextElementSibling !== before) box.insertBefore(card, before); }
+      else if (box.lastElementChild !== card) box.appendChild(card);
+    };
+    const end = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", end);
+      document.removeEventListener("pointercancel", end);
+      card.classList.remove("dragging");
+      refreshPairControls(box);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", end);
+    document.addEventListener("pointercancel", end);
+  });
 }
 
 /** Rebuild pair groupings from a flat row list (edit / prefill). */
@@ -99,17 +166,32 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
     };
     (pairs.length ? pairs : [null]).forEach(addPair);
     (farm.length ? farm : [null]).forEach(n => farmBox.insertAdjacentHTML("beforeend", singleRow(n)));
-    region.querySelector("#addPair").onclick = () => addPair(null);
+    region.querySelector("#addPair").onclick = () => { addPair(null); refreshPairControls(pairsBox); };
+    wireDrag(pairsBox);
+    refreshPairControls(pairsBox);
     region.querySelector("#addFarm").onclick = () => farmBox.insertAdjacentHTML("beforeend", singleRow(null));
   }
 
-  // Delegated remove for singles and (service) pair cards.
+  // Delegated remove for singles and (service) pair cards, and the move
+  // buttons on pair cards.
   region.onclick = (e) => {
+    const mv = e.target.closest("button.mv");
+    if (mv) {
+      const card = mv.closest(".pair-card");
+      const box = card.parentElement;
+      if (mv.classList.contains("up") && card.previousElementSibling) box.insertBefore(card, card.previousElementSibling);
+      else if (mv.classList.contains("dn") && card.nextElementSibling) box.insertBefore(card.nextElementSibling, card);
+      refreshPairControls(box);
+      return;
+    }
     const btn = e.target.closest("button.rm");
     if (!btn) return;
     const card = btn.closest(".pair-card");
-    if (card) card.remove();
-    else {
+    if (card) {
+      const box = card.parentElement;
+      card.remove();
+      refreshPairControls(box);
+    } else {
       const row = btn.closest(".name-row");
       if (row) row.remove();
     }

@@ -198,16 +198,17 @@ def saved_name_summary(row: CustomerSavedName) -> dict:
 
 
 async def list_saved_names(db: AsyncSession, customer_id: int) -> list[dict]:
-    """The whole pool, both sections, in the order it's meant to be read."""
+    """The whole pool, both sections, in the order it's meant to be read.
+
+    By display_order, which is the order the mobed arranged the pairs in -
+    the first pair is prayed first. pair_group only says which rows belong
+    together; it says nothing about which pair comes first, and ordering by it
+    would silently undo any reordering."""
     rows = (
         await db.execute(
             select(CustomerSavedName)
             .where(CustomerSavedName.customer_id == customer_id)
-            .order_by(
-                CustomerSavedName.section,
-                CustomerSavedName.pair_group,
-                CustomerSavedName.display_order,
-            )
+            .order_by(CustomerSavedName.section, CustomerSavedName.display_order)
         )
     ).scalars()
     return [saved_name_summary(r) for r in rows]
