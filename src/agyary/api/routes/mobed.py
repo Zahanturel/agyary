@@ -35,6 +35,7 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
+from agyary.messaging import booking_service
 from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, wa_login
 from agyary.services.phone import OptionalPhone, Phone
 
@@ -777,6 +778,44 @@ async def create_behdin(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await db.commit()
     return {**behdin_directory.customer_summary(customer), "created": created}
+
+
+class SavedNameRowIn(BaseModel):
+    section: str
+    title: str
+    name: str
+    status: str
+    pair_group: int | None = None
+
+
+class MergeNamesIn(BaseModel):
+    behdin_phone: Phone
+    names: list[SavedNameRowIn]
+
+
+@router.post("/agyaries/{agyary_id}/behdins/merge-names")
+async def merge_behdin_names(
+    agyary_id: int,
+    payload: MergeNamesIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Add the names an event was booked with to the behdin's saved names -
+    only what is new, nothing removed. Keyed by phone because that is what an
+    event carries (an edit does not know the behdin's id)."""
+    await _require_membership(db, agyary_id, user)
+    found = await booking_service.get_customer_by_phone(db, payload.behdin_phone)
+    customer = (
+        await behdin_directory.get_scoped(db, agyary_id, found.id, user.id) if found else None
+    )
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Unknown behdin")
+    for n in payload.names:
+        if n.title not in NAME_TITLES or n.status not in NAME_STATUSES or n.section not in NAME_SECTIONS:
+            raise HTTPException(status_code=400, detail="Unknown title, status or section")
+    result = await behdin_directory.merge_saved_names(db, customer.id, [n.model_dump() for n in payload.names])
+    await db.commit()
+    return result
 
 
 @router.get("/agyaries/{agyary_id}/behdins/{customer_id}")

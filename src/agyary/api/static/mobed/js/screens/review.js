@@ -19,7 +19,7 @@
  */
 
 import {
-  previewBooking, previewMachi, addBooking, editBooking, addMachi, editMachi, putSavedNames,
+  previewBooking, previewMachi, addBooking, editBooking, addMachi, editMachi, mergeNames,
 } from "../api.js";
 import { state, GEH_NAME_BY_NUM } from "../state.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
@@ -108,15 +108,16 @@ export function renderReview(kind) {
       <div id="rvSlip">${slipCardHtml(first.slip)}</div>
       <div class="card no-print">
         <h2>Names</h2>
-        <p class="meta">For this ${isMachi ? "machi" : "event"} only - the behdin's saved names
-          are not changed. Drag a pair, or use the arrows, to put it first.</p>
+        <p class="meta">Add, remove or reorder for this ${isMachi ? "machi" : "event"}.
+          Drag a pair, or use the arrows, to put it first.</p>
         <div id="rvNames"></div>
         <div id="rvHint" class="meta" style="margin-top:8px"></div>
-        ${first.pool_empty && draft.behdin.id ? `
-          <div class="check-row" style="margin-top:12px">
-            <input type="checkbox" id="rvKeep">
-            <label for="rvKeep">Also keep these as ${esc(draft.behdin.name)}'s saved names</label>
-          </div>` : ""}
+        <div class="check-row" style="margin-top:12px">
+          <input type="checkbox" id="rvKeep" checked>
+          <label for="rvKeep">Remember any new names for ${esc(draft.behdin.name)}</label>
+        </div>
+        <p class="meta" style="margin-top:4px">Adds to their saved names, so next time they are
+          already here. Nothing already saved is removed.</p>
       </div>
       <div class="wizard-nav no-print" style="margin-top:4px">
         <button class="ghost" id="rvEdit">Edit details</button>
@@ -197,14 +198,12 @@ export function renderReview(kind) {
           slipHash = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
         }
 
-        // The event is saved; keeping the names for next time is a courtesy
-        // that must not turn a saved event into an error.
+        // The event is saved. Remembering its names for next time is additive
+        // (see merge_saved_names) and must never turn a saved event into an
+        // error, so a failure here is swallowed.
         const keep = document.getElementById("rvKeep");
-        if (keep && keep.checked && draft.behdin.id) {
-          try {
-            await putSavedNames(aid, draft.behdin.id, "pair", rows.filter(n => n.section === "pair"));
-            await putSavedNames(aid, draft.behdin.id, "farmayeshne", rows.filter(n => n.section === "farmayeshne"));
-          } catch (e) { /* the event stands */ }
+        if (keep && keep.checked && rows.length) {
+          try { await mergeNames(aid, draft.behdin.phone, rows); } catch (e) { /* the event stands */ }
         }
 
         state.calendar.focus = draft.gregorian;

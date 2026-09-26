@@ -8,7 +8,8 @@
  * and shared screens (behdins, menu, login, onboarding, slip).
  */
 
-import { route, setGuard, setNotFound, start, navigate } from "./router.js";
+import { route, setGuard, setNotFound, start, navigate, onNavigated } from "./router.js";
+import { watchForUpdates } from "./update.js";
 import { state } from "./state.js";
 import { tryRefresh, getMe } from "./api.js";
 import { chrome, refreshHeader, menuBtn, setDefaultFabAction } from "./ui.js";
@@ -105,4 +106,7 @@ async function boot() {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/machi-sw.js").catch(() => {});
 }
+// Pick up a deployed update without waiting for someone to reload by hand,
+// but never while a form is half filled in.
+onNavigated(watchForUpdates({ busy: () => !!state.draft }));
 boot();

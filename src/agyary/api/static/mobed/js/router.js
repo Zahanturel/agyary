@@ -48,6 +48,11 @@ export function route(pattern, handler, opts = {}) {
 
 export function setNotFound(handler) { notFound = handler; }
 
+// Called after every screen has rendered - used to apply a pending app update
+// at a moment when nothing is half-finished. See update.js.
+let afterNav = null;
+export function onNavigated(fn) { afterNav = fn; }
+
 /**
  * Called before every navigation with the matched route. Return a hash
  * string to redirect, or nothing to allow. This is where auth and the
@@ -142,7 +147,10 @@ export async function resolve() {
   await found.route.handler(found.params);
   // Any message queued by a guard (or by the screen we just left) is shown
   // here, after the destination has rendered - see ui.flashError.
-  if (mine === token) drainFlash();
+  if (mine === token) {
+    drainFlash();
+    if (afterNav) afterNav();
+  }
 }
 
 export function start() {

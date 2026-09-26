@@ -16,6 +16,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
 } from "../ui.js";
 import { esc } from "../util.js";
+import { shellVersion } from "../update.js";
 import { navigate } from "../router.js";
 
 const PARSI_SYSTEMS = [
@@ -87,7 +88,12 @@ export async function renderMenu() {
 
     <div class="card">
       <button class="ghost" id="mSignOut">Sign out</button>
+      <p class="meta" style="margin:10px 0 0" id="mVersion"></p>
     </div>`;
+  shellVersion().then((v) => {
+    const el = document.getElementById("mVersion");
+    if (el && v) el.textContent = "App version " + v;
+  });
 
   document.getElementById("mSaveName").onclick = async () => {
     const name = document.getElementById("mName").value.trim();

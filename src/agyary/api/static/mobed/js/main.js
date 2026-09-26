@@ -11,7 +11,8 @@
  * at now.
  */
 
-import { route, setGuard, setNotFound, start, navigate } from "./router.js";
+import { route, setGuard, setNotFound, start, navigate, onNavigated } from "./router.js";
+import { watchForUpdates } from "./update.js";
 import { state, saveSession, restoreSession, clearSession } from "./state.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
 import { chrome, refreshHeader, menuBtn, setDefaultFabAction } from "./ui.js";
@@ -166,4 +167,7 @@ window.addEventListener("online", async () => {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/mobed-sw.js").catch(() => {});
 }
+// Pick up a deployed update without waiting for someone to reload by hand,
+// but never while a form is half filled in.
+onNavigated(watchForUpdates({ busy: () => !!state.draft }));
 boot();

@@ -318,6 +318,77 @@ async def replace_section(
     return await list_saved_names(db, customer_id)
 
 
+def _pair_key(status: str, members: list[dict]) -> tuple:
+    return (status, tuple((m["title"], m["name"].strip().casefold()) for m in members))
+
+
+async def merge_saved_names(db: AsyncSession, customer_id: int, names: list[dict]) -> dict:
+    """Remember the names an event was booked with, without disturbing what the
+    behdin already has.
+
+    Names typed on an event's review screen used to live and die with that one
+    event, so a mobed who added pairs for the same family each time started
+    from nothing every time. This adds whatever is NEW to the behdin's saved
+    names and leaves the rest alone: nothing is removed or reordered, a pair or
+    name already saved is not added twice, and a pair dropped from one event
+    (say, a single-pair Patet) stays in the family's list.
+    """
+    current = await list_saved_names(db, customer_id)
+
+    have_groups: dict[int, list[dict]] = {}
+    for row in current:
+        if row["section"] == "pair" and row["pair_group"] is not None:
+            have_groups.setdefault(row["pair_group"], []).append(row)
+    have_pairs = {_pair_key(g[0]["status"], g) for g in have_groups.values() if len(g) == 2}
+    have_singles = {
+        (r["title"], r["name"].strip().casefold()) for r in current if r["section"] == "farmayeshne"
+    }
+
+    incoming: dict[int, list[dict]] = {}
+    for row in names:
+        if row.get("section") == "pair" and row.get("pair_group") is not None and row["name"].strip():
+            incoming.setdefault(row["pair_group"], []).append(row)
+
+    next_group = max(have_groups, default=0) + 1
+    new_pair_rows: list[dict] = []
+    added_pairs = 0
+    for members in incoming.values():
+        if len(members) != 2 or members[0]["status"] != members[1]["status"]:
+            continue   # a half-filled pair is not something to remember
+        key = _pair_key(members[0]["status"], members)
+        if key in have_pairs:
+            continue
+        have_pairs.add(key)
+        for m in members:
+            new_pair_rows.append({"title": m["title"], "name": m["name"].strip(),
+                                  "status": m["status"], "pair_group": next_group})
+        next_group += 1
+        added_pairs += 1
+
+    new_single_rows = []
+    for row in names:
+        if row.get("section") != "farmayeshne" or not row["name"].strip():
+            continue
+        key = (row["title"], row["name"].strip().casefold())
+        if key in have_singles:
+            continue
+        have_singles.add(key)
+        new_single_rows.append({"title": row["title"], "name": row["name"].strip(),
+                                "status": "living", "pair_group": None})
+
+    def keep(section: str) -> list[dict]:
+        return [
+            {"title": r["title"], "name": r["name"], "status": r["status"], "pair_group": r["pair_group"]}
+            for r in current if r["section"] == section
+        ]
+
+    if new_pair_rows:
+        await replace_section(db, customer_id, "pair", keep("pair") + new_pair_rows)
+    if new_single_rows:
+        await replace_section(db, customer_id, "farmayeshne", keep("farmayeshne") + new_single_rows)
+    return {"added_pairs": added_pairs, "added_names": len(new_single_rows)}
+
+
 async def delete_saved_name(db: AsyncSession, customer_id: int, row_id: int) -> bool:
     """Remove a saved name; a paired one takes its partner with it.
 
