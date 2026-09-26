@@ -210,10 +210,15 @@ export function renderReview(kind) {
         state.calendar.focus = draft.gregorian;
         state.draft = null;
         // Neither the form nor this review may stay behind the slip in
-        // history. A new event replaces this entry; an edit pops back to the
-        // slip it was opened from.
-        if (draft.edit) returnTo(slipHash);
-        else navigate(slipHash, { replace: true });
+        // history. An edit pops back to the slip it was opened from.
+        if (draft.edit) return returnTo(slipHash);
+        // A new event: put the calendar on the day it was booked for, THEN open
+        // the slip on top. Back from the slip must show the event just made -
+        // it used to return to whichever calendar day the mobed happened to be
+        // on (or had left in the address from a previous visit), so a saved
+        // event looked as though it had not been.
+        await navigate(`#/calendar/day/${draft.gregorian}`, { replace: true });
+        navigate(slipHash);
       } catch (e) {
         confirmBtn.disabled = false;
         showError(e.message);
