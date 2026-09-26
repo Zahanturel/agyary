@@ -133,6 +133,10 @@ button:disabled { opacity: .5; cursor: default; }
   color: var(--accent-text); border-radius: 4px; padding: 1px 3px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .pg-event.machi { background: var(--primary-tint); color: var(--primary); }
+/* Machi Board: a long "Rapithwin - Patet" wraps onto a second line rather than
+   clipping the purpose. Only that board turns this on. */
+.pg-events.wrap .pg-event { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; font-size: 8px;
+  padding: 1px 2px; letter-spacing: -.1px; }
 .pg-more { font-size: 8.5px; color: var(--muted); line-height: 1.1; }
 
 /* A day's other calendar systems, listed at the top of the Day view rather

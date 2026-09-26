@@ -28,7 +28,12 @@ function machiItems(rows) {
     // Not `Machi (${display})` - the display names carry their own
     // parenthetical gloss, which would nest.
     label: `Machi · ${MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose}`,
-    short: m.purpose === "tandarosti" ? "Tandarosti" : "Patet",
+    // What a month cell shows: which geh is booked, and for what - "Havan -
+    // Patet". The board is about slots, so the geh is the first thing to read.
+    // Aiwisruthrem carries a soft hyphen: at phone width it is wider than a
+    // cell, and this breaks it at a syllable instead of mid-letter.
+    short: `${(GEH_NAME_BY_NUM[m.geh] || "").replace("Aiwisruthrem", "Aiwis­ruthrem")} - ${
+      m.purpose === "tandarosti" ? "Tandarosti" : "Patet"}`,
     sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }
@@ -47,7 +52,9 @@ async function loadItems({ from, to }) {
         dayGehs = [];
       }
     }
-    return machiItems(machis);
+    // Geh order, so a month cell lists Havan before Rapithwin whatever order
+    // the rows arrived in.
+    return machiItems(machis).sort((a, b) => a.geh - b.geh);
   } catch (e) {
     return [];
   }
@@ -114,6 +121,10 @@ async function draw() {
       loadItems,
       rerender: draw,
       viewHash: calendarHash,
+      // Up to five gehs can be booked on a day, and which ones is the point of
+      // the board, so a cell lists them all rather than "+3 more".
+      monthChips: 5,
+      monthChipWrap: true,
       renderDay: gehSlotHtml,
       wireDay: wireSlots,
       onItem: (kind, id) => {

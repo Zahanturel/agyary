@@ -115,7 +115,8 @@ function weekdayIndex(ymd) {
  * names, then "+N". The mobed reads the month to see what is happening when,
  * so the names stay in the cells; the full detail is on the Day view, which a
  * tap opens. */
-function monthGridHtml(monthDays, items, selectedDay) {
+function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
+  const maxChips = chips.max || 2;
   const today = todayIst();
   const lead = weekdayIndex(monthDays[0].gregorian_date);
   const cols = Math.ceil((lead + monthDays.length) / 7);
@@ -136,16 +137,16 @@ function monthGridHtml(monthDays, items, selectedDay) {
       // The day number alone, except where the Gregorian month turns over.
       const dayNo = Number(day.slice(8));
       const numLabel = idx === 0 || dayNo === 1 ? gregShort(day) : String(dayNo);
-      const shown = dayItems.slice(0, 2)
+      const shown = dayItems.slice(0, maxChips)
         .map(it => `<span class="pg-event${it.kind === "machi" ? " machi" : ""}"
           title="${esc(it.label)}${it.sublabel ? " - " + esc(it.sublabel) : ""}">${esc(it.short || it.label)}</span>`)
         .join("");
-      const more = n > 2 ? `<span class="pg-more">+${n - 2} more</span>` : "";
+      const more = n > maxChips ? `<span class="pg-more">+${n - maxChips} more</span>` : "";
       html += `<div class="${cls}" data-cal-day="${day}" role="button" tabindex="0"
         aria-label="${esc(gregLabel(day))}, ${esc(roj)}${n ? `, ${n} event${n > 1 ? "s" : ""}` : ""}">
         <span class="pg-greg-day">${esc(numLabel)}</span>
         <span class="pg-roj">${esc(roj)}</span>
-        <span class="pg-events">${shown}${more}</span></div>`;
+        <span class="pg-events${chips.wrap ? " wrap" : ""}">${shown}${more}</span></div>`;
     }
   }
   return html + "</div>";
@@ -196,6 +197,8 @@ async function dayReadingsHtml(ymd) {
  *   view           {mode, focus, parsiMonth, selectedDay} - mutated in place
  *   loadItems      async ({from, to, days}) -> [{kind,id,day,time,geh,label,sublabel,tags}]
  *   onItem         (kind, id) -> void
+ *   monthChips     how many event names a month cell lists before "+N more" (default 2)
+ *   monthChipWrap  let a long event name wrap onto a second line instead of clipping
  *   rerender       () -> void  (called after view state changes)
  */
 export async function renderCalendar(container, opts) {
@@ -225,7 +228,9 @@ export async function renderCalendar(container, opts) {
     // No per-day lookups: the month grid is already built FROM the
     // primary system's own month payload, so every cell's Roj (or Gatha)
     // name is sitting in the data we just fetched.
-    body = monthGridHtml(range.monthDays, items, view.selectedDay);
+    body = monthGridHtml(range.monthDays, items, view.selectedDay, {
+      max: opts.monthChips, wrap: opts.monthChipWrap,
+    });
   } else {
     body = (await dayReadingsHtml(view.focus))
       + (opts.renderDay ? await opts.renderDay(items, view) : dayHtml(items));
