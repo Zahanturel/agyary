@@ -81,8 +81,12 @@ menuBtn.onclick = () => navigate("#/menu");
 
 // What the add button does unless a screen overrides it (see ui.showFab).
 setDefaultFabAction(() => {
-  // A fresh event, not whatever half-finished draft is lying around.
-  state.draft = null;
+  // A fresh event, not whatever half-finished draft is lying around - but on
+  // the day the mobed is looking at. It used to open on today whatever day
+  // was on screen, so events added from another day's page landed on today.
+  state.draft = state.calendar.mode === "day" && state.calendar.focus
+    ? { prefill: { gregorian: state.calendar.focus } }
+    : null;
   navigate("#/event/new");
 });
 

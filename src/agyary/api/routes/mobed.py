@@ -35,7 +35,6 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
-from agyary.messaging import booking_service
 from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, wa_login
 from agyary.services.phone import OptionalPhone, Phone
 
@@ -780,44 +779,6 @@ async def create_behdin(
     return {**behdin_directory.customer_summary(customer), "created": created}
 
 
-class SavedNameRowIn(BaseModel):
-    section: str
-    title: str
-    name: str
-    status: str
-    pair_group: int | None = None
-
-
-class MergeNamesIn(BaseModel):
-    behdin_phone: Phone
-    names: list[SavedNameRowIn]
-
-
-@router.post("/agyaries/{agyary_id}/behdins/merge-names")
-async def merge_behdin_names(
-    agyary_id: int,
-    payload: MergeNamesIn,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> dict:
-    """Add the names an event was booked with to the behdin's saved names -
-    only what is new, nothing removed. Keyed by phone because that is what an
-    event carries (an edit does not know the behdin's id)."""
-    await _require_membership(db, agyary_id, user)
-    found = await booking_service.get_customer_by_phone(db, payload.behdin_phone)
-    customer = (
-        await behdin_directory.get_scoped(db, agyary_id, found.id, user.id) if found else None
-    )
-    if customer is None:
-        raise HTTPException(status_code=404, detail="Unknown behdin")
-    for n in payload.names:
-        if n.title not in NAME_TITLES or n.status not in NAME_STATUSES or n.section not in NAME_SECTIONS:
-            raise HTTPException(status_code=400, detail="Unknown title, status or section")
-    result = await behdin_directory.merge_saved_names(db, customer.id, [n.model_dump() for n in payload.names])
-    await db.commit()
-    return result
-
-
 @router.get("/agyaries/{agyary_id}/behdins/{customer_id}")
 async def get_behdin(
     agyary_id: int,
@@ -974,6 +935,10 @@ class ManualAddMachiIn(BaseModel):
     # AND Mah every Parsi year, for a birthday or anniversary. None: a
     # one-off, the common case.
     recurring: Literal["monthly", "yearly"] | None = None
+    # Add any new names to the behdin's saved names as part of saving. On by
+    # default: names typed for an event and then forgotten are names typed
+    # again next time.
+    remember_names: bool = True
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/machi")
@@ -992,6 +957,7 @@ async def manual_add_machi(
         gregorian=payload.gregorian, purpose=payload.purpose,
         names=names,
         recurring=payload.recurring,
+        remember_names=payload.remember_names,
     )
     await db.commit()
     if result.machi is None:
@@ -1017,6 +983,7 @@ class ManualAddBookingIn(BaseModel):
     names: list[ManualAddNameIn] | None = None
     location: str | None = None
     is_offsite: bool = False
+    remember_names: bool = True
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/booking")
@@ -1034,6 +1001,7 @@ async def manual_add_booking(
         service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime,
         purpose=payload.purpose, names=names,
         location=payload.location, is_offsite=payload.is_offsite,
+        remember_names=payload.remember_names,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Unknown service")
@@ -1138,6 +1106,7 @@ class EditMachiIn(BaseModel):
     # Left out, re-pulls the (possibly just-edited) behdin's current saved
     # names - see edit_machi.
     names: list[ManualAddNameIn] | None = None
+    remember_names: bool = True
 
 
 @router.put("/agyaries/{agyary_id}/machis/{machi_id}")
@@ -1155,7 +1124,7 @@ async def edit_machi(
         behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
         roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
         gregorian=payload.gregorian, purpose=payload.purpose,
-        names=names,
+        names=names, remember_names=payload.remember_names,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Unknown machi")
@@ -1183,6 +1152,7 @@ class EditBookingIn(BaseModel):
     names: list[ManualAddNameIn] | None = None
     location: str | None = None
     is_offsite: bool = False
+    remember_names: bool = True
 
 
 @router.put("/agyaries/{agyary_id}/bookings/{booking_id}")
@@ -1201,6 +1171,7 @@ async def edit_booking(
         service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime,
         purpose=payload.purpose, names=names,
         location=payload.location, is_offsite=payload.is_offsite,
+        remember_names=payload.remember_names,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Unknown booking or service")

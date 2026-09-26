@@ -442,6 +442,21 @@ async def _auto_names(db: AsyncSession, customer_id: int, service_name: str) -> 
     )
 
 
+async def _remember(db: AsyncSession, customer_id: int, names: list[dict] | None, remember: bool) -> None:
+    """Add the names an event was saved with to the behdin's saved names.
+
+    Done inside the save itself, in the same transaction, not as a second
+    request the app has to remember to make afterwards: that version silently
+    did nothing whenever the phone was running an older copy of the app. Only
+    when names were sent explicitly - when they were left out they came FROM the
+    saved names, so there is nothing new to add.
+    """
+    if remember and names:
+        from agyary.services.behdin_directory import merge_saved_names
+
+        await merge_saved_names(db, customer_id, names)
+
+
 async def manual_add_machi(
     db: AsyncSession,
     agyary: Agyary,
@@ -457,6 +472,7 @@ async def manual_add_machi(
     purpose: str,
     names: list[dict] | None = None,
     recurring: str | None = None,
+    remember_names: bool = True,
 ) -> MachiBookingResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
     the exact same shared function the WhatsApp flow uses (module 1) -
@@ -473,6 +489,7 @@ async def manual_add_machi(
     or "yearly") or None for a one-off. The API boundary is what actually
     restricts it to those values - here it is trusted."""
     customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
+    explicit_names = names is not None
     if names is None:
         names = await _saved_names_for(db, customer.id, living_only=purpose == "tandarosti")
     result = await booking_service.book_machi_slot(
@@ -482,6 +499,7 @@ async def manual_add_machi(
     if result.machi is not None:
         result.machi.created_by_user_id = actor_user_id
         await db.flush()
+        await _remember(db, customer.id, names if explicit_names else None, remember_names)
         if recurring and mah <= 12:
             await _create_recurring_machis(
                 db, agyary, result.machi, pattern=RECURRENCE_PATTERN_CHOICES[recurring]
@@ -720,6 +738,7 @@ async def manual_add_booking(
     names: list[dict] | None,
     location: str | None,
     is_offsite: bool,
+    remember_names: bool = True,
 ) -> ManualBookingResult | None:
     """Walk-ins/phone bookings, non-machi case. The mobed entered it
     themselves - already agreed, so BookingMobed starts "accepted", not
@@ -734,6 +753,7 @@ async def manual_add_booking(
     # conflict.
     conflict = await has_calendar_conflict(db, actor_user_id, ceremony_dt_local)
     customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
+    explicit_names = names is not None
     if names is None:
         names = await _auto_names(db, customer.id, service.name)
     booking = await booking_service.create_booking_request(
@@ -745,6 +765,7 @@ async def manual_add_booking(
     booking.created_by_user_id = actor_user_id
     db.add(BookingMobed(booking_id=booking.id, user_id=actor_user_id, status="accepted"))
     await db.flush()
+    await _remember(db, customer.id, names if explicit_names else None, remember_names)
     return ManualBookingResult(booking=booking, calendar_conflict=conflict)
 
 
@@ -831,6 +852,7 @@ async def edit_machi(
     gregorian,
     purpose: str,
     names: list[dict] | None = None,
+    remember_names: bool = True,
 ) -> MachiBookingResult | None:
     """Edit a machi via the shared slot-check core (rebook_machi_slot). Returns
     None if the machi doesn't belong to this agyari; otherwise a
@@ -848,6 +870,7 @@ async def edit_machi(
         return None
     previous_customer = machi.customer_id
     await _apply_behdin_edit(db, machi, behdin_phone, behdin_name, actor_user_id)
+    explicit_names = names is not None
     if names is None:
         if machi.customer_id == previous_customer:
             # Same behdin: the event's own names stand. They are a snapshot the
@@ -856,10 +879,13 @@ async def edit_machi(
             names = await _names_as_dicts(db, machi_id=machi.id)
         else:
             names = await _saved_names_for(db, machi.customer_id, living_only=purpose == "tandarosti")
-    return await booking_service.rebook_machi_slot(
+    result = await booking_service.rebook_machi_slot(
         db, agyary, machi, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
     )
+    if result.machi is not None:
+        await _remember(db, machi.customer_id, names if explicit_names else None, remember_names)
+    return result
 
 
 async def edit_booking(
@@ -876,6 +902,7 @@ async def edit_booking(
     names: list[dict] | None,
     location: str | None,
     is_offsite: bool,
+    remember_names: bool = True,
 ) -> ManualBookingResult | None:
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary.id:
@@ -887,6 +914,7 @@ async def edit_booking(
         return None
     previous_customer = booking.customer_id
     await _apply_behdin_edit(db, booking, behdin_phone, behdin_name, actor_user_id)
+    explicit_names = names is not None
     if names is None:
         if booking.customer_id == previous_customer:
             names = await _names_as_dicts(db, booking_id=booking.id)   # see edit_machi
@@ -898,6 +926,7 @@ async def edit_booking(
         ceremony_dt_local=ceremony_dt_local, purpose=purpose, names=names,
         location=location, is_offsite=is_offsite,
     )
+    await _remember(db, booking.customer_id, names if explicit_names else None, remember_names)
     # Non-blocking flag, same as create; exclude this booking so it doesn't
     # find itself.
     conflict = await has_calendar_conflict(

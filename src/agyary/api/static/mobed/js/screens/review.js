@@ -19,7 +19,7 @@
  */
 
 import {
-  previewBooking, previewMachi, addBooking, editBooking, addMachi, editMachi, mergeNames,
+  previewBooking, previewMachi, addBooking, editBooking, addMachi, editMachi,
 } from "../api.js";
 import { state, GEH_NAME_BY_NUM } from "../state.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
@@ -183,6 +183,9 @@ export function renderReview(kind) {
       confirmBtn.disabled = true;
       try {
         const body = bodyFor(draft, rows);
+        // Part of the save, not a request afterwards: see _remember on the server.
+        const keep = document.getElementById("rvKeep");
+        body.remember_names = !keep || keep.checked;
         let res, slipHash;
         if (isMachi) {
           if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
@@ -196,14 +199,6 @@ export function renderReview(kind) {
         } else {
           res = draft.edit ? await editBooking(aid, draft.edit.id, body) : await addBooking(aid, body);
           slipHash = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
-        }
-
-        // The event is saved. Remembering its names for next time is additive
-        // (see merge_saved_names) and must never turn a saved event into an
-        // error, so a failure here is swallowed.
-        const keep = document.getElementById("rvKeep");
-        if (keep && keep.checked && rows.length) {
-          try { await mergeNames(aid, draft.behdin.phone, rows); } catch (e) { /* the event stands */ }
         }
 
         state.calendar.focus = draft.gregorian;

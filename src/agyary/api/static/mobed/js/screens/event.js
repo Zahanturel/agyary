@@ -53,7 +53,7 @@ export async function renderNewEvent() {
   refreshHeader();
   showFab(false);
 
-  if (!state.draft || state.draft.edit) {
+  if (!state.draft || state.draft.edit || state.draft.prefill) {
     const prefill = (state.draft && state.draft.prefill) || {};
     state.draft = blankDraft(prefill);
   }
