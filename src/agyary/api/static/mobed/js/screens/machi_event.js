@@ -67,6 +67,13 @@ export async function renderEditMachi({ id }) {
   loading();
   const alive = navGuard();
 
+  // Back from the review step: keep the mobed's unsaved changes (see event.js).
+  const held = state.draft;
+  if (held && held.edit && held.edit.id === Number(id) && held.returning) {
+    held.returning = false;
+    return render(held);
+  }
+
   const aid = state.currentAgyaryId;
   let detail;
   try {

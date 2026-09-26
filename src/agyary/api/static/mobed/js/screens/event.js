@@ -18,7 +18,7 @@ import { state, primarySystem } from "../state.js";
 import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
-import { esc, istYmd, istTime, todayIst, gregLabel } from "../util.js";
+import { esc, istYmd, istHm, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
 function system() {
@@ -73,6 +73,15 @@ export async function renderEditEvent({ kind, id }) {
     return navigate("#/calendar", { replace: true });
   }
 
+  // Coming back from the review step ("Edit details"): the mobed's unsaved
+  // changes are in the draft. Rebuilding it from the server here threw them
+  // away - the time went back to what was saved.
+  const held = state.draft;
+  if (held && held.edit && held.edit.id === Number(id) && held.returning) {
+    held.returning = false;
+    return render(held);
+  }
+
   const aid = state.currentAgyaryId;
   let detail;
   try {
@@ -89,7 +98,7 @@ export async function renderEditEvent({ kind, id }) {
   draft.names = detail.names;   // the event's own, as saved
   draft.service_id = detail.service_id;
   draft.gregorian = istYmd(detail.ceremony_datetime);
-  draft.time = istTime(detail.ceremony_datetime).replace(/\s?[AP]M/i, "");
+  draft.time = istHm(detail.ceremony_datetime);
   await syncFromGregorian(draft);
   state.draft = draft;
   render(draft);

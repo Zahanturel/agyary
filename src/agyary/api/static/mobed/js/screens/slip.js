@@ -8,6 +8,7 @@
 
 import { machiSlip, bookingSlip, deleteMachi, deleteBooking } from "../api.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading, flashInfo } from "../ui.js";
+import { state } from "../state.js";
 import { esc } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
@@ -65,6 +66,7 @@ export async function renderSlip({ kind, aid, id }) {
   // generic event form) - #/event/machi/:id/edit is not a real page in
   // either app and used to silently bounce back to the calendar.
   document.getElementById("slipEdit").onclick = () => {
+    state.draft = null;   // a fresh edit starts from what is saved, never a stale draft
     navigate(kind === "machi" ? `#/machi/${id}/edit` : `#/event/${kind}/${id}/edit`);
   };
 

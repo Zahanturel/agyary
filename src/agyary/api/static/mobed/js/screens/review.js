@@ -97,6 +97,9 @@ export function renderReview(kind) {
     }
     if (!alive()) return;
     draft.names = first.names;
+    // Whichever way the mobed leaves this step for the form (Edit details, or
+    // the header Back), the form keeps this draft instead of reloading it.
+    draft.returning = true;
 
     mainEl.innerHTML = `
       <div class="card no-print">
@@ -171,6 +174,7 @@ export function renderReview(kind) {
 
     document.getElementById("rvEdit").onclick = () => {
       draft.names = editorNames();
+      draft.returning = true;   // tells the edit form to keep this draft, not reload it
       navigate(formFor(kind), { replace: true });
     };
 

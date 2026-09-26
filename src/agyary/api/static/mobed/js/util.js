@@ -21,6 +21,15 @@ export function istTime(iso) {
     timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit",
   });
 }
+/** "HH:MM", 24-hour, in IST - the form an <input type="time"> takes and the API
+ *  is sent. Not istTime() with the AM/PM cut off: that is locale text, so a
+ *  5:30 PM event came out as 05:30 (the morning) or, on a phone whose locale
+ *  writes "5:30 pm", as a value the time field refuses. */
+export function istHm(iso) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(new Date(iso));
+}
 export function todayIst() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
