@@ -27,6 +27,7 @@ function serviceItems(rows) {
     time: istTime(b.ceremony_datetime),
     geh: null,
     label: b.service_name,
+    short: b.service_name,
     sublabel: b.behdin_name || "-",
     tags: b.is_offsite ? '<span class="tag">Offsite</span>' : "",
   }));
@@ -44,6 +45,7 @@ function machiItems(rows) {
     // Not `Machi (${display})` - the display names carry their own
     // parenthetical gloss, which would nest.
     label: `Machi · ${MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose}`,
+    short: "Machi",
     sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }

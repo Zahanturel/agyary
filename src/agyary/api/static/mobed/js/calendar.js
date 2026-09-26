@@ -111,8 +111,10 @@ function weekdayIndex(ymd) {
  * its first day, with blanks above it. Weekday labels sit once at the edge
  * instead of inside every cell, which is what keeps the cells uncramped.
  *
- * A cell is the date, the Roj, and a dot per event - no event titles. Tapping
- * a date opens its day, which is where the details are. */
+ * A cell is the date, the Roj, and what is on that day - up to two short event
+ * names, then "+N". The mobed reads the month to see what is happening when,
+ * so the names stay in the cells; the full detail is on the Day view, which a
+ * tap opens. */
 function monthGridHtml(monthDays, items, selectedDay) {
   const today = todayIst();
   const lead = weekdayIndex(monthDays[0].gregorian_date);
@@ -126,21 +128,24 @@ function monthGridHtml(monthDays, items, selectedDay) {
       if (idx < 0 || !p) { html += `<div class="pg-blank"></div>`; continue; }
 
       const day = p.gregorian_date;
-      const n = items.filter(it => it.day === day).length;
+      const dayItems = items.filter(it => it.day === day);
+      const n = dayItems.length;
       const roj = (p.is_gatha ? p.gatha_name : p.roj_name) || "";
       const cls = ["pg-cell", day === today ? "pg-today" : "", day === selectedDay ? "pg-selected" : ""]
         .filter(Boolean).join(" ");
       // The day number alone, except where the Gregorian month turns over.
       const dayNo = Number(day.slice(8));
       const numLabel = idx === 0 || dayNo === 1 ? gregShort(day) : String(dayNo);
-      const dots = items.filter(it => it.day === day).slice(0, 3)
-        .map(it => `<i class="${it.kind === "machi" ? "machi" : ""}"></i>`).join("")
-        + (n > 3 ? `<b>+${n - 3}</b>` : "");
+      const shown = dayItems.slice(0, 2)
+        .map(it => `<span class="pg-event${it.kind === "machi" ? " machi" : ""}"
+          title="${esc(it.label)}${it.sublabel ? " - " + esc(it.sublabel) : ""}">${esc(it.short || it.label)}</span>`)
+        .join("");
+      const more = n > 2 ? `<span class="pg-more">+${n - 2} more</span>` : "";
       html += `<div class="${cls}" data-cal-day="${day}" role="button" tabindex="0"
         aria-label="${esc(gregLabel(day))}, ${esc(roj)}${n ? `, ${n} event${n > 1 ? "s" : ""}` : ""}">
         <span class="pg-greg-day">${esc(numLabel)}</span>
         <span class="pg-roj">${esc(roj)}</span>
-        <span class="pg-dots">${dots}</span></div>`;
+        <span class="pg-events">${shown}${more}</span></div>`;
     }
   }
   return html + "</div>";

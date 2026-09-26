@@ -28,6 +28,7 @@ function machiItems(rows) {
     // Not `Machi (${display})` - the display names carry their own
     // parenthetical gloss, which would nest.
     label: `Machi · ${MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose}`,
+    short: m.purpose === "tandarosti" ? "Tandarosti" : "Patet",
     sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }
