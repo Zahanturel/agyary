@@ -160,6 +160,11 @@ sideloading, no APK.
 
 ## Redeploying after a code change
 
+Normally you do nothing: every push to `master` deploys itself once the tests
+pass (see `deploy/README.md` for the one-time secrets setup). The manual
+equivalent, if you ever need it, is `bash deploy/deploy.sh` on the VM. What it
+automates:
+
 ```bash
 git pull
 docker compose up -d --build

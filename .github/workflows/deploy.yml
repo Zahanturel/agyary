@@ -1,0 +1,71 @@
+name: test and deploy
+
+# Every push to master: run the tests, and only if they pass, deploy.
+# Pull requests run the tests only - they never see the deploy secrets.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Two pushes in quick succession deploy one after the other, never at once.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agyary
+          POSTGRES_PASSWORD: agyary
+          POSTGRES_DB: agyary_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U agyary -d agyary_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv sync --frozen
+      - name: Enable pg_trgm (the schema's name index needs it)
+        run: PGPASSWORD=agyary psql -h localhost -U agyary -d agyary_test -c "create extension if not exists pg_trgm"
+      - name: Test
+        run: uv run pytest -q
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+        run: |
+          for v in VM_HOST VM_USER VM_SSH_KEY VM_KNOWN_HOSTS; do
+            if [ -z "${!v}" ]; then echo "::error::secret $v is not set (see deploy/README.md)"; exit 1; fi
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key: the connection is refused if the server is not the
+          # one recorded in the secret, rather than trusting whatever answers.
+          printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
+            'cd ~/agyary && git pull --ff-only && bash deploy/deploy.sh'
+      - name: Check it is live
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://mobed.gotiadarian.com/health || true)
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "::error::/health returned $code"
+          exit 1
