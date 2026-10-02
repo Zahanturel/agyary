@@ -1,6 +1,6 @@
 "use strict";
 
-import { drainFlash, showBack } from "./ui.js";
+import { drainFlash, showBack, showTabs } from "./ui.js";
 
 // A hash router, kept deliberately small: pattern -> handler, with :params.
 // Hash rather than a real path because the PWA is served from a single
@@ -30,6 +30,10 @@ const trail = [];
  * a function of the route params. A route WITH a parent shows the header
  * Back control; the roots (calendar, login, onboarding) have none.
  *
+ * opts.tab: which bottom tab this screen belongs to ("calendar", "behdins"),
+ * which also shows the tab bar. Omit it and the bar is hidden - forms,
+ * slips and the menu have a Back instead.
+ *
  * opts.stepBack: the parent is the PREVIOUS STEP of a flow, not merely an
  * earlier screen - Back swaps to it in place instead of walking history.
  * The review step uses this: Back returns to the form it came from.
@@ -42,7 +46,7 @@ export function route(pattern, handler, opts = {}) {
   routes.push({
     pattern, regex, names, handler,
     manage: !!opts.manage, open: !!opts.open, parent: opts.parent || null,
-    stepBack: !!opts.stepBack,
+    stepBack: !!opts.stepBack, tab: opts.tab || null,
   });
 }
 
@@ -143,6 +147,7 @@ export async function resolve() {
   showBack(parent
     ? () => (found.route.stepBack ? navigate(parent, { replace: true }) : back(parent))
     : null);
+  showTabs(found.route.tab);
   window.scrollTo(0, 0);
   await found.route.handler(found.params);
   // Any message queued by a guard (or by the screen we just left) is shown

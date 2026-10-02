@@ -129,7 +129,7 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
       if (idx < 0 || !p) { html += `<div class="pg-blank"></div>`; continue; }
 
       const day = p.gregorian_date;
-      const dayItems = items.filter(it => it.day === day);
+      const dayItems = items.filter(it => it.day === day).sort(pinnedFirst);
       const n = dayItems.length;
       const roj = (p.is_gatha ? p.gatha_name : p.roj_name) || "";
       const cls = ["pg-cell", day === today ? "pg-today" : "", day === selectedDay ? "pg-selected" : ""]
@@ -138,7 +138,7 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
       const dayNo = Number(day.slice(8));
       const numLabel = idx === 0 || dayNo === 1 ? gregShort(day) : String(dayNo);
       const shown = dayItems.slice(0, maxChips)
-        .map(it => `<span class="pg-event${it.kind === "machi" ? " machi" : ""}"
+        .map(it => `<span class="pg-event${KIND_CLASS[it.kind] || ""}"
           title="${esc(it.label)}${it.sublabel ? " - " + esc(it.sublabel) : ""}">${esc(it.short || it.label)}</span>`)
         .join("");
       const more = n > maxChips ? `<span class="pg-more">+${n - maxChips} more</span>` : "";
@@ -152,9 +152,14 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
   return html + "</div>";
 }
 
+// Kinds with their own look. Memorial observances are a category of their own,
+// and the closing notice is pinned: it sorts above everything else on its day.
+const KIND_CLASS = { machi: " machi", memorial: " memorial", memorial_closing: " closing" };
+const pinnedFirst = (a, b) => (b.kind === "memorial_closing") - (a.kind === "memorial_closing");
+
 function itemCardHtml(it) {
   const when = it.time ? `${it.time} · ` : it.geh ? `${GEH_NAME_BY_NUM[it.geh]} Geh · ` : "";
-  return `<div class="event ${it.kind === "machi" ? "machi" : ""}" data-cal-item="${it.kind}:${it.id}">
+  return `<div class="event${KIND_CLASS[it.kind] || ""}" data-cal-item="${it.kind}:${it.id}">
     <div class="t">${esc(when)}${esc(it.label)}</div>
     <div class="s">${esc(it.sublabel || "")}</div>
     ${it.tags ? `<div class="meta">${it.tags}</div>` : ""}
@@ -171,7 +176,7 @@ function dayHtml(items) {
   if (!items.length) return `<div class="empty-state">Nothing on this day.</div>`;
   return items
     .slice()
-    .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
+    .sort((a, b) => pinnedFirst(a, b) || (a.time || "").localeCompare(b.time || ""))
     .map(itemCardHtml)
     .join("");
 }

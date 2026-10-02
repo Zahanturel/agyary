@@ -3,7 +3,7 @@
 /**
  * Wiring: the route table, the guard, and boot.
  *
- * The mobed app is five screens. Anything not listed here does not exist
+ * The mobed app is five screens plus memorials. Anything not listed here does not exist
  * as far as this app is concerned - notably service-catalog
  * editing and fire-temple editing, whose screens remain in the tree but
  * have no route into them. They belong to the agyari management system,
@@ -15,7 +15,7 @@ import { route, setGuard, setNotFound, start, navigate, onNavigated } from "./ro
 import { watchForUpdates } from "./update.js";
 import { state, saveSession, restoreSession, clearSession } from "./state.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
-import { chrome, refreshHeader, menuBtn, setDefaultFabAction } from "./ui.js";
+import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab } from "./ui.js";
 import { loadSessionExtras, signedIn } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
@@ -23,6 +23,8 @@ import { renderCalendarScreen } from "./screens/calendar.js";
 import { renderNewEvent, renderEditEvent } from "./screens/event.js";
 import { renderEditMachi } from "./screens/machi_event.js";
 import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
+import { renderMemorialNew } from "./screens/memorial_new.js";
+import { renderMemorial } from "./screens/memorial.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
@@ -32,9 +34,10 @@ import { renderReview, formFor } from "./screens/review.js";
 route("#/login", renderLogin, { open: true });
 route("#/onboarding", renderOnboarding);
 
-route("#/calendar", renderCalendarScreen);
+// `tab` puts the screen under a bottom tab (and shows the tab bar).
+route("#/calendar", renderCalendarScreen, { tab: "calendar" });
 // The calendar's view is part of the address: #/calendar/day/2026-09-25.
-route("#/calendar/:mode/:date", renderCalendarScreen);
+route("#/calendar/:mode/:date", renderCalendarScreen, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/calendar" });
 
 // `parent` is where Back goes when there is nothing behind the screen (a
@@ -53,11 +56,18 @@ route("#/machi/:id/edit", renderEditMachi, { parent: slipOf("machi") });
 route("#/machi/:aid/:id", (p) => renderSlip({ kind: "machi", ...p }), { parent: "#/calendar" });
 route("#/booking/:aid/:id", (p) => renderSlip({ kind: "booking", ...p }), { parent: "#/calendar" });
 
-route("#/behdins", renderBehdinList, { parent: "#/menu" });
+// Behdins is a main area, not a corner of the menu: it has its own tab, and so
+// no Back control.
+route("#/behdins", renderBehdinList, { tab: "behdins" });
 // Before :id - the router matches in registration order, and "new"
 // would otherwise be read as a behdin id and looked up as NaN.
 route("#/behdins/new", renderBehdinNew, { parent: "#/behdins" });
 route("#/behdins/:id", renderBehdinDetail, { parent: "#/behdins" });
+// A memorial is a behdin's: made from their page, and Back returns to it.
+route("#/behdins/:id/memorials/new", renderMemorialNew, { parent: (p) => `#/behdins/${p.id}` });
+route("#/memorial/:id", renderMemorial, { parent: "#/behdins" });
+// Opened from the calendar on one observance's day, landing on that observance.
+route("#/memorial/:id/:oid", renderMemorial, { parent: "#/behdins" });
 
 // The calendar is home; anything unrecognised lands there.
 setNotFound(() => navigate("#/calendar", { replace: true }));
@@ -78,6 +88,7 @@ setGuard(async (matched) => {
 
 // --- Chrome -----------------------------------------------------------------
 menuBtn.onclick = () => navigate("#/menu");
+onTab((tab) => navigate(`#/${tab}`));
 
 // What the add button does unless a screen overrides it (see ui.showFab).
 setDefaultFabAction(() => {

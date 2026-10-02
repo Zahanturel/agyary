@@ -74,11 +74,22 @@ bookings on the calendar, tagged with the memorial.
    `bookings.has_time` (default true), store 00:00 IST when untimed, and fix
    the sunrise anchor, conflict check, slip and My Day "upcoming" query.
 
+7. **"N years" of Parabs** means through the Nth anniversary of the death
+   (day 361 for N=1), so a Parab after the anniversary falls in the next
+   year's count. Confirm this is how families count it.
+8. **Roj/Mah on memorial rows** is read in the fire temple's calendar (how the
+   schedule was counted), not the mobed's primary calendar. They differ only
+   if a mobed's primary is not their fire temple's system.
+
 ## Build order
 
 1. Engine (done) 2. Memorial tables + Baaj migration (done, verified on a
    scratch DB: upgrade, downgrade, no model drift)
 3. Service layer + API + tests (done: preview, create, list, edit one
    observance, delete, calendar feed + closing notice, privacy)
-5. UI: nav, behdin hub, memorial flow, closing notice
-6. Retire the machi-only monthly/yearly dropdown (migrate existing rules)
+4. UI (done, checked in the browser on a scratch copy): Behdins as a bottom
+   tab (mobed app only; the Machi Board keeps it in its menu), memorials on
+   the behdin page, new-memorial form with a date preview before saving,
+   memorial page with per-observance edit, green memorial category on the
+   calendar, pinned solid "Memorial closes today" notice.
+5. Retire the machi-only monthly/yearly dropdown (migrate existing rules)

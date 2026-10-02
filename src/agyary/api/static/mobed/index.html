@@ -31,6 +31,24 @@
 
 <main id="main"></main>
 
+<!-- The two places a mobed lives: their calendar and their behdins. Shown on
+     those screens only; forms and slips have a Back instead. -->
+<nav id="tabs" class="tabs hidden" aria-label="Main">
+  <button data-tab="calendar" aria-label="Calendar">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="2"/>
+      <path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><span>Calendar</span>
+  </button>
+  <button data-tab="behdins" aria-label="Behdins">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="9" cy="8" r="3.5" stroke="currentColor" stroke-width="2"/>
+      <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.4c2.2.7 3.5 2.6 3.5 5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><span>Behdins</span>
+  </button>
+</nav>
+
 <button id="fab" class="fab hidden" title="Add an event" aria-label="Add an event">+</button>
 
 <script type="module" src="/mobed-app/js/main.js"></script>

@@ -8,7 +8,7 @@
  * their events, added the same way any event is.
  */
 
-import { myDay, machiBoard } from "../api.js";
+import { myDay, machiBoard, memorialFeed } from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
@@ -50,16 +50,53 @@ function machiItems(rows) {
   }));
 }
 
+// Which memorial an observance on the calendar belongs to, so a tap can open
+// it on that observance. Rebuilt on every load.
+const memorialOfObservance = new Map();
+
+/** This mobed's memorial observances, and the closing notice on a memorial's
+ *  last day. The notice is pinned to the top of its day by the calendar. */
+function memorialItems(rows) {
+  memorialOfObservance.clear();
+  return rows.map(r => {
+    if (r.kind === "memorial_closing") {
+      return {
+        kind: "memorial_closing",
+        id: r.memorial_id,
+        day: r.date,
+        time: null,
+        geh: null,
+        label: "Memorial closes today",
+        short: "Closes today",
+        sublabel: r.text,
+      };
+    }
+    memorialOfObservance.set(r.id, r.memorial_id);
+    return {
+      kind: "memorial",
+      id: r.id,
+      day: r.date,
+      time: r.time,
+      geh: null,
+      label: `${r.label} · ${r.departed_name}`,
+      short: r.label,
+      sublabel: `${r.services.map(s => s.name).join(", ")} · ${r.behdin_name || "-"}`,
+    };
+  });
+}
+
 async function loadItems({ from, to }) {
   const agyaryId = state.currentAgyaryId;
-  const [services, machis] = await Promise.all([
+  const [services, machis, memorials] = await Promise.all([
     myDay(from, to).catch(() => []),
     agyaryId ? machiBoard(agyaryId, from, to).catch(() => []) : Promise.resolve([]),
+    agyaryId ? memorialFeed(agyaryId, from, to).catch(() => []) : Promise.resolve([]),
   ]);
   const inRange = (d) => d >= from && d <= to;
   return [
     ...serviceItems(services).filter(i => inRange(i.day)),
     ...machiItems(machis).filter(i => inRange(i.day)),
+    ...memorialItems(memorials).filter(i => inRange(i.day)),
   ];
 }
 
@@ -87,6 +124,8 @@ async function draw() {
       viewHash: calendarHash,
       onItem: (kind, id) => {
         const aid = state.currentAgyaryId;
+        if (kind === "memorial_closing") return navigate(`#/memorial/${id}`);
+        if (kind === "memorial") return navigate(`#/memorial/${memorialOfObservance.get(id)}/${id}`);
         navigate(kind === "machi" ? `#/machi/${aid}/${id}` : `#/booking/${aid}/${id}`);
       },
     });

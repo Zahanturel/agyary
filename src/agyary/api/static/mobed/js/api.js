@@ -145,6 +145,19 @@ export const putSavedNames = (aid, cid, section, names) =>
   put(`/agyaries/${aid}/behdins/${cid}/saved-names/${section}`, { names });
 export const deleteSavedName = (aid, cid, rowId) => del(`/agyaries/${aid}/behdins/${cid}/saved-names/${rowId}`);
 
+// --- Memorials: the observances a family keeps for one departed person ------
+export const memorialFeed = (aid, from, to) =>
+  get(`/agyaries/${aid}/memorial-feed?from=${from}&to=${to}`);
+export const listMemorials = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/memorials`);
+export const previewMemorial = (aid, cid, body) =>
+  post(`/agyaries/${aid}/behdins/${cid}/memorials/preview`, body);
+export const createMemorial = (aid, cid, body) =>
+  post(`/agyaries/${aid}/behdins/${cid}/memorials`, body);
+export const getMemorial = (aid, mid) => get(`/agyaries/${aid}/memorials/${mid}`);
+export const updateObservance = (aid, mid, oid, body) =>
+  patch(`/agyaries/${aid}/memorials/${mid}/observances/${oid}`, body);
+export const deleteMemorial = (aid, mid) => del(`/agyaries/${aid}/memorials/${mid}`);
+
 export const addMachi = (aid, body) => post(`/agyaries/${aid}/manual-add/machi`, body);
 export const addBooking = (aid, body) => post(`/agyaries/${aid}/manual-add/booking`, body);
 export const previewBooking = (aid, body) => post(`/agyaries/${aid}/slip-preview/booking`, body);

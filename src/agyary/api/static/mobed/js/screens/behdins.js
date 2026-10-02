@@ -17,7 +17,7 @@
 
 import {
   listBehdins, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
-  getSavedNames, putSavedNames,
+  getSavedNames, putSavedNames, listMemorials,
 } from "../api.js";
 import { state } from "../state.js";
 import { canPickContacts, pickContacts } from "../behdin_add.js";
@@ -26,7 +26,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, flashInfo,
   refreshHeader, loading, backBar,
 } from "../ui.js";
-import { esc, phoneField, readPhone, setPhoneField } from "../util.js";
+import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
 export async function renderBehdinList() {
@@ -243,14 +243,15 @@ export async function renderBehdinDetail({ id }) {
   const cid = Number(id);
   const alive = navGuard();
 
-  let record = null, history = null, saved = [];
+  let record = null, history = null, saved = [], memorials = [];
   try {
-    [record, history, saved] = await Promise.all([
+    [record, history, saved, memorials] = await Promise.all([
       getBehdin(aid, cid).catch(() => null),
       // History is scoped to what THIS mobed entered, so it can legitimately
       // be empty for a behdin someone else booked for.
       customerHistory(cid).catch(() => null),
       getSavedNames(aid, cid).catch(() => []),
+      listMemorials(aid, cid).catch(() => []),
     ]);
   } catch (e) {
     if (!alive()) return;
@@ -271,6 +272,22 @@ export async function renderBehdinDetail({ id }) {
       <p class="meta" style="margin-top:6px">
         <a class="tel" href="tel:${esc(record.phone)}">Call ${esc(record.phone)}</a></p>
       <div style="margin-top:12px"><button class="small" id="bdSave">Save details</button></div>
+    </div>
+
+    <div class="card">
+      <div class="row tight" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Memorials</h2>
+        <button class="icon-add" id="bdAddMemorial" title="New memorial" aria-label="New memorial">+</button>
+      </div>
+      <p class="meta">The observances this family keeps for someone they have lost.</p>
+      ${memorials.length ? memorials.map(m => `
+        <div class="search-result" data-mem="${m.id}">
+          <div>${esc(m.departed_name)}</div>
+          <div class="addr">${m.status === "completed"
+            ? `Completed - ${m.total} observances`
+            : `${m.done} of ${m.total} done${m.next ? ` · Next: ${esc(m.next.label)}, ${esc(gregShort(m.next.date))}` : ""}`}</div>
+          <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>
+        </div>`).join("") : '<p class="meta">None yet.</p>'}
     </div>
 
     <div class="card">
@@ -304,6 +321,11 @@ export async function renderBehdinDetail({ id }) {
       showError(e.message);
     }
   };
+
+  document.getElementById("bdAddMemorial").onclick = () => navigate(`#/behdins/${cid}/memorials/new`);
+  mainEl.querySelectorAll("[data-mem]").forEach(el => {
+    el.onclick = () => navigate(`#/memorial/${el.dataset.mem}`);
+  });
 
   document.getElementById("bdDeleteOpen").onclick = () => {
     const panel = document.getElementById("bdDeleteConfirm");

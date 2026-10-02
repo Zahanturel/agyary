@@ -1,8 +1,9 @@
 "use strict";
 
 /**
- * The menu, behind the header icon. Three sections and nothing else:
- * who you are, which calendar you read in, and your behdins.
+ * The menu, behind the header icon: who you are, and which calendar you read in.
+ * In the Machi Board app, which has no tab bar, your behdins are here too; in
+ * the mobed app they are a tab of their own.
  *
  * Everything management-shaped - the fire temple's own details,
  * the service catalog - is deliberately absent. Those belong to the agyari
@@ -37,6 +38,8 @@ export async function renderMenu() {
   const prefs = state.preferences;
   const visible = prefs.visible_calendar_systems || ["gregorian", "shenshai"];
   const agyary = currentAgyary();
+  // The mobed app has Behdins as a tab; the Machi Board has no tab bar.
+  const hasTabs = !!document.getElementById("tabs");
 
   mainEl.innerHTML = `
     <div class="card">
@@ -75,7 +78,7 @@ export async function renderMenu() {
       <div style="margin-top:14px"><button class="small" id="mSavePrefs">Save calendar</button></div>
     </div>
 
-    <div class="card">
+    ${hasTabs ? "" : `<div class="card">
       <div class="section-bar" id="mBehdinBar">
         <div class="sb-text"><b>Manage your behdins</b>
           <span>Names, numbers and their saved name lists</span></div>
@@ -84,7 +87,7 @@ export async function renderMenu() {
           <span class="chev">&rsaquo;</span>
         </div>
       </div>
-    </div>
+    </div>`}
 
     <div class="card">
       <button class="ghost" id="mSignOut">Sign out</button>
@@ -129,7 +132,7 @@ export async function renderMenu() {
   };
 
   // The whole bar opens the list; the + is a shortcut straight to adding.
-  document.getElementById("mBehdinBar").onclick = (e) => {
+  if (!hasTabs) document.getElementById("mBehdinBar").onclick = (e) => {
     if (e.target.closest("#mAddBehdin")) return;
     navigate("#/behdins");
   };
@@ -138,7 +141,7 @@ export async function renderMenu() {
   // here that could only do name and number, so adding saved names meant
   // saving, opening the behdin, and editing them in: three steps for one
   // job, and the reason this shortcut existed at all was to avoid steps.
-  document.getElementById("mAddBehdin").onclick = (e) => {
+  if (!hasTabs) document.getElementById("mAddBehdin").onclick = (e) => {
     e.stopPropagation();
     navigate("#/behdins/new");
   };
