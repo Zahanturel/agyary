@@ -10,6 +10,7 @@ from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName
 from agyary.models.machi import Machi
+from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
 from agyary.models.preferences import UserPreferences
@@ -30,6 +31,9 @@ __all__ = [
     "Customer",
     "CustomerSavedName",
     "Machi",
+    "Memorial",
+    "MemorialObservance",
+    "MemorialObservanceService",
     "Notification",
     "Payment",
     "RecurrenceRule",

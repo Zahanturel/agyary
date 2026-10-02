@@ -32,6 +32,7 @@ from agyary.models import (
     Customer,
     CustomerSavedName,
     Machi,
+    Memorial,
     Payment,
     UserCustomer,
 )
@@ -219,7 +220,7 @@ async def remove_from_book(
         )
     ).scalar_one()
     references = 0
-    for model in (Booking, Machi, Payment):
+    for model in (Booking, Machi, Memorial, Payment):
         references += (
             await db.execute(
                 select(func.count()).select_from(model).where(model.customer_id == customer.id)

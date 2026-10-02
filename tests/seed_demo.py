@@ -40,6 +40,7 @@ SEED_SERVICES = [
     ("Jashan", Decimal("1500"), 1, True),
     ("Afringan", Decimal("200"), 1, True),
     ("Farokshi", Decimal("200"), 1, True),
+    ("Baaj", Decimal("200"), 1, True),
     ("Satum", Decimal("300"), 1, False),
     ("Navjote", Decimal("5000"), 1, True),
     ("Wedding", Decimal("10000"), 1, True),

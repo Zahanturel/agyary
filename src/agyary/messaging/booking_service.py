@@ -125,6 +125,7 @@ DEFAULT_SERVICE_SPECS = [
     ("Jashan", 1, True),
     ("Afringan", 1, True),
     ("Farokshi", 1, True),
+    ("Baaj", 1, True),
     ("Satum", 1, False),
     ("Navjote", 1, True),
     ("Wedding", 1, True),

@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from agyary.api.routes.calendar import router as calendar_router
+from agyary.api.routes.memorials import router as memorials_router
 from agyary.api.routes.mobed import router as mobed_router
 from agyary.api.routes.whatsapp import router as whatsapp_router
 from agyary.core.config import get_settings
@@ -71,6 +72,7 @@ async def security_headers(request, call_next):
 
 app.include_router(calendar_router)
 app.include_router(mobed_router)
+app.include_router(memorials_router)
 app.include_router(whatsapp_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
