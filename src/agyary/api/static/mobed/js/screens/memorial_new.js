@@ -28,8 +28,8 @@ import { prayerServices, parsiText } from "./memorial.js";
 // calendar/memorial.py, which is what labels the saved schedule. The 10th is
 // part of the opening, so it is not listed here.
 const NAMED_DAYS = [
-  [29, "Deci"], [30, "Masiso"], [59, "Deci"], [60, "Bamsi"],
-  [179, "Deci"], [180, "Chamsi"], [359, "Deci"], [360, "Varsi"],
+  [29, "Deci"], [30, "Masiso - one month"], [59, "Deci"], [60, "Bamsi - two months"],
+  [179, "Deci"], [180, "Chamsi - six months"], [359, "Deci"], [360, "Varsi - one year"],
 ];
 
 const MAX = { months: 120, years: 50, parabYears: 25 };
@@ -135,7 +135,7 @@ export async function renderMemorialNew({ id }) {
 
       <div class="card">
         <h2>Other days</h2>
-        <p class="meta">Add any of these. The 29th, 59th, 179th and 359th are the day before the next one.</p>
+        <p class="meta">Masiso, Bamsi, Chamsi and Varsi fall on the same Roj, that many months on. A Deci is the day before. If you also choose monthly or yearly below, each date is listed once.</p>
         <div class="choice-group">${NAMED_DAYS.map(([n, name]) => `
           <div class="check-row"><input type="checkbox" data-day="${n}" id="mmDay${n}" ${has(n) ? "checked" : ""}>
             <label for="mmDay${n}">${n}th day · ${name}</label></div>`).join("")}
@@ -165,7 +165,7 @@ export async function renderMemorialNew({ id }) {
               ${draft.parabWhich === "fravardin_tir" ? "checked" : ""}><label for="mmParabFT">Fravardin and Tir only</label></div>
             <div class="check-row"><input type="radio" name="mmParabWhich" id="mmParabAll" value="all"
               ${draft.parabWhich === "all" ? "checked" : ""}><label for="mmParabAll">All Parabs</label></div>
-            <p class="meta" style="margin:0">All Parabs does not include the Dae Parab yet.</p>
+            <p class="meta" style="margin:0">Each Parab comes round once a year.</p>
             <label>For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.parabYears}" id="mmParabYears" value="${esc(draft.parabYears)}"></div>
         </div>
@@ -192,8 +192,7 @@ export async function renderMemorialNew({ id }) {
       if (!draft.death) { note.textContent = ""; return; }
       const label = await parsiLabel(draft.death, primarySystem());
       if (!note.isConnected) return;
-      note.textContent = label.includes("(Gatha)")
-        ? `${label}. A death in the Gatha days isn't supported yet.` : label;
+      note.textContent = label;
     };
     readParsi();
 

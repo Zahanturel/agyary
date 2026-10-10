@@ -78,7 +78,8 @@ class Memorial(Base):
         CheckConstraint(f"calendar_system IN ({sql_in(CALENDAR_SYSTEMS)})", name="calendar_system"),
         CheckConstraint(f"opening IN ({sql_in(OPENINGS)})", name="opening"),
         CheckConstraint(f"parabs IS NULL OR parabs IN ({sql_in(PARABS)})", name="parabs"),
-        CheckConstraint("death_mah BETWEEN 1 AND 12", name="death_mah"),
+        # 13 is a Gatha day, with the Gatha number in death_roj.
+        CheckConstraint("death_mah BETWEEN 1 AND 13", name="death_mah"),
         CheckConstraint("death_roj BETWEEN 1 AND 30", name="death_roj"),
         # A series and its length stand or fall together.
         CheckConstraint("(parabs IS NULL) = (parab_years IS NULL)", name="parab_length"),

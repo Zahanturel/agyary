@@ -21,11 +21,32 @@ bookings on the calendar, tagged with the memorial.
   yearly (day 361, 721, ...).
 - Choices offered: opening = "days 1 to 10" or "10th only" (days 1-4 are not
   a separate option); then any of the named days; monthly; yearly; Parabs.
-- Parab = the Roj named like the Mah. Offered as "all Parabs" or "Fravardin
-  and Tir only" (some families book only those two).
-- Repeating series (monthly, yearly, Parabs) have NO default length. The
-  mobed must choose one at creation; the API must refuse a series without it.
-- Dates already past are kept on the calendar (a diary, no payments yet).
+- Parab = the day whose Roj is named like the Mah. Mah 10 is Dae-Pa-Adar
+  (renamed from "Dae" across the app) and so is Roj 8, so that is its Parab.
+  Offered as "all Parabs" or "Fravardin and
+  Tir only" (some families book only those two). Each Parab comes round once
+  a year, so it is a repeating series like the yearly one.
+- Monthly, yearly and Parabs have NO default length. The mobed must choose
+  how many months / years at creation; the API refuses a series without it.
+  "N years" of Parabs is day 2 through the Nth anniversary (day 360*N + 1),
+  i.e. each Parab exactly N times.
+- Masiso, Bamsi, Chamsi and Varsi are month multiples, which is what the
+  names mean: the monthly (30th day), two months (60th), six months (180th)
+  and a year (360th), each on the SAME Roj. The Deci (29th, 59th, 179th,
+  359th) is the day before each. Masiso is therefore the first monthly and
+  Varsi the first yearly: when both are chosen the date is listed once, under
+  the family's own name. (The opening is different: the 10th is the literal
+  10th day with the death day as day 1.)
+- One observance per date. When several land on the same day the highest
+  wins: the opening days, then yearly (Varsi included), then monthly (Masiso,
+  Bamsi, Chamsi included), then a Deci, then a Parab. A Parab hidden under a
+  higher one is not shown elsewhere.
+- A death on a Gatha day: that Gatha day is day 1 and the opening carries on
+  from it. The monthly is then Roj Hormazd (Roj 1) of each Mah, from Mah 2 of
+  the next year (so Masiso is Mah 2 Roj 1, Bamsi Mah 3 Roj 1), and the yearly
+  is the SAME Gatha day each year (so Varsi is that Gatha day a year on). In
+  a Fasli year without that Gatha (the sixth exists only in leap cycles) the
+  last Gatha of that year is used. The Deci is always the actual day before.
 
 **What an observance is**
 - NOT a booking. Each observance is a row of its own (`memorial_observances`)
@@ -55,29 +76,16 @@ bookings on the calendar, tagged with the memorial.
 
 ## ON HOLD
 
-1. **Death on a Gatha day.** Has special rules the mobed must confirm first.
-   The engine refuses it (`ValueError`) rather than guess.
-2. **Dae Parab.** No Roj is called plain "Dae" (Dae-Pa-Adar, Dae-Pa-Meher and
-   Dae-Pa-Din are other days). Which Roj is Dae's Parab is unconfirmed. It is
-   left OUT of "all Parabs" for now, so "all" is currently 11 of 12 Mahs.
-   Must be settled before "all Parabs" is shown to a mobed.
-3. **Gujarati spellings** (Dasmi, Deci, Masiso, Bamsi, Chamsi, Varsi). Ours to
-   establish; provisional, all in `NAMED_DAYS`.
-4. **Day 30 convention.** Implemented as the Roj BEFORE the monthly Roj
-   (death day = day 1, counted by Roj and Mah). Confirm this matches how
-   Masiso is actually observed.
-5. **Parab on the same day as another observance** (e.g. a monthly landing on
-   a Parab) currently stays two entries. Decide at the database step whether
-   to merge into one booking.
-6. **Optional time on ORDINARY bookings.** Parked, not needed now that
+1. **Gujarati spellings** (Dasmi, Deci, Masiso, Bamsi, Chamsi, Varsi, and the
+   Parab names). Confirmed fine for now; all in `NAMED_DAYS`.
+2. **Gatha-death monthly starting point.** The first monthly (Masiso) after a
+   Gatha death is Mah 2 Roj 1 of the next year, about a month on. Mah 1 Roj 1
+   would be only a few days after the death, so it was not used. Confirm.
+3. **Optional time on ORDINARY bookings.** Parked, not needed now that
    memorial observances are their own rows. If wanted later: add
    `bookings.has_time` (default true), store 00:00 IST when untimed, and fix
    the sunrise anchor, conflict check, slip and My Day "upcoming" query.
-
-7. **"N years" of Parabs** means through the Nth anniversary of the death
-   (day 361 for N=1), so a Parab after the anniversary falls in the next
-   year's count. Confirm this is how families count it.
-8. **Roj/Mah on memorial rows** is read in the fire temple's calendar (how the
+4. **Roj/Mah on memorial rows** is read in the fire temple's calendar (how the
    schedule was counted), not the mobed's primary calendar. They differ only
    if a mobed's primary is not their fire temple's system.
 

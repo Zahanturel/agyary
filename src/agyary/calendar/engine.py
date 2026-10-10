@@ -32,7 +32,7 @@ from enum import Enum
 
 ROJ_NAMES: tuple[str, ...] = (
     "Hormazd", "Bahman", "Ardibehesht", "Shahrevar", "Aspandard", "Khordad",
-    "Amardad", "Daepadar", "Adar", "Avan", "Khorshed", "Mohor", "Tir", "Gosh",
+    "Amardad", "Dae-Pa-Adar", "Adar", "Avan", "Khorshed", "Mohor", "Tir", "Gosh",
     "Dae-Pa-Meher", "Meher", "Sarosh", "Rashne", "Fravardin", "Behram", "Ram",
     "Govad", "Dae-Pa-Din", "Din", "Ashishvangh", "Ashtad", "Asman", "Zamyad",
     "Mareshpand", "Aneran",
@@ -40,7 +40,7 @@ ROJ_NAMES: tuple[str, ...] = (
 
 MAH_NAMES: tuple[str, ...] = (
     "Fravardin", "Ardibehesht", "Khordad", "Tir", "Amardad", "Shahrevar",
-    "Meher", "Avan", "Adar", "Dae", "Bahman", "Aspandard",
+    "Meher", "Avan", "Adar", "Dae-Pa-Adar", "Bahman", "Aspandard",
 )
 
 GATHA_NAMES: tuple[str, ...] = (

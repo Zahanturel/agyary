@@ -56,9 +56,11 @@ def test_gatha_days_are_not_counted():
     assert count_from(30, 12, YEAR, 2) == (1, 1, YEAR + 1)
 
 
-def test_a_gatha_death_cannot_be_counted_from():
+def test_a_gatha_death_has_no_roj_and_mah_for_day_one():
     with pytest.raises(ValueError):
-        count_from(1, 13, YEAR, 10)
+        count_from(1, 13, YEAR, 1)
+    with pytest.raises(ValueError):
+        count_from(7, 13, YEAR, 2)   # there is no 7th Gatha day
 
 
 def test_day_number_must_be_positive():
@@ -127,15 +129,55 @@ def test_month_twelve_and_year_one_are_the_same_day_named_as_the_year():
     assert [o.code for o in day361] == ["year_1"]
 
 
-def test_named_days_in_order_with_the_before_days_one_day_earlier():
+@pytest.mark.parametrize("system", SYSTEMS)
+def test_masiso_bamsi_chamsi_varsi_are_months_on_at_the_same_roj(system):
+    # Masiso is the monthly, Bamsi two months, Chamsi six, Varsi a year.
+    sched = build_schedule(
+        death_roj=9, death_mah=3, death_year=YEAR, system=system,
+        opening=OPENING_TENTH, day_counts=(30, 60, 180, 360),
+    )
+    named = {o.label: o for o in sched if o.label != "Dasmi"}
+    assert {k: (v.roj, v.mah, v.year) for k, v in named.items()} == {
+        "Masiso": (9, 4, YEAR), "Bamsi": (9, 5, YEAR),
+        "Chamsi": (9, 9, YEAR), "Varsi": (9, 3, YEAR + 1),
+    }
+    for o in named.values():
+        assert o.gregorian_date == parsi_to_gregorian(o.year, system, mah=o.mah, roj=o.roj)
+
+
+def test_deci_is_the_day_before_each():
     sched = build_schedule(
         death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
         opening=OPENING_TENTH, day_counts=(29, 30, 59, 60, 179, 180, 359, 360),
     )
-    by_day = {o.day_number: o for o in sched}
-    for before in (29, 59, 179, 359):
-        assert by_day[before + 1].gregorian_date - by_day[before].gregorian_date == timedelta(days=1)
-    assert [o.day_number for o in sched] == sorted(by_day)
+    named = [o for o in sched if o.label != "Dasmi"]
+    assert [o.label for o in named] == [
+        "Deci", "Masiso", "Deci", "Bamsi", "Deci", "Chamsi", "Deci", "Varsi"]
+    for deci, day in zip(named[0::2], named[1::2]):
+        assert day.gregorian_date - deci.gregorian_date == timedelta(days=1)
+        assert (deci.roj, day.roj) == (8, 9)
+
+
+def test_masiso_is_the_first_monthly_so_the_date_is_listed_once_under_its_name():
+    sched = build_schedule(
+        death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+        opening=OPENING_TENTH, day_counts=(30,), monthly_months=3,
+    )
+    labels = [o.label for o in sched if o.label != "Dasmi"]
+    assert labels == ["Masiso", "Month 2", "Month 3"]
+    assert len({o.gregorian_date for o in sched}) == len(sched)
+
+
+def test_varsi_is_the_first_yearly_and_keeps_its_own_name():
+    kw = dict(death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+              opening=OPENING_TENTH, yearly_years=2)
+    with_varsi = build_schedule(**kw, day_counts=(360,))
+    assert [o.label for o in with_varsi if o.label != "Dasmi"] == ["Varsi", "Year 2"]
+    without = build_schedule(**kw)
+    assert [o.label for o in without if o.label != "Dasmi"] == ["Year 1", "Year 2"]
+    # And with monthly running through the year, the year still wins that day.
+    labels = [o.label for o in build_schedule(**kw, monthly_months=12)]
+    assert "Year 1" in labels and "Month 12" not in labels
 
 
 def test_rejects_bad_input():
@@ -172,30 +214,42 @@ def test_literal_opening_can_land_in_the_gatha_days():
     assert (by_day[10].mah, by_day[10].roj) == (1, 4)
 
 
-def test_thirtieth_day_skips_the_gathas_unlike_the_tenth():
+def test_masiso_skips_the_gathas_unlike_the_tenth():
     sched = build_schedule(
         death_roj=30, death_mah=12, death_year=YEAR, system=CalendarSystem.SHENSHAI,
         opening=OPENING_TENTH, day_counts=(30,),
     )
-    thirtieth = next(o for o in sched if o.day_number == 30)
-    # By Roj and Mah: the Roj before the same Roj (30) next Mah -> Mah 1, Roj 29...
-    assert (thirtieth.roj, thirtieth.mah, thirtieth.year) == (29, 1, YEAR + 1)
-    # ...which is 5 Gatha days later in real time than 29 days after the death.
+    masiso = next(o for o in sched if o.label == "Masiso")
+    # By Roj and Mah: the same Roj (30), one Mah on -> Mah 1 of the next year...
+    assert (masiso.roj, masiso.mah, masiso.year) == (30, 1, YEAR + 1)
+    # ...which is 5 Gatha days later in real time than 30 days after the death.
     death = parsi_to_gregorian(YEAR, CalendarSystem.SHENSHAI, mah=12, roj=30)
-    assert (thirtieth.gregorian_date - death).days == 29 + 5
+    assert (masiso.gregorian_date - death).days == 30 + 5
 
 
 # --- Parabs ------------------------------------------------------------------
+
+def _parabs(sched):
+    return [o for o in sched if o.code.startswith("parab_")]
+
 
 def test_parab_rojs_are_the_roj_named_like_the_mah():
     from agyary.calendar import MAH_NAMES, ROJ_NAMES
     from agyary.calendar.memorial import PARAB_ROJ_FOR_MAH
 
+    assert sorted(PARAB_ROJ_FOR_MAH) == list(range(1, 13))
     for mah, roj in PARAB_ROJ_FOR_MAH.items():
         assert ROJ_NAMES[roj - 1] == MAH_NAMES[mah - 1]
     assert PARAB_ROJ_FOR_MAH[1] == 19 and PARAB_ROJ_FOR_MAH[4] == 13
-    # Dae has no Roj of its own name; held until the mobed confirms it.
-    assert 10 not in PARAB_ROJ_FOR_MAH
+
+
+def test_dae_parab_is_dae_pa_adar():
+    from agyary.calendar import MAH_NAMES, ROJ_NAMES
+    from agyary.calendar.memorial import PARAB_ROJ_FOR_MAH
+
+    # Mah 10 and Roj 8 are both Dae-Pa-Adar, so the name rule covers it.
+    assert MAH_NAMES[9] == "Dae-Pa-Adar" and ROJ_NAMES[7] == "Dae-Pa-Adar"
+    assert PARAB_ROJ_FOR_MAH[10] == 8
 
 
 def test_fravardin_and_tir_parabs_only():
@@ -205,38 +259,107 @@ def test_fravardin_and_tir_parabs_only():
         death_roj=9, death_mah=6, death_year=YEAR, system=CalendarSystem.SHENSHAI,
         opening=OPENING_TENTH, parabs=PARAB_FRAVARDIN_TIR, parab_years=2,
     )
-    parabs = [o for o in sched if o.code.startswith("parab_")]
+    parabs = _parabs(sched)
     assert {(o.mah, o.roj) for o in parabs} == {(1, 19), (4, 13)}
-    # Two years after a Mah-6 death: Tir and Fravardin of the next two years.
+    # Two years after a Mah-6 death: Fravardin and Tir of each of the next two years.
     assert [(o.mah, o.year) for o in parabs] == [
         (1, YEAR + 1), (4, YEAR + 1), (1, YEAR + 2), (4, YEAR + 2)]
 
 
-def test_parabs_are_after_the_death_and_within_the_years_asked():
-    from agyary.calendar.memorial import PARAB_ALL, PARAB_ROJ_FOR_MAH
+def test_each_parab_comes_round_once_a_year_for_the_years_asked():
+    from agyary.calendar.memorial import PARAB_ALL
 
-    sched = build_schedule(
-        death_roj=9, death_mah=6, death_year=YEAR, system=CalendarSystem.SHENSHAI,
-        opening=OPENING_TENTH, parabs=PARAB_ALL, parab_years=1,
-    )
-    parabs = [o for o in sched if o.code.startswith("parab_")]
-    death = parsi_to_gregorian(YEAR, CalendarSystem.SHENSHAI, mah=6, roj=9)
-    assert all(1 < o.day_number <= 361 for o in parabs)
-    assert all(o.gregorian_date > death for o in parabs)
-    # One year after a Mah-6 death: every Parab with a Roj, exactly once.
-    assert len(parabs) == len(PARAB_ROJ_FOR_MAH)
+    for years in (1, 2, 3):
+        sched = build_schedule(
+            death_roj=9, death_mah=6, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+            opening=OPENING_TENTH, parabs=PARAB_ALL, parab_years=years,
+        )
+        parabs = _parabs(sched)
+        death = parsi_to_gregorian(YEAR, CalendarSystem.SHENSHAI, mah=6, roj=9)
+        assert len(parabs) == 12 * years
+        assert all(2 <= o.day_number <= 360 * years + 1 for o in parabs)
+        assert all(o.gregorian_date > death for o in parabs)
+        for mah in range(1, 13):
+            assert sum(o.mah == mah for o in parabs) == years
+    assert any(o.label == "Dae-Pa-Adar Parab" and o.roj == 8 for o in parabs)
 
 
-def test_a_parab_death_day_is_not_its_own_observance():
+def test_a_parab_on_the_death_day_is_not_an_observance_but_next_years_is():
     from agyary.calendar.memorial import PARAB_FRAVARDIN_TIR
 
+    # Death on the Fravardin Parab itself: that day is day 1; Tir follows this
+    # year and the next Fravardin Parab is the anniversary, day 361.
     sched = build_schedule(
         death_roj=19, death_mah=1, death_year=YEAR, system=CalendarSystem.SHENSHAI,
         opening=OPENING_TENTH, parabs=PARAB_FRAVARDIN_TIR, parab_years=1,
     )
-    parabs = [o for o in sched if o.code.startswith("parab_")]
-    # Tir this year, and Fravardin again on the anniversary (day 361).
-    assert [(o.mah, o.year) for o in parabs] == [(4, YEAR), (1, YEAR + 1)]
+    assert [(o.mah, o.year) for o in _parabs(sched)] == [(4, YEAR), (1, YEAR + 1)]
+
+
+# --- When observances share a date, one wins: opening > yearly > monthly > Deci > Parab
+
+KW = dict(system=CalendarSystem.SHENSHAI)
+
+
+def test_yearly_beats_a_parab_on_the_same_day():
+    from agyary.calendar.memorial import PARAB_FRAVARDIN_TIR
+
+    # Death on the Fravardin Parab: the next one is the anniversary, day 361.
+    sched = build_schedule(
+        death_roj=19, death_mah=1, death_year=YEAR, opening=OPENING_TENTH,
+        yearly_years=1, parabs=PARAB_FRAVARDIN_TIR, parab_years=1, **KW,
+    )
+    on_361 = [o for o in sched if o.day_number == 361]
+    assert [o.code for o in on_361] == ["year_1"]
+    assert len({o.gregorian_date for o in sched}) == len(sched)
+
+
+def test_monthly_beats_a_parab_on_the_same_day():
+    from agyary.calendar.memorial import PARAB_ALL
+
+    # Death on Roj 6 of Mah 1: the monthly on Roj 6 of Mah 3 is the Khordad Parab's day.
+    sched = build_schedule(
+        death_roj=6, death_mah=1, death_year=YEAR, opening=OPENING_TENTH,
+        monthly_months=2, parabs=PARAB_ALL, parab_years=1, **KW,
+    )
+    on_that_day = [o for o in sched if (o.mah, o.roj) == (3, 6)]
+    assert [o.code for o in on_that_day] == ["month_2"]
+
+
+def test_the_opening_beats_a_parab_on_the_same_day():
+    from agyary.calendar.memorial import PARAB_FRAVARDIN_TIR
+
+    # Death on Roj 10 of Mah 1: the 10th day is Roj 19 of Mah 1, the Fravardin Parab.
+    sched = build_schedule(
+        death_roj=10, death_mah=1, death_year=YEAR, opening=OPENING_TENTH,
+        parabs=PARAB_FRAVARDIN_TIR, parab_years=1, **KW,
+    )
+    on_that_day = [o for o in sched if (o.mah, o.roj) == (1, 19)]
+    assert [o.label for o in on_that_day] == ["Dasmi"]
+
+
+def test_a_deci_beats_a_parab_on_the_same_day():
+    from agyary.calendar.memorial import PARAB_ALL
+
+    # The Deci is the day before Masiso, so for a death on Roj 7 it is Roj 6 of the
+    # next Mah - the Parab of any Mah whose Parab Roj is 6 (Khordad).
+    sched = build_schedule(
+        death_roj=7, death_mah=2, death_year=YEAR, opening=OPENING_TENTH,
+        day_counts=(29, 30), parabs=PARAB_ALL, parab_years=1, **KW,
+    )
+    deci = next(o for o in sched if o.label == "Deci")
+    assert (deci.roj, deci.mah) == (6, 3)
+    assert [o.label for o in sched if o.gregorian_date == deci.gregorian_date] == ["Deci"]
+
+
+def test_a_named_day_keeps_its_name_over_the_plain_series():
+    sched = build_schedule(
+        death_roj=9, death_mah=3, death_year=YEAR, opening=OPENING_TENTH,
+        day_counts=(30, 360), monthly_months=12, yearly_years=1, **KW,
+    )
+    labels = [o.label for o in sched]
+    assert "Masiso" in labels and "Varsi" in labels
+    assert "Month 1" not in labels and "Year 1" not in labels and "Month 12" not in labels
 
 
 def test_parabs_need_an_explicit_length():
@@ -247,3 +370,121 @@ def test_parabs_need_an_explicit_length():
             death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
             opening=OPENING_TENTH, parabs=PARAB_ALL,
         )
+
+
+# --- A death on a Gatha day ---------------------------------------------------
+# The Gatha day is day 1 and the opening carries straight on. Counting by Roj
+# and Mah has no Roj to start from, so the Gatha sits just before Mah 1 Roj 1
+# of the next year: day 2 is Mah 1 Roj 1.
+
+def test_roj_and_mah_counting_from_a_gatha_death():
+    assert count_from(3, 13, YEAR, 2) == (1, 1, YEAR + 1)
+    assert count_from(3, 13, YEAR, 30) == (29, 1, YEAR + 1)
+    assert count_from(3, 13, YEAR, 31) == (30, 1, YEAR + 1)
+    assert count_from(3, 13, YEAR, 32) == (1, 2, YEAR + 1)
+    # Day 361 is 360 Roj-days on: the last Roj of the last Mah.
+    assert count_from(3, 13, YEAR, 361) == (30, 12, YEAR + 1)
+
+
+@pytest.mark.parametrize("system", SYSTEMS)
+def test_opening_from_a_gatha_death_is_literal_days_from_that_day(system):
+    sched = build_schedule(
+        death_roj=3, death_mah=13, death_year=YEAR, system=system, opening=OPENING_ALL,
+    )
+    death = parsi_to_gregorian(YEAR, system, gatha_index=3)
+    assert [o.day_number for o in sched] == list(range(1, 11))
+    assert sched[0].gregorian_date == death and sched[0].gatha_index == 3
+    assert [o.gregorian_date for o in sched] == [death + timedelta(days=n) for n in range(10)]
+    # Gatha 3 is followed by Gatha 4, Gatha 5, then Mah 1 Roj 1 of the next year.
+    assert [o.gatha_index for o in sched[:3]] == [3, 4, 5]
+    assert (sched[3].mah, sched[3].roj, sched[3].year) == (1, 1, YEAR + 1)
+
+
+def test_the_tenth_day_from_a_gatha_death_is_literal():
+    sched = build_schedule(
+        death_roj=3, death_mah=13, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+        opening=OPENING_TENTH,
+    )
+    death = parsi_to_gregorian(YEAR, CalendarSystem.SHENSHAI, gatha_index=3)
+    assert sched[0].gregorian_date == death + timedelta(days=9)
+
+
+@pytest.mark.parametrize("system", SYSTEMS)
+def test_after_a_gatha_death_monthly_is_roj_hormazd_and_yearly_is_the_gatha(system):
+    from agyary.calendar.memorial import PARAB_FRAVARDIN_TIR
+
+    sched = build_schedule(
+        death_roj=3, death_mah=13, death_year=YEAR, system=system,
+        opening=OPENING_TENTH, day_counts=(29, 30, 60, 360), monthly_months=3, yearly_years=2,
+        parabs=PARAB_FRAVARDIN_TIR, parab_years=1,
+    )
+    by_label = {o.label: o for o in sched}
+    # Monthly: Roj Hormazd (Roj 1) of each Mah, from Mah 2 of the next year.
+    assert (by_label["Masiso"].roj, by_label["Masiso"].mah, by_label["Masiso"].year) == (1, 2, YEAR + 1)
+    assert (by_label["Bamsi"].roj, by_label["Bamsi"].mah) == (1, 3)
+    assert (by_label["Month 3"].roj, by_label["Month 3"].mah) == (1, 4)
+    # Yearly: the same Gatha day each year. Varsi is the first of them.
+    assert by_label["Varsi"].gatha_index == 3 and by_label["Varsi"].year == YEAR + 1
+    assert by_label["Varsi"].gregorian_date == parsi_to_gregorian(YEAR + 1, system, gatha_index=3)
+    assert by_label["Year 2"].gatha_index == 3 and by_label["Year 2"].year == YEAR + 2
+    assert "Year 1" not in by_label   # that day is Varsi
+    # The Deci is the actual day before Masiso: the last Roj of Mah 1.
+    assert by_label["Deci"].gregorian_date == by_label["Masiso"].gregorian_date - timedelta(days=1)
+    assert (by_label["Deci"].roj, by_label["Deci"].mah) == (30, 1)
+    # And a month is about a month: Masiso is not days after the death.
+    assert (by_label["Masiso"].gregorian_date - parsi_to_gregorian(YEAR, system, gatha_index=3)).days > 25
+    # Fravardin Parab is Roj 19 of Mah 1: day 20; Tir Parab is Roj 13 of Mah 4: day 104.
+    parabs = {o.mah: o for o in _parabs(sched)}
+    assert (parabs[1].day_number, parabs[1].year) == (20, YEAR + 1)
+    assert (parabs[4].day_number, parabs[4].year) == (104, YEAR + 1)
+
+
+def test_after_a_gatha_death_the_twelfth_monthly_and_the_first_yearly_are_different_days():
+    sched = build_schedule(
+        death_roj=3, death_mah=13, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+        opening=OPENING_TENTH, monthly_months=13, yearly_years=1,
+    )
+    by_code = {o.code: o for o in sched}
+    assert (by_code["month_11"].mah, by_code["month_11"].roj, by_code["month_11"].year) == (12, 1, YEAR + 1)
+    assert by_code["year_1"].gatha_index == 3
+    # The 12th and 13th monthly wrap into the following year.
+    assert (by_code["month_12"].mah, by_code["month_12"].roj, by_code["month_12"].year) == (1, 1, YEAR + 2)
+    assert (by_code["month_13"].mah, by_code["month_13"].roj, by_code["month_13"].year) == (2, 1, YEAR + 2)
+
+
+def test_a_yearly_gatha_in_a_year_without_that_gatha_keeps_the_last_one():
+    # Fasli's sixth Gatha exists only in leap cycles; the year after one has five.
+    for year in range(1390, 1410):
+        try:
+            parsi_to_gregorian(year, CalendarSystem.FASLI, gatha_index=6)
+            parsi_to_gregorian(year + 1, CalendarSystem.FASLI, gatha_index=6)
+        except ValueError:
+            try:
+                parsi_to_gregorian(year, CalendarSystem.FASLI, gatha_index=6)
+            except ValueError:
+                continue
+            sched = build_schedule(
+                death_roj=6, death_mah=13, death_year=year, system=CalendarSystem.FASLI,
+                opening=OPENING_TENTH, yearly_years=1,
+            )
+            year_one = next(o for o in sched if o.code == "year_1")
+            assert year_one.gatha_index == 5 and year_one.year == year + 1
+            return
+    raise AssertionError("no leap Fasli year found")
+
+
+def test_a_gatha_death_in_the_sixth_gatha_of_a_fasli_leap_cycle():
+    # Fasli adds a sixth Gatha in leap cycles; find one and die on it.
+    for year in range(1390, 1410):
+        try:
+            died = parsi_to_gregorian(year, CalendarSystem.FASLI, gatha_index=6)
+        except ValueError:
+            continue
+        sched = build_schedule(
+            death_roj=6, death_mah=13, death_year=year, system=CalendarSystem.FASLI,
+            opening=OPENING_ALL,
+        )
+        assert sched[0].gregorian_date == died and sched[0].gatha_index == 6
+        assert (sched[1].mah, sched[1].roj, sched[1].year) == (1, 1, year + 1)
+        return
+    raise AssertionError("no leap Fasli year found")

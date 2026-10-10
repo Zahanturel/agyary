@@ -54,7 +54,7 @@ def upgrade() -> None:
         sa.CheckConstraint("calendar_system IN ('shenshai', 'kadmi', 'fasli')", name="ck_memorials_calendar_system"),
         sa.CheckConstraint("opening IN ('days_1_to_10', 'tenth_only')", name="ck_memorials_opening"),
         sa.CheckConstraint("parabs IS NULL OR parabs IN ('all', 'fravardin_tir')", name="ck_memorials_parabs"),
-        sa.CheckConstraint("death_mah BETWEEN 1 AND 12", name="ck_memorials_death_mah"),
+        sa.CheckConstraint("death_mah BETWEEN 1 AND 13", name="ck_memorials_death_mah"),
         sa.CheckConstraint("death_roj BETWEEN 1 AND 30", name="ck_memorials_death_roj"),
         sa.CheckConstraint("(parabs IS NULL) = (parab_years IS NULL)", name="ck_memorials_parab_length"),
         sa.CheckConstraint("monthly_months IS NULL OR monthly_months >= 1", name="ck_memorials_monthly_length"),

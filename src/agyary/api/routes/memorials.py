@@ -46,7 +46,7 @@ class MemorialIn(BaseModel):
     day_counts: list[int] = []
     monthly: SeriesIn | None = None   # count = months
     yearly: SeriesIn | None = None    # count = years
-    parabs: ParabsIn | None = None
+    parabs: ParabsIn | None = None   # years = how many years they run
 
 
 class CreateMemorialIn(MemorialIn):

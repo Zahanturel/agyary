@@ -10,23 +10,34 @@ simply the Nth calendar day from the death, Gatha days included. A death on
 Roj Aneran, the day before the Gathas, has its 10th day a few Rojs into the
 next year, after the Gathas have each used up a day.
 
-ROJ-AND-MAH days - everything else (29th and 30th, 59th and 60th, ..., the
-monthly and yearly observances, the Parabs). These depend only on Roj and
-Mah, so the five Gatha days are NOT counted and each is a plain walk around
-a 360-day cycle (12 Mah x 30 Roj), identical in all three calendar systems.
-The system only decides which Gregorian date a given Roj and Mah lands on.
+ROJ-AND-MAH days - everything else. These depend only on Roj and Mah, so the
+five Gatha days are NOT counted and each is a plain walk around a 360-day
+cycle (12 Mah x 30 Roj), identical in all three calendar systems. The system
+only decides which Gregorian date a given Roj and Mah lands on.
 
-So, for a death on Roj R of Mah M, counting by Roj and Mah:
+The named days are month multiples, which is what their names mean: Masiso
+is the monthly (the 30th day), Bamsi is two months (60th), Chamsi six months
+(180th) and Varsi a year (360th). Each lands on the SAME Roj, that many Mahs
+on. The Deci is the day before: the 29th before Masiso, and so on.
+
+So, for a death on Roj R of Mah M, with the day of death as day 1:
 
     day 1    = R, M                     (the day of death)
-    day 30   = the Roj before R, next Mah
-    day 31   = R, next Mah              (the monthly observance)
-    day 360  = the Roj before R, M, next year   (Varsi)
-    day 361  = R, M, next year          (the yearly observance)
+    day 30   = the Roj before R, next Mah      (the Deci before Masiso)
+    day 31   = R, next Mah              (Masiso, and the first monthly)
+    day 361  = R, M, next year          (Varsi, and the first yearly)
 
-A death during the Gatha days (Mah 13) has no Roj and Mah to count from, so
-it is refused rather than guessed at. It has special rules the mobed has yet
-to confirm - see docs/memorial-plan.md.
+A death on a Gatha day (Mah 13, with the Gatha number in the Roj slot, as
+machis store it) has no Roj and Mah of its own. That Gatha day is day 1 and
+the literal opening carries on from it. After that, as the mobed has it:
+
+    monthly  = Roj Hormazd (the first Roj) of each Mah, from Mah 2 of the
+               next year - so Masiso is Mah 2 Roj 1, a month or so on, and
+               Bamsi Mah 3 Roj 1, ...
+    yearly   = the same Gatha day, each year - so Varsi is that Gatha day
+               a year on
+
+The Deci is always the actual day before the day it precedes.
 """
 
 from __future__ import annotations
@@ -52,9 +63,11 @@ OPENING_ALL = "days_1_to_10"
 OPENING_TENTH = "tenth_only"
 OPENINGS = (OPENING_ALL, OPENING_TENTH)
 
-# The named day-count observances, in the mobed's own words. The labels are
-# provisional spellings and live ONLY here, so settling one is a one-line
-# change. The 29/59/179/359 ones are the day before the 30/60/180/360.
+# The named observances, in the mobed's own words, keyed by the family's name
+# for the day ("the 30th"). 10 is the Dasmi, a literal day. 30/60/180/360 are
+# Masiso, Bamsi, Chamsi and Varsi - one, two, six and twelve months on, on the
+# same Roj - and 29/59/179/359 are the Deci, the day before each. The labels
+# are spellings and live ONLY here, so changing one is a one-line change.
 NAMED_DAYS: dict[int, str] = {
     10: "Dasmi",
     29: "Deci",
@@ -68,13 +81,12 @@ NAMED_DAYS: dict[int, str] = {
 }
 DAY_COUNT_CHOICES = tuple(NAMED_DAYS)  # what the picker offers, in order
 
+
 # A Parab is the day whose Roj shares its name with the Mah. Fravardin and
 # Tir are the two special ones, which some families book on their own.
 # Keyed by Mah number -> Roj number.
 #
-# Dae (Mah 10) is deliberately absent: no Roj is called plain "Dae"
-# (Dae-Pa-Adar, Dae-Pa-Meher and Dae-Pa-Din are different days), and which
-# Roj is its Parab is not settled. See docs/memorial-plan.md.
+# Mah 10 is Dae-Pa-Adar, and so is Roj 8, so every Mah has its Parab by name.
 PARAB_ROJ_FOR_MAH: dict[int, int] = {
     mah: ROJ_NAMES.index(name) + 1
     for mah, name in enumerate(MAH_NAMES, start=1)
@@ -108,19 +120,37 @@ def _ordinal(mah: int, roj: int) -> int:
     return (mah - 1) * DAYS_PER_MONTH + (roj - 1)
 
 
+GATHA_MAH = 13  # how machis (and memorials) store a Gatha day: Roj slot = its number
+
+
+def _start(death_roj: int, death_mah: int, death_year: int) -> tuple[int, int]:
+    """Where counting by Roj and Mah starts: (position in the 360-day cycle,
+    the Parsi year that cycle belongs to). A Gatha death sits at -1 of the
+    NEXT year - the slot just before Mah 1, Roj 1."""
+    if death_mah == GATHA_MAH:
+        if not 1 <= death_roj <= 6:
+            raise ValueError(f"A Gatha day is 1 to 6, got {death_roj}")
+        return -1, death_year + 1
+    if not 1 <= death_mah <= MONTHS_PER_YEAR:
+        raise ValueError(f"mah must be between 1 and {GATHA_MAH}, got {death_mah}")
+    if not 1 <= death_roj <= DAYS_PER_MONTH:
+        raise ValueError(f"roj must be between 1 and {DAYS_PER_MONTH}, got {death_roj}")
+    return _ordinal(death_mah, death_roj), death_year
+
+
 def count_from(
     death_roj: int, death_mah: int, death_year: int, day_number: int
 ) -> tuple[int, int, int]:
     """(roj, mah, year) of day ``day_number`` counted by Roj and Mah, where
-    day 1 is the death day and Gatha days are skipped."""
+    day 1 is the death day and Gatha days are skipped. For a death on a Gatha
+    day, day 1 is that Gatha day itself, which has no Roj and Mah to return."""
     if day_number < 1:
         raise ValueError(f"day_number must be 1 or more, got {day_number}")
-    if not 1 <= death_mah <= MONTHS_PER_YEAR:
-        raise ValueError("A death during the Gatha days cannot be counted from")
-    if not 1 <= death_roj <= DAYS_PER_MONTH:
-        raise ValueError(f"roj must be between 1 and {DAYS_PER_MONTH}, got {death_roj}")
-    steps = _ordinal(death_mah, death_roj) + (day_number - 1)
-    year = death_year + steps // CYCLE_DAYS
+    start, base_year = _start(death_roj, death_mah, death_year)
+    if death_mah == GATHA_MAH and day_number == 1:
+        raise ValueError("Day 1 is the Gatha day itself")
+    steps = start + (day_number - 1)
+    year = base_year + steps // CYCLE_DAYS
     within = steps % CYCLE_DAYS
     return within % DAYS_PER_MONTH + 1, within // DAYS_PER_MONTH + 1, year
 
@@ -150,25 +180,64 @@ def _literal(
 def _parab_observances(
     death: tuple[int, int, int], system: CalendarSystem, which: str, years: int,
 ) -> list[Observance]:
-    """Every Parab strictly after the death, through the ``years``-th
-    anniversary. Counted by Roj and Mah, like the monthly ones."""
-    death_roj, death_mah, death_year = death
-    start = _ordinal(death_mah, death_roj)
+    """Every Parab from day 2 through the ``years``-th anniversary (day
+    360 * years + 1), so each Parab comes round once a year for ``years``
+    years. Counted by Roj and Mah, like the monthly ones. The death day itself
+    is not a Parab observance."""
+    start, base_year = _start(*death)
     mahs = _FRAVARDIN_TIR_MAHS if which == PARAB_FRAVARDIN_TIR else tuple(PARAB_ROJ_FOR_MAH)
     out = []
     for year_offset in range(years + 1):
         for mah in mahs:
             roj = PARAB_ROJ_FOR_MAH[mah]
             day_number = _ordinal(mah, roj) - start + CYCLE_DAYS * year_offset + 1
-            if day_number <= 1 or day_number > CYCLE_DAYS * years + 1:
+            if not 2 <= day_number <= CYCLE_DAYS * years + 1:
                 continue
-            year = death_year + year_offset
+            year = base_year + year_offset
             out.append(Observance(
                 code=f"parab_{mah}_{year}", label=f"{MAH_NAMES[mah - 1]} Parab",
                 day_number=day_number, roj=roj, mah=mah, year=year,
                 gregorian_date=parsi_to_gregorian(year, system, mah=mah, roj=roj),
             ))
     return out
+
+
+# The named days that are month multiples, as ("m", months) / ("y", years):
+# Masiso is the monthly, Bamsi two months, Chamsi six, Varsi a year. Each Deci
+# is the day before its named day.
+_NAMED_SPAN = {30: ("m", 1), 60: ("m", 2), 180: ("m", 6), 360: ("y", 1)}
+_DECI_OF = {29: 30, 59: 60, 179: 180, 359: 360}
+
+# Which wins when two observances land on one date (lower wins).
+_RANK = {"lit": 0, "y": 1, "m": 2, "deci": 3, "parab": 4}
+
+
+def _position(roj: int, mah: int, year: int, start: int, base_year: int) -> int:
+    """Which day since the death (the death day being day 1) a Roj and Mah
+    is, counting by Roj and Mah."""
+    return (year - base_year) * CYCLE_DAYS + _ordinal(mah, roj) - start + 1
+
+
+def _gatha_day(year: int, system: CalendarSystem, gatha: int) -> date:
+    """That Gatha day in ``year``. Fasli has a sixth Gatha only in leap
+    cycles, so a year without one keeps the last Gatha it does have."""
+    for g in range(gatha, 0, -1):
+        try:
+            return parsi_to_gregorian(year, system, gatha_index=g)
+        except ValueError:
+            continue
+    raise ValueError(f"No Gatha day found in year {year}")
+
+
+def _on_date(
+    code: str, label: str, day_number: int, when: date, system: CalendarSystem,
+) -> Observance:
+    """An observance on a given date, read back in the calendar."""
+    p = gregorian_to_parsi(when, system)
+    return Observance(
+        code=code, label=label, day_number=day_number, roj=p.roj, mah=p.mah,
+        year=p.year, gregorian_date=when, gatha_index=p.gatha_index,
+    )
 
 
 def build_schedule(
@@ -190,19 +259,25 @@ def build_schedule(
 
     ``opening`` is OPENING_ALL (days 1-10) or OPENING_TENTH. ``day_counts``
     picks from DAY_COUNT_CHOICES; the 10th is already covered by the opening
-    and is never listed twice. ``monthly_months`` is how many monthly
+    and is never listed twice. Masiso, Bamsi, Chamsi and Varsi are the same
+    days as the monthly and yearly observances, so when both are chosen each
+    date appears once, under its own name. ``monthly_months`` is how many monthly
     observances follow the death (day 31, 61, ...), and ``yearly_years`` how
     many yearly ones (day 361, 721, ...); 0 means none.
 
     There is no "forever" here, so a schedule is always finite and can always
-    be shown whole. There are no default end points either: choosing a
-    repeating series without saying how long is for the caller to refuse
-    (``parabs`` without ``parab_years`` is refused here), not for this to
-    fill in.
+    be shown whole. There are no default end points either: a series without
+    a length is for the caller to refuse (``parabs`` without ``parab_years`` is
+    refused here), not for this to fill in.
 
     ``parabs`` is PARAB_ALL or PARAB_FRAVARDIN_TIR, for ``parab_years`` years
-    after the death. A Parab that lands on the same day as another
-    observance stays its own entry.
+    after the death - each Parab once a year, like the yearly observance.
+
+    Only one observance is kept per date. When several land on the same day
+    the highest wins: the opening days, then the yearly (Varsi included), then
+    the monthly (Masiso, Bamsi and Chamsi included), then a Deci, then a Parab.
+
+    ``death_mah`` 13 means a Gatha day, with the Gatha number in ``death_roj``.
     """
     if opening not in OPENINGS:
         raise ValueError(f"opening must be one of {OPENINGS}, got {opening!r}")
@@ -217,33 +292,76 @@ def build_schedule(
         raise ValueError("Say how many years the Parabs should run for")
 
     death = (death_roj, death_mah, death_year)
-    # Validates the death date as a side effect (Gatha deaths are refused).
-    count_from(*death, 1)
-    death_date = parsi_to_gregorian(death_year, system, mah=death_mah, roj=death_roj)
+    _start(*death)  # validates the death date
+    if death_mah == GATHA_MAH:
+        death_date = parsi_to_gregorian(death_year, system, gatha_index=death_roj)
+    else:
+        death_date = parsi_to_gregorian(death_year, system, mah=death_mah, roj=death_roj)
 
-    wanted: dict[int, tuple[str, str]] = {}  # day_number -> (code, label)
+    start, base_year = _start(*death)
+    gatha = death_mah == GATHA_MAH
+
+    # What each choice IS, so that two names for one day are one entry. The
+    # first to claim a day keeps it: the family's own word (Masiso) beats
+    # "Year 1", which beats "Month 12". Keys: ("lit", n) a literal day,
+    # ("m", k) the k-th monthly, ("y", k) the k-th yearly, ("deci", n).
+    def canon(kind: str, k: int) -> tuple[str, int]:
+        # By Roj and Mah, the 12th monthly IS the first yearly. After a death on
+        # a Gatha day it is not: the monthly is on Roj 1, the yearly on the Gatha.
+        if not gatha and kind == "m" and k % 12 == 0:
+            return ("y", k // 12)
+        return (kind, k)
+
+    wanted: dict[tuple[str, int], tuple[str, str]] = {}
+
+    def claim(key, code, label):
+        wanted.setdefault(key, (code, label))
+
     if opening == OPENING_ALL:
         for n in range(1, 11):
-            wanted[n] = (f"day_{n}", f"Day {n}")
-    for n in day_counts:
-        wanted.setdefault(n, (f"day_{n}", NAMED_DAYS[n]))
+            claim(("lit", n), f"day_{n}", f"Day {n}")
     # The 10th is always the mobed's own word for it, however it was reached.
-    wanted[10] = ("day_10", NAMED_DAYS[10])
-
-    for k in range(1, monthly_months + 1):
-        wanted.setdefault(1 + DAYS_PER_MONTH * k, (f"month_{k}", f"Month {k}"))
+    wanted[("lit", 10)] = ("day_10", NAMED_DAYS[10])
+    for n in day_counts:
+        if n == 10:
+            continue
+        if n in _NAMED_SPAN:
+            claim(canon(*_NAMED_SPAN[n]), f"day_{n}", NAMED_DAYS[n])
+        else:
+            claim(("deci", n), f"day_{n}", NAMED_DAYS[n])
     for k in range(1, yearly_years + 1):
-        # Month 12 and Year 1 are the same day (361); the family knows it
-        # as the year.
-        wanted[1 + CYCLE_DAYS * k] = (f"year_{k}", f"Year {k}")
+        claim(("y", k), f"year_{k}", f"Year {k}")
+    for k in range(1, monthly_months + 1):
+        claim(canon("m", k), f"month_{k}", f"Month {k}")
 
-    # The opening is counted in literal days; everything else by Roj and Mah.
-    # With "tenth only" the 10th is still the literal 10th day.
-    found = [
-        _literal(code, label, n, death_date, system) if n <= 10
-        else _by_roj_and_mah(code, label, n, death, system)
-        for n, (code, label) in sorted(wanted.items())
-    ]
+    def resolve(key, code, label) -> Observance:
+        kind, k = key
+        if kind == "lit":
+            return _literal(code, label, k, death_date, system)
+        if kind == "deci":
+            target = resolve(canon(*_NAMED_SPAN[_DECI_OF[k]]), "", "")
+            return _on_date(code, label, target.day_number - 1,
+                            target.gregorian_date - timedelta(days=1), system)
+        if kind == "m":
+            if gatha:
+                mah, year = k % 12 + 1, base_year + k // 12
+                return Observance(
+                    code=code, label=label, roj=1, mah=mah, year=year,
+                    day_number=_position(1, mah, year, start, base_year),
+                    gregorian_date=parsi_to_gregorian(year, system, mah=mah, roj=1),
+                )
+            return _by_roj_and_mah(code, label, 1 + DAYS_PER_MONTH * k, death, system)
+        # kind == "y"
+        if gatha:
+            return _on_date(code, label, 1 + CYCLE_DAYS * k,
+                            _gatha_day(death_year + k, system, death_roj), system)
+        return _by_roj_and_mah(code, label, 1 + CYCLE_DAYS * k, death, system)
+
+    ranked = [(_RANK[key[0]], resolve(key, code, label)) for key, (code, label) in wanted.items()]
     if parabs is not None:
-        found += _parab_observances(death, system, parabs, parab_years)
-    return sorted(found, key=lambda o: (o.gregorian_date, o.day_number))
+        ranked += [(_RANK["parab"], o) for o in _parab_observances(death, system, parabs, parab_years)]
+    best: dict[date, tuple[int, Observance]] = {}
+    for rank, o in ranked:
+        if o.gregorian_date not in best or rank < best[o.gregorian_date][0]:
+            best[o.gregorian_date] = (rank, o)
+    return sorted((o for _, o in best.values()), key=lambda o: (o.gregorian_date, o.day_number))

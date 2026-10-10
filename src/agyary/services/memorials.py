@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.calendar.memorial import Observance, build_schedule
 from agyary.messaging import booking_service
+from agyary.messaging.availability import parsi_slot_fields
 from agyary.models import (
     Agyary,
     Customer,
@@ -87,18 +88,13 @@ def plan(agyary: Agyary, choice: Choice) -> tuple[list[Observance], tuple[int, i
         raise MemorialError("Choose how many years the Parabs should run for.")
 
     system = CalendarSystem(agyary.calendar_system)
-    death = gregorian_to_parsi(choice.death_date, system)
-    if death.is_gatha:
-        # ON HOLD: deaths in the Gatha days have rules still to be confirmed
-        # (docs/memorial-plan.md). Refuse rather than guess.
-        raise MemorialError(
-            "A death during the Gatha days isn't supported yet. Please check "
-            "the date, or speak to us about how these should be counted."
-        )
+    # A Gatha death is stored the way machis store one: Mah 13, with the
+    # Gatha number in the Roj slot.
+    roj, mah, year = parsi_slot_fields(gregorian_to_parsi(choice.death_date, system))
 
     try:
         schedule = build_schedule(
-            death_roj=death.roj, death_mah=death.mah, death_year=death.year,
+            death_roj=roj, death_mah=mah, death_year=year,
             system=system, opening=choice.opening,
             day_counts=tuple(choice.day_counts),
             monthly_months=choice.monthly_months or 0,
@@ -112,7 +108,7 @@ def plan(agyary: Agyary, choice: Choice) -> tuple[list[Observance], tuple[int, i
             f"That makes {len(schedule)} observances, more than the {MAX_OBSERVANCES} allowed. "
             "Shorten the series."
         )
-    return schedule, (death.roj, death.mah, death.year)
+    return schedule, (roj, mah, year)
 
 
 async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: list[int]) -> list[Service]:

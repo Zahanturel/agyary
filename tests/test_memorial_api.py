@@ -66,10 +66,10 @@ async def test_create_gives_every_observance_the_same_services(db, client, seede
     r = await _create(client, db, aid, cid, headers, service_ids=ids)
     assert r.status_code == 200, r.text
     body = r.json()
-    # days 1-10 (10) + day 30 + 3 monthly (days 31, 61, 91)
-    assert body["total"] == 14 and body["status"] == "running"
+    # days 1-10 (10) + Masiso, which is the first of the 3 monthly (31, 61, 91)
+    assert body["total"] == 13 and body["status"] == "running"
     assert all(o["service_ids"] == sorted(ids) for o in body["observances"])
-    assert [o["time"] for o in body["observances"]] == [None] * 14   # time is optional, and blank
+    assert [o["time"] for o in body["observances"]] == [None] * 13   # time is optional, and blank
     dates = [o["date"] for o in body["observances"]]
     assert dates == sorted(dates)
 
@@ -79,7 +79,7 @@ async def test_preview_saves_nothing(db, client, seeded):
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
                           json=_body(DEATH), headers=headers)
     assert r.status_code == 200, r.text
-    assert r.json()["count"] == 14
+    assert r.json()["count"] == 13
     assert (await db.execute(select(func.count()).select_from(Memorial))).scalar_one() == 0
 
 
@@ -89,6 +89,8 @@ async def test_a_series_without_a_length_is_refused(client, db, seeded):
     url = f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials"
     r = await client.post(url, json={**_body(DEATH, service_ids=ids), "monthly": {}}, headers=headers)
     assert r.status_code == 422
+    r = await client.post(url, json={**_body(DEATH, service_ids=ids), "yearly": {}}, headers=headers)
+    assert r.status_code == 422
     r = await client.post(url, json={**_body(DEATH, service_ids=ids), "monthly": None,
                                      "parabs": {"which": "all"}}, headers=headers)
     assert r.status_code == 422
@@ -96,7 +98,8 @@ async def test_a_series_without_a_length_is_refused(client, db, seeded):
 
 async def test_lengths_are_bounded(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
-    for bad in ({"monthly": {"count": 0}}, {"monthly": {"count": 9999}}, {"yearly": {"count": 99}}):
+    for bad in ({"monthly": {"count": 0}}, {"monthly": {"count": 9999}}, {"yearly": {"count": 99}},
+                {"parabs": {"which": "all", "years": 0}}, {"parabs": {"which": "all", "years": 99}}):
         r = await _create(client, db, aid, cid, headers, **bad)
         assert r.status_code == 400, (bad, r.text)
 
@@ -110,12 +113,20 @@ async def test_at_least_one_service_is_required(client, db, seeded):
     assert r.status_code == 400
 
 
-async def test_a_death_in_the_gatha_days_is_refused_for_now(client, db, seeded):
+async def test_a_death_on_a_gatha_day_starts_from_that_day(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
     agyary = await db.get(Agyary, aid)
     gatha = parsi_to_gregorian(1400, CalendarSystem(agyary.calendar_system), gatha_index=2)
-    r = await _create(client, db, aid, cid, headers, death=gatha)
-    assert r.status_code == 400 and "Gatha" in r.json()["detail"]
+    r = await _create(client, db, aid, cid, headers, death=gatha, day_counts=[], monthly=None)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["death"]["mah"] == 13 and body["death"]["roj"] == 2
+    first = body["observances"][0]
+    assert first["date"] == gatha.isoformat() and first["gatha_index"] == 2
+    assert body["total"] == 10
+    # And it can be read back, and previewed, like any other.
+    again = await client.get(f"/api/mobed/agyaries/{aid}/memorials/{body['id']}", headers=headers)
+    assert again.status_code == 200 and again.json()["observances"][0]["gatha_index"] == 2
 
 
 async def test_parabs_and_the_other_series(client, db, seeded):
@@ -125,6 +136,7 @@ async def test_parabs_and_the_other_series(client, db, seeded):
     assert r.status_code == 200, r.text
     codes = [o["code"] for o in r.json()["observances"]]
     assert "year_1" in codes and "year_2" in codes
+    # Fravardin and Tir, once a year for two years.
     assert sum(c.startswith("parab_") for c in codes) == 4
 
 
