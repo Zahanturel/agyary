@@ -111,8 +111,6 @@ export async function renderMemorial({ id, oid }) {
 
     <div class="card">
       <h2>Observances</h2>
-      <p class="meta">Tap one to change its services, add a time, or leave a note.
-        Changes apply to that day only.</p>
       <div id="obsList"></div>
     </div>
 

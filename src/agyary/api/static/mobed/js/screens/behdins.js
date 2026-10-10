@@ -127,7 +127,7 @@ export function renderBehdinNew() {
           Import from contacts
         </button>` : ""}
       <label>Name</label>
-      <input type="text" id="bnName" placeholder="e.g. Behdin Jaidev Mistry"
+      <input type="text" id="bnName" placeholder="e.g. Behdin Zubin Mistry"
              autocomplete="off" value="${esc(prefillName)}">
       <label>WhatsApp number</label>${phoneField("bnPhone")}
     </div>
@@ -142,8 +142,6 @@ export function renderBehdinNew() {
     ${memorialOk ? `<div class="card">
       <div class="check-row"><input type="checkbox" id="bnMemOn">
         <label for="bnMemOn"><b>They are keeping observances for someone they have lost</b></label></div>
-      <p class="meta" style="margin:4px 0 0">Give the date of death and choose what the family keeps -
-        the whole schedule is laid out from it.</p>
     </div>
     <div id="bnMemForm" style="display:none"></div>` : ""}
 
@@ -387,7 +385,6 @@ export async function renderBehdinDetail({ id }) {
         <h2 style="margin:0">Memorials</h2>
         <button class="icon-add" id="bdAddMemorial" title="New memorial" aria-label="New memorial">+</button>
       </div>
-      <p class="meta">The observances this family keeps for someone they have lost.</p>
       ${memorials.length ? memorials.map(m => `
         <div class="search-result" data-mem="${m.id}">
           <div>${esc(m.departed_name)}</div>

@@ -22,9 +22,13 @@
 import { esc } from "./util.js";
 import { NAME_TITLES, TITLE_DISPLAY } from "./state.js";
 
+// A new row is a Behdin unless someone says otherwise; saved rows keep theirs.
+const DEFAULT_TITLE = "behdin";
+
 function titleSelect(sel) {
+  const chosen = sel || DEFAULT_TITLE;
   return `<select class="t">${NAME_TITLES.map(t =>
-    `<option value="${t}" ${t === sel ? "selected" : ""}>${TITLE_DISPLAY[t]}</option>`).join("")}</select>`;
+    `<option value="${t}" ${t === chosen ? "selected" : ""}>${TITLE_DISPLAY[t]}</option>`).join("")}</select>`;
 }
 
 /** One half of a pair - no remove button; a pair is two people, and

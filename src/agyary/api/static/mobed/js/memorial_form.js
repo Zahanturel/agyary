@@ -24,8 +24,8 @@ import { parsiText } from "./screens/memorial.js";
 // calendar/memorial.py, which is what labels the saved schedule. The 10th is
 // part of the opening, so it is not listed here.
 const NAMED_DAYS = [
-  [29, "Deci"], [30, "Masiso - one month"], [59, "Deci"], [60, "Bamsi - two months"],
-  [179, "Deci"], [180, "Chamsi - six months"], [359, "Deci"], [360, "Varsi - one year"],
+  [29, "Deci"], [30, "Masiso"], [59, "Deci"], [60, "Bamsi"],
+  [179, "Deci"], [180, "Chamsi"], [359, "Deci"], [360, "Varsi"],
 ];
 
 const MAX = { months: 120, years: 50, parabYears: 25 };
@@ -82,59 +82,58 @@ export function buildMemorialBody(draft) {
   return { body };
 }
 
-/** The form's cards. `heading` goes at the top of the first card; `intro` is
- *  a line under it. */
+/** The form: who and when, then one card holding every option. `heading` goes
+ *  at the top of the first card; `intro` is a line under it. */
 export function memorialFormHtml(draft, services, { heading = "", intro = "" } = {}) {
   const has = (n) => draft.days.includes(n);
+  const radio = (name, id, value, checked, text) =>
+    `<div class="check-row"><input type="radio" name="${name}" id="${id}" value="${value}" ${checked ? "checked" : ""}>
+        <label for="${id}">${text}</label></div>`;
   return `
       <div class="card">
         ${heading}
         ${intro ? `<p class="meta">${intro}</p>` : ""}
         <label>Departed person</label>
-        <input type="text" id="mmName" placeholder="e.g. Dinshaw Mistry" autocomplete="off"
-               value="${esc(draft.name)}">
+        <input type="text" id="mmName" autocomplete="off" value="${esc(draft.name)}">
         <label>Date of death</label>
         <input type="date" id="mmDeath" max="${todayIst()}" value="${esc(draft.death)}">
         <p class="meta" id="mmParsi" style="margin:6px 0 0"></p>
-        <label>Calendar the family keeps</label>
+        <label>Calendar</label>
         <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"], ["fasli", "Fasli"]].map(([k, v]) =>
           `<option value="${k}" ${draft.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
-        <p class="meta" style="margin:6px 0 0">Decides which day is a Parab and where the Gatha days fall.
-          It starts as your own calendar.</p>
       </div>
 
       <div class="card">
-        <h2>Opening</h2>
-        <p class="meta">The first days after the death. The day of death is day 1.</p>
-        <div class="choice-group">
-          <div class="check-row"><input type="radio" name="mmOpening" id="mmOpenAll" value="days_1_to_10"
-            ${draft.opening === "days_1_to_10" ? "checked" : ""}><label for="mmOpenAll">Every day, days 1 to 10</label></div>
-          <div class="check-row"><input type="radio" name="mmOpening" id="mmOpenTenth" value="tenth_only"
-            ${draft.opening === "tenth_only" ? "checked" : ""}><label for="mmOpenTenth">The 10th day only</label></div>
+        <h2>Observances</h2>
+
+        <div class="names-group-label"><b>Prayers</b><span>on every day</span></div>
+        <div class="chip-row" id="mmServices">${services.map(s => `
+          <label class="chip ${draft.services.includes(s.id) ? "on" : ""}" style="margin:0">
+            <input type="checkbox" data-svc="${s.id}" ${draft.services.includes(s.id) ? "checked" : ""}>${esc(s.name)}</label>`).join("")}
         </div>
-      </div>
 
-      <div class="card">
-        <h2>Other days</h2>
-        <p class="meta">Masiso, Bamsi, Chamsi and Varsi fall on the same Roj, that many months on. A Deci is the day before. If you also choose monthly or yearly below, each date is listed once.</p>
+        <div class="names-group-label"><b>First days</b></div>
+        <div class="choice-group">
+          ${radio("mmOpening", "mmOpenAll", "days_1_to_10", draft.opening === "days_1_to_10", "Days 1 to 10")}
+          ${radio("mmOpening", "mmOpenTenth", "tenth_only", draft.opening === "tenth_only", "10th day only")}
+        </div>
+
+        <div class="names-group-label"><b>Named days</b></div>
         <div class="choice-group">${NAMED_DAYS.map(([n, name]) => `
           <div class="check-row"><input type="checkbox" data-day="${n}" id="mmDay${n}" ${has(n) ? "checked" : ""}>
             <label for="mmDay${n}">${n}th day · ${name}</label></div>`).join("")}
         </div>
-      </div>
 
-      <div class="card">
-        <h2>Repeating</h2>
-        <p class="meta">Each one needs a length - choose how long it should run.</p>
+        <div class="names-group-label"><b>Repeating</b></div>
         <div class="choice-group">
           <div class="check-row"><input type="checkbox" id="mmMonthly" ${draft.monthly ? "checked" : ""}>
-            <label for="mmMonthly">Every month, on the same Roj</label></div>
+            <label for="mmMonthly">Every month</label></div>
           <div class="sub-field" id="mmMonthlyBox" style="${draft.monthly ? "" : "display:none"}">
             <label>For how many months</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.months}" id="mmMonths" value="${esc(draft.months)}"></div>
 
           <div class="check-row"><input type="checkbox" id="mmYearly" ${draft.yearly ? "checked" : ""}>
-            <label for="mmYearly">Every year, on the same Roj and Mah</label></div>
+            <label for="mmYearly">Every year</label></div>
           <div class="sub-field" id="mmYearlyBox" style="${draft.yearly ? "" : "display:none"}">
             <label>For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.years}" id="mmYears" value="${esc(draft.years)}"></div>
@@ -142,22 +141,10 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <div class="check-row"><input type="checkbox" id="mmParab" ${draft.parab ? "checked" : ""}>
             <label for="mmParab">Parabs</label></div>
           <div class="sub-field" id="mmParabBox" style="${draft.parab ? "" : "display:none"}">
-            <div class="check-row"><input type="radio" name="mmParabWhich" id="mmParabFT" value="fravardin_tir"
-              ${draft.parabWhich === "fravardin_tir" ? "checked" : ""}><label for="mmParabFT">Fravardin and Tir only</label></div>
-            <div class="check-row"><input type="radio" name="mmParabWhich" id="mmParabAll" value="all"
-              ${draft.parabWhich === "all" ? "checked" : ""}><label for="mmParabAll">All Parabs</label></div>
-            <p class="meta" style="margin:0">Each Parab comes round once a year.</p>
+            ${radio("mmParabWhich", "mmParabFT", "fravardin_tir", draft.parabWhich === "fravardin_tir", "Fravardin and Tir only")}
+            ${radio("mmParabWhich", "mmParabAll", "all", draft.parabWhich === "all", "All Parabs")}
             <label>For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.parabYears}" id="mmParabYears" value="${esc(draft.parabYears)}"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Services</h2>
-        <p class="meta">Every observance starts with these. You can change any one of them later.</p>
-        <div class="chip-row" id="mmServices">${services.map(s => `
-          <label class="chip ${draft.services.includes(s.id) ? "on" : ""}" style="margin:0">
-            <input type="checkbox" data-svc="${s.id}" ${draft.services.includes(s.id) ? "checked" : ""}>${esc(s.name)}</label>`).join("")}
         </div>
       </div>`;
 }

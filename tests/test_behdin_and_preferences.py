@@ -24,7 +24,7 @@ from tests.test_mobed_api import _member_headers
 BEHDIN_PHONE = "+919944400001"
 
 
-async def _behdin(client, aid, headers, name="Behdin Jaidev", phone=BEHDIN_PHONE) -> dict:
+async def _behdin(client, aid, headers, name="Behdin Zubin", phone=BEHDIN_PHONE) -> dict:
     r = await client.post(
         f"/api/mobed/agyaries/{aid}/behdins", json={"name": name, "phone": phone}, headers=headers
     )
@@ -131,20 +131,20 @@ async def test_create_get_and_update_behdin(db, client, seeded):
     headers = await _member_headers(client, seeded)
 
     created = await _behdin(client, aid, headers)
-    assert created["created"] is True and created["name"] == "Behdin Jaidev"
+    assert created["created"] is True and created["name"] == "Behdin Zubin"
 
     fetched = (await client.get(f"/api/mobed/agyaries/{aid}/behdins/{created['id']}", headers=headers)).json()
     assert fetched["phone"] == BEHDIN_PHONE
 
     r = await client.patch(
         f"/api/mobed/agyaries/{aid}/behdins/{created['id']}",
-        json={"name": "Behdin Jaidev Mistry", "phone": "+919944400002"},
+        json={"name": "Behdin Zubin Mistry", "phone": "+919944400002"},
         headers=headers,
     )
     assert r.status_code == 200
     customer = await db.get(Customer, created["id"])
     await db.refresh(customer)
-    assert customer.name == "Behdin Jaidev Mistry" and customer.phone == "+919944400002"
+    assert customer.name == "Behdin Zubin Mistry" and customer.phone == "+919944400002"
 
 
 async def test_registering_does_not_claim_they_booked(db, client, seeded):
@@ -175,7 +175,7 @@ async def test_known_phone_links_instead_of_duplicating(db, client, seeded):
     again = await _behdin(client, aid, headers, name="Typed Differently")
     assert again["created"] is False and again["id"] == first["id"]
     # An existing person's stored name is not silently rewritten.
-    assert again["name"] == "Behdin Jaidev"
+    assert again["name"] == "Behdin Zubin"
 
     rows = (await db.execute(select(Customer).where(Customer.phone == BEHDIN_PHONE))).scalars().all()
     assert len(rows) == 1
@@ -196,7 +196,7 @@ async def test_register_lists_behdins_who_have_never_booked(db, client, seeded):
     assert created["id"] in [b["id"] for b in listed]
 
     filtered = (
-        await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": "Jaidev"}, headers=headers)
+        await client.get(f"/api/mobed/agyaries/{aid}/behdins", params={"q": "Zubin"}, headers=headers)
     ).json()
     assert [b["id"] for b in filtered] == [created["id"]]
     assert (
@@ -364,7 +364,7 @@ async def test_saved_names_round_trip_and_delete(db, client, seeded):
     r = await client.put(f"{base}/pair", json=pairs, headers=headers)
     assert r.status_code == 200 and len(r.json()) == 2
 
-    singles = {"names": [{"title": "behdin", "name": "Jaidev", "status": "living", "pair_group": None}]}
+    singles = {"names": [{"title": "behdin", "name": "Zubin", "status": "living", "pair_group": None}]}
     assert (await client.put(f"{base}/farmayeshne", json=singles, headers=headers)).status_code == 200
 
     listed = (await client.get(base, headers=headers)).json()
