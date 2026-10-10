@@ -46,25 +46,26 @@ class SlotOption:
     gregorian: date
 
 
-async def booked_gehs(
-    db: AsyncSession, agyary_id: int, roj: int, mah: int, year: int
-) -> set[int]:
+async def booked_gehs(db: AsyncSession, agyary_id: int, gregorian: date) -> set[int]:
+    """The gehs already taken on a real day at this fire temple.
+
+    A slot is a day and a geh. It is looked up by the day itself, not by the
+    Roj/Mah/year a client worked out for it: those depend on which calendar the
+    person doing the booking reads, so two mobeds booking the same real day
+    would otherwise look at different slots and both succeed.
+    """
     result = await db.execute(
         select(Machi.geh).where(
             Machi.agyary_id == agyary_id,
-            Machi.parsi_roj == roj,
-            Machi.parsi_mah == mah,
-            Machi.parsi_year == year,
+            Machi.gregorian_date == gregorian,
             Machi.status.notin_(SLOT_RELEASING_STATUSES),
         )
     )
     return set(result.scalars())
 
 
-async def available_gehs(
-    db: AsyncSession, agyary_id: int, roj: int, mah: int, year: int
-) -> list[int]:
-    booked = await booked_gehs(db, agyary_id, roj, mah, year)
+async def available_gehs(db: AsyncSession, agyary_id: int, gregorian: date) -> list[int]:
+    booked = await booked_gehs(db, agyary_id, gregorian)
     return [geh for geh in ALL_GEHS if geh not in booked]
 
 
@@ -81,7 +82,7 @@ async def next_days_with_geh(
     for offset in range(1, _SCAN_LIMIT_DAYS + 1):
         day = after + timedelta(days=offset)
         roj, mah, year = parsi_slot_fields(gregorian_to_parsi(day, system))
-        if geh not in await booked_gehs(db, agyary_id, roj, mah, year):
+        if geh not in await booked_gehs(db, agyary_id, day):
             options.append(SlotOption(roj=roj, mah=mah, year=year, geh=geh, gregorian=day))
             if len(options) >= count:
                 break
@@ -101,7 +102,7 @@ async def next_days_with_any_geh(
     for offset in range(1, _SCAN_LIMIT_DAYS + 1):
         day = after + timedelta(days=offset)
         roj, mah, year = parsi_slot_fields(gregorian_to_parsi(day, system))
-        free = await available_gehs(db, agyary_id, roj, mah, year)
+        free = await available_gehs(db, agyary_id, day)
         if free:
             options.append(SlotOption(roj=roj, mah=mah, year=year, geh=free[0], gregorian=day))
             if len(options) >= count:

@@ -24,8 +24,8 @@ import {
 import { state, GEH_NAME_BY_NUM } from "../state.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import { slipCardHtml } from "./slip.js";
-import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
-import { esc } from "../util.js";
+import { chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading } from "../ui.js";
+import { esc, gregLabel } from "../util.js";
 import { navigate, returnTo, navGuard } from "../router.js";
 
 const FORM = { booking: "#/event/new", machi: "#/machi/new" };
@@ -85,6 +85,8 @@ export function renderReview(kind) {
     const preview = (names) => (isMachi ? previewMachi : previewBooking)(aid, {
       ...bodyFor(draft, names),
       ...(isMachi && draft.edit ? { editing_machi_id: draft.edit.id } : {}),
+      // So the server can say now which dates of the series are already taken.
+      ...(isMachi && draft.recurring && !draft.edit ? { recurring: draft.recurring } : {}),
     });
 
     let first;
@@ -108,6 +110,7 @@ export function renderReview(kind) {
           then save.</p>
       </div>
       <div id="rvWarn"></div>
+      <div id="rvSeries"></div>
       <div id="rvSlip">${slipCardHtml(first.slip)}</div>
       <div class="card no-print">
         <h2>Names</h2>
@@ -149,6 +152,16 @@ export function renderReview(kind) {
       }
     };
     showSlot(first.slot_available !== false);
+
+    // A repeating series runs into somebody else's booking only for those dates;
+    // the rest still book. Say which, before the mobed confirms.
+    const clashes = first.series_conflicts || [];
+    if (clashes.length) {
+      document.getElementById("rvSeries").innerHTML = `<div class="info-banner">
+        The geh is already booked on ${clashes.length === 1 ? "this date" : "these dates"} in the repeat,
+        so ${clashes.length === 1 ? "it" : "they"} will be left out:
+        ${clashes.map(d => esc(gregLabel(d))).join("; ")}.</div>`;
+    }
 
     // Redraw the slip as the names change. Only a valid set is sent - a
     // half-filled pair would be refused - and the hint says why nothing moved.
@@ -216,6 +229,11 @@ export function renderReview(kind) {
         // on (or had left in the address from a previous visit), so a saved
         // event looked as though it had not been.
         await navigate(`#/calendar/day/${draft.gregorian}`, { replace: true });
+        // Said on the slip, where the mobed lands - not on the calendar they pass through.
+        const skipped = (res.skipped || []).map(x => gregLabel(x.gregorian));
+        if (skipped.length) {
+          flashInfo(`Booked. The geh was already taken on ${skipped.join("; ")}, so ${skipped.length === 1 ? "that date was" : "those dates were"} left out of the repeat.`);
+        }
         navigate(slipHash);
       } catch (e) {
         confirmBtn.disabled = false;

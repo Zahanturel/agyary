@@ -7,10 +7,10 @@ HTTP/JWT/request-response layer on top of it.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -919,15 +919,25 @@ class ManualAddNameIn(BaseModel):
     pair_group: int | None = None
 
 
+# What a machi slot can possibly be. Roj, Mah and year are worked out again on the
+# server from the date (see booking_service.slot_keys), but a value that could
+# never be real is still refused here - it must never be mistaken for "taken".
+RojNo = Annotated[int, Field(ge=1, le=30)]
+MahNo = Annotated[int, Field(ge=1, le=13)]       # 13 is the Gatha days
+ParsiYear = Annotated[int, Field(ge=1, le=9999)]
+GehNo = Annotated[int, Field(ge=1, le=5)]
+MachiPurpose = Literal["patet", "tandarosti"]
+
+
 class ManualAddMachiIn(BaseModel):
     behdin_phone: Phone
     behdin_name: str
-    roj: int
-    mah: int
-    year: int
-    geh: int
+    roj: RojNo
+    mah: MahNo
+    year: ParsiYear
+    geh: GehNo
     gregorian: date
-    purpose: str
+    purpose: MachiPurpose
     # Left out (the PWA never sends it), the behdin's saved names are
     # auto-attached server-side - see manual_add_machi.
     names: list[ManualAddNameIn] | None = None
@@ -950,15 +960,18 @@ async def manual_add_machi(
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
     names = [n.model_dump() for n in payload.names] if payload.names is not None else None
-    result = await mobed_dashboard.manual_add_machi(
-        db, agyary, user.id,
-        behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
-        roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
-        gregorian=payload.gregorian, purpose=payload.purpose,
-        names=names,
-        recurring=payload.recurring,
-        remember_names=payload.remember_names,
-    )
+    try:
+        result = await mobed_dashboard.manual_add_machi(
+            db, agyary, user.id,
+            behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
+            roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
+            gregorian=payload.gregorian, purpose=payload.purpose,
+            names=names,
+            recurring=payload.recurring,
+            remember_names=payload.remember_names,
+        )
+    except mobed_dashboard.BookingInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await db.commit()
     if result.machi is None:
         return {
@@ -971,7 +984,12 @@ async def manual_add_machi(
                 ],
             },
         }
-    return {"confirmed": True, "machi_id": result.machi.id}
+    return {
+        "confirmed": True,
+        "machi_id": result.machi.id,
+        # Dates of a repeating series that could not be booked: somebody holds that geh.
+        "skipped": [{"gregorian": d.isoformat()} for d in result.skipped],
+    }
 
 
 class ManualAddBookingIn(BaseModel):
@@ -1059,13 +1077,16 @@ async def preview_machi(
     still get the geh."""
     agyary = await _require_membership(db, agyary_id, user)
     names = [n.model_dump() for n in payload.names] if payload.names is not None else None
-    result = await mobed_dashboard.preview_machi_slip(
-        db, agyary, user.id,
-        behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
-        roj=payload.roj, mah=payload.mah, year=payload.year,
-        gregorian=payload.gregorian, geh=payload.geh, purpose=payload.purpose,
-        names=names, editing_machi_id=payload.editing_machi_id,
-    )
+    try:
+        result = await mobed_dashboard.preview_machi_slip(
+            db, agyary, user.id,
+            behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
+            roj=payload.roj, mah=payload.mah, year=payload.year,
+            gregorian=payload.gregorian, geh=payload.geh, purpose=payload.purpose,
+            names=names, editing_machi_id=payload.editing_machi_id, recurring=payload.recurring,
+        )
+    except mobed_dashboard.BookingInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _preview_response(result)
 
 
@@ -1097,12 +1118,12 @@ async def booking_detail(
 class EditMachiIn(BaseModel):
     behdin_phone: Phone
     behdin_name: str
-    roj: int
-    mah: int
-    year: int
-    geh: int
+    roj: RojNo
+    mah: MahNo
+    year: ParsiYear
+    geh: GehNo
     gregorian: date
-    purpose: str
+    purpose: MachiPurpose
     # Left out, re-pulls the (possibly just-edited) behdin's current saved
     # names - see edit_machi.
     names: list[ManualAddNameIn] | None = None

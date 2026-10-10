@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
 from agyary.messaging import booking_service
-from agyary.messaging.availability import available_gehs, drop_elapsed_gehs, parsi_slot_fields
+from agyary.messaging.availability import (
+    available_gehs, booked_gehs, drop_elapsed_gehs, parsi_slot_fields,
+)
 from agyary.messaging.booking_service import MachiBookingResult
 from agyary.messaging.formatting import PURPOSE_SHORT, date_label, geh_label, names_block
 from agyary.messaging.geh_times import IST, ensure_ist, to_ist
@@ -211,10 +213,7 @@ async def bookable_gehs(db: AsyncSession, agyary: Agyary, gregorian: date) -> li
     manually recording what already happened. drop_elapsed_gehs still
     correctly no-ops for any day that isn't literally today, so this doesn't
     change same-day elapsed-geh behaviour at all."""
-    roj, mah, year = parsi_slot_fields(
-        gregorian_to_parsi(gregorian, CalendarSystem(agyary.calendar_system))
-    )
-    return drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+    return drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
 
 
 MAX_BOARD_RANGE_DAYS = 366
@@ -457,6 +456,58 @@ async def _remember(db: AsyncSession, customer_id: int, names: list[dict] | None
         await merge_saved_names(db, customer_id, names)
 
 
+class BookingInputError(Exception):
+    """A request that can never work as asked - the message is safe to show."""
+
+
+@dataclass(frozen=True)
+class MachiAddResult:
+    """What adding a machi came to. ``skipped`` lists the dates of a repeating
+    series that could not be booked because somebody already holds that geh."""
+
+    machi: Machi | None
+    alternatives: booking_service.MachiSlotAlternatives | None
+    skipped: tuple[date, ...] = ()
+
+
+def refuse_repeating_gatha(recurring: str | None, mah: int) -> None:
+    """A machi on a Gatha day cannot repeat: there is no Roj of that name to
+    come round again. Said up front, not by quietly booking just the one."""
+    if recurring and mah > 12:
+        raise BookingInputError(
+            "A machi on a Gatha day can't repeat. Book it once, or choose another day."
+        )
+
+
+# How far ahead the preview checks a repeating series for somebody else's bookings.
+SERIES_PREVIEW_PERIODS = {"same_roj_every_mah": 12, "same_roj_mah_every_year": 5}
+
+
+def _series_dates(system: CalendarSystem, roj: int, mah: int, year: int, pattern: str, periods: int) -> list[date]:
+    step = _step_for(pattern)
+    out: list[date] = []
+    for _ in range(periods):
+        mah, year = step(mah, year)
+        try:
+            out.append(parsi_to_gregorian(year, system, mah=mah, roj=roj))
+        except ValueError:
+            continue
+    return out
+
+
+async def series_conflicts(
+    db: AsyncSession, agyary: Agyary, gregorian: date, geh: int, recurring: str
+) -> list[date]:
+    """The dates in the next stretch of a series where this geh is already
+    booked - what the mobed is warned about BEFORE choosing to repeat."""
+    roj, mah, year = booking_service.slot_keys(agyary, gregorian)
+    pattern = RECURRENCE_PATTERN_CHOICES[recurring]
+    dates = _series_dates(
+        CalendarSystem(agyary.calendar_system), roj, mah, year, pattern, SERIES_PREVIEW_PERIODS[pattern]
+    )
+    return [d for d in dates if geh in await booked_gehs(db, agyary.id, d)]
+
+
 async def manual_add_machi(
     db: AsyncSession,
     agyary: Agyary,
@@ -473,7 +524,7 @@ async def manual_add_machi(
     names: list[dict] | None = None,
     recurring: str | None = None,
     remember_names: bool = True,
-) -> MachiBookingResult:
+) -> MachiAddResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
     the exact same shared function the WhatsApp flow uses (module 1) -
     never a second slot-check implementation. created_by_user_id is set
@@ -488,6 +539,11 @@ async def manual_add_machi(
     ``recurring`` is one of RECURRENCE_PATTERN_CHOICES (currently "monthly"
     or "yearly") or None for a one-off. The API boundary is what actually
     restricts it to those values - here it is trusted."""
+    # The slot is the real day and geh, worked out here in the fire temple's
+    # calendar. The Roj/Mah/year a client sends were worked out in the calendar
+    # THAT mobed reads, and are not used to decide what is being booked.
+    roj, mah, year = booking_service.slot_keys(agyary, gregorian)
+    refuse_repeating_gatha(recurring, mah)
     customer = await _resolve_customer(db, behdin_phone, behdin_name, actor_user_id)
     explicit_names = names is not None
     if names is None:
@@ -496,15 +552,16 @@ async def manual_add_machi(
         db, agyary, customer, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
     )
+    skipped: list[date] = []
     if result.machi is not None:
         result.machi.created_by_user_id = actor_user_id
         await db.flush()
         await _remember(db, customer.id, names if explicit_names else None, remember_names)
-        if recurring and mah <= 12:
-            await _create_recurring_machis(
+        if recurring:
+            skipped = await _create_recurring_machis(
                 db, agyary, result.machi, pattern=RECURRENCE_PATTERN_CHOICES[recurring]
             )
-    return result
+    return MachiAddResult(machi=result.machi, alternatives=result.alternatives, skipped=tuple(skipped))
 
 
 # Recurrence horizon, in periods of whatever the pattern steps by (months
@@ -553,7 +610,8 @@ def _step_for(pattern: str):
 
 
 async def generate_recurrence_instances(
-    db: AsyncSession, agyary: Agyary, rule: RecurrenceRule, *, through: date
+    db: AsyncSession, agyary: Agyary, rule: RecurrenceRule, *, through: date,
+    skipped: list[date] | None = None,
 ) -> int:
     """Materialise this rule's machis up to and including ``through``.
 
@@ -620,6 +678,8 @@ async def generate_recurrence_instances(
             result.machi.recurrence_rule_id = rule.id
             result.machi.is_recurring_instance = True
             created += 1
+        elif skipped is not None:
+            skipped.append(greg)
 
         attempted_through = greg
         if greg >= through:
@@ -679,9 +739,10 @@ async def _create_recurring_machis(
     *,
     pattern: str = "same_roj_every_mah",
     horizon_periods: int = RECURRENCE_HORIZON_PERIODS,
-) -> None:
+) -> list[date]:
     """Start a recurrence from ``source_machi`` and generate the first few
-    periods of it.
+    periods of it. Returns the dates it could not book because somebody else
+    holds that geh.
 
     A machi kept for a departed relative is usually kept every month on the
     same Roj, indefinitely (``same_roj_every_mah``). One kept for a birthday
@@ -716,7 +777,9 @@ async def _create_recurring_machis(
     through = parsi_to_gregorian(
         year, CalendarSystem(agyary.calendar_system), mah=mah, roj=source_machi.parsi_roj
     )
-    await generate_recurrence_instances(db, agyary, rule, through=through)
+    skipped: list[date] = []
+    await generate_recurrence_instances(db, agyary, rule, through=through, skipped=skipped)
+    return skipped
 
 
 @dataclass(frozen=True)
@@ -1225,6 +1288,7 @@ async def preview_machi_slip(
     db: AsyncSession, agyary: Agyary, reader_user_id: int, *,
     behdin_phone: str, behdin_name: str, roj: int, mah: int, year: int, gregorian: date,
     geh: int, purpose: str, names: list[dict] | None, editing_machi_id: int | None = None,
+    recurring: str | None = None,
 ) -> dict:
     name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name)
     pool_empty = await _pool_is_empty(db, customer)
@@ -1244,15 +1308,20 @@ async def preview_machi_slip(
 
     # Whether confirming would actually get the slot. An edit that leaves the
     # day and geh alone is trivially fine - the machi already holds it.
-    # Asked the way saving asks it: by the slot's Roj/Mah/Year, through the
-    # same availability core, so the answer cannot differ from what confirming
-    # would find.
-    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+    # Asked the way saving asks it: by the real day and geh, through the same
+    # availability core, so the answer cannot differ from what confirming would find.
+    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
     available = geh in free
     if not available and editing_machi_id is not None:
         machi = await db.get(Machi, editing_machi_id)
         available = bool(
-            machi and machi.agyary_id == agyary.id
-            and (machi.parsi_roj, machi.parsi_mah, machi.parsi_year, machi.geh) == (roj, mah, year, geh)
+            machi and machi.agyary_id == agyary.id and (machi.gregorian_date, machi.geh) == (gregorian, geh)
         )
-    return {"slip": slip, "names": names, "pool_empty": pool_empty, "slot_available": available}
+    conflicts: list[date] = []
+    if recurring and editing_machi_id is None:
+        refuse_repeating_gatha(recurring, booking_service.slot_keys(agyary, gregorian)[1])
+        conflicts = await series_conflicts(db, agyary, gregorian, geh, recurring)
+    return {
+        "slip": slip, "names": names, "pool_empty": pool_empty, "slot_available": available,
+        "series_conflicts": [d.isoformat() for d in conflicts],
+    }

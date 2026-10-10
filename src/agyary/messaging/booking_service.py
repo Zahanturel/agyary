@@ -392,12 +392,17 @@ class MachiBookingResult:
     alternatives: MachiSlotAlternatives | None
 
 
+def slot_keys(agyary: Agyary, gregorian: date) -> tuple[int, int, int]:
+    """The (roj, mah, year) a machi on this day is stored under: the fire
+    temple's own calendar, always. Callers may be reading Kadmi or Fasli; what
+    they send is for display, never for deciding which slot is being taken."""
+    return parsi_slot_fields(gregorian_to_parsi(gregorian, CalendarSystem(agyary.calendar_system)))
+
+
 async def compute_machi_alternatives(
-    db: AsyncSession, agyary: Agyary, roj: int, mah: int, year: int, geh: int, gregorian: date
+    db: AsyncSession, agyary: Agyary, geh: int, gregorian: date
 ) -> MachiSlotAlternatives:
-    same_day = drop_elapsed_gehs(
-        await available_gehs(db, agyary.id, roj, mah, year), gregorian
-    )
+    same_day = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
     same_geh_next = await next_days_with_geh(
         db, agyary.id, CalendarSystem(agyary.calendar_system), gregorian, geh
     )
@@ -427,7 +432,8 @@ async def book_machi_slot(
     booked with no amount recorded in this redesign.
     """
     names = normalize_machi_names(purpose, names)
-    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+    roj, mah, year = slot_keys(agyary, gregorian)
+    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
     if geh in free:
         try:
             machi = await create_machi_request(
@@ -451,7 +457,7 @@ async def book_machi_slot(
         except SlotTakenError:
             pass  # raced between the pre-check and the insert - fall through
 
-    alternatives = await compute_machi_alternatives(db, agyary, roj, mah, year, geh, gregorian)
+    alternatives = await compute_machi_alternatives(db, agyary, geh, gregorian)
     return MachiBookingResult(machi=None, alternatives=alternatives)
 
 
@@ -544,12 +550,16 @@ async def rebook_machi_slot(
     leaves the machi untouched; an unchanged slot (name/purpose-only edit)
     skips the re-check entirely so it can't collide with itself."""
     names = normalize_machi_names(purpose, names)
-    if (roj, mah, year, geh) != (machi.parsi_roj, machi.parsi_mah, machi.parsi_year, machi.geh):
-        free = drop_elapsed_gehs(await available_gehs(db, agyary.id, roj, mah, year), gregorian)
+    roj, mah, year = slot_keys(agyary, gregorian)
+    # Same day and geh means the machi already holds it - judged by the real day,
+    # so a machi stored under another calendar's Roj/Mah is not "moved" by a
+    # name-only edit and cannot collide with itself.
+    if (gregorian, geh) != (machi.gregorian_date, machi.geh):
+        free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
         if geh not in free:
             return MachiBookingResult(
                 machi=None,
-                alternatives=await compute_machi_alternatives(db, agyary, roj, mah, year, geh, gregorian),
+                alternatives=await compute_machi_alternatives(db, agyary, geh, gregorian),
             )
         try:
             async with db.begin_nested():
@@ -561,7 +571,7 @@ async def rebook_machi_slot(
         except IntegrityError:  # raced onto a slot taken between check and write
             return MachiBookingResult(
                 machi=None,
-                alternatives=await compute_machi_alternatives(db, agyary, roj, mah, year, geh, gregorian),
+                alternatives=await compute_machi_alternatives(db, agyary, geh, gregorian),
             )
     machi.purpose = purpose
     await replace_ceremony_names(db, names, machi_id=machi.id)

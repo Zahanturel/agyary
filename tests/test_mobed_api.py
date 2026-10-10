@@ -4,10 +4,11 @@ Machi Board, manual add, and edit - the last through the shared slot-check
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import delete, func, select
 
+from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.messaging.geh_times import to_ist
 from agyary.models import Agyary, Booking, BookingMobed, Machi, RecurrenceRule, Service, User
 from tests.conftest import sign_in
@@ -319,7 +320,10 @@ async def test_edit_machi_reschedule_and_collision(db, client, seeded):
 
     # detail pre-fills the edit form
     detail = (await client.get(f"/api/mobed/agyaries/{aid}/machis/{m1}/detail", headers=headers)).json()
-    assert detail["geh"] == 1 and detail["roj"] == 7
+    # The slot follows the date, not the Roj/Mah the request carried (this test's
+    # 7/4/1397 is not 2027-12-01), so the form pre-fills the date's real Roj.
+    real = gregorian_to_parsi(date(2027, 12, 1), CalendarSystem.SHENSHAI)
+    assert detail["geh"] == 1 and detail["roj"] == real.roj
 
     # Reschedule m1 from geh 1 -> geh 3 (free): succeeds and moves the slot.
     edit = {"behdin_phone": detail["behdin_phone"], "behdin_name": detail["behdin_name"],
