@@ -10,10 +10,13 @@ service, a mobed to accept it and a slip, while an observance carries any
 subset of Afringan / Farokshi / Baaj and an optional time. See
 docs/memorial-plan.md.
 
-Baaj is added to the service catalog of every existing fire temple (new ones
-get it from ensure_default_services). It goes in next to Farokshi, where it is
-found with the other prayers, shifting later services down by one. A fire
-temple that already has a service called Baaj is left alone.
+Baaj is added to the service catalog of every fire temple that HAS one (new
+ones get it from ensure_default_services). The unclaimed reference temples
+seeded from the worldwide list have no catalog until a mobed claims one, and
+are left alone - giving each a lone Baaj would be junk rows, and claiming one
+adds the full list anyway. It goes in next to Farokshi, where it is found with
+the other prayers, shifting later services down by one. A fire temple that
+already has a service called Baaj is left alone.
 """
 from typing import Sequence, Union
 
@@ -88,10 +91,11 @@ def upgrade() -> None:
         sa.Column("service_id", sa.BigInteger(), sa.ForeignKey("services.id"), primary_key=True),
     )
 
-    # Baaj, for every fire temple that does not already list one.
+    # Baaj, for every fire temple that has a catalog but does not list one.
     lacking = """
         FROM agyaries a
-        WHERE NOT EXISTS (
+        WHERE EXISTS (SELECT 1 FROM services s0 WHERE s0.agyary_id = a.id)
+          AND NOT EXISTS (
             SELECT 1 FROM services s
             WHERE s.agyary_id = a.id AND lower(trim(s.name)) = 'baaj'
         )

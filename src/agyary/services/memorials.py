@@ -37,6 +37,8 @@ from agyary.models import (
     MemorialObservanceService,
     Service,
 )
+from agyary.models.enums import CALENDAR_SYSTEMS
+from agyary.services import mobed_dashboard
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -65,6 +67,10 @@ class Choice:
     yearly_years: int | None = None
     parabs: str | None = None
     parab_years: int | None = None
+    # The calendar the family keeps, or None for the mobed's own primary. It
+    # decides which day is a Parab and where the Gatha days fall, so it is
+    # stored with the memorial rather than assumed later.
+    calendar: str | None = None
 
 
 def _validate_length(value: int | None, label: str, ceiling: int) -> None:
@@ -74,10 +80,22 @@ def _validate_length(value: int | None, label: str, ceiling: int) -> None:
         raise MemorialError(f"{label} must be between 1 and {ceiling}.")
 
 
-def plan(agyary: Agyary, choice: Choice) -> tuple[list[Observance], tuple[int, int, int]]:
+async def calendar_for(db: AsyncSession, user_id: int, choice: Choice) -> CalendarSystem:
+    """The calendar a memorial is counted in: the one the mobed chose for this
+    family, else the one they read in. NOT the fire temple's - the temple's
+    reckoning is for its own slots, while a family's Parabs and Gatha days
+    follow the calendar they keep, and the mobed sees every date in theirs."""
+    if choice.calendar:
+        if choice.calendar not in CALENDAR_SYSTEMS:
+            raise MemorialError("Choose Shenshai, Kadmi or Fasli.")
+        return CalendarSystem(choice.calendar)
+    return await mobed_dashboard.reading_system(db, user_id)
+
+
+def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tuple[int, int, int]]:
     """The schedule for a choice, without saving anything. Also returns the
-    death as (roj, mah, year) in the fire temple's calendar - what the
-    preview shows the mobed, and what gets stored."""
+    death as (roj, mah, year) in ``system`` - what the preview shows the
+    mobed, and what gets stored."""
     name = choice.departed_name.strip()
     if not name:
         raise MemorialError("Please enter the departed person's name.")
@@ -87,7 +105,6 @@ def plan(agyary: Agyary, choice: Choice) -> tuple[list[Observance], tuple[int, i
     if (choice.parabs is None) != (choice.parab_years is None):
         raise MemorialError("Choose how many years the Parabs should run for.")
 
-    system = CalendarSystem(agyary.calendar_system)
     # A Gatha death is stored the way machis store one: Mah 13, with the
     # Gatha number in the Roj slot.
     roj, mah, year = parsi_slot_fields(gregorian_to_parsi(choice.death_date, system))
@@ -134,7 +151,8 @@ async def create_memorial(
 ) -> Memorial:
     """Save a memorial. Every observance starts with the same services - the
     set chosen here - and each can be changed on its own afterwards."""
-    schedule, (roj, mah, year) = plan(agyary, choice)
+    system = await calendar_for(db, user_id, choice)
+    schedule, (roj, mah, year) = plan(system, choice)
     services = await _validated_services(db, agyary.id, service_ids)
 
     memorial = Memorial(
@@ -144,7 +162,7 @@ async def create_memorial(
         departed_name=choice.departed_name.strip(),
         death_gregorian=choice.death_date,
         death_roj=roj, death_mah=mah, death_year=year,
-        calendar_system=agyary.calendar_system,
+        calendar_system=system.value,
         opening=choice.opening,
         day_counts=sorted(set(choice.day_counts)),
         monthly_months=choice.monthly_months,
@@ -257,6 +275,7 @@ def serialize_memorial(
         "departed_name": memorial.departed_name,
         "death_date": memorial.death_gregorian.isoformat(),
         "death": {"roj": memorial.death_roj, "mah": memorial.death_mah, "year": memorial.death_year},
+        "calendar": memorial.calendar_system,
         "opening": memorial.opening,
         "day_counts": memorial.day_counts,
         "monthly_months": memorial.monthly_months,

@@ -47,6 +47,8 @@ class MemorialIn(BaseModel):
     monthly: SeriesIn | None = None   # count = months
     yearly: SeriesIn | None = None    # count = years
     parabs: ParabsIn | None = None   # years = how many years they run
+    # The calendar the family keeps. Left out, it is the mobed's primary.
+    calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
 
 
 class CreateMemorialIn(MemorialIn):
@@ -64,6 +66,7 @@ def _choice(p: MemorialIn) -> memorials.Choice:
         yearly_years=p.yearly.count if p.yearly else None,
         parabs=p.parabs.which if p.parabs else None,
         parab_years=p.parabs.years if p.parabs else None,
+        calendar=p.calendar,
     )
 
 
@@ -94,10 +97,13 @@ async def preview_memorial(
     await _require_behdin(db, agyary_id, customer_id, user)
     agyary = await _require_membership(db, agyary_id, user)
     try:
-        schedule, (roj, mah, year) = memorials.plan(agyary, _choice(payload))
+        choice = _choice(payload)
+        system = await memorials.calendar_for(db, user.id, choice)
+        schedule, (roj, mah, year) = memorials.plan(system, choice)
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc
     return {
+        "calendar": system.value,
         "death": {"roj": roj, "mah": mah, "year": year},
         "count": len(schedule),
         "observances": [

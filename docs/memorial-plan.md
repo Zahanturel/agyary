@@ -48,6 +48,12 @@ bookings on the calendar, tagged with the memorial.
   a Fasli year without that Gatha (the sixth exists only in leap cycles) the
   last Gatha of that year is used. The Deci is always the actual day before.
 
+**Calendar**
+- A memorial is counted in the calendar the family keeps - chosen on the form,
+  defaulting to the mobed's own primary calendar, stored with the memorial. It
+  is NOT the fire temple's: the calendars disagree about which day is a Parab
+  and where the Gatha days fall, and the mobed sees every date in their own.
+
 **What an observance is**
 - NOT a booking. Each observance is a row of its own (`memorial_observances`)
   carrying any subset of Afringan, Farokshi, Baaj, an optional time and a
@@ -85,9 +91,6 @@ bookings on the calendar, tagged with the memorial.
    memorial observances are their own rows. If wanted later: add
    `bookings.has_time` (default true), store 00:00 IST when untimed, and fix
    the sunrise anchor, conflict check, slip and My Day "upcoming" query.
-4. **Roj/Mah on memorial rows** is read in the fire temple's calendar (how the
-   schedule was counted), not the mobed's primary calendar. They differ only
-   if a mobed's primary is not their fire temple's system.
 
 ## Build order
 

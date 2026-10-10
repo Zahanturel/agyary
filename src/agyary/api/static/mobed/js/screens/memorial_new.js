@@ -36,7 +36,7 @@ const MAX = { months: 120, years: 50, parabYears: 25 };
 
 function blankDraft(cid) {
   return {
-    cid, name: "", death: "", opening: null, days: [],
+    cid, name: "", death: "", calendar: primarySystem(), opening: null, days: [],
     monthly: false, months: "", yearly: false, years: "",
     parab: false, parabWhich: null, parabYears: "",
     services: [],
@@ -82,6 +82,7 @@ export async function renderMemorialNew({ id }) {
     const body = {
       departed_name: draft.name.trim(),
       death_date: draft.death,
+      calendar: draft.calendar,
       opening: draft.opening,
       day_counts: draft.days.slice().sort((a, b) => a - b),
       monthly: null, yearly: null, parabs: null,
@@ -120,6 +121,11 @@ export async function renderMemorialNew({ id }) {
         <label>Date of death</label>
         <input type="date" id="mmDeath" max="${todayIst()}" value="${esc(draft.death)}">
         <p class="meta" id="mmParsi" style="margin:6px 0 0"></p>
+        <label>Calendar the family keeps</label>
+        <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"], ["fasli", "Fasli"]].map(([k, v]) =>
+          `<option value="${k}" ${draft.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+        <p class="meta" style="margin:6px 0 0">Decides which day is a Parab and where the Gatha days fall.
+          It starts as your own calendar.</p>
       </div>
 
       <div class="card">
@@ -190,7 +196,7 @@ export async function renderMemorialNew({ id }) {
     const readParsi = async () => {
       const note = $("#mmParsi");
       if (!draft.death) { note.textContent = ""; return; }
-      const label = await parsiLabel(draft.death, primarySystem());
+      const label = await parsiLabel(draft.death, draft.calendar);
       if (!note.isConnected) return;
       note.textContent = label;
     };
@@ -198,6 +204,7 @@ export async function renderMemorialNew({ id }) {
 
     $("#mmName").oninput = (e) => { draft.name = e.target.value; };
     $("#mmDeath").onchange = (e) => { draft.death = e.target.value; readParsi(); };
+    $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); };
     mainEl.querySelectorAll("[name=mmOpening]").forEach(r => {
       r.onchange = () => { draft.opening = r.value; };
     });

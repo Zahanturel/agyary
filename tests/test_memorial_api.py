@@ -140,6 +140,60 @@ async def test_parabs_and_the_other_series(client, db, seeded):
     assert sum(c.startswith("parab_") for c in codes) == 4
 
 
+# --- The calendar the family keeps -------------------------------------------
+
+async def _set_primary(client, headers, system):
+    r = await client.put("/api/mobed/me/preferences", headers=headers, json={
+        "visible_calendar_systems": ["gregorian", system], "default_secondary_system": system,
+        "display_language": "en"})
+    assert r.status_code == 200, r.text
+
+
+async def test_the_calendar_defaults_to_the_mobeds_primary_and_is_stored(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    await _set_primary(client, headers, "kadmi")
+    body = (await _create(client, db, aid, cid, headers, monthly=None, day_counts=[])).json()
+    assert body["calendar"] == "kadmi"
+    row = await db.get(Memorial, body["id"])
+    assert row.calendar_system == "kadmi"   # the temple is shenshai; the family is not
+
+
+async def test_a_memorial_can_be_counted_in_another_calendar(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    await _set_primary(client, headers, "shenshai")
+    kw = dict(monthly=None, day_counts=[], parabs={"which": "all", "years": 1})
+    by_system = {}
+    for system in ("shenshai", "kadmi", "fasli"):
+        r = await _create(client, db, aid, cid, headers, calendar=system, **kw)
+        assert r.status_code == 200, r.text
+        assert r.json()["calendar"] == system
+        by_system[system] = {o["code"]: o["date"] for o in r.json()["observances"]
+                             if o["code"].startswith("parab_")}
+    # The Parab of a Mah is a different Gregorian day in each calendar.
+    shen, kad = by_system["shenshai"], by_system["kadmi"]
+    assert len(shen) == len(kad) == 12
+    assert sorted(shen.values()) != sorted(kad.values())
+    assert sorted(shen.values()) != sorted(by_system["fasli"].values())
+
+
+async def test_the_preview_and_the_saved_memorial_agree_on_the_calendar(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Baaj")
+    url = f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials"
+    body = _body(DEATH, service_ids=ids, calendar="fasli")
+    preview = (await client.post(url + "/preview", json=body, headers=headers)).json()
+    made = (await client.post(url, json=body, headers=headers)).json()
+    assert preview["calendar"] == made["calendar"] == "fasli"
+    assert [o["date"] for o in preview["observances"]] == [o["date"] for o in made["observances"]]
+    assert preview["death"] == made["death"]
+
+
+async def test_an_unknown_calendar_is_refused(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    r = await _create(client, db, aid, cid, headers, calendar="gregorian")
+    assert r.status_code == 422
+
+
 # --- Privacy ----------------------------------------------------------------
 
 async def test_another_mobed_cannot_see_or_touch_a_memorial(client, db, seeded):

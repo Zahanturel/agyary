@@ -104,7 +104,7 @@ export async function renderMemorial({ id, oid }) {
       <p class="meta" style="margin:4px 0 0">
         ${behdin ? `For <a href="#/behdins/${m.customer_id}">${esc(behdin.name)}</a> · ` : ""}died
         ${esc(gregLabel(m.death_date))}</p>
-      <p class="meta" style="margin:4px 0 0">${esc(choicesText(m))}</p>
+      <p class="meta" style="margin:4px 0 0">${esc(choicesText(m))} · ${esc(m.calendar[0].toUpperCase() + m.calendar.slice(1))} calendar</p>
       <p style="margin:12px 0 0;font-size:var(--text-sm)"><b>${esc(statusText(m))}</b></p>
       <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>
     </div>
