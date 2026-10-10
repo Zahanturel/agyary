@@ -13,6 +13,7 @@ from agyary.calendar import CalendarSystem, parsi_to_gregorian
 from agyary.models import (
     Agyary, Customer, Memorial, MemorialObservance, Service,
 )
+from agyary.services import memorials
 from tests.test_mobed_api import _member_headers
 
 PHONE = "+919944400701"
@@ -291,7 +292,8 @@ async def test_a_memorial_whose_dates_have_passed_is_completed(client, db, seede
 
 async def test_next_observance_is_the_soonest_not_yet_past(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
-    death = date.today() - timedelta(days=3)
+    # IST, like the app: on a UTC runner the two dates differ for a few hours a day.
+    death = memorials.today_ist() - timedelta(days=3)
     body = (await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])).json()
     assert body["status"] == "running"
     assert body["done"] == 3
