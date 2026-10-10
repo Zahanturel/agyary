@@ -151,6 +151,8 @@ export const memorialFeed = (aid, from, to) =>
 export const listMemorials = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/memorials`);
 export const previewMemorial = (aid, cid, body) =>
   post(`/agyaries/${aid}/behdins/${cid}/memorials/preview`, body);
+export const previewNewMemorial = (aid, body) =>
+  post(`/agyaries/${aid}/memorials/preview`, body);
 export const createMemorial = (aid, cid, body) =>
   post(`/agyaries/${aid}/behdins/${cid}/memorials`, body);
 export const getMemorial = (aid, mid) => get(`/agyaries/${aid}/memorials/${mid}`);

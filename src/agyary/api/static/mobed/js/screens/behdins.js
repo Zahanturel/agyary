@@ -17,13 +17,13 @@
 
 import {
   listBehdins, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
-  getSavedNames, putSavedNames, listMemorials,
+  getSavedNames, putSavedNames, listMemorials, previewNewMemorial, createMemorial,
 } from "../api.js";
 import { state } from "../state.js";
 import { canPickContacts, pickContacts } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, flashInfo,
+  chrome, mainEl, showFab, showError, showInfo, flashInfo, flashError,
   refreshHeader, loading, backBar,
 } from "../ui.js";
 import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js";
@@ -113,7 +113,13 @@ export function renderBehdinNew() {
   state.behdinPrefillName = null;
   const backTarget = returnTo ? RETURN_TARGETS[returnTo] : "#/behdins";
 
+  // A new behdin often comes because someone has died: give the date and the
+  // whole schedule is laid out from it. Only in the mobed app (the Machi Board
+  // has no memorial screens), and not when this page is a detour from a form.
+  const memorialOk = !returnTo && !!document.getElementById("tabs");
+
   mainEl.innerHTML = `
+    <div id="bnForm">
     <div class="card">
       ${backBar("New behdin")}
       ${canPickContacts() ? `
@@ -133,10 +139,20 @@ export function renderBehdinNew() {
       <div id="savedRegion"></div>
     </div>
 
+    ${memorialOk ? `<div class="card">
+      <div class="check-row"><input type="checkbox" id="bnMemOn">
+        <label for="bnMemOn"><b>They are keeping observances for someone they have lost</b></label></div>
+      <p class="meta" style="margin:4px 0 0">Give the date of death and choose what the family keeps -
+        the whole schedule is laid out from it.</p>
+    </div>
+    <div id="bnMemForm" style="display:none"></div>` : ""}
+
     <div class="wizard-nav" style="margin-top:4px">
       <button class="ghost" id="bnCancel">Cancel</button>
       <button id="bnSave">Add behdin</button>
-    </div>`;
+    </div>
+    </div>
+    <div id="bnPreview" style="display:none"></div>`;
 
   document.getElementById("bnCancel").onclick = () => back(backTarget);
   document.getElementById("bnName").focus();
@@ -177,7 +193,39 @@ export function renderBehdinNew() {
     };
   }
 
-  document.getElementById("bnSave").onclick = async () => {
+  // The memorial, if one is being set up here. Its form is built the first
+  // time the box is ticked, and loaded then: it is not needed to add a behdin.
+  let mem = null, mdraft = null, mservices = [];
+  const saveBtn = document.getElementById("bnSave");
+  const memOn = memorialOk ? document.getElementById("bnMemOn") : null;
+  if (memOn) {
+    memOn.onchange = async () => {
+      const box = document.getElementById("bnMemForm");
+      saveBtn.textContent = memOn.checked ? "Review schedule" : "Add behdin";
+      box.style.display = memOn.checked ? "" : "none";
+      if (!memOn.checked || mdraft) return;   // off, or already built: just show/hide
+      try {
+        const [form, { prayerServices }] = await Promise.all([
+          import("../memorial_form.js"), import("./memorial.js"),
+        ]);
+        mservices = await prayerServices(state.currentAgyaryId);
+        mem = form;
+        mdraft = form.blankMemorialDraft();
+        box.innerHTML = form.memorialFormHtml(mdraft, mservices, {
+          heading: "<h2>Someone they have lost</h2>",
+        });
+        form.wireMemorialForm(box, mdraft);
+      } catch (e) {
+        memOn.checked = false;
+        box.style.display = "none";
+        saveBtn.textContent = "Add behdin";
+        showError("Couldn't load the memorial form: " + e.message);
+      }
+    };
+  }
+
+  /** What the mobed typed, checked - or null after saying what is wrong. */
+  const validate = () => {
     const name = document.getElementById("bnName").value.trim();
     const phone = readPhone("bnPhone");
     if (!name) return showError("Please enter the behdin's name.");
@@ -190,17 +238,22 @@ export function renderBehdinNew() {
       const problem = validateNames(rows);
       if (problem) return showError(problem);
     }
+    return { name, phone, rows };
+  };
 
-    const btn = document.getElementById("bnSave");
+  /** Create the behdin, their saved names, and - if there is one - the
+   *  memorial. `btn` is whatever was pressed, so it can be released on failure. */
+  const saveAll = async (v, memorialBody, btn) => {
+    const aid = state.currentAgyaryId;
     btn.disabled = true;
     let created;
     try {
-      created = await createBehdin(state.currentAgyaryId, name, phone);
+      created = await createBehdin(aid, v.name, v.phone);
     } catch (e) {
       btn.disabled = false;
       return showError(e.message);
     }
-    if (!created.created && !returnTo) {
+    if (!created.created && !returnTo && !memorialBody) {
       showInfo(`${created.name} was already on file - opening their record.`);
     }
 
@@ -217,19 +270,72 @@ export function renderBehdinNew() {
       }
     };
 
-    if (rows.length) {
+    let namesProblem = "";
+    if (v.rows.length) {
       try {
-        await putSavedNames(state.currentAgyaryId, created.id, "pair",
-                            rows.filter(n => n.section === "pair"));
-        await putSavedNames(state.currentAgyaryId, created.id, "farmayeshne",
-                            rows.filter(n => n.section === "farmayeshne"));
+        await putSavedNames(aid, created.id, "pair", v.rows.filter(n => n.section === "pair"));
+        await putSavedNames(aid, created.id, "farmayeshne", v.rows.filter(n => n.section === "farmayeshne"));
+      } catch (e) {
+        namesProblem = `${created.name} was added, but the names didn't save: ${e.message}`;
+      }
+    }
+
+    if (memorialBody) {
+      try {
+        const made = await createMemorial(aid, created.id, memorialBody);
+        if (namesProblem) flashError(namesProblem);
+        return navigate(`#/memorial/${made.id}`, { replace: true });
       } catch (e) {
         // The behdin exists either way - say so rather than losing them.
-        landing();
-        return showError(`${created.name} was added, but the names didn't save: ${e.message}`);
+        flashError(`${created.name} was added, but the memorial wasn't: ${e.message}`);
+        return navigate(`#/behdins/${created.id}`, { replace: true });
       }
     }
     landing();
+    if (namesProblem) showError(namesProblem);
+  };
+
+  /** Every date, before anything is saved - the same step the behdin's own
+   *  page has. Nothing exists yet: not the behdin, not the memorial. */
+  const showPreview = (v, body, preview) => {
+    const formEl = document.getElementById("bnForm");
+    const previewEl = document.getElementById("bnPreview");
+    // A message from an earlier attempt would sit above a schedule it no longer applies to.
+    mainEl.querySelectorAll(".error-banner, .info-banner").forEach(el => el.remove());
+    formEl.style.display = "none";
+    previewEl.style.display = "";
+    previewEl.innerHTML = `
+      ${mem.schedulePreviewHtml(body, preview, mservices, { heading: backBar("Review the schedule") })}
+      <p class="meta">For ${esc(v.name)}. Nothing is saved until you confirm.</p>
+      <div class="wizard-nav" style="margin-top:4px">
+        <button class="ghost" id="bnPrevBack">Change</button>
+        <button id="bnPrevGo">Add behdin and memorial</button>
+      </div>`;
+    window.scrollTo(0, 0);
+    document.getElementById("bnPrevBack").onclick = () => {
+      previewEl.style.display = "none";
+      formEl.style.display = "";
+    };
+    document.getElementById("bnPrevGo").onclick = (e) => saveAll(v, body, e.currentTarget);
+  };
+
+  saveBtn.onclick = async () => {
+    const v = validate();
+    if (!v) return;
+    if (memOn && memOn.checked) {
+      const built = mem.buildMemorialBody(mdraft);
+      if (built.error) return showError(built.error);
+      saveBtn.disabled = true;
+      try {
+        showPreview(v, built.body, await previewNewMemorial(state.currentAgyaryId, built.body));
+      } catch (e) {
+        showError(e.message);
+      } finally {
+        saveBtn.disabled = false;
+      }
+      return;
+    }
+    await saveAll(v, null, saveBtn);
   };
 }
 
@@ -243,6 +349,8 @@ export async function renderBehdinDetail({ id }) {
   const cid = Number(id);
   const alive = navGuard();
 
+  // Memorials live in the mobed app; the Machi Board has no screens for them.
+  const hasMemorials = !!document.getElementById("tabs");
   let record = null, history = null, saved = [], memorials = [];
   try {
     [record, history, saved, memorials] = await Promise.all([
@@ -251,7 +359,7 @@ export async function renderBehdinDetail({ id }) {
       // be empty for a behdin someone else booked for.
       customerHistory(cid).catch(() => null),
       getSavedNames(aid, cid).catch(() => []),
-      listMemorials(aid, cid).catch(() => []),
+      hasMemorials ? listMemorials(aid, cid).catch(() => []) : [],
     ]);
   } catch (e) {
     if (!alive()) return;
@@ -274,7 +382,7 @@ export async function renderBehdinDetail({ id }) {
       <div style="margin-top:12px"><button class="small" id="bdSave">Save details</button></div>
     </div>
 
-    <div class="card">
+    ${hasMemorials ? `<div class="card">
       <div class="row tight" style="justify-content:space-between;align-items:center">
         <h2 style="margin:0">Memorials</h2>
         <button class="icon-add" id="bdAddMemorial" title="New memorial" aria-label="New memorial">+</button>
@@ -288,7 +396,7 @@ export async function renderBehdinDetail({ id }) {
             : `${m.done} of ${m.total} done${m.next ? ` · Next: ${esc(m.next.label)}, ${esc(gregShort(m.next.date))}` : ""}`}</div>
           <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>
         </div>`).join("") : '<p class="meta">None yet.</p>'}
-    </div>
+    </div>` : ""}
 
     <div class="card">
       <h2>Saved names</h2>
@@ -322,7 +430,9 @@ export async function renderBehdinDetail({ id }) {
     }
   };
 
-  document.getElementById("bdAddMemorial").onclick = () => navigate(`#/behdins/${cid}/memorials/new`);
+  if (hasMemorials) {
+    document.getElementById("bdAddMemorial").onclick = () => navigate(`#/behdins/${cid}/memorials/new`);
+  }
   mainEl.querySelectorAll("[data-mem]").forEach(el => {
     el.onclick = () => navigate(`#/memorial/${el.dataset.mem}`);
   });

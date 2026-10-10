@@ -195,6 +195,31 @@ async def test_an_unknown_calendar_is_refused(client, db, seeded):
     assert r.status_code == 422
 
 
+# --- Previewing before the behdin exists (the New behdin page) ---------------
+
+async def test_a_preview_needs_no_behdin_and_matches_the_one_with_a_behdin(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Afringan", "Baaj")
+    body = _body(DEATH, service_ids=ids, calendar="kadmi")
+    bare = await client.post(f"/api/mobed/agyaries/{aid}/memorials/preview", json=body, headers=headers)
+    assert bare.status_code == 200, bare.text
+    with_behdin = await client.post(
+        f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview", json=body, headers=headers)
+    assert bare.json() == with_behdin.json()
+    assert (await db.execute(select(func.count()).select_from(Memorial))).scalar_one() == 0
+
+
+async def test_the_bare_preview_still_validates_and_needs_a_member(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    bad = await client.post(f"/api/mobed/agyaries/{aid}/memorials/preview",
+                            json=_body(DEATH, service_ids=[], monthly={"count": 9999}), headers=headers)
+    assert bad.status_code == 400
+    from tests.test_mobed_api import _headers
+    outsider = await _headers(client, name="Outsider", phone="+919911100066")   # signed in, not joined
+    r = await client.post(f"/api/mobed/agyaries/{aid}/memorials/preview", json=_body(DEATH), headers=outsider)
+    assert r.status_code == 403
+
+
 # --- Privacy ----------------------------------------------------------------
 
 async def test_another_mobed_cannot_see_or_touch_a_memorial(client, db, seeded):

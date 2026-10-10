@@ -84,18 +84,7 @@ async def _own_memorial(db: AsyncSession, agyary_id: int, memorial_id: int, user
     return memorial
 
 
-@router.post("/agyaries/{agyary_id}/behdins/{customer_id}/memorials/preview")
-async def preview_memorial(
-    agyary_id: int,
-    customer_id: int,
-    payload: MemorialIn,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> dict:
-    """Every date this choice would produce, with nothing saved - the step
-    where the mobed checks the schedule before confirming it."""
-    await _require_behdin(db, agyary_id, customer_id, user)
-    agyary = await _require_membership(db, agyary_id, user)
+async def _preview(db: AsyncSession, user: User, payload: MemorialIn) -> dict:
     try:
         choice = _choice(payload)
         system = await memorials.calendar_for(db, user.id, choice)
@@ -115,6 +104,34 @@ async def preview_memorial(
             for o in schedule
         ],
     }
+
+
+@router.post("/agyaries/{agyary_id}/memorials/preview")
+async def preview_new_memorial(
+    agyary_id: int,
+    payload: MemorialIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Every date this choice would produce, with nothing saved. Needs no
+    behdin: the New behdin page shows the schedule before the behdin exists."""
+    await _require_membership(db, agyary_id, user)
+    return await _preview(db, user, payload)
+
+
+@router.post("/agyaries/{agyary_id}/behdins/{customer_id}/memorials/preview")
+async def preview_memorial(
+    agyary_id: int,
+    customer_id: int,
+    payload: MemorialIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """The same, for a behdin who is already on file - the step where the
+    mobed checks the schedule before confirming it."""
+    await _require_behdin(db, agyary_id, customer_id, user)
+    await _require_membership(db, agyary_id, user)
+    return await _preview(db, user, payload)
 
 
 @router.post("/agyaries/{agyary_id}/behdins/{customer_id}/memorials")
