@@ -37,6 +37,12 @@ class Notification(Base):
 
     machi_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("machis.id"))
     booking_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("bookings.id"))
+    # The memorial observance a reminder is about. A reminder is sent at most
+    # once per observance (the unique index below), which is what makes the
+    # scheduler safe to run twice or to restart mid-evening.
+    memorial_observance_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("memorial_observances.id", ondelete="SET NULL")
+    )
 
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -65,6 +71,12 @@ class Notification(Base):
             postgresql_where=text("status = 'pending'"),
         ),
         Index("idx_notifications_agyary", "agyary_id", text("created_at DESC")),
+        Index(
+            "uq_notifications_memorial_reminder",
+            "memorial_observance_id",
+            unique=True,
+            postgresql_where=text("notification_type = 'memorial_reminder'"),
+        ),
         Index(
             "idx_notifications_wa_message",
             "wa_message_id",

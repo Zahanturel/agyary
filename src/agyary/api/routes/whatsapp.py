@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import PlainTextResponse
@@ -29,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.services import wa_login
+from agyary.services import reminder_sender, reminders, wa_login
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +90,20 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     payload = json.loads(raw_body) if raw_body else {}
+    now = datetime.now(timezone.utc)
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
-            for message in (change.get("value") or {}).get("messages", []):
+            value = change.get("value") or {}
+            for message in value.get("messages", []):
                 await _process_message(db, message)
+            # Delivery receipts for reminders we sent.
+            for receipt in value.get("statuses", []):
+                errors = receipt.get("errors") or []
+                reason = (errors[0].get("title") or errors[0].get("message")) if errors else None
+                if receipt.get("id") and receipt.get("status"):
+                    await reminder_sender.apply_status(
+                        db, receipt["id"], receipt["status"], reason, now
+                    )
 
     await db.commit()
     return Response(status_code=200)
@@ -100,13 +111,24 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
 
 async def _process_message(db: AsyncSession, message: dict) -> None:
     from_phone = message.get("from")
-    code = wa_login.extract_code(_extract_text(message))
-    if not code or not from_phone:
+    if not from_phone:
         return
+    text = _extract_text(message)
 
     # wa.me strips the +; every phone we store is E.164 with one.
     if not from_phone.startswith("+"):
         from_phone = f"+{from_phone}"
+
+    # A family replying STOP to a reminder. Handled before sign-in because
+    # honouring it must never depend on anything else about the message.
+    if reminders.is_stop(text):
+        told = await reminders.record_stop(db, from_phone)
+        logger.info("Inbound STOP: %d mobed(s) notified", told)
+        return
+
+    code = wa_login.extract_code(text)
+    if not code:
+        return
 
     # A replayed delivery finds the attempt already claimed and is ignored -
     # which is why this needs no separate message-id dedupe table the way

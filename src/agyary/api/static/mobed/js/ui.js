@@ -15,6 +15,9 @@ export function loading() { mainEl.innerHTML = `<div class="empty-state">Loading
  *  full-screen login and onboarding flows. */
 export function chrome(show) {
   menuBtn.classList.toggle("hidden", !show);
+  // Only the mobed app has a bell; the Machi Board has no notifications.
+  const bellBtn = document.getElementById("bellBtn");
+  if (bellBtn) bellBtn.classList.toggle("hidden", !show);
   if (!show) { fabEl.classList.add("hidden"); showBack(null); showTabs(null); }
 }
 

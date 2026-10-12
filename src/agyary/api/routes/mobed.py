@@ -35,7 +35,7 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
-from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, wa_login
+from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, reminders, wa_login
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -787,7 +787,10 @@ async def get_behdin(
     user: User = Depends(get_current_user),
 ) -> dict:
     customer = await _require_behdin(db, agyary_id, customer_id, user)
-    return behdin_directory.customer_summary(customer)
+    return {
+        **behdin_directory.customer_summary(customer),
+        "reminders": await reminders.reminder_state(db, user.id, customer),
+    }
 
 
 class UpdateBehdinIn(BaseModel):

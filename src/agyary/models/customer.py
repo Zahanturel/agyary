@@ -27,6 +27,10 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str] = mapped_column(String(20), unique=True)  # E.164
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # Set when this person replied STOP to a reminder. It belongs to the
+    # person, not to any one mobed: they told our number to stop, so nobody
+    # may send them reminders until a mobed confirms they have asked again.
+    reminders_stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

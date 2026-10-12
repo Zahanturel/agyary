@@ -27,6 +27,30 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str = ""
     whatsapp_app_secret: str = ""
 
+    # --- Memorial reminders (the one thing we send) ---------------------------
+    # Business-initiated, so unlike sign-in this needs a System User access
+    # token, the number's phone_number_id, and a template Meta has approved.
+    # None of them belong in the repo: set them in .env on the server.
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_graph_version: str = "v23.0"
+    whatsapp_reminder_template: str = "memorial_reminder"
+    whatsapp_template_language: str = "en"
+
+    # off: nothing is planned or sent. dry_run: reminders are planned and
+    # logged as they would be sent, and nothing leaves the building. live:
+    # they are sent - but only to numbers in `reminders_allowlist` (a comma
+    # separated list of E.164 numbers), or to everyone when it is "*". An
+    # empty list in live mode sends to nobody, so going live is two deliberate
+    # steps rather than one flag.
+    reminders_send_mode: str = "off"
+    reminders_allowlist: str = ""
+    # The evening run: tomorrow's reminders go out from this hour (IST), and
+    # whatever has not gone by the cutoff is skipped rather than sent late -
+    # "tomorrow" at midnight is no longer true.
+    reminders_send_hour: int = 19
+    reminders_cutoff_hour: int = 21
+
     # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
     # another login to remember, and the WhatsApp number is already the
     # identity.

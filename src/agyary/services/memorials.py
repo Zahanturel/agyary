@@ -26,13 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from agyary.calendar import (
-    GATHA_NAMES,
-    MAH_NAMES,
-    ROJ_NAMES,
-    CalendarSystem,
-    gregorian_to_parsi,
-)
+from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.calendar.memorial import Observance, build_schedule
 from agyary.messaging import booking_service
 from agyary.messaging.availability import parsi_slot_fields
@@ -42,10 +36,12 @@ from agyary.models import (
     Memorial,
     MemorialObservance,
     MemorialObservanceService,
+    Notification,
     Service,
+    UserCustomer,
 )
 from agyary.models.enums import CALENDAR_SYSTEMS
-from agyary.services import mobed_dashboard
+from agyary.services import mobed_dashboard, reminder_message
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -444,51 +440,6 @@ REMINDER_LEAD_DAYS = 1
 OPENING_DAYS = 10
 
 
-def _parsi_text(obs: MemorialObservance) -> str:
-    if obs.gatha_index:
-        name = GATHA_NAMES[obs.gatha_index - 1] if obs.gatha_index <= len(GATHA_NAMES) else ""
-        return f"Gatha {name}".strip()
-    return f"Roj {ROJ_NAMES[obs.parsi_roj - 1]}, Mah {MAH_NAMES[obs.parsi_mah - 1]}"
-
-
-def _list_and(names: list[str]) -> str:
-    if len(names) <= 1:
-        return "".join(names)
-    return ", ".join(names[:-1]) + " and " + names[-1]
-
-
-def _clock(t: time) -> str:
-    return f"{t.hour % 12 or 12}:{t.minute:02d} {'am' if t.hour < 12 else 'pm'}"
-
-
-def reminder_text(
-    agyary_name: str,
-    obs: MemorialObservance,
-    departed: str,
-    service_names: list[str],
-    today: date,
-) -> str:
-    """What a family is told. One wording for the manual send and, later,
-    the automatic one, so a mobed sees today exactly what would go out.
-
-    The mobed has already booked this, so it does not ask for anything: it
-    says what is happening, when, and that they are welcome. Plain on
-    purpose - no internal names ("day 31", "observance"), nothing that reads
-    as a promotion.
-    """
-    d = obs.gregorian_date
-    days_away = (d - today).days
-    date_text = f"{d:%a} {d.day} {d:%b}"
-    when = {0: f"Today, {date_text}", 1: f"Tomorrow, {date_text}"}.get(days_away, date_text)
-    what = _list_and(service_names) or obs.label
-    at = f" at {_clock(obs.time_of_day)}" if obs.time_of_day else ""
-    return (
-        f"{agyary_name}\n\n"
-        f"{when} ({_parsi_text(obs)}): {what} for {departed}{at}.\n\n"
-        "You are welcome to attend."
-    )
-
-
 def whatsapp_link(phone: str, text: str) -> str:
     """A wa.me link that opens a chat with ``phone`` with ``text`` ready to
     send. Sent from the mobed's own WhatsApp: nothing goes out until they
@@ -511,9 +462,16 @@ async def reminders_due(
     end = today + timedelta(days=horizon_days)
     rows = (
         await db.execute(
-            select(MemorialObservance, Memorial, Customer.name, Customer.phone)
+            select(
+                MemorialObservance, Memorial, Customer.name, Customer.phone,
+                UserCustomer.reminders_enabled, Customer.reminders_stopped_at,
+            )
             .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
             .join(Customer, Customer.id == Memorial.customer_id)
+            .outerjoin(
+                UserCustomer,
+                (UserCustomer.user_id == user_id) & (UserCustomer.customer_id == Memorial.customer_id),
+            )
             .options(selectinload(MemorialObservance.services))
             .where(
                 Memorial.created_by_user_id == user_id,
@@ -527,14 +485,25 @@ async def reminders_due(
     ).all()
     names = await _service_names(db, agyary_id)
     agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == agyary_id))).scalar_one()
+    # What has already been sent automatically, by observance.
+    sent = dict(
+        (
+            await db.execute(
+                select(Notification.memorial_observance_id, Notification.status).where(
+                    Notification.notification_type == "memorial_reminder",
+                    Notification.memorial_observance_id.in_([o.id for o, *_ in rows]),
+                )
+            )
+        ).all()
+    )
     items = []
-    for obs, memorial, behdin_name, behdin_phone in rows:
+    for obs, memorial, behdin_name, behdin_phone, auto_on, stopped_at in rows:
         days_away = (obs.gregorian_date - today).days
         serialized = serialize_observance(obs, names)
-        text = reminder_text(
+        text = reminder_message.manual_text(reminder_message.build_parts(
             agyary_name, obs, memorial.departed_name,
             [s["name"] for s in serialized["services"]], today,
-        )
+        ))
         items.append({
             **serialized,
             "memorial_id": memorial.id,
@@ -548,5 +517,9 @@ async def reminders_due(
             "calendar": memorial.calendar_system,
             "days_away": days_away,
             "due": days_away <= REMINDER_LEAD_DAYS,
+            # Will it go on its own (the behdin agreed and has not said STOP),
+            # and if it has been tried, how that went.
+            "auto": bool(auto_on) and stopped_at is None,
+            "sent_status": sent.get(obs.id),
         })
     return items

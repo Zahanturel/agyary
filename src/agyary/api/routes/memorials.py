@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api.routes.mobed import _require_behdin, _require_membership, get_current_user
 from agyary.calendar.memorial import OPENING_ALL, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
+from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Memorial, User
 from agyary.services import memorials
@@ -274,4 +275,10 @@ async def memorial_reminders(
     items = await memorials.reminders_due(
         db, user.id, agyary_id, memorials.today_ist(), days
     )
-    return {"lead_days": memorials.REMINDER_LEAD_DAYS, "items": items}
+    return {
+        "lead_days": memorials.REMINDER_LEAD_DAYS,
+        # Whether anything is sent on its own yet, so the screen never promises
+        # an automatic reminder that is not going to happen.
+        "delivery": get_settings().reminders_send_mode,
+        "items": items,
+    }

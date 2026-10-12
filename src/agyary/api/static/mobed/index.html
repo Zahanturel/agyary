@@ -21,6 +21,12 @@
   <div class="right">
     <!-- The menu is an icon, not a word. It is the only thing in the header
          besides the title - there is no tab bar; the calendar IS the app. -->
+    <button id="bellBtn" class="icon-btn hidden" title="Notifications" aria-label="Notifications">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16zM10 21h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span id="bellBadge" class="bell-badge hidden"></span>
+    </button>
     <button id="menuBtn" class="icon-btn hidden" title="Menu" aria-label="Menu">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

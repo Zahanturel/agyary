@@ -32,7 +32,28 @@ function whenText(daysAway) {
   return `In ${daysAway} days`;
 }
 
-function rowHtml(o) {
+const SENT = { sent: "Sent", delivered: "Delivered", read: "Read" };
+
+/** What to show under a reminder: how it went, or how it will go. */
+function actionHtml(o, delivery) {
+  if (SENT[o.sent_status]) {
+    return `<p class="meta" style="margin:8px 0 0">&#10003; ${SENT[o.sent_status]} to ${esc(o.behdin_name)} on WhatsApp.</p>`;
+  }
+  const button = `<div class="row tight" style="margin-top:8px">
+      <a class="button small" data-wa href="${esc(o.wa_link)}" target="_blank" rel="noopener">Remind on WhatsApp</a>
+    </div>`;
+  if (o.sent_status === "failed") {
+    return `<p class="meta" style="margin:8px 0 0">It could not be sent automatically.</p>${button}`;
+  }
+  // Only promise an automatic reminder when sending is actually on.
+  if (o.auto && delivery === "live") {
+    return `<p class="meta" style="margin:8px 0 0">Will be sent to ${esc(o.behdin_name)} automatically
+      at about 7 pm the evening before.</p>`;
+  }
+  return button;
+}
+
+function rowHtml(o, delivery) {
   const svc = o.services.map(s => s.name).join(", ");
   return `<div class="obs" data-mid="${o.memorial_id}" data-oid="${o.id}">
     <div class="obs-head">
@@ -40,9 +61,7 @@ function rowHtml(o) {
         <span>${esc(o.behdin_name)}${svc ? " · " + esc(svc) : ""}</span></div>
       <div class="obs-when"><b>${esc(whenText(o.days_away))}</b><br>${esc(gregLabel(o.date))}<br>${esc(parsiText(o))}</div>
     </div>
-    <div class="row tight" style="margin-top:8px">
-      <a class="button small" data-wa href="${esc(o.wa_link)}" target="_blank" rel="noopener">Remind on WhatsApp</a>
-    </div>
+    ${actionHtml(o, delivery)}
   </div>`;
 }
 
@@ -73,7 +92,7 @@ export async function renderReminders() {
   const group = (title, note, list) => list.length ? `
     <div class="card">
       <div class="names-group-label" style="margin-top:0"><b>${title}</b><span>${note}</span></div>
-      ${list.map(rowHtml).join("")}
+      ${list.map(o => rowHtml(o, data.delivery)).join("")}
     </div>` : "";
 
   mainEl.innerHTML = `

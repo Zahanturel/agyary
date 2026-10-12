@@ -29,6 +29,7 @@ import { renderReminders } from "./screens/reminders.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
+import { refreshNotifications, setupNotifications } from "./notifications.js";
 
 // --- Routes -----------------------------------------------------------------
 // `open: true` needs no session.
@@ -163,6 +164,8 @@ async function boot() {
     location.replace("#/login");
   }
   await start();
+  // What a mobed must not miss goes in front of them as the app opens.
+  if (signedIn() && !state.offline) refreshNotifications({ popup: true });
 }
 
 // Signal came back after an offline boot. Take the session live and
@@ -179,6 +182,7 @@ window.addEventListener("online", async () => {
     saveSession();
     refreshHeader();
     navigate(location.hash || "#/calendar");
+    refreshNotifications({ popup: true });
   } catch (e) { /* still not really back; the next online event retries */ }
 });
 
@@ -188,4 +192,5 @@ if ("serviceWorker" in navigator) {
 // Pick up a deployed update without waiting for someone to reload by hand,
 // but never while a form is half filled in.
 onNavigated(watchForUpdates({ busy: () => !!state.draft }));
+setupNotifications();
 boot();

@@ -16,7 +16,7 @@
  */
 
 import {
-  listBehdins, memorialReminders, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
+  listBehdins, memorialReminders, setBehdinReminders, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
   getSavedNames, putSavedNames, listMemorials, previewNewMemorial, createMemorial,
 } from "../api.js";
 import { state } from "../state.js";
@@ -388,6 +388,7 @@ export async function renderBehdinDetail({ id }) {
     mainEl.innerHTML = "";
     return showError("That behdin isn't on file at this fire temple.");
   }
+  let reminders = record.reminders || { enabled: false, stopped_at: null, delivery: "off" };
 
   mainEl.innerHTML = `
     <div class="card">
@@ -412,6 +413,18 @@ export async function renderBehdinDetail({ id }) {
             : `${m.done} of ${m.total} done${m.next ? ` · Next: ${esc(m.next.label)}, ${esc(gregShort(m.next.date))}` : ""}`}</div>
           <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>
         </div>`).join("") : '<p class="meta">None yet.</p>'}
+    </div>
+
+    <div class="card">
+      <h2>WhatsApp reminders</h2>
+      <p class="meta">A short message the evening before each memorial prayer after the
+        first ten days. Turn this on only after you have asked ${esc(record.name)} and
+        they have said yes - they can stop it any time by replying STOP.</p>
+      <div class="check-row">
+        <input type="checkbox" id="bdReminders" ${reminders.enabled ? "checked" : ""}>
+        <label for="bdReminders">${esc(record.name)} has agreed to receive reminders</label>
+      </div>
+      <p class="meta" id="bdRemindersNote"></p>
     </div>` : ""}
 
     <div class="card">
@@ -448,6 +461,47 @@ export async function renderBehdinDetail({ id }) {
 
   if (hasMemorials) {
     document.getElementById("bdAddMemorial").onclick = () => navigate(`#/behdins/${cid}/memorials/new`);
+
+    // Reminders: the mobed asks the behdin in person and records the yes here.
+    const box = document.getElementById("bdReminders");
+    const note = document.getElementById("bdRemindersNote");
+    const paintNote = () => {
+      const parts = [];
+      if (reminders.stopped_at) {
+        parts.push(`${record.name} replied STOP on ${gregShort(reminders.stopped_at.slice(0, 10))}, `
+          + "so reminders are off. Turn them back on only if they ask you to.");
+      }
+      if (reminders.enabled && reminders.delivery !== "live") {
+        parts.push("Automatic sending is not switched on yet - until it is, use "
+          + "Remind on WhatsApp from the Reminders list.");
+      }
+      note.textContent = parts.join(" ");
+    };
+    paintNote();
+
+    const apply = async (want, confirmRestart) => {
+      try {
+        reminders = await setBehdinReminders(aid, cid, want, confirmRestart);
+        box.checked = reminders.enabled;
+        paintNote();
+        showInfo(want ? "Reminders on." : "Reminders off.");
+      } catch (e) {
+        box.checked = reminders.enabled;
+        // A person who replied STOP is only restored on purpose.
+        if (e.status === 409 && want) {
+          note.innerHTML = `${esc(e.message)}
+            <div class="row tight" style="margin-top:8px">
+              <button class="small" id="bdRemConfirm">They asked me to - turn on</button>
+              <button class="ghost small" id="bdRemCancel">Cancel</button>
+            </div>`;
+          document.getElementById("bdRemConfirm").onclick = () => apply(true, true);
+          document.getElementById("bdRemCancel").onclick = paintNote;
+          return;
+        }
+        showError(e.message);
+      }
+    };
+    box.onchange = () => apply(box.checked, false);
   }
   mainEl.querySelectorAll("[data-mem]").forEach(el => {
     el.onclick = () => navigate(`#/memorial/${el.dataset.mem}`);

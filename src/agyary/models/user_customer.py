@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
@@ -36,5 +36,13 @@ class UserCustomer(Base):
         BigInteger, ForeignKey("customers.id", ondelete="CASCADE"), primary_key=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Whether this behdin has agreed, in person to this mobed, to be sent
+    # WhatsApp reminders for their memorials. Off until the mobed turns it on,
+    # and turned off again when the behdin replies STOP (services/reminders.py).
+    # It sits here, not on the behdin, because the agreement is made with one
+    # mobed.
+    reminders_enabled: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    reminders_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (Index("idx_user_customers_customer", "customer_id"),)

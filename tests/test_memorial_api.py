@@ -439,7 +439,7 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     assert item["behdin_phone"] == PHONE
     text = item["message"]
     agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == aid))).scalar_one()
-    assert text.startswith(agyary_name + "\n\n")
+    assert text.startswith(f"Reminder from {agyary_name}.\n\n")
     assert text.splitlines()[2].startswith("Tomorrow, ")
     assert "Roj " in text and "Afringan and Baaj for Dinshaw." in text
     assert text.endswith("You are welcome to attend.")
@@ -450,42 +450,3 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     link = urlparse(item["wa_link"])
     assert (link.scheme, link.netloc, link.path) == ("https", "wa.me", "/" + PHONE.lstrip("+"))
     assert parse_qs(link.query)["text"] == [text]
-
-
-def _obs(**over):
-    from datetime import time as dt_time
-    from types import SimpleNamespace
-
-    at = over.pop("at", None)
-    base = dict(gregorian_date=date(2030, 3, 14), label="Varsi", gatha_index=None,
-                parsi_roj=1, parsi_mah=1, time_of_day=dt_time(*at) if at else None)
-    return SimpleNamespace(**{**base, **over})
-
-
-def test_the_wording_says_when_and_where_without_asking_for_anything():
-    day = date(2030, 3, 14)
-    roj_mah = "(Roj Hormazd, Mah Fravardin)"
-    say = lambda today, **kw: memorials.reminder_text(  # noqa: E731
-        "Goti Adarian", _obs(**kw), "Dinshaw", ["Afringan", "Baaj"], today)
-
-    assert say(day - timedelta(days=1)) == (
-        f"Goti Adarian\n\nTomorrow, Thu 14 Mar {roj_mah}: Afringan and Baaj for Dinshaw."
-        "\n\nYou are welcome to attend.")
-    assert "Today, Thu 14 Mar" in say(day)
-    # Further off it is just the date; no "tomorrow" that would be wrong.
-    assert say(day - timedelta(days=4)).splitlines()[2].startswith(f"Thu 14 Mar {roj_mah}")
-
-
-def test_the_wording_includes_the_time_only_when_there_is_one():
-    day = date(2030, 3, 14)
-    put = lambda **kw: memorials.reminder_text(  # noqa: E731
-        "Goti Adarian", _obs(**kw), "Dinshaw", ["Afringan"], day - timedelta(days=1))
-    assert "Afringan for Dinshaw at 9:00 am." in put(at=(9, 0))
-    assert "Afringan for Dinshaw at 5:30 pm." in put(at=(17, 30))
-    assert "at 12:00 pm" in put(at=(12, 0)) and "at 12:05 am" in put(at=(0, 5))
-    assert "Afringan for Dinshaw." in put()
-
-
-def test_the_wording_falls_back_to_the_observance_name_with_no_services():
-    text = memorials.reminder_text("Goti Adarian", _obs(), "Dinshaw", [], date(2030, 3, 10))
-    assert ": Varsi for Dinshaw." in text
