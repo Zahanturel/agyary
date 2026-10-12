@@ -53,7 +53,8 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
     otp_today = (
         await db.execute(
             select(func.count()).select_from(LoginOtp).where(
-                LoginOtp.status != "failed", LoginOtp.created_at >= day_start, LoginOtp.created_at < day_end
+                LoginOtp.status.notin_(("failed", "suppressed")),
+                LoginOtp.created_at >= day_start, LoginOtp.created_at < day_end,
             )
         )
     ).scalar_one()

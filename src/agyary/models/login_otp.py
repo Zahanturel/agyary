@@ -33,7 +33,8 @@ class LoginOtp(Base):
     is_new_number: Mapped[bool] = mapped_column(Boolean, server_default="false")
     # A digest of the requester's address, never the address itself.
     requester: Mapped[str | None] = mapped_column(String(16))
-    # pending: not yet handed to Meta; sent: Meta took it; failed: it did not.
+    # pending: not yet handed to Meta; sent: Meta took it; failed: it did not;
+    # suppressed: a number that could not sign in, so nothing was sent.
     status: Mapped[str] = mapped_column(String(10), server_default="pending")
     wa_message_id: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

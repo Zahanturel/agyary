@@ -96,6 +96,7 @@ setting with its meaning. The ones that matter:
 |---|---|
 | `JWT_SECRET_KEY` | Signs sessions. Required. |
 | `APP_DEBUG` | Off by default; `true` only on a laptop. The app refuses to start with it on when `APP_ENV=production`. |
+| `SIGNUP_MODE`, `SIGNUP_ALLOWLIST` | Who may create an account. `invite` (default): only numbers in the allowlist, and admins; anyone with an account always signs in. `open`: any verified number. |
 | `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | Verify Meta's webhook. |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | Needed to SEND anything (reminders, sign-in codes). Server only, never in git. |
 | `REMINDERS_SEND_MODE` | `off` (default), `dry_run` (log what would go), or `live`. |

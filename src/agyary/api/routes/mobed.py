@@ -10,6 +10,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,8 +106,18 @@ async def _wa_login_session(
     The attempt row is only retired once a session actually exists, so a
     first-ever sign-in can come back with a name and finish against the
     same row rather than being handed its own phone number to post back.
+
+    A number that may not sign up (SIGNUP_MODE) is told so plainly, and its
+    attempt is spent: polling on would only wait for ever.
     """
-    user = await mobed_auth.login_user(db, phone, name)
+    try:
+        user = await mobed_auth.login_user(db, phone, name)
+    except mobed_auth.SignupRefused as exc:
+        await wa_login.consume(db, poll_secret)
+        await db.commit()
+        refused = JSONResponse(status_code=403, content={"detail": str(exc)})
+        refused.delete_cookie("wa_login")
+        return refused
     if not user.name:
         await db.commit()
         return {"status": "needs_name"}

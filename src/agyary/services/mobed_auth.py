@@ -42,11 +42,43 @@ class TokenError(Exception):
     """Invalid, expired, or wrong-type JWT - message is safe to show the caller."""
 
 
+class SignupRefused(Exception):
+    """A proven number that may not create an account. Safe to show."""
+
+
+NOT_INVITED = (
+    "This number is not set up for Mobed Diary yet. Ask the person who runs it "
+    "to invite you, then sign in again."
+)
+
+
+def _listed(raw: str, phone: str) -> bool:
+    return phone in {p.strip() for p in raw.split(",") if p.strip()}
+
+
+def may_sign_up(phone: str) -> bool:
+    """Whether a number with no account may create one under SIGNUP_MODE:
+    anyone when it is "open"; when it is "invite" (the default), only a number
+    in SIGNUP_ALLOWLIST or an admin, so the owner can never lock themselves out."""
+    settings = get_settings()
+    if settings.signup_mode.strip().lower() == "open":
+        return True
+    return _listed(settings.signup_allowlist, phone) or _listed(settings.admin_phones, phone)
+
+
+async def may_sign_in(db: AsyncSession, phone: str) -> bool:
+    """Whether ``phone`` would be let in: it has an account, or may sign up."""
+    if may_sign_up(phone):
+        return True
+    return (await db.execute(select(User.id).where(User.phone == phone))).first() is not None
+
+
 async def login_user(db: AsyncSession, phone: str, name: str) -> User:
     """Resolve (or create) the mobed's User row for a proven phone.
 
-    First sign-in creates it; a later one refreshes the display name if
-    the caller supplied a different one. Only ever called once wa_login
+    First sign-in creates it - if SIGNUP_MODE lets this number sign up
+    (``may_sign_up``), else SignupRefused. A later one refreshes the display
+    name if the caller supplied a different one. Only ever called once wa_login
     has bound the number to a claimed attempt - this function itself
     proves nothing, so calling it with an unproven number would hand out
     a session for it.
@@ -54,6 +86,8 @@ async def login_user(db: AsyncSession, phone: str, name: str) -> User:
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
     if user is None:
+        if not may_sign_up(phone):
+            raise SignupRefused(NOT_INVITED)
         user = User(phone=phone, name=name)
         db.add(user)
         await db.flush()

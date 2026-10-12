@@ -87,6 +87,9 @@ def _whatsapp_configured(monkeypatch):
     monkeypatch.setenv("WHATSAPP_SIGNIN_NUMBER", WA_SIGNIN_NUMBER)
     monkeypatch.setenv("WHATSAPP_APP_SECRET", WA_APP_SECRET)
     monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", WA_VERIFY_TOKEN)
+    # Sign-up is by invitation unless opened, and almost every test signs up a
+    # fresh number. test_signup_invite_only covers the invitation rule itself.
+    monkeypatch.setenv("SIGNUP_MODE", "open")
     config.get_settings.cache_clear()
     yield
     config.get_settings.cache_clear()

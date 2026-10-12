@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.models import LoginOtp, User
-from agyary.services import guardrails
+from agyary.services import guardrails, mobed_auth
 from agyary.services.reminder_sender import ACCOUNT_CODES
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,12 @@ async def request_code(
     if await guardrails.paused_reason(db):
         raise OtpError(UNAVAILABLE, 503)
 
+    # Per-number limits count every request that was not a failure, including
+    # "suppressed" ones (a number that could not sign in: nothing was sent, see
+    # below), so a number that has no account meets the same cool-down as one
+    # that does. The spend caps count only what could really have gone out.
     sent_ok = LoginOtp.status != "failed"
+    really_sent = LoginOtp.status.notin_(("failed", "suppressed"))
 
     # One code at a time to a number, and only a few: nobody should be flooded
     # because somebody else typed their number.
@@ -138,7 +143,7 @@ async def request_code(
 
     # The money: a ceiling on codes sent today overall.
     day_start, day_end = guardrails.day_bounds(now)
-    if await _count(db, sent_ok, LoginOtp.created_at >= day_start, LoginOtp.created_at < day_end) >= settings.otp_daily_cap:
+    if await _count(db, really_sent, LoginOtp.created_at >= day_start, LoginOtp.created_at < day_end) >= settings.otp_daily_cap:
         await guardrails.alert_admins(
             db, settings, "Sign-in code limit reached",
             f"{settings.otp_daily_cap} sign-in codes have been sent today, so no more will go out until tomorrow. "
@@ -150,7 +155,7 @@ async def request_code(
     # Strangers are what an abuser would send to, so they get a harder cap.
     is_new = (await db.execute(select(User.id).where(User.phone == phone))).first() is None
     if is_new and await _count(
-        db, LoginOtp.is_new_number.is_(True), sent_ok, LoginOtp.created_at > now - timedelta(hours=1)
+        db, LoginOtp.is_new_number.is_(True), really_sent, LoginOtp.created_at > now - timedelta(hours=1)
     ) >= settings.otp_new_number_hourly_cap:
         raise OtpError(UNAVAILABLE, 429)
 
@@ -167,11 +172,20 @@ async def request_code(
     await db.flush()
 
     out = {"expires_in": settings.otp_ttl_seconds, "resend_after": COOLDOWN_SECONDS}
+    if not settings.whatsapp_access_token and not settings.app_debug:
+        raise OtpError(UNAVAILABLE, 503)
+
+    # A number that could not sign in anyway (no account, and SIGNUP_MODE does
+    # not let it make one) is sent nothing - no cost, no message to a stranger -
+    # but answered exactly as any other, so this endpoint cannot be used to find
+    # out who is a mobed. The row keeps the per-number limits honest.
+    if not await mobed_auth.may_sign_in(db, phone):
+        row.status = "suppressed"
+        return out
+
     if not settings.whatsapp_access_token:
         # No way to send. Fine on a laptop, where the code comes back in the
-        # response so the flow can be tried end to end; refused anywhere else.
-        if not settings.app_debug:
-            raise OtpError(UNAVAILABLE, 503)
+        # response so the flow can be tried end to end (refused above anywhere else).
         row.status = "sent"
         out["debug_code"] = code
         return out

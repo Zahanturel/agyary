@@ -102,6 +102,17 @@ class Settings(BaseSettings):
     # to end a session deliberately; it clears this cookie server-side.
     jwt_refresh_token_days: int = 3650
 
+    # --- Who may sign up ------------------------------------------------------
+    # Signing up is creating an account; anyone who already has one always signs
+    # in. The policy is open sign-up for any verified number (docs/DECISIONS.md
+    # D1), but only once the safeguards that make it safe have shipped - until
+    # then sign-up is by invitation. "invite": a new account only for a number in
+    # SIGNUP_ALLOWLIST (comma separated E.164) or an admin. "open": any number
+    # WhatsApp has verified. To invite a mobed, add their number and restart the
+    # app; once they have signed up the entry can go.
+    signup_mode: str = "invite"
+    signup_allowlist: str = ""
+
     # --- Inbound WhatsApp sign-in -------------------------------------------
     # The mobed messages US a code rather than us texting one to them, so
     # nothing is business-initiated: no template, no per-message cost, and

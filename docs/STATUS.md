@@ -165,6 +165,7 @@ sending is off. Settings that matter operationally:
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
 | `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
 | `APP_DEBUG` | false | `true` only on a laptop: it enables a sign-in bypass and `/docs`. Refused at startup when `APP_ENV=production` |
+| `SIGNUP_MODE` / `SIGNUP_ALLOWLIST` | `invite` / empty | new accounts only for invited numbers and admins until the D1 safeguards ship; `open` = any verified number |
 
 ## 5. External dependencies and their state
 
