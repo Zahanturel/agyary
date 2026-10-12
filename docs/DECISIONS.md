@@ -10,26 +10,27 @@ Recorded 12 Oct 2026, in answer to the independent review's questions (section 7
 
 ## D1. Who may become a mobed
 
-**Anyone whose phone number is verified may sign up as a mobed**, for now. Verification
-is by the sign-in code on WhatsApp (see D3) or by the existing "send us a code" flow.
-Later, when the Machi and Mobed apps are merged, a panthaky will approve the mobeds of
-their temple.
+**Anyone whose phone number is verified may sign up as a mobed.** Verification is by the
+sign-in code sent over WhatsApp (D3), or by the existing "send us a code" flow. Later, when the
+Machi and Mobed apps are merged, a panthaky will approve the mobeds of their temple.
 
-Safeguards that must ship with open sign-up (they are what make it safe):
-- Every cross-account read and write found by the review is closed first (the checks for
-  who owns a behdin, a slip, a machi and a record). Open sign-up is not acceptable without
-  them: any stranger will be able to create an account.
-- A new account must not be able to make our WhatsApp account message strangers with its
-  own text. Free text that reaches a template (temple name, service names, the departed's
-  name) is validated: bounded length, no links, no @-handles, no long digit runs. At most
-  one automatic reminder per recipient number per day.
-- New accounts start with low automatic-sending limits that rise as the account ages or is
-  vouched for (for example a handful a day for the first week). The existing global,
-  per-mobed and per-temple caps stay.
-- Joining a temple is not blocked today (anyone may join any temple). Joining must not
-  grant access to other people's behdins; see D2.
-- Sign-up abuse protection: the code-request step gets a bot check (Cloudflare Turnstile is
-  free) and the existing per-number, per-address and new-number limits.
+**This is in force now** (12 Oct 2026): the server runs `SIGNUP_MODE=open` and `OTP_MODE=live`.
+It is the owner's decision and the invite-only mode that Phase 0 shipped is NOT a standing
+requirement; do not switch sign-up back to invite-only without the owner asking. (An earlier
+version of this file made open sign-up wait for other fixes. The owner rejected that ordering.)
+
+The hardening below is **work to do next, in this order**, because open sign-up makes it matter
+more. It is not a precondition for sign-up being open:
+1. **AZ-3 first**: typing a known number must not attach a mobed to another mobed's behdin
+   (D2). This is the largest remaining exposure.
+2. A new account must not be able to make our WhatsApp account message strangers with its own
+   text. Validate free text that reaches a template (temple name, service names, the departed's
+   name): bounded length, no links, no @-handles, no long digit runs. At most one automatic
+   reminder per recipient number per day. Low automatic-sending limits for brand-new accounts
+   that rise as the account ages or is vouched for. The global, per-mobed and per-temple caps stay.
+3. A bot check (Cloudflare Turnstile, free) on the code-request step, plus the per-number,
+   per-address and new-number limits already in place.
+4. Joining a temple stays unrestricted, and must never grant access to other people's behdins.
 
 ## D2. Behdins are private to the mobed who created them
 
@@ -51,8 +52,8 @@ Sign-in by a six digit WhatsApp code goes live (`OTP_MODE=live`); the `login_cod
 Authentication template is approved. The "send us a code" flow stays as the other way in
 and is fixed (the phishing weakness found by the review).
 
-The review advised against enabling it. The owner has decided to, so the review's
-conditions apply and are part of "done":
+The review advised against enabling it. The owner has decided to, and it is **live as of 12 Oct
+2026**. The review's conditions are follow-up work, not preconditions:
 - the template keeps the security recommendation text;
 - per-address limits are kept in the database, not only in memory;
 - a bot check on the request step for numbers that have no account yet (D1);
