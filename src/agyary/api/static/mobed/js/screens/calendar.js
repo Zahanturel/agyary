@@ -8,7 +8,7 @@
  * their events, added the same way any event is.
  */
 
-import { myDay, machiBoard, memorialFeed } from "../api.js";
+import { myDay, machiBoard, memorialFeed, memorialReminders } from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
@@ -109,8 +109,31 @@ export async function renderCalendarScreen(params) {
   state.calendar.focus = state.calendar.focus || todayIst();
   const redirect = applyCalendarRoute(state.calendar, params);
   if (redirect) return navigate(redirect, { replace: true });
-  mainEl.innerHTML = `<div id="cal"></div>`;
+  mainEl.innerHTML = `<div id="calReminders"></div><div id="cal"></div>`;
+  showReminderNotice();
   await draw();
+}
+
+const DONE = ["sent", "delivered", "read"];
+
+/** A line above the calendar when there is a family to remind today or
+ *  tomorrow - the thing a mobed would otherwise only find by knowing to look
+ *  in the Behdins tab. Not shown for reminders that are going out on their own
+ *  or already went. Silent on any failure: the calendar matters more. */
+async function showReminderNotice() {
+  try {
+    const r = await memorialReminders(state.currentAgyaryId, 1);
+    const todo = r.items.filter(o => !DONE.includes(o.sent_status) && !(o.auto && r.delivery === "live"));
+    const slot = document.getElementById("calReminders");
+    if (!slot || !todo.length) return;
+    slot.innerHTML = `<div class="card">
+      <div class="section-bar" id="calRemBar">
+        <div class="sb-text"><b>${todo.length} reminder${todo.length === 1 ? "" : "s"} to send</b>
+          <span>For today and tomorrow - tap to see who</span></div>
+        <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
+      </div></div>`;
+    document.getElementById("calRemBar").onclick = () => navigate("#/reminders");
+  } catch (e) { /* the calendar does not depend on it */ }
 }
 
 async function draw() {
