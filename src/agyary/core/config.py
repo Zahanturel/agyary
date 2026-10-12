@@ -8,7 +8,12 @@ class Settings(BaseSettings):
 
     app_name: str = "agyary"
     app_env: str = "development"
-    app_debug: bool = True
+    # Off unless asked for. Debug signs anyone in as any number (the simulate
+    # webhook, OTP codes in the response) and drops Secure cookies and HSTS, so
+    # a server built from a forgotten .env must come up with it off - and a
+    # production one refuses to start with it on (validate_runtime_secrets).
+    # A laptop serving plain http on localhost needs APP_DEBUG=true in .env.
+    app_debug: bool = False
 
     database_url: str = "postgresql+asyncpg://agyary:agyary@localhost:5432/agyary"
 
@@ -116,7 +121,8 @@ class Settings(BaseSettings):
     wa_login_ttl_seconds: int = 600
 
     def validate_runtime_secrets(self) -> None:
-        """Refuse to serve with a blank JWT signing key.
+        """Refuse to serve with a blank JWT signing key, or in debug mode in
+        production.
 
         An empty ``jwt_secret_key`` doesn't disable auth, which would at
         least be obvious - it signs every session token with the empty
@@ -131,6 +137,11 @@ class Settings(BaseSettings):
                 "blank key and could be forged by anyone. Generate one with "
                 "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
                 "and set it in .env before starting the app."
+            )
+        if self.app_debug and self.app_env.strip().lower() == "production":
+            raise RuntimeError(
+                "APP_DEBUG is true with APP_ENV=production. Debug mode lets anyone "
+                "sign in as any number. Set APP_DEBUG=false in .env before starting."
             )
 
 

@@ -61,7 +61,9 @@ uv run uvicorn agyary.api.main:app --reload
 ```
 
 Open http://localhost:8000/mobed. In `.env`, set `JWT_SECRET_KEY` first
-(`openssl rand -hex 32`); the app refuses to start without it.
+(`openssl rand -hex 32`); the app refuses to start without it. On a laptop also
+set `APP_DEBUG=true`: it is off by default, and without it the browser will not
+send the sign-in cookies back over plain http.
 
 ### Signing in
 
@@ -81,7 +83,9 @@ On a laptop there is no WhatsApp to send from, so with `APP_DEBUG=true`
 `POST /webhooks/whatsapp/simulate` with `{"code": ..., "phone": ...}` stands in
 for Meta, and a sign-in code comes back in the response when no access token is
 set. Both are refused whenever `APP_DEBUG` is false, and must be: they hand out a
-session for any number the caller names.
+session for any number the caller names. The simulate endpoint also answers only
+a caller on the same machine, and the app refuses to start with `APP_DEBUG=true`
+when `APP_ENV=production`.
 
 ## Configuration
 
@@ -91,7 +95,7 @@ setting with its meaning. The ones that matter:
 | Setting | What it does |
 |---|---|
 | `JWT_SECRET_KEY` | Signs sessions. Required. |
-| `APP_DEBUG` | Must be `false` in production (enables dev-only shortcuts when true). |
+| `APP_DEBUG` | Off by default; `true` only on a laptop. The app refuses to start with it on when `APP_ENV=production`. |
 | `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | Verify Meta's webhook. |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | Needed to SEND anything (reminders, sign-in codes). Server only, never in git. |
 | `REMINDERS_SEND_MODE` | `off` (default), `dry_run` (log what would go), or `live`. |

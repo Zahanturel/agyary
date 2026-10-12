@@ -164,7 +164,7 @@ sending is off. Settings that matter operationally:
 | `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
 | `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
-| `APP_DEBUG` | true (dev) | MUST be false in production: it enables a sign-in bypass and `/docs` |
+| `APP_DEBUG` | false | `true` only on a laptop: it enables a sign-in bypass and `/docs`. Refused at startup when `APP_ENV=production` |
 
 ## 5. External dependencies and their state
 

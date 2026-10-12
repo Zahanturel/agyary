@@ -14,6 +14,11 @@ import os
 # Set a test value before any get_settings() call so the suite runs green under
 # a plain `uv run pytest` (an OS env var overrides the empty .env entry).
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
+# Debug is off by default, and the suite needs it on: the in-process client
+# talks plain http, so Secure cookies would never come back, and the simulate
+# webhook (exercised from 127.0.0.1) is debug-only. test_debug_safety checks the
+# real default with this cleared.
+os.environ.setdefault("APP_DEBUG", "true")
 
 import pytest
 from sqlalchemy import text

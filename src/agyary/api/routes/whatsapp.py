@@ -148,9 +148,12 @@ async def _process_message(db: AsyncSession, message: dict) -> None:
 # ---------------------------------------------------------------------------
 # Local development
 # ---------------------------------------------------------------------------
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
 @router.post("/simulate", include_in_schema=False)
 async def simulate_inbound(
-    payload: dict, db: AsyncSession = Depends(get_db)
+    payload: dict, request: Request, db: AsyncSession = Depends(get_db)
 ) -> dict:
     """Stand in for Meta on a machine Meta cannot reach.
 
@@ -163,8 +166,13 @@ async def simulate_inbound(
     load-bearing: with it true this endpoint is a complete authentication
     bypass. The signed webhook above is the only way to claim an attempt
     once debug is off.
+
+    And even with debug on it answers only a caller on this machine: on a
+    server, every request arrives through the tunnel from another container,
+    so a debug flag left on by mistake still opens nothing to the internet.
     """
-    if not get_settings().app_debug:
+    peer = request.client.host if request.client else ""
+    if not get_settings().app_debug or peer not in _LOOPBACK:
         raise HTTPException(status_code=404)
 
     code = str(payload.get("code", "")).strip()

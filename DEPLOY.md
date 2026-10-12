@@ -68,8 +68,9 @@ Edit `.env`:
 - **`APP_DEBUG`** — must be `false`. `POST /webhooks/whatsapp/simulate`
   exists so sign-in can be exercised on a laptop Meta cannot reach, and it
   grants a session for any phone number the caller names. It 404s when
-  debug is off. Leaving debug on in production is a complete authentication
-  bypass, not a verbosity setting.
+  debug is off, and to any caller not on the machine itself. Leaving debug on
+  in production is a complete authentication bypass, not a verbosity setting,
+  so with `APP_ENV=production` the app refuses to start until it is `false`.
 - **`WHATSAPP_APP_SECRET`** — the Meta App's secret (App Settings → Basic).
   The webhook verifies every payload's HMAC against it and returns 503 while
   it is blank, rather than comparing against an empty key and accepting
