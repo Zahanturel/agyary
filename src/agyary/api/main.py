@@ -15,7 +15,7 @@ from agyary.api.routes.otp import router as otp_router
 from agyary.api.routes.reminders import router as reminders_router
 from agyary.api.routes.whatsapp import router as whatsapp_router
 from agyary.core.config import get_settings
-from agyary.services import reminder_worker
+from agyary.services import bot_check, reminder_worker
 
 settings = get_settings()
 settings.validate_runtime_secrets()
@@ -82,16 +82,20 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     # The app is its own origin and nothing else: no inline script, no inline
-    # event handlers, no eval and no third-party host anywhere in it (checked
-    # when this was written), so the browser is told to run nothing but our own
-    # files. That turns any injected markup into text instead of code. Styles
-    # stay inline because the screens set style attributes. frame-ancestors is
-    # the modern X-Frame-Options.
+    # event handlers, no eval and no third-party host anywhere in it, so the
+    # browser is told to run nothing but our own files. That turns any injected
+    # markup into text instead of code. Styles stay inline because the screens
+    # set style attributes. frame-ancestors is the modern X-Frame-Options.
+    # The one exception: once the bot check is configured, Cloudflare's
+    # Turnstile script and its frame, for the sign-in code request (D3).
+    turnstile = bot_check.CHALLENGE_ORIGIN if get_settings().turnstile_site_key.strip() else None
+    script_src = f"'self' {turnstile}" if turnstile else "'self'"
+    frame_src = turnstile or "'none'"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        f"default-src 'self'; script-src {script_src}; style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; "
-        "worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
-        "frame-ancestors 'none'"
+        f"worker-src 'self'; frame-src {frame_src}; object-src 'none'; base-uri 'none'; "
+        "form-action 'self'; frame-ancestors 'none'"
     )
     # Camera, microphone, location and payment are never needed. The clipboard
     # and contacts are, so they are not listed here.

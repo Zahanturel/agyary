@@ -3,10 +3,10 @@
 /**
  * Sign in.
  *
- * One path: we mint a code, the mobed sends it to us from their own
- * WhatsApp, and we learn their number from the message. They never type a
- * phone number, so there is nothing here to enumerate, and because we never
- * send anything it needs no approved template and costs nothing per sign-in.
+ * Two ways in. By code, when the server offers it: type your number, pass the
+ * bot check (Cloudflare Turnstile), and a six digit code arrives on WhatsApp.
+ * Or the "send us a message" way: we mint a code, the mobed sends it to us from
+ * their own WhatsApp, and we learn their number from the message.
  *
  * Signing in neither creates nor raises a role: every membership this app
  * makes is a plain 'mobed'.
@@ -23,6 +23,9 @@ import { afterSignIn } from "../session.js";
 
 let pollTimer = null;
 let otpCleanup = null;
+// The bot check's public site key, when the server has one (D3). Without it the
+// server does not offer codes at all.
+let turnstileSiteKey = null;
 
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -37,7 +40,11 @@ export async function renderLogin() {
   chrome(false);
   setHeader("Agyary");
   let offered = false;
-  try { offered = (await authOptions()).otp === true; } catch (e) { /* the other way still works */ }
+  try {
+    const options = await authOptions();
+    offered = options.otp === true;
+    turnstileSiteKey = options.turnstile_site_key || null;
+  } catch (e) { /* the other way still works */ }
   return offered ? renderPhoneStep() : renderWaChoice();
 }
 
@@ -59,13 +66,31 @@ export function extractCode(text) {
   return found.length === 1 ? found[0] : null;
 }
 
+/** Cloudflare's script, loaded once and only when the server has a site key. */
+let turnstileLoading = null;
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (!turnstileLoading) {
+    turnstileLoading = new Promise((resolve, reject) => {
+      const tag = document.createElement("script");
+      tag.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      tag.async = true;
+      tag.onload = () => resolve(window.turnstile);
+      tag.onerror = () => { turnstileLoading = null; reject(new Error("The check could not load.")); };
+      document.head.appendChild(tag);
+    });
+  }
+  return turnstileLoading;
+}
+
 function renderPhoneStep(prefill) {
   mainEl.innerHTML = `
     <div class="card">
       <h2>Sign in</h2>
       <p class="meta">Enter your WhatsApp number and we'll send you a code there.</p>
-      <label>WhatsApp number</label>
+      <label for="lgPhone">WhatsApp number</label>
       ${phoneField("lgPhone", prefill || rememberedPhone())}
+      ${turnstileSiteKey ? `<div id="lgCheck" style="margin-top:12px"></div>` : ""}
       <div style="margin-top:14px"><button id="lgSend">Send code</button></div>
       <p class="meta" style="margin-top:18px">
         Prefer not to type your number?
@@ -75,14 +100,31 @@ function renderPhoneStep(prefill) {
     </div>`;
   document.getElementById("lgOther").onclick = (e) => { e.preventDefault(); renderWaChoice(true); };
 
+  // The bot check: each token is good for one request, so a new one is needed
+  // for every Send (and Resend comes back to this step).
+  let checkToken = null;
+  if (turnstileSiteKey) {
+    loadTurnstile().then((ts) => {
+      const box = document.getElementById("lgCheck");
+      if (!box) return;
+      ts.render(box, {
+        sitekey: turnstileSiteKey,
+        callback: (token) => { checkToken = token; },
+        "expired-callback": () => { checkToken = null; },
+        "error-callback": () => { checkToken = null; },
+      });
+    }).catch(() => showError("The check could not load. Sign in by sending us a message instead."));
+  }
+
   const send = async () => {
     const phone = readPhone("lgPhone");
     if (!phone) return showError("Please enter a valid phone number.");
+    if (turnstileSiteKey && !checkToken) return showError("Please wait for the check to finish, then tap Send code.");
     const btn = document.getElementById("lgSend");
     btn.disabled = true;
     btn.textContent = "Sending...";
     try {
-      const info = await otpRequest(phone);
+      const info = await otpRequest(phone, checkToken);
       rememberPhone(phone);
       renderCodeStep(phone, info);
     } catch (e) {
@@ -110,7 +152,11 @@ function renderCodeStep(phone, info) {
         <button class="ghost small" id="lgResend" disabled>Resend code</button>
         <button class="ghost small" id="lgChange">Change number</button>
       </div>
+      <p class="meta" style="margin-top:14px">No code after a minute? If you use a WhatsApp
+        username, WhatsApp may not deliver codes to you.
+        <a href="#" id="lgUseWa">Sign in by sending us a message instead</a>.</p>
     </div>`;
+  document.getElementById("lgUseWa").onclick = (e) => { e.preventDefault(); otpCleanup(); renderWaChoice(true); };
 
   const codeEl = document.getElementById("lgCode");
   const statusEl = document.getElementById("lgStatus");
@@ -188,6 +234,9 @@ function renderCodeStep(phone, info) {
   timer = setInterval(tick, 1000);
   tick();
   resendBtn.onclick = async () => {
+    // A fresh bot check is needed for every code, so resending goes back to
+    // the number step (which keeps the number) when there is one.
+    if (turnstileSiteKey) { otpCleanup(); return renderPhoneStep(phone); }
     resendBtn.disabled = true;
     try {
       const again = await otpRequest(phone);

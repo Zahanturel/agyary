@@ -141,6 +141,14 @@ async def request_code(
     if await _count(db, LoginOtp.phone == phone, sent_ok, LoginOtp.created_at > now - timedelta(days=1)) >= PER_PHONE_DAILY:
         raise OtpError("Too many codes were asked for this number today. Please try again tomorrow.", 429, retry_after=86400)
 
+    # And from one place, counted here rather than in memory so a restart or a
+    # deploy cannot reset it (D3). Only a digest of the address is ever stored.
+    requester = _requester(settings, ip)
+    if await _count(db, LoginOtp.requester == requester, LoginOtp.created_at > now - timedelta(hours=1)) >= settings.otp_per_address_hourly:
+        raise OtpError("Too many codes were asked for from here. Please try again in an hour.", 429, retry_after=3600)
+    if await _count(db, LoginOtp.requester == requester, LoginOtp.created_at > now - timedelta(days=1)) >= settings.otp_per_address_daily:
+        raise OtpError("Too many codes were asked for from here today. Please try again tomorrow.", 429, retry_after=86400)
+
     # The money: a ceiling on codes sent today overall.
     day_start, day_end = guardrails.day_bounds(now)
     if await _count(db, really_sent, LoginOtp.created_at >= day_start, LoginOtp.created_at < day_end) >= settings.otp_daily_cap:
@@ -166,7 +174,7 @@ async def request_code(
     row = LoginOtp(
         phone=phone, salt=salt, code_hash=_digest(settings, salt, phone, code),
         expires_at=now + timedelta(seconds=settings.otp_ttl_seconds),
-        is_new_number=is_new, requester=_requester(settings, ip), status="pending", created_at=now,
+        is_new_number=is_new, requester=requester, status="pending", created_at=now,
     )
     db.add(row)
     await db.flush()

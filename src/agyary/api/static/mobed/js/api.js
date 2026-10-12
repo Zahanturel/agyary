@@ -100,7 +100,8 @@ export const del = (path) => api(path, { method: "DELETE" });
 export const adminOverview = () => get("/admin/overview");
 export const adminSetPaused = (paused, reason) => post("/admin/reminders/pause", { paused, reason: reason || "" });
 export const authOptions = () => get("/auth/options");
-export const otpRequest = (phone) => post("/auth/otp/request", { phone });
+export const otpRequest = (phone, turnstileToken = null) =>
+  post("/auth/otp/request", { phone, turnstile_token: turnstileToken });
 export const otpVerify = (phone, code) => post("/auth/otp/verify", { phone, code });
 export const waLoginStart = () => post("/auth/wa/start", {});
 export const waLoginPoll = () => get("/auth/wa/poll");

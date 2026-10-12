@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from agyary.core import config
 from agyary.models import AppNotification, LoginOtp, User
-from agyary.services import guardrails, otp
+from agyary.services import bot_check, guardrails, otp
 from tests.test_reminder_sender import _settings
 
 PHONE = "+919944400701"
@@ -53,10 +53,19 @@ def outbox(monkeypatch):
 
 @pytest.fixture
 def live(monkeypatch):
-    """The server configured for sign-in codes, as environment so the routes see it."""
+    """The server configured for sign-in codes, as environment so the routes see
+    it - bot check included, with Cloudflare stood in for by a check that passes
+    (test_otp_bot_check covers the check itself)."""
     monkeypatch.setenv("OTP_MODE", "live")
     monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "test-token")
     monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "555000111")
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "site-key")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret-key")
+
+    async def passes(settings, token, ip):
+        return True
+
+    monkeypatch.setattr(bot_check, "verify", passes)
     config.get_settings.cache_clear()
     yield
     config.get_settings.cache_clear()
@@ -77,11 +86,13 @@ async def _ask(db, phone=PHONE, now=NOW, ip="1.2.3.4", **settings):
 
 async def test_the_login_screen_is_told_whether_codes_are_offered(client, monkeypatch):
     config.get_settings.cache_clear()
-    assert (await client.get("/api/mobed/auth/options")).json() == {"otp": False}
+    assert (await client.get("/api/mobed/auth/options")).json()["otp"] is False
     monkeypatch.setenv("OTP_MODE", "live")
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "site-key")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret-key")
     config.get_settings.cache_clear()
     try:
-        assert (await client.get("/api/mobed/auth/options")).json() == {"otp": True}
+        assert (await client.get("/api/mobed/auth/options")).json()["otp"] is True
     finally:
         config.get_settings.cache_clear()
 

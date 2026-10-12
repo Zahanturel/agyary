@@ -67,8 +67,16 @@ async def test_an_uninvited_number_is_turned_away_and_everyone_else_gets_in(clie
 
 
 async def test_a_code_is_not_sent_to_a_number_that_could_not_sign_in(client, db, seeded, monkeypatch):
+    from agyary.services import bot_check
+
+    async def passes(settings, token, ip):
+        return True
+
     monkeypatch.setenv("OTP_MODE", "live")
     monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "")
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "site-key")      # codes need the bot check (D3)
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret-key")
+    monkeypatch.setattr(bot_check, "verify", passes)
     _invite_only(monkeypatch)
 
     stranger = await client.post("/api/mobed/auth/otp/request", json={"phone": STRANGER})

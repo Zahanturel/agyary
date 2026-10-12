@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     otp_ttl_seconds: int = 300
     otp_daily_cap: int = 100                 # codes sent per IST day, all numbers
     otp_new_number_hourly_cap: int = 20      # codes to numbers with no account, per hour
+    # Requests from one address, counted in the database (a restart cannot reset them).
+    otp_per_address_hourly: int = 10
+    otp_per_address_daily: int = 30
+    # Cloudflare Turnstile, the bot check every code request must pass (D1, D3).
+    # Until both are set, sign-in by code stays unavailable even with OTP_MODE=live.
+    turnstile_site_key: str = ""
+    turnstile_secret_key: str = ""
 
     # --- Spend and abuse guardrails -----------------------------------------
     # Every reminder costs money, and a bug or a bad actor must not be able to

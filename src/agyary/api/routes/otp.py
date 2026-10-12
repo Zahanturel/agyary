@@ -9,6 +9,8 @@ over its limit.
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -18,14 +20,18 @@ from agyary.api import rate_limit
 from agyary.api.routes.mobed import _wa_login_session
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.services import otp, wa_login
+from agyary.services import bot_check, otp, wa_login
 from agyary.services.phone import Phone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mobed", tags=["otp"])
 
 
 class OtpRequestIn(BaseModel):
     phone: Phone
+    # The Cloudflare Turnstile token the login screen got from its widget.
+    turnstile_token: str | None = None
 
 
 class OtpVerifyIn(BaseModel):
@@ -36,8 +42,12 @@ class OtpVerifyIn(BaseModel):
 @router.get("/auth/options")
 async def auth_options() -> dict:
     """What sign-in methods this server offers, so the login screen can show
-    the right ones instead of finding out by failing."""
-    return {"otp": get_settings().otp_mode == "live"}
+    the right ones instead of finding out by failing. Codes are offered only
+    when they are live AND the bot check is configured (D3), and the screen is
+    given the check's public site key to show it."""
+    settings = get_settings()
+    offered = settings.otp_mode == "live" and bot_check.configured(settings)
+    return {"otp": offered, "turnstile_site_key": settings.turnstile_site_key.strip() or None}
 
 
 def _refused(exc: otp.OtpError) -> HTTPException:
@@ -53,6 +63,14 @@ async def otp_request(
     number has an account."""
     rate_limit.enforce(request, "otp_request", max_requests=10, window_seconds=600)
     rate_limit.enforce_key(f"otp_request_phone:{payload.phone}", max_requests=5, window_seconds=600)
+    settings = get_settings()
+    if settings.otp_mode == "live":
+        # D3: no bot check, no codes - however the rest is configured.
+        if not bot_check.configured(settings):
+            logger.error("OTP_MODE is live but the bot check (TURNSTILE_*) is not configured; refusing codes")
+            raise HTTPException(status_code=503, detail=otp.UNAVAILABLE)
+        if not await bot_check.verify(settings, payload.turnstile_token, rate_limit.client_ip(request)):
+            raise HTTPException(status_code=400, detail="Please complete the check and try again.")
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             out = await otp.request_code(
