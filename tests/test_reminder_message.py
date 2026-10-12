@@ -24,22 +24,23 @@ def _parts(today=DAY - timedelta(days=1), services=("Afringan", "Baaj"), **kw):
 
 def test_the_manual_message_says_when_and_what_without_asking_for_anything():
     assert rm.manual_text(_parts()) == (
-        f"Reminder from Goti Adarian.\n\nTomorrow, Thu 14 Mar ({ROJ_MAH}): "
-        "Afringan and Baaj for Dinshaw.\n\nWe would be glad to have you there."
+        "Reminder from Goti Adarian.\n\n"
+        "This is a notice of prayers scheduled at the fire temple.\n\n"
+        f"When: Tomorrow, Thu 14 Mar ({ROJ_MAH})\n"
+        "Prayers: Afringan and Baaj for Dinshaw."
     )
 
 
 def test_the_automatic_message_adds_how_to_stop():
     text = rm.template_text(_parts())
-    assert text.endswith("We would be glad to have you there.\n\nTo stop these reminders, reply STOP.")
+    assert text.endswith("Prayers: Afringan and Baaj for Dinshaw.\n\nTo stop these reminders, reply STOP.")
     assert text.startswith(rm.manual_text(_parts()))
 
 
 def test_today_and_tomorrow_are_said_only_when_true():
-    assert f"Today, Thu 14 Mar ({ROJ_MAH})" in rm.manual_text(_parts(today=DAY))
+    assert f"When: Today, Thu 14 Mar ({ROJ_MAH})" in rm.manual_text(_parts(today=DAY))
     # Further off it is just the date; no "tomorrow" that would be wrong.
-    assert rm.manual_text(_parts(today=DAY - timedelta(days=4))).splitlines()[2].startswith(
-        f"Thu 14 Mar ({ROJ_MAH})")
+    assert f"When: Thu 14 Mar ({ROJ_MAH})\n" in rm.manual_text(_parts(today=DAY - timedelta(days=4)))
 
 
 def test_the_time_appears_only_when_there_is_one():

@@ -50,10 +50,10 @@ keep the free version (the manual "Remind on WhatsApp" button).
 
     Reminder from <Agyari name>.
 
-    Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad): Afringan and Baaj for
-    Ardeshir Mehta at 9:00 am.
+    This is a notice of prayers scheduled at the fire temple.
 
-    We would be glad to have you there.
+    When: Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad)
+    Prayers: Afringan and Baaj for Ardeshir Mehta at 9:00 am.
 
     To stop these reminders, reply STOP.
 
@@ -63,6 +63,16 @@ keep the free version (the manual "Remind on WhatsApp" button).
   or end with a blank, nor put a newline inside one; both are tested.) The
   manual wa.me message is the same without the STOP line, since a reply to a
   message a mobed sends from their own WhatsApp goes to the mobed, not to us.
+
+  **Why it is so plain.** Meta's own check, run when a template is submitted,
+  classed both "We would be glad to have you there." and "Please join us." as
+  Marketing, and said a template with either would be rejected as Utility. A
+  version with no such line was refused for having too many blanks for its
+  length, so the fixed sentence in the middle is there to give the blanks
+  enough text around them. The final template (name `memorial_reminder`,
+  English, Utility, 6-hour validity so an undelivered 7 pm reminder expires by
+  1 am instead of arriving as a wrong "tomorrow") was submitted 12 Oct 2026.
+  Warmth has to come from the mobed in person, not the template.
 
 - "at 9:00 am" only when the mobed has set a time; it is optional and usually
   blank, so most messages have none. "Tomorrow" / "Today" appear only when true;

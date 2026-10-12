@@ -23,11 +23,18 @@ from agyary.calendar import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 # The text submitted to Meta for approval, with its four numbered blanks:
 #   {{1}} the fire temple   {{2}} when, e.g. "Tomorrow, Thu 15 Oct"
 #   {{3}} the Parsi date    {{4}} what, for whom, and at what time
-# It must not start or end with a blank, which Meta rejects.
+# It must not start or end with a blank, and Meta rejects one with too many
+# blanks for its length - hence the fixed sentence in the middle.
+#
+# Deliberately plain and appointment-like. Meta decides the category, and it
+# judged anything that invites ("We would be glad to have you there", "Please
+# join us") to be Marketing, which is billed at several times the rate and may
+# not be approved as Utility. The warmth lives in the mobed, not the template.
 TEMPLATE_BODY = (
     "Reminder from {{1}}.\n\n"
-    "{{2}} ({{3}}): {{4}}\n\n"
-    "We would be glad to have you there.\n\n"
+    "This is a notice of prayers scheduled at the fire temple.\n\n"
+    "When: {{2}} ({{3}})\n"
+    "Prayers: {{4}}\n\n"
     "To stop these reminders, reply STOP."
 )
 
@@ -36,8 +43,9 @@ TEMPLATE_BODY = (
 # STOP" would promise something we cannot honour.
 MANUAL_BODY = (
     "Reminder from {{1}}.\n\n"
-    "{{2}} ({{3}}): {{4}}\n\n"
-    "We would be glad to have you there."
+    "This is a notice of prayers scheduled at the fire temple.\n\n"
+    "When: {{2}} ({{3}})\n"
+    "Prayers: {{4}}"
 )
 
 
