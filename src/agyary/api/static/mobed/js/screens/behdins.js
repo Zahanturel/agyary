@@ -16,7 +16,8 @@
  */
 
 import {
-  listBehdins, memorialReminders, setBehdinReminders, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
+  listBehdins, memorialReminders, setBehdinReminders, consentWording, customerHistory, getBehdin, updateBehdin,
+  createBehdin, deleteBehdin,
   getSavedNames, putSavedNames, listMemorials, previewNewMemorial, createMemorial,
 } from "../api.js";
 import { state } from "../state.js";
@@ -479,9 +480,10 @@ export async function renderBehdinDetail({ id }) {
     };
     paintNote();
 
+    let consentVersion = null;
     const apply = async (want, confirmRestart) => {
       try {
-        reminders = await setBehdinReminders(aid, cid, want, confirmRestart);
+        reminders = await setBehdinReminders(aid, cid, want, confirmRestart, want ? consentVersion : null);
         box.checked = reminders.enabled;
         paintNote();
         showInfo(want ? "Reminders on." : "Reminders off.");
@@ -501,7 +503,29 @@ export async function renderBehdinDetail({ id }) {
         showError(e.message);
       }
     };
-    box.onchange = () => apply(box.checked, false);
+    // Turning reminders on is a record that the family agreed to particular
+    // words, so the mobed is shown them and confirms before anything is saved
+    // (RM-6). Turning them off needs no ceremony.
+    const askConsent = async () => {
+      let wording;
+      try {
+        wording = await consentWording();
+      } catch (e) {
+        box.checked = false;
+        return showError(e.message);
+      }
+      note.innerHTML = `<div class="card" style="margin:8px 0 0">
+          <p style="margin:0 0 8px"><b>Before you turn this on, ask ${esc(record.name)}:</b></p>
+          <p style="margin:0 0 12px">"${esc(wording.text)}"</p>
+          <div class="row tight">
+            <button class="small" id="bdConsentYes">They said yes</button>
+            <button class="ghost small" id="bdConsentNo">Cancel</button>
+          </div>
+        </div>`;
+      document.getElementById("bdConsentYes").onclick = () => { consentVersion = wording.version; apply(true, false); };
+      document.getElementById("bdConsentNo").onclick = () => { box.checked = false; paintNote(); };
+    };
+    box.onchange = () => (box.checked ? askConsent() : apply(false, false));
   }
   mainEl.querySelectorAll("[data-mem]").forEach(el => {
     el.onclick = () => navigate(`#/memorial/${el.dataset.mem}`);

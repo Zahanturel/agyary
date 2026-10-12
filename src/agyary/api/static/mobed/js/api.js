@@ -154,8 +154,11 @@ export const deleteSavedName = (aid, cid, rowId) => del(`/agyaries/${aid}/behdin
 // --- Memorials: the observances a family keeps for one departed person ------
 export const memorialFeed = (aid, from, to) =>
   get(`/agyaries/${aid}/memorial-feed?from=${from}&to=${to}`);
-export const setBehdinReminders = (aid, cid, enabled, confirmRestart = false) =>
-  put(`/agyaries/${aid}/behdins/${cid}/reminders`, { enabled, confirm_restart: confirmRestart });
+export const setBehdinReminders = (aid, cid, enabled, confirmRestart = false, consentVersion = null) =>
+  put(`/agyaries/${aid}/behdins/${cid}/reminders`,
+    { enabled, confirm_restart: confirmRestart, consent_version: consentVersion });
+/** The words to read to a family before turning reminders on, and their version. */
+export const consentWording = () => get("/reminders/consent");
 export const getNotifications = () => get("/notifications");
 export const markNotificationsSeen = (ids) => post("/notifications/seen", ids ? { ids } : {});
 export const memorialReminders = (aid, days) =>

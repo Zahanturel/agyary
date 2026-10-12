@@ -30,6 +30,17 @@ from agyary.models import AppNotification, Customer, Memorial, MemorialObservanc
 NOTIFICATION_TTL = timedelta(hours=24)
 
 KIND_REMINDER_STOPPED = "reminder_stopped"
+
+# The words a mobed says to the family before turning reminders on (RM-6). They
+# name the business that will message them and say how to stop, which is what
+# Meta's opt-in rules expect. Change the words, change the version: each
+# agreement keeps the version that was read out.
+CONSENT_VERSION = "2026-10-a"
+CONSENT_TEXT = (
+    "May Mobed Diary send you a short WhatsApp message the evening before each of "
+    "these prayers? It comes from the Mobed Diary number, not from me. You can stop "
+    "them at any time by replying STOP."
+)
 KIND_MEMORIAL_CLOSING = "memorial_closing"
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -137,6 +148,7 @@ async def set_reminders(
     enabled: bool,
     *,
     confirm_restart: bool = False,
+    consent_version: str | None = None,
     now: datetime | None = None,
 ) -> dict:
     """Turn reminders on or off for one of this mobed's behdins.
@@ -149,6 +161,12 @@ async def set_reminders(
         raise ReminderError("That behdin is not in your book.", "not_in_book")
 
     if enabled:
+        if consent_version is not None and consent_version != CONSENT_VERSION:
+            raise ReminderError(
+                "The words to read to the family have changed. Please open this page again "
+                "and read them the new words first.",
+                "stale_consent",
+            )
         if customer.reminders_stopped_at is not None:
             if not confirm_restart:
                 raise ReminderError(
@@ -159,9 +177,11 @@ async def set_reminders(
             customer.reminders_stopped_at = None
         customer.reminders_enabled = True
         customer.reminders_enabled_at = now
+        customer.reminders_consent_version = CONSENT_VERSION
     else:
         customer.reminders_enabled = False
         customer.reminders_enabled_at = None
+        customer.reminders_consent_version = None
     await db.flush()
     return await reminder_state(db, user_id, customer)
 

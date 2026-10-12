@@ -41,6 +41,9 @@ class Customer(Base):
     # Off until the mobed turns it on; turned off again by a STOP.
     reminders_enabled: Mapped[bool] = mapped_column(Boolean, server_default="false")
     reminders_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Which version of the consent words (reminders.CONSENT_TEXT) the mobed read
+    # out when the family agreed - the evidence of what they agreed to (RM-6).
+    reminders_consent_version: Mapped[str | None] = mapped_column(String(20))
     # Set when the person replied STOP. A STOP is the person's, so it reaches
     # every mobed's record of the number (and any made later, through
     # ReminderOptOut); each mobed lifts it only for their own record, and only

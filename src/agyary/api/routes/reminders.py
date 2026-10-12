@@ -25,6 +25,8 @@ class RemindersIn(BaseModel):
     enabled: bool
     # Needed only to turn reminders back on for someone who replied STOP.
     confirm_restart: bool = False
+    # Which consent words the screen showed (GET /reminders/consent); refused if stale.
+    consent_version: str | None = None
 
 
 @router.put("/agyaries/{agyary_id}/behdins/{customer_id}/reminders")
@@ -43,13 +45,21 @@ async def set_behdin_reminders(
     customer = await _require_behdin(db, agyary_id, customer_id, user)
     try:
         state = await reminders.set_reminders(
-            db, user.id, customer, payload.enabled, confirm_restart=payload.confirm_restart
+            db, user.id, customer, payload.enabled, confirm_restart=payload.confirm_restart,
+            consent_version=payload.consent_version,
         )
     except reminders.ReminderError as exc:
-        status = 409 if exc.code == "stopped" else 400
+        status = 409 if exc.code in ("stopped", "stale_consent") else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc
     await db.commit()
     return state
+
+
+@router.get("/reminders/consent")
+async def consent_wording(user: User = Depends(get_current_user)) -> dict:
+    """The words a mobed reads to the family before turning reminders on, and
+    their version, which is kept with the agreement (RM-6)."""
+    return {"version": reminders.CONSENT_VERSION, "text": reminders.CONSENT_TEXT}
 
 
 def _serialize(note: AppNotification) -> dict:
