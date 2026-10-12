@@ -1,4 +1,4 @@
-# Memorial reminders (the first paid feature)
+# Memorial reminders
 
 Working notes, same style as `memorial-plan.md`. Decisions below are what we
 agreed in discussion; ON HOLD is what is deliberately not built yet.
@@ -20,6 +20,38 @@ keep the free version (the manual "Remind on WhatsApp" button).
   automation we do not yet need.
 - Meta's fee is NOT the constraint (see Cost). Opt-in friction and mobed
   adoption are.
+
+## Free for now, with guardrails
+
+During the pilot every fire temple has every feature; there is no plan gate and
+no `agyari_plan`. What stands in for a paywall is a set of limits, so that a bug,
+a bad actor or a Meta billing surprise cannot cost much:
+
+- **Ceilings** (`REMINDERS_*_CAP`): per day and per month overall, per mobed per
+  day, per fire temple per day. A reminder over any of them is NOT sent; its mobed
+  is told ("not sent, daily limit reached - send it yourself with Remind on
+  WhatsApp") and it shows as not sent on their Reminders list; the admins get an
+  alert. Failed or blocked reminders are not counted, since they cost nothing.
+  Defaults: 150 a day, 2000 a month, 40 per mobed, 100 per fire temple.
+- **Pause switch** (Admin screen, `app_settings`): stops ALL outbound WhatsApp -
+  reminders and sign-in codes - within a minute, and survives a restart.
+- **Auto-pause**: the loop pauses itself at once on an account-level error from
+  Meta (invalid or expired token 190, payment 131042, locked account, spam or
+  throughput limits, a missing or paused template) and after
+  `REMINDERS_BREAKER_FAILURES` failures in a row. One bad number (not on
+  WhatsApp) fails that reminder only and never counts toward it. The reminder
+  that hit an account error stays pending; it was not its fault.
+- **Alerts**: admins (`ADMIN_PHONES`) get an in-app alert and the server logs an
+  ERROR; the same alert is not repeated within six hours. With no admins set the
+  alert reaches the log only, and says so.
+- **Allowlist**: `live` sends only to `REMINDERS_ALLOWLIST` until it is `*`.
+- **Meta's prepaid balance is the outermost limit.** Do not turn on auto top-up:
+  spending can then never exceed what was put in.
+- Worst case at the shipped defaults is a few hundred rupees a month at the
+  estimated Utility rate (tested), not an open-ended bill.
+
+Billing, plans and the cost/revenue view come back when there is something to
+charge for.
 
 ## Settled
 
@@ -207,6 +239,22 @@ history, same rule as the sign-in number.
   and sends them. The app's own log lines are raised to INFO so it can be
   watched in the server log. It holds no state, so a restart mid-evening carries on; one uvicorn
   worker runs, and the unique index makes an overlap during a deploy harmless.
+- **Guardrails** (`services/guardrails.py`, `api/routes/admin.py`, the Admin
+  screen): see "Free for now, with guardrails" above.
+- **Sign-in by a code on WhatsApp** (`services/otp.py`, `api/routes/otp.py`,
+  `OTP_MODE`, default off): a second sign-in next to "send us a code". A caller
+  types a number and we send a six digit code as an Authentication template with a
+  Copy code button; the app reads it back from the clipboard (a web page cannot
+  read WhatsApp, and WebOTP and iPhone autofill are SMS-only, so "Copy code" and a
+  Paste button are as automatic as it can be). It is the weaker of the two sign-ins
+  - a typed number can be someone else's - so it is limited: a 30 second cool-down,
+  3 codes an hour and 8 a day per number, a daily cap overall, a harder hourly cap
+  on numbers with no account, five wrong tries then the code is dead, five minutes
+  to live, only a salted digest stored, only the newest code counts, the same
+  answer for known and unknown numbers, and it respects the pause switch. It is
+  BLOCKED until the business is verified with Meta: creating the `login_code`
+  Authentication template was refused ("does not have permission to create message
+  template") and the account's business verification status is `not_verified`.
 - **Safety**: `REMINDERS_SEND_MODE` is `off` by default. `dry_run` plans and
   logs without writing anything. `live` sends only to `REMINDERS_ALLOWLIST`
   (`*` for everyone; empty means nobody). Per-agyari daily cap of 300.
@@ -237,6 +285,10 @@ history, same rule as the sign-in number.
 
 ## ON HOLD
 
+0. **Sign-in by WhatsApp code** is built and deployed but off, waiting on business
+   verification (Udyam/GST, then Meta's review) so the Authentication template can
+   be created. Until then "send us a code" is the way in, and it is the better one.
+
 1. **Conversational booking / AI scheduling and reply handling.** Reminders
    ask for nothing, so there are no reply buttons. A free-text bot is a
    separate, larger feature with its own PII and wrong-booking risk, to be
@@ -246,7 +298,7 @@ history, same rule as the sign-in number.
 3. **Native apps.** Keep the PWA. Android via a Trusted Web Activity (Play
    Store) and iOS via a Capacitor wrapper are possible later; neither gates
    this feature.
-4. **Payment gateway / automated subscriptions.** Manual until volume asks.
+4. **Plans, billing and a cost/revenue view.** Everything is free during the pilot; see the guardrails above for what limits it.
 5. **Moving sign-in to an outbound OTP.** Rejected for now: the inbound code
    is free, unphishable, and already built. Revisit only if the username
    change breaks it.

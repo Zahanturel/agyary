@@ -97,6 +97,8 @@ export const del = (path) => api(path, { method: "DELETE" });
 // never ask for their number - the webhook learns it from Meta. start()
 // mints the code and sets an httpOnly cookie; poll() matches on that cookie,
 // never on the code, which is public by the time it reaches WhatsApp.
+export const adminOverview = () => get("/admin/overview");
+export const adminSetPaused = (paused, reason) => post("/admin/reminders/pause", { paused, reason: reason || "" });
 export const authOptions = () => get("/auth/options");
 export const otpRequest = (phone) => post("/auth/otp/request", { phone });
 export const otpVerify = (phone, code) => post("/auth/otp/verify", { phone, code });

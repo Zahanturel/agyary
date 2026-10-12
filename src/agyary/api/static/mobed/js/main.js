@@ -26,6 +26,7 @@ import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens
 import { renderMemorialNew } from "./screens/memorial_new.js";
 import { renderMemorial } from "./screens/memorial.js";
 import { renderReminders } from "./screens/reminders.js";
+import { renderAdmin } from "./screens/admin.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
@@ -41,6 +42,8 @@ route("#/calendar", renderCalendarScreen, { tab: "calendar" });
 // The calendar's view is part of the address: #/calendar/day/2026-09-25.
 route("#/calendar/:mode/:date", renderCalendarScreen, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/calendar" });
+// For the numbers in ADMIN_PHONES only (the server enforces it; the menu entry just hides).
+route("#/admin", renderAdmin, { parent: "#/menu" });
 
 // `parent` is where Back goes when there is nothing behind the screen (a
 // reload, a shared link) - see router.back(). Screens with a parent get the

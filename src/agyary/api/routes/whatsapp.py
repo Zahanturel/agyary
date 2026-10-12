@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["whatsapp"])
 
+MAX_WEBHOOK_BYTES = 1_000_000
+
 
 @router.get("", include_in_schema=False)
 async def verify_webhook(
@@ -77,6 +79,11 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     earns a rejection is a payload we cannot prove came from Meta.
     """
     raw_body = await request.body()
+    # Meta's payloads are a few kilobytes. Refusing anything large costs a
+    # genuine delivery nothing and stops an oversized body being hashed and
+    # parsed for nothing.
+    if len(raw_body) > MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large")
     settings = get_settings()
 
     # An unset app secret would make hmac compare against b"" and accept

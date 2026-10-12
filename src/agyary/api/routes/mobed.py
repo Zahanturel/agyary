@@ -35,7 +35,7 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
-from agyary.services import behdin_directory, mobed_auth, mobed_dashboard, reminders, wa_login
+from agyary.services import behdin_directory, guardrails, mobed_auth, mobed_dashboard, reminders, wa_login
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -262,7 +262,11 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
         }
         for a, role in result.all()
     ]
-    return {"id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries}
+    return {
+        "id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries,
+        # Only to show the admin screen's menu entry; the server checks again on every call.
+        "is_admin": guardrails.is_admin(get_settings(), user.phone),
+    }
 
 
 @router.post("/auth/logout")

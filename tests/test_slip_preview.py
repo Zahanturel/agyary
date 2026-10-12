@@ -109,7 +109,7 @@ async def test_editing_without_names_keeps_the_events_own_names(db, client, seed
     the event's names may have been reviewed and reordered."""
     aid = seeded["agyary_id"]
     headers = await _member_headers(client, seeded)
-    cid = await _behdin_with_pairs(client, aid, headers)
+    await _behdin_with_pairs(client, aid, headers)
     custom = [{"section": "pair", **n} for n in _pair(1, "Only", "These")]
     made = await client.post(f"/api/mobed/agyaries/{aid}/manual-add/booking",
                              json=_booking_body(names=custom), headers=headers)
@@ -122,7 +122,7 @@ async def test_editing_without_names_keeps_the_events_own_names(db, client, seed
     assert slip["names_text"] == "Ervad Only, Ervad These"
 
     # Changing the behdin is different: their saved names are the sensible start.
-    other = await client.post(f"/api/mobed/agyaries/{aid}/behdins",
+    await client.post(f"/api/mobed/agyaries/{aid}/behdins",
                               json={"name": "Someone Else", "phone": "+919944400802"}, headers=headers)
     edit = _booking_body(behdin_phone="+919944400802", behdin_name="Someone Else")
     r = await client.put(f"/api/mobed/agyaries/{aid}/bookings/{bid}", json=edit, headers=headers)

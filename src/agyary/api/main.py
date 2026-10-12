@@ -7,6 +7,7 @@ from fastapi import FastAPI, Header
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from agyary.api.routes.admin import router as admin_router
 from agyary.api.routes.calendar import router as calendar_router
 from agyary.api.routes.memorials import router as memorials_router
 from agyary.api.routes.mobed import router as mobed_router
@@ -80,6 +81,26 @@ async def security_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # The app is its own origin and nothing else: no inline script, no inline
+    # event handlers, no eval and no third-party host anywhere in it (checked
+    # when this was written), so the browser is told to run nothing but our own
+    # files. That turns any injected markup into text instead of code. Styles
+    # stay inline because the screens set style attributes. frame-ancestors is
+    # the modern X-Frame-Options.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; "
+        "worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    # Camera, microphone, location and payment are never needed. The clipboard
+    # and contacts are, so they are not listed here.
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    if not settings.app_debug:
+        # Production is HTTPS only (Cloudflare). Told once, a browser refuses
+        # to talk to it over plain HTTP for six months. Not sent in debug, where
+        # a laptop serves http on localhost.
+        response.headers["Strict-Transport-Security"] = "max-age=15552000"
     # The PWA is a dozen ES modules with no build step, so no filename
     # hashing to bust caches with. Without this the browser is free to
     # serve some modules from its own cache after a deploy and fetch
@@ -105,6 +126,7 @@ async def security_headers(request, call_next):
 
 
 app.include_router(calendar_router)
+app.include_router(admin_router)
 app.include_router(mobed_router)
 app.include_router(memorials_router)
 app.include_router(otp_router)

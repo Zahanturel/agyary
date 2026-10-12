@@ -1,76 +1,115 @@
 # agyary
 
-WhatsApp-based temple management system for Zoroastrian fire temples (agyaries).
+A calendar and booking tool for the priests (mobeds, and the panthaky) of
+Zoroastrian fire temples (agyaries), with WhatsApp reminders to the families
+they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
+
+## What it does
+
+- **Calendar and bookings.** A day, week and month calendar in the Parsi
+  calendars (Shenshai, Kadmi, Fasli) next to the Gregorian one, per-fire-temple
+  Machi Board, and a shared print-ready slip for each ceremony.
+- **Behdins.** Each mobed keeps their own book of the families they look after,
+  with saved names reused on every booking. A behdin is a person keyed by phone
+  number; one mobed's book is never visible to a colleague.
+- **Memorials.** From a date of death the app works out every observance a
+  family keeps (the opening days, the 30th day, monthly, yearly, the Parabs) and
+  puts them on the calendar. See [docs/memorial-plan.md](docs/memorial-plan.md).
+- **Reminders.** The evening before a memorial prayer after the opening days, the
+  family can be sent a short WhatsApp message - by hand through a `wa.me` link, or
+  automatically. See [docs/reminders-plan.md](docs/reminders-plan.md).
 
 ## Stack
 
-- Python 3.12, FastAPI, SQLAlchemy (async), Alembic, asyncpg
-- Postgres 16
-- [uv](https://github.com/astral-sh/uv) for dependency management
+Python 3.12, FastAPI, SQLAlchemy (async), Alembic, asyncpg, Postgres 16, managed
+with [uv](https://github.com/astral-sh/uv). The front end is plain ES modules and
+a service worker under `src/agyary/api/static/` - there is no build step.
 
-## Project layout
+## Layout
 
 ```
 src/agyary/
-  api/        FastAPI app, routers, static web-chat simulator
-  core/       settings, database session
-  models/     SQLAlchemy ORM models (full v2 schema)
-  messaging/  transport-agnostic conversation layer:
-              handle_message(db, agyary_id, phone, text) -> [OutgoingMessage]
-              flows (machi/service booking, approvals, cancellations),
-              regex name parser, Parsi/Gregorian date parser, geh times
-  services/   business logic
-  calendar/   Parsi (Zoroastrian) calendar engine — pure functions, no DB
+  api/        the FastAPI app, its routers, rate limiting, and the PWA's static files
+  core/       settings (config.py) and the database session
+  models/     SQLAlchemy models
+  calendar/   the Parsi calendar engine and the memorial schedule - pure functions, no database
+  services/   the rules: memorials, reminders and their sender, sign-in, guardrails
+  messaging/  booking core (named for a bot that no longer exists - see its docstring)
+tests/        pytest against a real Postgres (agyary_test)
+alembic/      migrations
+deploy/       the server deploy script
+docs/         design notes and plans
 ```
 
-The messaging layer is the WhatsApp bot without WhatsApp: the web chat UI
-(`/chat`) and the future WhatsApp Cloud API webhook are both thin transport
-adapters around `handle_message`.
-
-## Local development
+## Running it locally
 
 ```bash
 uv sync
-cp .env.example .env          # set DATABASE_URL to your local Postgres
-uv run alembic upgrade head   # create the schema
-uv run python -m tests.seed_demo   # optional: demo agyary, mobeds, services
+cp .env.example .env                       # then fill it in, see below
+uv run alembic upgrade head
+uv run python -m tests.seed_demo           # optional: a demo fire temple, mobeds and services
+uv run python -m agyary.scripts.seed_fire_temples   # optional: 167 reference fire temples
 uv run uvicorn agyary.api.main:app --reload
 ```
 
-Then open http://localhost:8000/chat — a two-pane WhatsApp simulator
-(customer + panthaky) that drives the full booking flow: onboarding,
-machi (patet/tandarosti), service bookings with purpose and name sections,
-saved-name reuse, slot alternatives, approval, cancellation.
+Open http://localhost:8000/mobed. In `.env`, set `JWT_SECRET_KEY` first
+(`openssl rand -hex 32`); the app refuses to start without it.
 
-**The simulator is development-only.** It has no auth and takes the behdin's
-phone number as a parameter, so it can read and act on any person's bookings.
-It is registered only when `APP_DEBUG` is true; in production `/chat` and
-`/api/chat/*` return 404.
+### Signing in
 
-## Mobed PWA
+There are two ways, and the first is always available.
 
-The priest-facing calendar tool lives at `/mobed` (a no-build vanilla PWA).
-Tap "Sign in with WhatsApp" and send the pre-filled code to our number —
-you never type a phone number, because we learn it from the message Meta
-delivers. Then search for your agyari, and you land in a day/week calendar
-(My Day) and a per-agyari Machi Board; both open a shared print-ready slip
-with Edit.
+1. **Send us a code.** The app shows a code and opens WhatsApp with it ready to
+   send; the mobed sends it from their own WhatsApp and the page signs them in by
+   itself. Their number is proven by Meta and nothing is sent to them, so it
+   costs nothing and there is nothing to enumerate.
+2. **A code on WhatsApp** (off by default, `OTP_MODE=live`). They type their
+   number and we send a six digit code, which the app reads from the clipboard.
+   It sends a paid message to a number the caller names, so it is limited hard
+   (see Guardrails) and needs an approved WhatsApp *Authentication* template,
+   which Meta only allows once the business is verified.
 
-Locally there is no WhatsApp to send from, so with `APP_DEBUG=true` you can
-close the loop yourself — the code is on screen, and
-`POST /webhooks/whatsapp/simulate` with `{"code": ..., "phone": ...}` stands
-in for Meta. That endpoint 404s whenever `APP_DEBUG` is false, and it must:
-it hands out a session for any number the caller names.
+On a laptop there is no WhatsApp to send from, so with `APP_DEBUG=true`
+`POST /webhooks/whatsapp/simulate` with `{"code": ..., "phone": ...}` stands in
+for Meta, and a sign-in code comes back in the response when no access token is
+set. Both are refused whenever `APP_DEBUG` is false, and must be: they hand out a
+session for any number the caller names.
 
-Set `JWT_SECRET_KEY` in `.env` first (`openssl rand -hex 32`) — the app won't
-start without it. Then seed the worldwide fire-temple reference list
-(167 temples, imported as `unclaimed` until a mobed claims and sets one up):
+## Configuration
 
-```bash
-uv run python -m agyary.scripts.seed_fire_temples
-```
+Everything is read from the environment (`.env`); `.env.example` lists each
+setting with its meaning. The ones that matter:
 
-Open http://localhost:8000/mobed.
+| Setting | What it does |
+|---|---|
+| `JWT_SECRET_KEY` | Signs sessions. Required. |
+| `APP_DEBUG` | Must be `false` in production (enables dev-only shortcuts when true). |
+| `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | Verify Meta's webhook. |
+| `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | Needed to SEND anything (reminders, sign-in codes). Server only, never in git. |
+| `REMINDERS_SEND_MODE` | `off` (default), `dry_run` (log what would go), or `live`. |
+| `REMINDERS_ALLOWLIST` | In `live`, the only numbers messaged; `*` means everyone, empty means nobody. |
+| `ADMIN_PHONES` | Numbers that see the Admin screen and receive alerts. |
+| `OTP_MODE` | `off` (default) or `live` for sign-in by WhatsApp code. |
+
+### Guardrails
+
+Every message sent is paid, so sending is ringed with limits: a ceiling per day
+and per month overall, per mobed and per fire temple (`REMINDERS_*_CAP`), a pause
+switch for admins that survives a restart, and an automatic pause when Meta
+reports an account-level problem or several sends fail in a row. A reminder over
+a limit is not sent, its mobed is told so they can send it by hand, and the admins
+are alerted. Meta's prepaid balance, with no auto top-up, is the outermost limit.
+Details are in `src/agyary/services/guardrails.py`.
+
+### Security
+
+Sessions are short-lived JWTs with a sliding refresh cookie. Every endpoint that
+sends or guesses at something is rate limited per address and per subject. The
+webhook verifies Meta's signature and caps the body size. Responses carry a
+Content-Security-Policy that allows only the app's own files (the app has no
+inline script and no third-party host, which a test enforces), HSTS in
+production, and the usual framing and sniffing headers. Secrets live only in the
+server's `.env`, which is readable by its owner alone.
 
 ## Docker
 
@@ -78,17 +117,21 @@ Open http://localhost:8000/mobed.
 docker compose up --build
 ```
 
-API is served at http://localhost:8000. Interactive docs at http://localhost:8000/docs.
+The API is served at http://localhost:8000. The interactive docs (`/docs`) exist
+only when `APP_DEBUG` is true.
 
-## Deploying for an alpha test
+## Deploying
 
-See [DEPLOY.md](DEPLOY.md) for a full walkthrough of getting this onto a
-free, always-on `https://` URL (Oracle Cloud + Cloudflare Tunnel) that alpha
-mobeds install by opening a link and tapping "Add to Home Screen" — no
-server for them to run.
+Pushing to `master` runs the tests and, if they pass, deploys: a database backup,
+a build, the migrations, the swap, and a health check
+(`.github/workflows/deploy.yml`, `deploy/deploy.sh`). [DEPLOY.md](DEPLOY.md) and
+[deploy/README.md](deploy/README.md) cover setting the server up the first time.
 
 ## Tests
 
 ```bash
 uv run pytest
 ```
+
+The tests use a real Postgres database called `agyary_test` and truncate it, so
+run one pytest at a time.

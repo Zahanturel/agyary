@@ -84,7 +84,14 @@ export async function renderMenu() {
           <span>Families to remind about memorial prayers</span></div>
         <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
       </div>
-    </div>` : `<div class="card">
+    </div>
+    ${state.user.is_admin ? `<div class="card">
+      <div class="section-bar" id="mAdminBar">
+        <div class="sb-text"><b>Admin</b>
+          <span>Sending limits, cost and the pause switch</span></div>
+        <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
+      </div>
+    </div>` : ""}` : `<div class="card">
       <div class="section-bar" id="mBehdinBar">
         <div class="sb-text"><b>Manage your behdins</b>
           <span>Names, numbers and their saved name lists</span></div>
@@ -138,6 +145,8 @@ export async function renderMenu() {
   };
 
   if (hasTabs) document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
+  const adminBar = document.getElementById("mAdminBar");
+  if (adminBar) adminBar.onclick = () => navigate("#/admin");
 
   // The whole bar opens the list; the + is a shortcut straight to adding.
   if (!hasTabs) document.getElementById("mBehdinBar").onclick = (e) => {
