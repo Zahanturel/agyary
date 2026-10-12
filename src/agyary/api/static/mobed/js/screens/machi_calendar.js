@@ -11,12 +11,17 @@
 import { machiBoard, bookableGehs } from "../api.js";
 import { state, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
-import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
+import { chrome, mainEl, showFab, showError, showInfo, refreshHeader } from "../ui.js";
 import { esc, todayIst } from "../util.js";
 import { navigate } from "../router.js";
 
 let dayGehs = [];
 let dayMachis = [];
+
+// The board is shared so everyone can see which gehs are taken, but who a
+// colleague's machi is for is theirs: the server leaves the name blank and
+// marks the slot `mine: false`, and the app does not offer to open it.
+const OTHERS = "Booked by another mobed";
 
 function machiItems(rows) {
   return rows.map(m => ({
@@ -34,7 +39,7 @@ function machiItems(rows) {
     // cell, and this breaks it at a syllable instead of mid-letter.
     short: `${(GEH_NAME_BY_NUM[m.geh] || "").replace("Aiwisruthrem", "Aiwis­ruthrem")} - ${
       m.purpose === "tandarosti" ? "Tandarosti" : "Patet"}`,
-    sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
+    sublabel: `${m.mine === false ? OTHERS : (m.behdin_name || "-")} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }
 
@@ -71,10 +76,11 @@ function gehSlotHtml(items) {
 
     if (m) {
       const purpose = MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose;
-      html += `<div class="geh-slot booked" data-cal-item="machi:${m.id}">
+      const tap = m.mine === false ? "" : ` data-cal-item="machi:${m.id}"`;
+      html += `<div class="geh-slot booked"${tap}>
         <div class="geh-slot-head">${esc(name)}</div>
         <div class="geh-slot-purpose">${esc(purpose)}</div>
-        <div class="geh-slot-behdin">${esc(m.behdin_name || "-")}</div>
+        <div class="geh-slot-behdin">${esc(m.mine === false ? OTHERS : (m.behdin_name || "-"))}</div>
       </div>`;
     } else if (available) {
       html += `<div class="geh-slot open" data-geh-book="${num}">
@@ -128,6 +134,8 @@ async function draw() {
       renderDay: gehSlotHtml,
       wireDay: wireSlots,
       onItem: (kind, id) => {
+        const m = dayMachis.find(x => x.id === Number(id));
+        if (m && m.mine === false) return showInfo(`${OTHERS}.`);
         const aid = state.currentAgyaryId;
         navigate(`#/machi/${aid}/${id}`);
       },

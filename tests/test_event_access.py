@@ -77,9 +77,10 @@ async def test_only_the_owner_or_an_admin_can_change_a_machi(db, client, seeded)
     mid = r.json()["machi_id"]
     base = f"/api/mobed/agyaries/{aid}/machis/{mid}"
 
-    # Shared board: another member can still open it...
-    assert (await client.get(f"{base}/slip", headers=other)).status_code == 200
-    # ...but not change or remove it.
+    # Another member can neither read who it is for (the board shows them the
+    # slot as taken, nothing more - see test_machi_privacy)...
+    assert (await client.get(f"{base}/slip", headers=other)).status_code == 404
+    # ...nor change or remove it.
     assert (await client.delete(base, headers=other)).status_code == 404
     assert await db.get(Machi, mid) is not None
     assert (await client.delete(base, headers=owner)).status_code == 200

@@ -611,10 +611,11 @@ async def machi_board(
     would re-download in full.
 
     ``mine=true`` narrows it to the machis the caller entered themselves.
-    The mobed app always asks for that - a mobed has no need to see every
-    machi at their fire temple, and the unfiltered response carries other
-    mobeds' behdin names. The unfiltered form remains for the agyari
-    management surface that will come later.
+    The mobed app always asks for that. The unfiltered form (the Machi app's
+    shared board) lists every taken slot, but names the family only on the
+    caller's own machis - created by them, assigned to them, or any at a
+    temple they are panthaky of - and flags each with ``mine``. Anyone else's
+    slot reads as taken, by nobody in particular.
 
     Recurring machis are topped up here before reading. There is no
     scheduler in this deployment, so if nothing generated them on the way
@@ -632,6 +633,11 @@ async def machi_board(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    admin = await mobed_dashboard.is_admin(db, agyary_id, user.id)
+
+    def _mine(machi) -> bool:
+        return admin or user.id in (machi.created_by_user_id, machi.assigned_mobed_id)
+
     return [
         {
             "id": e.machi.id,
@@ -642,7 +648,8 @@ async def machi_board(
             "gregorian_date": e.machi.gregorian_date.isoformat(),
             "ceremony_datetime": e.machi.ceremony_datetime.isoformat(),
             "status": e.machi.status,
-            "behdin_name": e.behdin_name,
+            "behdin_name": e.behdin_name if _mine(e.machi) else "",
+            "mine": _mine(e.machi),
         }
         for e in entries
     ]
@@ -1105,7 +1112,7 @@ async def machi_detail(
     agyary_id: int, machi_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     await _require_membership(db, agyary_id, user)
-    detail = await mobed_dashboard.get_machi_detail(db, agyary_id, machi_id)
+    detail = await mobed_dashboard.get_machi_detail(db, agyary_id, machi_id, user.id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Unknown machi")
     return detail

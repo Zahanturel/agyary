@@ -302,9 +302,10 @@ async def may_touch_booking(db: AsyncSession, booking: Booking, user_id: int) ->
 
 
 async def may_modify_machi(db: AsyncSession, machi: Machi, user_id: int) -> bool:
-    """Editing or deleting a machi: its creator, the mobed assigned to it,
-    or an admin. Reading stays agyari-wide - the Machi Board is a shared slot
-    board by design - but changing someone else's entry is not."""
+    """A machi's own mobeds: its creator, the mobed assigned to it, or an
+    admin. Only they may edit or delete it, or read who it is for - the detail
+    and the slip carry the family's name, number and the names recited. The
+    Machi Board stays shared, but shows anyone else only that the slot is taken."""
     if machi.created_by_user_id == user_id or machi.assigned_mobed_id == user_id:
         return True
     return await is_admin(db, machi.agyary_id, user_id)
@@ -840,9 +841,13 @@ async def manual_add_booking(
 # ---------------------------------------------------------------------------
 # Edit (re-uses the shared slot-check / conflict core, never a raw update)
 # ---------------------------------------------------------------------------
-async def get_machi_detail(db: AsyncSession, agyary_id: int, machi_id: int) -> dict | None:
+async def get_machi_detail(
+    db: AsyncSession, agyary_id: int, machi_id: int, user_id: int | None = None
+) -> dict | None:
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary_id:
+        return None
+    if user_id is not None and not await may_modify_machi(db, machi, user_id):
         return None
     customer = await db.get(Customer, machi.customer_id)
     return {
@@ -1211,6 +1216,8 @@ async def get_machi_slip(
 ) -> SlipData | None:
     machi = await db.get(Machi, machi_id)
     if machi is None or machi.agyary_id != agyary_id:
+        return None
+    if reader_user_id is not None and not await may_modify_machi(db, machi, reader_user_id):
         return None
     agyary = await db.get(Agyary, agyary_id)
     customer = await db.get(Customer, machi.customer_id)
