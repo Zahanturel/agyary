@@ -47,3 +47,8 @@ Thumbs.db
 
 # Quarantined for manual deletion (agent cannot unlink on this mount)
 _to_delete/
+
+# The independent review lists live, unfixed vulnerabilities. It must never be committed or pushed
+# while the repository is (or is about to be) public. Keep it local, or redact it first.
+docs/REVIEW.md
+docs/REVIEW-*.md
