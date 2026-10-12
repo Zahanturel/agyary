@@ -19,13 +19,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from agyary.calendar import CalendarSystem, gregorian_to_parsi
+from agyary.calendar import (
+    GATHA_NAMES,
+    MAH_NAMES,
+    ROJ_NAMES,
+    CalendarSystem,
+    gregorian_to_parsi,
+)
 from agyary.calendar.memorial import Observance, build_schedule
 from agyary.messaging import booking_service
 from agyary.messaging.availability import parsi_slot_fields
@@ -431,6 +438,49 @@ async def calendar_feed(
 REMINDER_LEAD_DAYS = 5
 
 
+def _parsi_text(obs: MemorialObservance) -> str:
+    if obs.gatha_index:
+        name = GATHA_NAMES[obs.gatha_index - 1] if obs.gatha_index <= len(GATHA_NAMES) else ""
+        return f"Gatha {name}".strip()
+    return f"Roj {ROJ_NAMES[obs.parsi_roj - 1]}, Mah {MAH_NAMES[obs.parsi_mah - 1]}"
+
+
+def _list_and(names: list[str]) -> str:
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def reminder_text(
+    agyary_name: str, obs: MemorialObservance, departed: str, service_names: list[str]
+) -> str:
+    """What a family is told. One wording for the manual send and, later,
+    the automatic one, so a mobed sees today exactly what would go out.
+
+    Plain and factual on purpose: it says which temple, whose observance,
+    when, and how to ask for it. Nothing that reads as a promotion.
+    """
+    d = obs.gregorian_date
+    when = f"{d:%a} {d.day} {d:%b %Y}"
+    # "the Varsi of X", but the opening days are labelled "Day 4", which reads
+    # wrongly after "the".
+    if obs.label.startswith("Day "):
+        what = f"the {obs.label.lower()} observance for {departed}"
+    else:
+        what = f"the {obs.label} of {departed}"
+    text = f"{agyary_name}\n\nA reminder: {what} is on {when} ({_parsi_text(obs)})."
+    if service_names:
+        text += f"\n\nIf you would like {_list_and(service_names)} arranged, please reply here."
+    return text
+
+
+def whatsapp_link(phone: str, text: str) -> str:
+    """A wa.me link that opens a chat with ``phone`` with ``text`` ready to
+    send. Sent from the mobed's own WhatsApp: nothing goes out until they
+    tap Send."""
+    return f"https://wa.me/{phone.lstrip('+')}?text={quote(text, safe='')}"
+
+
 async def reminders_due(
     db: AsyncSession, user_id: int, agyary_id: int, today: date, horizon_days: int
 ) -> list[dict]:
@@ -446,7 +496,7 @@ async def reminders_due(
     end = today + timedelta(days=horizon_days)
     rows = (
         await db.execute(
-            select(MemorialObservance, Memorial, Customer.name)
+            select(MemorialObservance, Memorial, Customer.name, Customer.phone)
             .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
             .join(Customer, Customer.id == Memorial.customer_id)
             .options(selectinload(MemorialObservance.services))
@@ -460,14 +510,22 @@ async def reminders_due(
         )
     ).all()
     names = await _service_names(db, agyary_id)
+    agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == agyary_id))).scalar_one()
     items = []
-    for obs, memorial, behdin_name in rows:
+    for obs, memorial, behdin_name, behdin_phone in rows:
         days_away = (obs.gregorian_date - today).days
+        serialized = serialize_observance(obs, names)
+        text = reminder_text(
+            agyary_name, obs, memorial.departed_name, [s["name"] for s in serialized["services"]]
+        )
         items.append({
-            **serialize_observance(obs, names),
+            **serialized,
             "memorial_id": memorial.id,
             "customer_id": memorial.customer_id,
             "behdin_name": behdin_name,
+            "behdin_phone": behdin_phone,
+            "message": text,
+            "wa_link": whatsapp_link(behdin_phone, text),
             "departed_name": memorial.departed_name,
             # The observance's Roj/Mah/year are in THIS memorial's calendar.
             "calendar": memorial.calendar_system,

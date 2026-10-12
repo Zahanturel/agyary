@@ -9,7 +9,10 @@
  * screen and the future automatic sender can never disagree): the point at
  * which a family should hear about an observance.
  *
- * Tapping a row opens that observance on its memorial.
+ * Tapping a row opens that observance on its memorial. "Remind on WhatsApp"
+ * opens a chat with the family, with the message already written, from the
+ * mobed's own WhatsApp - nothing is sent until they press Send there, and it
+ * costs us nothing.
  */
 
 import { memorialReminders } from "../api.js";
@@ -36,6 +39,9 @@ function rowHtml(o) {
       <div class="obs-title"><b>${esc(o.label)} · ${esc(o.departed_name)}</b>
         <span>${esc(o.behdin_name)}${svc ? " · " + esc(svc) : ""}</span></div>
       <div class="obs-when"><b>${esc(whenText(o.days_away))}</b><br>${esc(gregLabel(o.date))}<br>${esc(parsiText(o))}</div>
+    </div>
+    <div class="row tight" style="margin-top:8px">
+      <a class="button small" data-wa href="${esc(o.wa_link)}" target="_blank" rel="noopener">Remind on WhatsApp</a>
     </div>
   </div>`;
 }
@@ -79,6 +85,10 @@ export async function renderReminders() {
     ${group("Coming up", "", later)}`;
 
   mainEl.querySelectorAll("[data-oid]").forEach(el => {
-    el.onclick = () => navigate(`#/memorial/${el.dataset.mid}/${el.dataset.oid}`);
+    el.onclick = (e) => {
+      // The WhatsApp link opens WhatsApp; it must not also open the memorial.
+      if (e.target.closest("[data-wa]")) return;
+      navigate(`#/memorial/${el.dataset.mid}/${el.dataset.oid}`);
+    };
   });
 }

@@ -400,3 +400,36 @@ async def test_reminder_horizon_is_bounded(client, db, seeded):
 async def test_reminders_need_a_session(client, seeded):
     r = await client.get(f"/api/mobed/agyaries/{seeded['agyary_id']}/memorial-reminders")
     assert r.status_code in (401, 403)
+
+
+async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db, seeded):
+    from urllib.parse import parse_qs, urlparse
+
+    aid, cid, headers = await _setup(client, db, seeded)
+    death = memorials.today_ist() - timedelta(days=1)
+    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
+
+    item = (await _reminders(client, aid, headers)).json()["items"][0]
+    assert item["behdin_phone"] == PHONE
+    text = item["message"]
+    # Which temple, whose observance, when - and how to ask for it.
+    agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == aid))).scalar_one()
+    assert text.startswith(agyary_name)
+    assert "Dinshaw" in text and "Roj " in text
+    assert "the day 2 observance for Dinshaw" in text
+    assert "Afringan and Baaj" in text and "please reply here" in text
+
+    # The link opens a chat with the behdin (no +) and carries exactly that text.
+    link = urlparse(item["wa_link"])
+    assert (link.scheme, link.netloc, link.path) == ("https", "wa.me", "/" + PHONE.lstrip("+"))
+    assert parse_qs(link.query)["text"] == [text]
+
+
+async def test_a_reminder_with_no_services_still_reads_properly():
+    from types import SimpleNamespace
+
+    obs = SimpleNamespace(
+        gregorian_date=date(2030, 3, 14), label="Varsi", gatha_index=None, parsi_roj=1, parsi_mah=1,
+    )
+    text = memorials.reminder_text("Goti Adarian", obs, "Dinshaw", [])
+    assert text == "Goti Adarian\n\nA reminder: the Varsi of Dinshaw is on Thu 14 Mar 2030 (Roj Hormazd, Mah Fravardin)."
