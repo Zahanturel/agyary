@@ -32,6 +32,7 @@ from agyary.models import (
     Payment,
     RecurrenceRule,
     Service,
+    UserCustomer,
     UserPreferences,
 )
 from agyary.models.enums import ADMIN_ROLES, DEFAULT_SECONDARY_CALENDAR_SYSTEM, SLOT_RELEASING_STATUSES
@@ -321,9 +322,13 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
     collapse into a single entry here. The individual dates are still real
     rows on the calendar/Machi board; this is a relationship summary, not a
     second copy of the schedule.
+
+    None unless the behdin is in this mobed's own book. Filtering the entries
+    is not enough: the answer also carries the behdin's name and number, so
+    without this any signed-in account could count up ids and read them all.
     """
     customer = await db.get(Customer, customer_id)
-    if customer is None:
+    if customer is None or await db.get(UserCustomer, (user_id, customer_id)) is None:
         return None
 
     machis = (
