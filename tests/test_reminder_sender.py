@@ -158,7 +158,9 @@ async def test_off_plans_nothing_and_dry_run_writes_nothing(client, db, seeded, 
 
     with caplog.at_level("INFO"):
         assert await reminder_sender.plan_tomorrow(db, now, _settings(reminders_send_mode="dry_run")) == 1
-    assert "DRY RUN" in caplog.text and "Reminder from Goti Adarian." in caplog.text
+    assert "DRY RUN" in caplog.text
+    # The log names the observance, not the family: no number, no departed name.
+    assert BEHDIN_PHONE not in caplog.text and "Ardeshir Mehta" not in caplog.text
     await db.commit()
     assert await _rows(db) == []              # nothing to block the real run later
 

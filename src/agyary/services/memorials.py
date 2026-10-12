@@ -40,7 +40,7 @@ from agyary.models import (
     Service,
 )
 from agyary.models.enums import CALENDAR_SYSTEMS
-from agyary.services import mobed_dashboard, reminder_message
+from agyary.services import mobed_dashboard, reminder_message, template_text
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -101,6 +101,12 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
     name = choice.departed_name.strip()
     if not name:
         raise MemorialError("Please enter the departed person's name.")
+    # The name is read out in each reminder, so it follows the rules for text
+    # in a paid message (services/template_text.py).
+    try:
+        template_text.check(name, "departed person's name", max_len=template_text.DEPARTED_MAX)
+    except ValueError as exc:
+        raise MemorialError(str(exc)) from exc
     _validate_length(choice.monthly_months, "Monthly observances", MAX_MONTHLY_MONTHS)
     _validate_length(choice.yearly_years, "Yearly observances", MAX_YEARLY_YEARS)
     _validate_length(choice.parab_years, "Parab years", MAX_PARAB_YEARS)

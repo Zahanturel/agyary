@@ -36,7 +36,15 @@ from agyary.models.enums import (
     NAME_TITLES,
 )
 from agyary.models.preferences import default_preferences
-from agyary.services import behdin_directory, guardrails, mobed_auth, mobed_dashboard, reminders, wa_login
+from agyary.services import (
+    behdin_directory,
+    guardrails,
+    mobed_auth,
+    mobed_dashboard,
+    reminders,
+    template_text,
+    wa_login,
+)
 from agyary.services.phone import OptionalPhone, Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
@@ -405,6 +413,15 @@ async def put_preferences(
 # ---------------------------------------------------------------------------
 # Agyari search / join
 # ---------------------------------------------------------------------------
+def _check_template_text(text: str, what: str, max_len: int) -> None:
+    """A temple or service name is read out in every reminder for it, so it
+    may not carry a link, a handle or a number (services/template_text.py)."""
+    try:
+        template_text.check(text, what, max_len=max_len)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 
 def _agyary_summary(a: Agyary) -> dict:
     return {
@@ -456,6 +473,7 @@ async def activate_agyari(
     agyary = await _require_membership(db, agyary_id, user)
     if not payload.name.strip() or not payload.city.strip():
         raise HTTPException(status_code=400, detail="Name and city are required")
+    _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)
     await mobed_dashboard.activate_agyary(
         db, agyary,
         name=payload.name, city=payload.city,
@@ -482,6 +500,7 @@ async def create_agyari(
     activation outcome (born active), then the creating mobed joins it."""
     if not payload.name.strip() or not payload.city.strip():
         raise HTTPException(status_code=400, detail="Name and city are required")
+    _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)
     agyary = await mobed_dashboard.create_agyary(
         db,
         name=payload.name, city=payload.city,
@@ -600,6 +619,7 @@ async def create_service(
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Service name is required")
+    _check_template_text(name, "service name", template_text.SERVICE_MAX)
     service = Service(agyary_id=agyary_id, name=name, offsite_capable=payload.offsite_capable, display_order=999)
     db.add(service)
     await db.commit()

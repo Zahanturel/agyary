@@ -40,8 +40,9 @@ from agyary.models import (
     MemorialObservance,
     Notification,
     Service,
+    User,
 )
-from agyary.services import guardrails, reminder_message, reminders
+from agyary.services import guardrails, reminder_message, reminders, template_text
 from agyary.services.memorials import OPENING_DAYS
 
 logger = logging.getLogger(__name__)
@@ -120,9 +121,47 @@ def _may_send_to(settings: Settings, phone: str) -> bool:
 # ---------------------------------------------------------------------------
 # Planning
 # ---------------------------------------------------------------------------
+def _masked(phone: str) -> str:
+    """Enough of a number to tell two apart in a log, not enough to read it."""
+    return f"{phone[:3]}...{phone[-2:]}" if len(phone) > 6 else "..."
+
+
+def _text_problem(agyary_name: str, departed: str, services: list[str]) -> str | None:
+    """Why this reminder's free text cannot go out, or None. The same rules as
+    where the text is typed (template_text), for anything saved before them."""
+    checks = [(agyary_name, template_text.TEMPLE_MAX), (departed, template_text.DEPARTED_MAX)]
+    checks += [(name, template_text.SERVICE_MAX) for name in services]
+    for text_, max_len in checks:
+        if template_text.problem(text_, max_len=max_len):
+            return "its wording cannot be sent automatically (a temple, service or departed name)"
+    return None
+
+
+async def _owner_caps(db: AsyncSession, settings: Settings, owner_ids: set[int], now: datetime) -> dict[int, int]:
+    """The daily cap for each account in its first days (D1): a handful, until
+    it is older than reminders_new_account_days or the owner vouches for it
+    (REMINDERS_VOUCHED) - admins are trusted. Accounts not listed have only
+    the ordinary per-mobed cap."""
+    vouched = {p.strip() for p in settings.reminders_vouched.split(",") if p.strip()}
+    vouched |= guardrails.admin_phones(settings)
+    young = now - timedelta(days=settings.reminders_new_account_days)
+    users = (await db.execute(select(User.id, User.phone, User.created_at).where(User.id.in_(owner_ids)))).all()
+    return {
+        uid: settings.reminders_new_account_daily_cap
+        for uid, phone, created_at in users
+        if created_at > young and phone not in vouched
+    }
+
+
 async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> int:
     """Write a pending reminder for every observance tomorrow that may be
-    reminded. Returns how many were newly planned (in dry_run, how many would be)."""
+    reminded. Returns how many were newly planned (in dry_run, how many would be).
+
+    What may be reminded: the family agreed (on the memorial's own mobed's
+    record), has not said STOP, is past the opening days, is on the allowlist
+    in live mode; the text passes the rules for paid messages; no other
+    reminder goes to that number that day; and no cap - overall, per mobed
+    (lower for a new account), per fire temple - is reached."""
     mode = settings.reminders_send_mode
     if mode == "off":
         return 0
@@ -151,40 +190,64 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
 
     service_names: dict[int, dict[int, str]] = {}
     used = await guardrails.usage(db, now)
+    owner_caps = await _owner_caps(db, settings, {m.created_by_user_id for _, m, _, _ in rows}, now)
+    # Numbers already given a reminder today (planned or sent): one per number per day.
+    day_start, day_end = guardrails.day_bounds(now)
+    reminded = set(
+        (
+            await db.execute(
+                select(Notification.recipient_phone).where(
+                    Notification.notification_type == TYPE, Notification.status != "failed",
+                    Notification.created_at >= day_start, Notification.created_at < day_end,
+                )
+            )
+        ).scalars()
+    )
     blocked: dict[str, int] = {}
     planned = 0
     for obs, memorial, customer, agyary_name in rows:
         if mode == "live" and not _may_send_to(settings, customer.phone):
             continue
-
-        # The ceilings: a reminder over any of them is not sent, the mobed is
-        # told (so they can send it by hand), and the admins are alerted below.
-        limit = used.blocker(settings, memorial.created_by_user_id, memorial.agyary_id)
-        if limit:
-            blocked[limit] = blocked.get(limit, 0) + 1
-            if mode == "live":
-                await _record_blocked(db, settings, obs, memorial, customer, limit, now)
+        if await _already_planned(db, obs.id):
             continue
 
         if memorial.agyary_id not in service_names:
             found = await db.execute(select(Service.id, Service.name).where(Service.agyary_id == memorial.agyary_id))
             service_names[memorial.agyary_id] = dict(found.all())
         names = service_names[memorial.agyary_id]
-        parts = reminder_message.build_parts(
-            agyary_name, obs, memorial.departed_name,
-            [names.get(s.service_id, "") for s in sorted(obs.services, key=lambda s: s.service_id)
-             if names.get(s.service_id)],
-            today,
+        services = [names.get(s.service_id, "") for s in sorted(obs.services, key=lambda s: s.service_id)
+                    if names.get(s.service_id)]
+
+        why = _text_problem(agyary_name, memorial.departed_name, services)
+        if why is None and customer.phone in reminded:
+            why = "only one automatic reminder goes to a number each day"
+        if why is not None:
+            if mode == "live":
+                await _record_not_sent(db, settings, obs, memorial, customer, why, now)
+            continue
+
+        # The ceilings: a reminder over any of them is not sent, the mobed is
+        # told (so they can send it by hand), and the admins are alerted below.
+        limit = used.blocker(
+            settings, memorial.created_by_user_id, memorial.agyary_id,
+            owner_cap=owner_caps.get(memorial.created_by_user_id),
         )
+        if limit:
+            blocked[limit] = blocked.get(limit, 0) + 1
+            if mode == "live":
+                await _record_not_sent(db, settings, obs, memorial, customer, f"{limit} was reached", now)
+            continue
+
+        parts = reminder_message.build_parts(agyary_name, obs, memorial.departed_name, services, today)
 
         if mode == "dry_run":
-            # The loop runs every minute for two hours; say it once.
+            # The loop runs every minute for two hours; say it once. The words
+            # are on the mobed's Reminders list; the log needs no family's number.
             if (obs.id, tomorrow) not in _dry_run_logged:
                 _dry_run_logged.add((obs.id, tomorrow))
-                logger.info(
-                    "DRY RUN - would send to %s:\n%s", customer.phone, reminder_message.template_text(parts)
-                )
+                logger.info("DRY RUN - would send observance %s to %s", obs.id, _masked(customer.phone))
             planned += 1
+            reminded.add(customer.phone)
             used.add(memorial.created_by_user_id, memorial.agyary_id)
             continue
 
@@ -210,6 +273,7 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
         )
         if inserted.rowcount:
             planned += 1
+            reminded.add(customer.phone)
             used.add(memorial.created_by_user_id, memorial.agyary_id)
     if blocked:
         await guardrails.alert_admins(
@@ -222,12 +286,23 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
     return planned
 
 
-async def _record_blocked(
-    db: AsyncSession, settings: Settings, obs, memorial, customer, limit: str, now: datetime
+async def _already_planned(db: AsyncSession, observance_id: int) -> bool:
+    """Whether this observance already has its one reminder row (planned, sent
+    or given up on) - the loop asks every minute, and the answer must not change."""
+    found = await db.execute(
+        select(Notification.id).where(
+            Notification.notification_type == TYPE, Notification.memorial_observance_id == observance_id
+        )
+    )
+    return found.first() is not None
+
+
+async def _record_not_sent(
+    db: AsyncSession, settings: Settings, obs, memorial, customer, why: str, now: datetime
 ) -> None:
-    """Note a reminder a ceiling stopped, and tell its mobed - once. The row is
-    unique on the observance, so the loop asking every minute does not tell
-    them every minute; and it shows on their Reminders list as not sent."""
+    """Note a reminder that will not go automatically, and tell its mobed - once.
+    The row is unique on the observance, so the loop asking every minute does
+    not tell them every minute; and it shows on their Reminders list as not sent."""
     inserted = await db.execute(
         pg_insert(Notification)
         .values(
@@ -241,7 +316,7 @@ async def _record_blocked(
             scheduled_at=now,
             created_at=now,
             status="failed",
-            error_message=f"Not sent: {limit} was reached",
+            error_message=f"Not sent: {why}"[:500],
         )
         .on_conflict_do_nothing(
             index_elements=[Notification.memorial_observance_id],
@@ -251,7 +326,7 @@ async def _record_blocked(
     if inserted.rowcount:
         await reminders.notify(
             db, memorial.created_by_user_id, "reminder_failed", f"Reminder to {customer.name} was not sent",
-            f"We did not send tomorrow's reminder to {customer.name} because {limit} was reached. "
+            f"We did not send tomorrow's reminder to {customer.name} automatically: {why}. "
             "You can still send it yourself with Remind on WhatsApp in the Reminders list.",
             link="#/reminders", agyary_id=memorial.agyary_id, now=now,
         )

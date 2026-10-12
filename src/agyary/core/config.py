@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     reminders_monthly_cap: int = 2000        # all fire temples, per IST month
     reminders_per_mobed_daily_cap: int = 40  # one mobed
     reminders_per_agyary_daily_cap: int = 100  # one fire temple
+    # An account in its first days may send only a handful a day (D1), unless
+    # the owner vouches for it (comma separated E.164) or it is an admin.
+    reminders_new_account_days: int = 7
+    reminders_new_account_daily_cap: int = 5
+    reminders_vouched: str = ""
     # Only for the estimate on the admin screen; the real price is Meta's.
     reminders_cost_per_message_inr: float = 0.14
     # This many failures in a row (not counting a single bad number) pause all

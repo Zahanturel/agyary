@@ -152,12 +152,17 @@ class Usage:
     per_mobed: dict[int, int] = field(default_factory=dict)
     per_agyary: dict[int, int] = field(default_factory=dict)
 
-    def blocker(self, settings: Settings, owner_id: int | None, agyary_id: int | None) -> str | None:
-        """The name of the cap that forbids one more reminder, or None."""
+    def blocker(
+        self, settings: Settings, owner_id: int | None, agyary_id: int | None, *, owner_cap: int | None = None
+    ) -> str | None:
+        """The name of the cap that forbids one more reminder, or None.
+        ``owner_cap`` is a lower per-mobed cap for a new account (D1)."""
         if self.today >= settings.reminders_daily_cap:
             return "the daily limit for all fire temples"
         if self.month >= settings.reminders_monthly_cap:
             return "the monthly limit for all fire temples"
+        if owner_id is not None and owner_cap is not None and self.per_mobed.get(owner_id, 0) >= owner_cap:
+            return "the daily limit for a new account"
         if owner_id is not None and self.per_mobed.get(owner_id, 0) >= settings.reminders_per_mobed_daily_cap:
             return "your daily limit"
         if agyary_id is not None and self.per_agyary.get(agyary_id, 0) >= settings.reminders_per_agyary_daily_cap:
