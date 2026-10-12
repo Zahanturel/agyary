@@ -42,7 +42,7 @@ from agyary.models import (
     Service,
     User,
 )
-from agyary.services import guardrails, reminder_message, reminders, template_text
+from agyary.services import guardrails, reminder_message, reminders, template_text, wa_send
 from agyary.services.memorials import OPENING_DAYS
 
 logger = logging.getLogger(__name__)
@@ -348,7 +348,8 @@ def _payload(n: Notification, settings: Settings) -> dict:
     params = [n.template_params[k] for k in sorted(n.template_params, key=int)]
     return {
         "messaging_product": "whatsapp",
-        "to": n.recipient_phone.lstrip("+"),
+        # With its "+": without one Meta prefixes our own country code (RM-8a).
+        "to": wa_send.to_number(n.recipient_phone),
         "type": "template",
         "template": {
             "name": n.template_name,
@@ -588,10 +589,13 @@ _RANK = {"pending": 0, "sent": 1, "delivered": 2, "read": 3}
 
 
 async def apply_status(
-    db: AsyncSession, wa_message_id: str, status: str, error: str | None, now: datetime
+    db: AsyncSession, wa_message_id: str, status: str, error: str | None, now: datetime,
+    *, recipient_user_id: str | None = None,
 ) -> None:
     """A delivery receipt for a message we sent. Receipts arrive out of order
-    and more than once, so a status only ever moves a message forward."""
+    and more than once, so a status only ever moves a message forward. The
+    recipient's username id, when WhatsApp gives one, is kept so a STOP that
+    later comes with only that id still finds them (AU-4)."""
     n = (
         await db.execute(
             select(Notification).where(
@@ -601,6 +605,8 @@ async def apply_status(
     ).scalar_one_or_none()
     if n is None:
         return
+    if recipient_user_id and not n.recipient_user_id:
+        n.recipient_user_id = recipient_user_id[:128]
 
     if status == "failed":
         if n.status != "failed":

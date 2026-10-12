@@ -118,7 +118,8 @@ def _set_refresh_cookie(response: Response, session) -> None:
 # there is nothing here to enumerate. See services/wa_login.py.
 # ---------------------------------------------------------------------------
 async def _wa_login_session(
-    db: AsyncSession, response: Response, poll_secret: str, phone: str, name: str
+    db: AsyncSession, response: Response, poll_secret: str, phone: str, name: str,
+    *, wa_user_id: str | None = None,
 ) -> dict:
     """Turn a claimed attempt into a session, or say a name is still needed.
 
@@ -137,6 +138,12 @@ async def _wa_login_session(
         refused = JSONResponse(status_code=403, content={"detail": str(exc)})
         refused.delete_cookie("wa_login")
         return refused
+    if wa_user_id and not user.wa_user_id:
+        # Learnt from a sign-in that carried both, so one that later carries
+        # only the username id still finds this mobed (AU-4).
+        taken = (await db.execute(select(User.id).where(User.wa_user_id == wa_user_id))).first()
+        if taken is None:
+            user.wa_user_id = wa_user_id
     if not user.name:
         await db.commit()
         return {"status": "needs_name"}
@@ -210,10 +217,60 @@ async def wa_login_poll(
     if not wa_login_cookie:
         raise HTTPException(status_code=400, detail="No sign-in is in progress.")
 
-    phone = await wa_login.peek_claimed_phone(db, wa_login_cookie)
-    if phone is None:
+    attempt = await wa_login.peek(db, wa_login_cookie)
+    if attempt is None or attempt.claimed_at is None:
         return {"status": "pending"}
-    return await _wa_login_session(db, response, wa_login_cookie, phone, "")
+    if attempt.claimed_phone is None:
+        # WhatsApp sent a username id we cannot tie to any mobed, and no number.
+        await wa_login.consume(db, wa_login_cookie)
+        await db.commit()
+        refused = JSONResponse(status_code=403, content={"detail": NO_NUMBER})
+        refused.delete_cookie("wa_login")
+        return refused
+    if attempt.confirm_hash is not None:
+        # AU-1: waiting for the number we sent to that phone.
+        return {"status": "confirm"}
+    return await _wa_login_session(
+        db, response, wa_login_cookie, attempt.claimed_phone, "", wa_user_id=attempt.claimed_wa_user_id
+    )
+
+
+NO_NUMBER = (
+    "WhatsApp did not share your phone number with us - this happens when you use a WhatsApp "
+    "username. Ask the person who runs Mobed Diary to help you sign in."
+)
+
+
+class WaLoginConfirmIn(BaseModel):
+    number: str
+
+
+@router.post("/auth/wa/confirm")
+async def wa_login_confirm(
+    payload: WaLoginConfirmIn,
+    request: Request,
+    response: Response,
+    wa_login_cookie: str | None = Cookie(default=None, alias="wa_login"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Finish a "send us a code" sign-in with the number we sent back to the
+    phone the code came from (AU-1). Someone who only started the attempt -
+    and tricked a mobed into sending its code - never sees that number."""
+    rate_limit.enforce(request, "wa_login_confirm", max_requests=20, window_seconds=300)
+    if not wa_login_cookie:
+        raise HTTPException(status_code=400, detail="No sign-in is in progress.")
+    attempt = await wa_login.peek(db, wa_login_cookie)
+    if attempt is None or attempt.claimed_phone is None or attempt.confirm_hash is None:
+        raise HTTPException(status_code=400, detail="That sign-in has expired. Please start again.")
+    ok = await wa_login.confirm(db, attempt, payload.number)
+    await db.commit()
+    if not ok:
+        if attempt.confirm_attempts >= wa_login.CONFIRM_MAX_ATTEMPTS:
+            raise HTTPException(status_code=400, detail="Too many tries. Please start again.")
+        raise HTTPException(status_code=400, detail="That number is not right. Check the WhatsApp message.")
+    return await _wa_login_session(
+        db, response, wa_login_cookie, attempt.claimed_phone, "", wa_user_id=attempt.claimed_wa_user_id
+    )
 
 
 class WaLoginCompleteIn(BaseModel):
@@ -242,10 +299,13 @@ async def wa_login_complete(
     if not name:
         raise HTTPException(status_code=400, detail="Name is required for a first sign-in")
 
+    attempt = await wa_login.peek(db, wa_login_cookie)
     phone = await wa_login.peek_claimed_phone(db, wa_login_cookie)
     if phone is None:
         raise HTTPException(status_code=400, detail="That sign-in has expired. Please start again.")
-    return await _wa_login_session(db, response, wa_login_cookie, phone, name)
+    return await _wa_login_session(
+        db, response, wa_login_cookie, phone, name, wa_user_id=attempt.claimed_wa_user_id
+    )
 
 
 @router.post("/auth/refresh")

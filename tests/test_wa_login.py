@@ -216,8 +216,8 @@ async def test_a_replayed_delivery_does_not_reclaim(db, client):
     """Meta retries. The attempt itself is the idempotency key, which is why
     this needs no message-id dedupe table."""
     code = await _start(client)
-    assert await wa_login.claim(db, code, "+919800000055") is True
-    assert await wa_login.claim(db, code, "+919800000066") is False
+    assert await wa_login.claim(db, code, "+919800000055") is not None
+    assert await wa_login.claim(db, code, "+919800000066") is None
 
     row = (await db.execute(select(WaLoginAttempt))).scalar_one()
     assert row.claimed_phone == "+919800000055"
@@ -229,12 +229,12 @@ async def test_an_expired_attempt_cannot_be_claimed(db, client):
     row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await db.flush()
 
-    assert await wa_login.claim(db, code, f"+{SENDER}") is False
+    assert await wa_login.claim(db, code, f"+{SENDER}") is None
 
 
 async def test_an_unknown_code_claims_nothing(db, client):
     await _start(client)
-    assert await wa_login.claim(db, "ZZZZZZZZZZ", f"+{SENDER}") is False
+    assert await wa_login.claim(db, "ZZZZZZZZZZ", f"+{SENDER}") is None
 
 
 async def test_start_is_refused_when_no_signin_number_is_configured(client, monkeypatch):

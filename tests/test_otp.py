@@ -337,7 +337,7 @@ async def test_with_no_token_a_real_server_refuses_and_never_returns_a_code(db, 
 
 def test_the_message_is_an_authentication_template_with_the_code_in_the_body_and_the_copy_button():
     body = otp._payload(_s(whatsapp_template_language="en"), PHONE, "482913")
-    assert body["to"] == "919944400701" and body["type"] == "template"
+    assert body["to"] == "+919944400701" and body["type"] == "template"   # with its + (RM-8a)
     assert body["template"]["name"] == "login_code" and body["template"]["language"] == {"code": "en"}
     body_part, button = body["template"]["components"]
     assert body_part == {"type": "body", "parameters": [{"type": "text", "text": "482913"}]}

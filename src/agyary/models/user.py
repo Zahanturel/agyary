@@ -26,6 +26,10 @@ class User(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str] = mapped_column(String(20), unique=True)  # E.164, doubles as WhatsApp ID
+    # The id WhatsApp sends for this mobed if they use a username (a BSUID),
+    # learnt at a sign-in that carried both - so a later one that carries only
+    # the id still finds them (AU-4).
+    wa_user_id: Mapped[str | None] = mapped_column(String(128), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     # The one switch for automatic WhatsApp reminders from this account
     # (docs/DECISIONS.md D4). On for everyone in the pilot; a free tier later is

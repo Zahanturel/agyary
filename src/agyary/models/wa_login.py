@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, String, func
+from sqlalchemy import DateTime, Index, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
@@ -37,6 +37,14 @@ class WaLoginAttempt(Base):
     # Null until the webhook sees the code. Set together, always.
     claimed_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The id WhatsApp sends for someone who uses a username (a BSUID), when it
+    # sends one - with or instead of the number (AU-4).
+    claimed_wa_user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # AU-1: when the code arrives, a short number is sent back to that phone and
+    # only its digest is kept here; the sign-in finishes only once it is typed on
+    # the screen that started it. NULL means none is outstanding.
+    confirm_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confirm_attempts: Mapped[int] = mapped_column(SmallInteger, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.models import LoginOtp, User
-from agyary.services import guardrails, mobed_auth
+from agyary.services import guardrails, mobed_auth, wa_send
 from agyary.services.reminder_sender import ACCOUNT_CODES
 
 logger = logging.getLogger(__name__)
@@ -229,7 +229,7 @@ def _payload(settings: Settings, phone: str, code: str) -> dict:
     # Copy code button's value - Meta requires the button to carry it.
     return {
         "messaging_product": "whatsapp",
-        "to": phone.lstrip("+"),
+        "to": wa_send.to_number(phone),        # with its "+" (RM-8a)
         "type": "template",
         "template": {
             "name": settings.otp_template,

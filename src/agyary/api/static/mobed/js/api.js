@@ -106,6 +106,8 @@ export const otpVerify = (phone, code) => post("/auth/otp/verify", { phone, code
 export const waLoginStart = () => post("/auth/wa/start", {});
 export const waLoginPoll = () => get("/auth/wa/poll");
 export const waLoginComplete = (name) => post("/auth/wa/complete", { name });
+/** The number we sent back to the phone the code came from (AU-1). */
+export const waLoginConfirm = (number) => post("/auth/wa/confirm", { number });
 export const logout = () => post("/auth/logout");
 /** End every other signed-in device of this mobed; this one stays. */
 export const signOutOtherDevices = () => post("/auth/sessions/sign-out-others", {});

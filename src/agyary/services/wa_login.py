@@ -17,10 +17,13 @@ Two secrets, deliberately not the same one:
 
 ``code`` goes into the wa.me link, through the user's WhatsApp, and back to
 us via the webhook. It is a bearer token by construction - anyone who sees
-the link can send that code from their own WhatsApp. Doing so binds THEIR
-number to the attempt, so the worst an attacker achieves is signing the
-victim's browser into the attacker's own account. Becoming the victim needs
-the victim's SIM.
+the link can send that code from their own WhatsApp, and doing so binds THEIR
+number to the attempt. That cuts both ways: an attacker who starts an attempt
+and tricks a mobed into tapping Send on the link would get the mobed's
+account. So (AU-1) when the code arrives we reply to that phone with a short
+confirmation number and a warning, and the attempt finishes only when that
+number is typed on the screen that started it - which the attacker never
+sees. Where nothing can be sent (a laptop with no token), that step is skipped.
 
 ``poll_secret`` never leaves the originating browser, as an httpOnly
 cookie. The poll endpoint matches on its digest rather than on the code, so
@@ -30,6 +33,7 @@ holding the code is not enough to collect the session it created.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import re
 import secrets
 from dataclasses import dataclass
@@ -134,28 +138,81 @@ async def start(db: AsyncSession) -> StartedLogin:
     )
 
 
-async def claim(db: AsyncSession, code: str, phone: str) -> bool:
-    """Bind ``phone`` to the attempt ``code`` opened. Called by the webhook.
+def _expired(row: WaLoginAttempt) -> bool:
+    expires_at = row.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at < datetime.now(UTC)
 
-    Returns False for anything that isn't a live, unclaimed attempt: an
-    unknown code, an expired one, or one already claimed. All three are
-    ordinary - Meta retries deliveries, and a retry of an already-claimed
-    message must not reopen it - so none of them is an error.
+
+async def claim(
+    db: AsyncSession, code: str, phone: str | None, *, wa_user_id: str | None = None
+) -> WaLoginAttempt | None:
+    """Bind the sender to the attempt ``code`` opened. Called by the webhook.
+
+    ``phone`` is None when WhatsApp withheld the number (a username it could not
+    map to a mobed); the attempt is then claimed with no number, and polling
+    tells the person plainly. Returns the attempt, or None for anything that
+    isn't a live, unclaimed attempt: an unknown code, an expired one, or one
+    already claimed. All three are ordinary - Meta retries deliveries, and a
+    retry of an already-claimed message must not reopen it.
     """
     row = (
         await db.execute(select(WaLoginAttempt).where(WaLoginAttempt.code == code))
     ).scalar_one_or_none()
-    if row is None or row.claimed_at is not None:
-        return False
-
-    expires_at = row.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at < datetime.now(UTC):
-        return False
-
+    if row is None or row.claimed_at is not None or _expired(row):
+        return None
     row.claimed_phone = phone
+    row.claimed_wa_user_id = wa_user_id
     row.claimed_at = datetime.now(UTC)
+    await db.flush()
+    return row
+
+
+CONFIRM_MAX_ATTEMPTS = 5
+
+
+def _confirm_digest(row: WaLoginAttempt, number: str) -> str:
+    return hashlib.sha256(f"{row.poll_secret_hash}:{number}".encode()).hexdigest()
+
+
+async def require_confirmation(db: AsyncSession, row: WaLoginAttempt) -> str:
+    """Put a fresh four digit confirmation number on a claimed attempt and
+    return it, for the webhook to send to the phone. Only its digest is kept."""
+    number = f"{secrets.randbelow(10_000):04d}"
+    row.confirm_hash = _confirm_digest(row, number)
+    row.confirm_attempts = 0
+    await db.flush()
+    return number
+
+
+def confirmation_message(number: str) -> str:
+    return (
+        f"Mobed Diary: someone is signing in to Mobed Diary as you. If that is you, type {number} "
+        "on the sign-in screen. If it is not you, do not share this number with anyone - "
+        "nobody can sign in as you without it."
+    )
+
+
+async def peek(db: AsyncSession, poll_secret: str) -> WaLoginAttempt | None:
+    """This browser's attempt, live or not. Does NOT consume it."""
+    return (
+        await db.execute(
+            select(WaLoginAttempt).where(WaLoginAttempt.poll_secret_hash == _hash_secret(poll_secret))
+        )
+    ).scalar_one_or_none()
+
+
+async def confirm(db: AsyncSession, row: WaLoginAttempt, number: str) -> bool:
+    """Check the typed confirmation number. Five wrong tries and the attempt is
+    spent, even for the right number afterwards."""
+    if row.confirm_hash is None or row.confirm_attempts >= CONFIRM_MAX_ATTEMPTS or _expired(row):
+        return False
+    row.confirm_attempts += 1
+    if not hmac.compare_digest(_confirm_digest(row, (number or "").strip()), row.confirm_hash):
+        await db.flush()
+        return False
+    row.confirm_hash = None
     await db.flush()
     return True
 
@@ -196,14 +253,8 @@ async def peek_claimed_phone(db: AsyncSession, poll_secret: str) -> str | None:
     purpose; the caller decides what to say based on whether it still holds
     a cookie at all.
     """
-    row = (
-        await db.execute(
-            select(WaLoginAttempt).where(
-                WaLoginAttempt.poll_secret_hash == _hash_secret(poll_secret)
-            )
-        )
-    ).scalar_one_or_none()
-    if row is None or row.claimed_at is None:
+    row = await peek(db, poll_secret)
+    if row is None or row.claimed_at is None or row.confirm_hash is not None:
         return None
     return row.claimed_phone
 

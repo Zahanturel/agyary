@@ -26,11 +26,13 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.services import reminder_sender, reminders, wa_login
+from agyary.models import Notification, User
+from agyary.services import reminder_sender, reminders, wa_login, wa_send
 
 logger = logging.getLogger(__name__)
 
@@ -114,25 +116,58 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             # Delivery receipts for reminders we sent.
             for receipt in value.get("statuses", []):
                 errors = receipt.get("errors") or []
-                reason = (errors[0].get("title") or errors[0].get("message")) if errors else None
+                reason = None
+                if errors:
+                    # Codes and details, not titles: Meta is retiring the titles (RM-8b).
+                    first = errors[0]
+                    detail = (first.get("error_data") or {}).get("details") or first.get("message") or first.get("title")
+                    reason = f"{detail} ({first.get('code')})" if first.get("code") else detail
                 if receipt.get("id") and receipt.get("status"):
                     await reminder_sender.apply_status(
-                        db, receipt["id"], receipt["status"], reason, now
+                        db, receipt["id"], receipt["status"], reason, now,
+                        recipient_user_id=receipt.get("recipient_user_id"),
                     )
 
     await db.commit()
     return Response(status_code=200)
 
 
-async def _process_message(db: AsyncSession, message: dict) -> None:
+async def _sender_phone(db: AsyncSession, message: dict) -> str | None:
+    """The sender's number. WhatsApp may leave it out for someone who uses a
+    username, sending only their id (``from_user_id``, a BSUID); then it is the
+    number of the mobed who signed in with that id before, or of the family a
+    reminder with that id went to - else unknown (AU-4)."""
     from_phone = message.get("from")
-    if not from_phone:
-        return
-    text = _extract_text(message)
+    if from_phone:
+        # wa.me strips the +; every phone we store is E.164 with one.
+        return from_phone if from_phone.startswith("+") else f"+{from_phone}"
+    wa_user_id = message.get("from_user_id")
+    if not wa_user_id:
+        return None
+    mobed = (await db.execute(select(User.phone).where(User.wa_user_id == wa_user_id))).scalar_one_or_none()
+    if mobed:
+        return mobed
+    return (
+        await db.execute(
+            select(Notification.recipient_phone)
+            .where(Notification.recipient_user_id == wa_user_id)
+            .order_by(Notification.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
-    # wa.me strips the +; every phone we store is E.164 with one.
-    if not from_phone.startswith("+"):
-        from_phone = f"+{from_phone}"
+
+async def _process_message(db: AsyncSession, message: dict) -> None:
+    from_phone = await _sender_phone(db, message)
+    wa_user_id = message.get("from_user_id")
+    text = _extract_text(message)
+    if not from_phone:
+        # Nothing to stop, forward or prove - except a sign-in, which is told
+        # plainly that WhatsApp did not share the number.
+        code = wa_login.extract_code(text)
+        if code and wa_user_id:
+            await wa_login.claim(db, code, None, wa_user_id=wa_user_id)
+        return
 
     # A family replying STOP to a reminder. Handled before sign-in because
     # honouring it must never depend on anything else about the message.
@@ -153,8 +188,19 @@ async def _process_message(db: AsyncSession, message: dict) -> None:
     # A replayed delivery finds the attempt already claimed and is ignored -
     # which is why this needs no separate message-id dedupe table the way
     # the bot did. The attempt itself is the idempotency key.
-    claimed = await wa_login.claim(db, code, from_phone)
-    logger.info("Inbound sign-in code %s: %s", code, "claimed" if claimed else "no live attempt")
+    attempt = await wa_login.claim(db, code, from_phone, wa_user_id=wa_user_id)
+    logger.info("Inbound sign-in code: %s", "claimed" if attempt else "no live attempt")
+    if attempt is None:
+        return
+    # AU-1: the screen that started this finishes only with a number sent back
+    # to this phone. If nothing can be sent (a laptop, or Meta refusing), the
+    # sign-in goes ahead as before rather than locking everyone out.
+    settings = get_settings()
+    if wa_send.can_send(settings):
+        number = await wa_login.require_confirmation(db, attempt)
+        if not await wa_send.send_text(settings, from_phone, wa_login.confirmation_message(number)):
+            attempt.confirm_hash = None
+            logger.warning("Sign-in confirmation could not be sent; finishing without it")
 
 
 

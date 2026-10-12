@@ -13,7 +13,7 @@
  */
 
 import {
-  getMe, waLoginStart, waLoginPoll, waLoginComplete, authOptions, otpRequest, otpVerify,
+  getMe, waLoginStart, waLoginPoll, waLoginComplete, waLoginConfirm, authOptions, otpRequest, otpVerify,
 } from "../api.js";
 import { state } from "../state.js";
 import { chrome, mainEl, setHeader, showError } from "../ui.js";
@@ -336,13 +336,56 @@ async function pollOnce() {
     res = await waLoginPoll();
   } catch (e) {
     stopPolling();
+    // The attempt is over (refused, expired): the card must stop saying it is
+    // waiting, and stop offering to open WhatsApp for it.
+    const status = document.getElementById("waStatus");
+    if (status) status.textContent = "Not signed in. Tap Start again to try once more.";
+    const open = document.getElementById("waOpen");
+    if (open) open.remove();
     return showError(e.message);
   }
   if (res.status === "pending") return;
 
   stopPolling();
+  if (res.status === "confirm") return renderWaConfirmStep();
   if (res.status === "needs_name") return renderWaNameStep();
   await finishSignIn(res);
+}
+
+/** AU-1: the code arrived, and we sent a four digit number back to that phone.
+ *  Typing it here proves this screen belongs to whoever has the phone. */
+function renderWaConfirmStep() {
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>One more step</h2>
+      <p class="meta">We have sent a 4-digit number to your WhatsApp. Type it here to finish
+        signing in.</p>
+      <label for="waConfirm">Number from WhatsApp</label>
+      <input type="text" id="waConfirm" class="otp-input" inputmode="numeric" autocomplete="one-time-code"
+        maxlength="4" placeholder="0000">
+      <div style="margin-top:14px"><button id="waConfirmGo">Continue</button></div>
+      <div style="margin-top:12px"><button class="ghost small" id="waConfirmRestart">Start again</button></div>
+    </div>`;
+  const input = document.getElementById("waConfirm");
+  input.focus();
+  const go = async () => {
+    const number = input.value.replace(/\D/g, "");
+    if (number.length !== 4) return showError("Please type the 4-digit number from WhatsApp.");
+    const btn = document.getElementById("waConfirmGo");
+    btn.disabled = true;
+    try {
+      const res = await waLoginConfirm(number);
+      if (res.status === "needs_name") return renderWaNameStep();
+      await finishSignIn(res);
+    } catch (e) {
+      btn.disabled = false;
+      input.value = "";
+      showError(e.message);
+    }
+  };
+  document.getElementById("waConfirmGo").onclick = go;
+  input.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  document.getElementById("waConfirmRestart").onclick = () => renderLogin();
 }
 
 function renderWaNameStep() {

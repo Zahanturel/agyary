@@ -53,6 +53,9 @@ class Notification(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     wa_message_id: Mapped[str | None] = mapped_column(String(100))
+    # The id WhatsApp gave the recipient if they use a username (from the
+    # receipts), so a STOP that arrives with only that id still finds them (AU-4).
+    recipient_user_id: Mapped[str | None] = mapped_column(String(128))
     error_message: Mapped[str | None] = mapped_column(Text)
     retry_count: Mapped[int] = mapped_column(SmallInteger, server_default="0")
 
@@ -81,5 +84,10 @@ class Notification(Base):
             "idx_notifications_wa_message",
             "wa_message_id",
             postgresql_where=text("wa_message_id IS NOT NULL"),
+        ),
+        Index(
+            "idx_notifications_recipient_user",
+            "recipient_user_id",
+            postgresql_where=text("recipient_user_id IS NOT NULL"),
         ),
     )

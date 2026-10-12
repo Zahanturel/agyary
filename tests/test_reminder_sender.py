@@ -200,7 +200,7 @@ async def test_a_planned_reminder_is_posted_to_meta_as_the_approved_template(cli
     assert call.headers["authorization"] == "Bearer test-token"
     body = json.loads(call.content)
     assert body["messaging_product"] == "whatsapp" and body["type"] == "template"
-    assert body["to"] == BEHDIN_PHONE.lstrip("+")                       # digits, no +
+    assert body["to"] == BEHDIN_PHONE          # with its +: without one Meta prefixes our country code
     assert body["template"]["name"] == "memorial_reminder"
     assert body["template"]["language"] == {"code": "en"}
     params = [p["text"] for p in body["template"]["components"][0]["parameters"]]
