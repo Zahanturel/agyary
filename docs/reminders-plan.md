@@ -252,11 +252,12 @@ history, same rule as the sign-in number.
   on numbers with no account, five wrong tries then the code is dead, five minutes
   to live, only a salted digest stored, only the newest code counts, the same
   answer for known and unknown numbers, and it respects the pause switch. It is
-  BLOCKED on Meta: creating the `login_code` Authentication template is refused
-  ("does not have permission to create message template", error 10 / subcode
-  2388185, non-transient), by the web form and by the API alike. Business
-  verification was completed on 12 Oct 2026 (Udyam, sole proprietorship) and the
-  refusal persisted at the first retry, so verification alone is not the fix.
+  The `login_code` Authentication template was first refused ("does not have
+  permission to create message template", error 10 / subcode 2388185), by the web
+  form and the API alike, even after business verification on 12 Oct 2026 (Udyam,
+  sole proprietorship). A later API retry (16:44 UTC the same day) succeeded and
+  Meta approved it at once, so the block was a delay. The template is ready; the
+  mode stays off pending the independent review (docs/REVIEW.md, not committed).
 - **Safety**: `REMINDERS_SEND_MODE` is `off` by default. `dry_run` plans and
   logs without writing anything. `live` sends only to `REMINDERS_ALLOWLIST`
   (`*` for everyone; empty means nobody). Per-agyari daily cap of 100 (see the guardrails section).
@@ -287,10 +288,10 @@ history, same rule as the sign-in number.
 
 ## ON HOLD
 
-0. **Sign-in by WhatsApp code** is built and deployed but off, waiting on Meta to
-   let us create the Authentication template (business verification is done and did
-   not by itself unlock it; see docs/STATUS.md section 5). Until then "send us a
-   code" is the way in, and it is the better one.
+0. **Sign-in by WhatsApp code** is built, deployed and its template is approved,
+   but it is off on purpose: the independent review advises against enabling it
+   (cost and harassment surface, a weaker sign-in than "send us a code"). Fix the
+   "send us a code" flow first; consider passkeys instead.
 
 1. **Conversational booking / AI scheduling and reply handling.** Reminders
    ask for nothing, so there are no reply buttons. A free-text bot is a

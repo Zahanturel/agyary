@@ -144,7 +144,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Admin screen, pause switch, spend caps, alerts | **Live** | `ADMIN_PHONES` set |
 | Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
 | Automatic WhatsApp reminders | **Built, OFF** | `REMINDERS_SEND_MODE`; template approval |
-| Sign-in by WhatsApp code | **Built, OFF** | `OTP_MODE`; an approved Authentication template, which Meta currently will not let us create |
+| Sign-in by WhatsApp code | **Built, OFF** | `OTP_MODE`. The Authentication template `login_code` is now APPROVED, so it could be switched on; the review advises against it for now |
 | Play Store app | **Not started** | section 10 |
 | Web Push to mobeds | **Not started** | |
 
@@ -174,12 +174,13 @@ sending is off. Settings that matter operationally:
   messaging and management permissions is in the server `.env` and verified.
 - **Templates.** `memorial_reminder` (Utility) was submitted 12 Oct 2026 and was still
   **pending** at the last check (many hours, no rejection reason). `login_code`
-  (Authentication, Copy code, 5-minute expiry) **cannot be created yet**: both the web form and
-  the Graph API answer error 10 / subcode 2388185, "This WhatsApp business account does not have
-  permission to create message template", flagged non-transient. This happened both before and
-  AFTER business verification, so verification alone did not fix it. Next ideas, in order: wait
-  for the permission to propagate, retry; check the WhatsApp Business Account's status and
-  restrictions in Meta's Account quality / WhatsApp Manager; ask Meta support.
+  (Authentication, Copy code, 5-minute expiry) was **refused at first**: the web form and the
+  Graph API both answered error 10 / subcode 2388185, "does not have permission to create message
+  template", flagged non-transient, before and for a while after business verification. A retry
+  through the API at 16:44 UTC on 12 Oct 2026 (about ten hours after verification was submitted)
+  **succeeded and the template was APPROVED immediately**. So the block cleared on its own, most
+  likely a propagation delay after verification. The template exists; the app's OTP mode is still
+  OFF, and the independent review recommends leaving it off (see REVIEW.md AU-5, section 5.2).
 - **Business verification.** Submitted 12 Oct 2026 using a Udyam registration (sole
   proprietorship); Meta matched the business to the public record by registration number and
   address. Meta estimated two business days; the API reported `verified` within about six hours.
@@ -294,8 +295,8 @@ Not an exhaustive review; the review brief asks for one. These are the ones know
 ## 10. What is left (prioritised)
 
 **A. Waiting on Meta.** (1) Approval of `memorial_reminder`, then the live test (section 6).
-(2) Getting permission to create the `login_code` Authentication template (see section 5); only
-then can sign-in by WhatsApp code go live. Business verification is already done.
+(2) Nothing for `login_code`: it is approved. Whether to switch sign-in by WhatsApp code on is a
+decision, not a blocker (the review says not yet). Business verification is done.
 
 **B. Independent review, then fixes.** Run the brief in `REVIEW-PROMPT.md` in a fresh session. Do not
 start A's go-live steps until the review's critical/high findings on sending, security and data are
