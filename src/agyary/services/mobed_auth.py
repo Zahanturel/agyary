@@ -88,7 +88,7 @@ async def login_user(db: AsyncSession, phone: str, name: str) -> User:
     if user is None:
         if not may_sign_up(phone):
             raise SignupRefused(NOT_INVITED)
-        user = User(phone=phone, name=name)
+        user = User(phone=phone, name=name, automatic_reminders=get_settings().reminders_automatic_default)
         db.add(user)
         await db.flush()
         return user

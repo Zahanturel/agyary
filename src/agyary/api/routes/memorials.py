@@ -20,7 +20,7 @@ from agyary.calendar.memorial import OPENING_ALL, OPENING_TENTH, PARAB_ALL, PARA
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Memorial, User
-from agyary.services import memorials
+from agyary.services import guardrails, memorials
 
 router = APIRouter(prefix="/api/mobed", tags=["memorials"])
 
@@ -275,10 +275,14 @@ async def memorial_reminders(
     items = await memorials.reminders_due(
         db, user.id, agyary_id, memorials.today_ist(), days
     )
+    settings = get_settings()
     return {
         "lead_days": memorials.REMINDER_LEAD_DAYS,
         # Whether anything is sent on its own yet, so the screen never promises
-        # an automatic reminder that is not going to happen.
-        "delivery": get_settings().reminders_send_mode,
+        # an automatic reminder that is not going to happen ("auto" per item is
+        # the planner's own answer), and when it goes.
+        "delivery": settings.reminders_send_mode,
+        "paused": await guardrails.paused_reason(db) is not None,
+        "send_hour": settings.reminders_send_hour,
         "items": items,
     }

@@ -490,9 +490,14 @@ async def test_the_shipped_defaults_send_nothing():
 
 # --- What the Reminders list shows ------------------------------------------
 
-async def test_the_list_shows_whether_it_will_go_on_its_own_and_whether_it_went(client, db, seeded):
+async def test_the_list_shows_whether_it_will_go_on_its_own_and_whether_it_went(client, db, seeded, monkeypatch):
+    from agyary.core import config
     from tests.test_memorial_api import _user_id
 
+    # "On its own" means the planner would really send it: sending live, to everyone.
+    monkeypatch.setenv("REMINDERS_SEND_MODE", "live")
+    monkeypatch.setenv("REMINDERS_ALLOWLIST", "*")
+    config.get_settings.cache_clear()
     aid, cid, headers, later, opening, now = await _scenario(client, db, seeded)
     uid = await _user_id(db, NEW_MOBED_PHONE)
     first = date.fromisoformat(later[0]["date"])

@@ -34,8 +34,12 @@ function whenText(daysAway) {
 
 const SENT = { sent: "Sent", delivered: "Delivered", read: "Read" };
 
+function clockHour(h) {
+  return `${h % 12 || 12} ${h < 12 ? "am" : "pm"}`;
+}
+
 /** What to show under a reminder: how it went, or how it will go. */
-function actionHtml(o, delivery) {
+function actionHtml(o, data) {
   if (SENT[o.sent_status]) {
     return `<p class="meta" style="margin:8px 0 0">&#10003; ${SENT[o.sent_status]} to ${esc(o.behdin_name)} on WhatsApp.</p>`;
   }
@@ -45,15 +49,16 @@ function actionHtml(o, delivery) {
   if (o.sent_status === "failed") {
     return `<p class="meta" style="margin:8px 0 0">It could not be sent automatically.</p>${button}`;
   }
-  // Only promise an automatic reminder when sending is actually on.
-  if (o.auto && delivery === "live") {
+  // Only promise an automatic reminder when the server says the planner will
+  // really send it (sending live, not paused, this account on, on the allowlist).
+  if (o.auto && data.delivery === "live") {
     return `<p class="meta" style="margin:8px 0 0">Will be sent to ${esc(o.behdin_name)} automatically
-      at about 7 pm the evening before.</p>`;
+      at about ${esc(clockHour(data.send_hour ?? 19))} the evening before.</p>`;
   }
   return button;
 }
 
-function rowHtml(o, delivery) {
+function rowHtml(o, data) {
   const svc = o.services.map(s => s.name).join(", ");
   return `<div class="obs" data-mid="${o.memorial_id}" data-oid="${o.id}">
     <div class="obs-head">
@@ -61,7 +66,7 @@ function rowHtml(o, delivery) {
         <span>${esc(o.behdin_name)}${svc ? " · " + esc(svc) : ""}</span></div>
       <div class="obs-when"><b>${esc(whenText(o.days_away))}</b><br>${esc(gregLabel(o.date))}<br>${esc(parsiText(o))}</div>
     </div>
-    ${actionHtml(o, delivery)}
+    ${actionHtml(o, data)}
   </div>`;
 }
 
@@ -92,7 +97,7 @@ export async function renderReminders() {
   const group = (title, note, list) => list.length ? `
     <div class="card">
       <div class="names-group-label" style="margin-top:0"><b>${title}</b><span>${note}</span></div>
-      ${list.map(o => rowHtml(o, data.delivery)).join("")}
+      ${list.map(o => rowHtml(o, data)).join("")}
     </div>` : "";
 
   mainEl.innerHTML = `
@@ -101,6 +106,8 @@ export async function renderReminders() {
       <p class="meta" style="margin:4px 0 0">What is coming up in the next ${HORIZON_DAYS} days
         for the families you look after. Remind a family ${leadText} - not
         during the first ten days, when they are with you at the fire temple.</p>
+      ${data.paused ? `<p class="meta" style="margin:8px 0 0"><b>Automatic sending is paused just now</b>,
+        so please remind families yourself with the WhatsApp button.</p>` : ""}
     </div>
     ${data.items.length ? "" : `<div class="card">
       <p class="meta" style="margin:0">Nothing in the next ${HORIZON_DAYS} days.</p></div>`}

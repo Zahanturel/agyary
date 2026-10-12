@@ -283,6 +283,7 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
     ]
     return {
         "id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries,
+        "automatic_reminders": user.automatic_reminders,
         # Only to show the admin screen's menu entry; the server checks again on every call.
         "is_admin": guardrails.is_admin(get_settings(), user.phone),
     }

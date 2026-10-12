@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # steps rather than one flag.
     reminders_send_mode: str = "off"
     reminders_allowlist: str = ""
+    # Whether a NEW account has automatic sending on (users.automatic_reminders,
+    # D4). True for the pilot; a free tier later sets it false.
+    reminders_automatic_default: bool = True
     # The evening run: tomorrow's reminders go out from this hour (IST), and
     # whatever has not gone by the cutoff is skipped rather than sent late -
     # "tomorrow" at midnight is no longer true.

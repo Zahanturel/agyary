@@ -63,7 +63,8 @@ RECURRENCE_END_TYPES = ("indefinite", "after_count", "until_date")
 
 BULK_BATCH_STATUSES = ("open", "in_progress", "completed")
 
-NOTIFICATION_STATUSES = ("pending", "queued", "sent", "delivered", "read", "failed")
+# "sending": handed to Meta, no answer yet - never retried (at most once).
+NOTIFICATION_STATUSES = ("pending", "queued", "sending", "sent", "delivered", "read", "failed")
 RECIPIENT_TYPES = ("user", "customer")
 
 MESSAGE_DIRECTIONS = ("inbound", "outbound")

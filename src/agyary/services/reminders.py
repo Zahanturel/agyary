@@ -52,6 +52,33 @@ def is_stop(text: str) -> bool:
     return bool(_STOP.match(text or ""))
 
 
+def may_send_to(settings, phone: str) -> bool:
+    """Whether REMINDERS_ALLOWLIST lets a live reminder go to ``phone``
+    ("*" for everyone; empty for nobody)."""
+    raw = settings.reminders_allowlist.strip()
+    if raw == "*":
+        return True
+    return phone in {p.strip() for p in raw.split(",") if p.strip()}
+
+
+def goes_automatically(
+    settings, *, paused: bool, account_on: bool, customer: Customer, owner_user_id: int
+) -> bool:
+    """Whether the planner would send this family's reminder on its own - the
+    one answer both the planner and the mobed's Reminders list use, so the list
+    never promises a reminder that is not going to happen (RM-2)."""
+    return (
+        settings.reminders_send_mode == "live"
+        and not paused
+        and account_on
+        and customer.owner_user_id == owner_user_id
+        and customer.reminders_enabled
+        and customer.reminders_stopped_at is None
+        and customer.is_active
+        and may_send_to(settings, customer.phone)
+    )
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 

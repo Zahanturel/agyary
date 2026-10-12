@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.calendar.memorial import Observance, build_schedule
+from agyary.core.config import get_settings
 from agyary.messaging import booking_service
 from agyary.messaging.availability import parsi_slot_fields
 from agyary.models import (
@@ -38,9 +39,10 @@ from agyary.models import (
     MemorialObservanceService,
     Notification,
     Service,
+    User,
 )
 from agyary.models.enums import CALENDAR_SYSTEMS
-from agyary.services import mobed_dashboard, reminder_message, template_text
+from agyary.services import guardrails, mobed_dashboard, reminder_message, reminders, template_text
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -467,11 +469,7 @@ async def reminders_due(
     end = today + timedelta(days=horizon_days)
     rows = (
         await db.execute(
-            select(
-                MemorialObservance, Memorial, Customer.name, Customer.phone,
-                Customer.reminders_enabled & (Customer.owner_user_id == user_id),
-                Customer.reminders_stopped_at,
-            )
+            select(MemorialObservance, Memorial, Customer)
             .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
             .join(Customer, Customer.id == Memorial.customer_id)
             .options(selectinload(MemorialObservance.services))
@@ -487,6 +485,12 @@ async def reminders_due(
     ).all()
     names = await _service_names(db, agyary_id)
     agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == agyary_id))).scalar_one()
+    # Whether each would go on its own is the planner's own rule (RM-2): sending
+    # live, not paused, this account's switch on (D4), consent, no STOP, allowlist.
+    settings = get_settings()
+    paused = await guardrails.paused_reason(db) is not None
+    me = await db.get(User, user_id)
+    account_on = bool(me and me.automatic_reminders)
     # What has already been sent automatically, by observance.
     sent = dict(
         (
@@ -499,7 +503,8 @@ async def reminders_due(
         ).all()
     )
     items = []
-    for obs, memorial, behdin_name, behdin_phone, auto_on, stopped_at in rows:
+    for obs, memorial, customer in rows:
+        behdin_name, behdin_phone = customer.name, customer.phone
         days_away = (obs.gregorian_date - today).days
         serialized = serialize_observance(obs, names)
         text = reminder_message.manual_text(reminder_message.build_parts(
@@ -519,9 +524,10 @@ async def reminders_due(
             "calendar": memorial.calendar_system,
             "days_away": days_away,
             "due": days_away <= REMINDER_LEAD_DAYS,
-            # Will it go on its own (the behdin agreed and has not said STOP),
-            # and if it has been tried, how that went.
-            "auto": bool(auto_on) and stopped_at is None,
+            # Will it go on its own, and if it has been tried, how that went.
+            "auto": reminders.goes_automatically(
+                settings, paused=paused, account_on=account_on, customer=customer, owner_user_id=user_id,
+            ),
             "sent_status": sent.get(obs.id),
         })
     return items

@@ -102,20 +102,26 @@ class _AccountProblem(_Permanent):
 
 
 class _Transient(Exception):
-    """A network problem or a Meta outage; worth trying again."""
+    """It certainly did not go: the request never reached Meta (no connection),
+    or Meta answered with an outage or "slow down". Worth trying again."""
 
 
-def _allowlist(settings: Settings) -> set[str] | None:
-    """None means everyone."""
-    raw = settings.reminders_allowlist.strip()
-    if raw == "*":
-        return None
-    return {p.strip() for p in raw.split(",") if p.strip()}
+class _Unknown(Exception):
+    """The request went out and no answer came back (a timeout, a dropped
+    connection): Meta may have accepted it. Never retried - a second copy to a
+    grieving family is worse than a missing one the mobed is told about."""
+
+
+# Failures before the request can have reached Meta. Anything else that goes
+# wrong on the wire happened after it was sent, and is _Unknown.
+_NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+UNKNOWN = "No answer from WhatsApp: it may or may not have been sent, so it was not tried again"
+# A row left "sending" this long has lost its sender (a crash, a restart).
+STUCK_SENDING = timedelta(minutes=5)
 
 
 def _may_send_to(settings: Settings, phone: str) -> bool:
-    allowed = _allowlist(settings)
-    return allowed is None or phone in allowed
+    return reminders.may_send_to(settings, phone)
 
 
 # ---------------------------------------------------------------------------
@@ -174,11 +180,14 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
             .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
             .join(Customer, Customer.id == Memorial.customer_id)
             .join(Agyary, Agyary.id == Memorial.agyary_id)
+            .join(User, User.id == Memorial.created_by_user_id)
             .options(selectinload(MemorialObservance.services))
             .where(
                 MemorialObservance.gregorian_date == tomorrow,
                 MemorialObservance.day_number > OPENING_DAYS,
-                # The memorial's own mobed's record of the family, with their consent.
+                # The account sends automatically at all (D4)...
+                User.automatic_reminders.is_(True),
+                # ...for the memorial's own mobed's record of the family, with their consent.
                 Customer.owner_user_id == Memorial.created_by_user_id,
                 Customer.reminders_enabled.is_(True),
                 Customer.reminders_stopped_at.is_(None),
@@ -356,14 +365,17 @@ async def _post(client: httpx.AsyncClient, n: Notification, settings: Settings) 
         resp = await client.post(
             url, json=_payload(n, settings), headers={"Authorization": f"Bearer {settings.whatsapp_access_token}"}
         )
-    except httpx.HTTPError as exc:
+    except _NOT_SENT as exc:
         raise _Transient(f"network error: {exc.__class__.__name__}") from exc
+    except httpx.HTTPError as exc:
+        raise _Unknown(f"no answer: {exc.__class__.__name__}") from exc
 
     if resp.status_code == 200:
+        # Accepted. Without an id its receipts cannot be matched, but it went.
         try:
             return resp.json()["messages"][0]["id"]
-        except (KeyError, IndexError, ValueError) as exc:
-            raise _Transient("Meta accepted the message but sent no id") from exc
+        except (KeyError, IndexError, ValueError):
+            return ""
 
     code = None
     try:
@@ -438,6 +450,23 @@ async def send_pending(
     if paused:
         logger.warning("Reminder sending is paused (%s); nothing will be sent", paused)
 
+    # A reminder left mid-send by a crash or a restart may or may not have gone.
+    # It is closed, not sent again (at most once), and its mobed told.
+    stuck = (
+        await db.execute(
+            select(Notification).where(
+                Notification.notification_type == TYPE, Notification.status == "sending",
+                Notification.updated_at < now - STUCK_SENDING,
+            ).with_for_update(skip_locked=True)
+        )
+    ).scalars().all()
+    for n in stuck:
+        n.status, n.error_message = "failed", UNKNOWN
+        await _tell_mobed_failed(db, n, "we could not tell whether it was sent - please check with the family", now)
+        report.failed += 1
+    if stuck:
+        await db.commit()
+
     local = now.astimezone(IST)
     sent_for: dict[int, list[str]] = {}
     streak = 0            # failures in a row, not counting a single bad number
@@ -481,12 +510,18 @@ async def send_pending(
             await db.commit()
             continue
 
+        # Marked as on its way, and committed, BEFORE it is handed to Meta: if
+        # the answer is lost, or the process dies here, the row says so and is
+        # never picked up as pending again (at most once).
+        n.status = "sending"
+        await db.commit()
         try:
-            n.wa_message_id = await _post(client, n, settings)
+            n.wa_message_id = await _post(client, n, settings) or None
         except _AccountProblem as exc:
             # The account itself is the problem, so the next send would hit it
-            # too. Keep this reminder pending (it was not this one's fault),
-            # stop everything, and tell the admins.
+            # too. Keep this reminder pending (it was not this one's fault, and
+            # Meta refused it, so it did not go), stop everything, and tell the admins.
+            n.status = "pending"
             n.error_message = str(exc)[:500]
             await guardrails.pause(
                 db, settings, f"Meta reported a problem with the account ({exc.code}): {exc}", now=now
@@ -499,7 +534,12 @@ async def send_pending(
             report.failed += 1
             if exc.code not in RECIPIENT_CODES:
                 streak += 1
+        except _Unknown as exc:
+            n.status, n.error_message = "failed", f"{UNKNOWN} ({exc})"[:500]
+            await _tell_mobed_failed(db, n, "we could not tell whether it was sent - please check with the family", now)
+            report.failed += 1
         except _Transient as exc:
+            n.status = "pending"
             n.retry_count += 1
             n.error_message = str(exc)[:500]
             if n.retry_count >= MAX_ATTEMPTS:
