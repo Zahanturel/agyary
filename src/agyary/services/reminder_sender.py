@@ -64,6 +64,7 @@ class Report:
     sent: int = 0
     failed: int = 0
     missed: int = 0
+    closing: int = 0
     notes: list[str] = field(default_factory=list)
 
 

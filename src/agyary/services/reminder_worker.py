@@ -1,4 +1,4 @@
-"""The loop that runs the evening reminders.
+"""The loop that runs the evening jobs.
 
 Every minute it asks one question - is it time, and is there anything to do? -
 and does it. It holds no state of its own: what has been planned and sent is
@@ -6,9 +6,12 @@ in the database, so a restart or a redeploy in the middle of the evening picks
 up exactly where it was, and two of these running at once cannot double-send
 (see reminder_sender).
 
-From ``reminders_send_hour`` IST it plans tomorrow's reminders; from then until
-``reminders_cutoff_hour`` it sends them. Past the cutoff it plans nothing and
-anything still unsent is given up on, because "tomorrow" is no longer true.
+From ``reminders_send_hour`` IST until ``reminders_cutoff_hour`` it:
+  - tells each mobed whose memorial has its last prayer tomorrow (always: it
+    only leaves a notice in the app, so it does not depend on sending), and
+  - when sending is on, plans tomorrow's WhatsApp reminders and sends them.
+Past the cutoff it plans nothing and anything still unsent is given up on,
+because "tomorrow" is no longer true.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ import httpx
 
 from agyary.core.config import get_settings
 from agyary.core.database import async_session_factory
-from agyary.services import reminder_sender
+from agyary.services import reminder_sender, reminders
 
 logger = logging.getLogger(__name__)
 
@@ -38,40 +41,48 @@ async def tick(
     settings = get_settings()
     now = now or datetime.now(timezone.utc)
     report = reminder_sender.Report()
-    if settings.reminders_send_mode == "off":
-        return report
 
     hour = now.astimezone(reminder_sender.IST).hour
-    own_client = client is None
-    client = client or httpx.AsyncClient(timeout=20)
+    in_window = settings.reminders_send_hour <= hour < settings.reminders_cutoff_hour
+    sending = settings.reminders_send_mode != "off"
+    if not in_window and not sending:
+        return report            # nothing to do, and nothing worth opening a connection for
+
+    own_client = client is None and sending
+    if sending and client is None:
+        client = httpx.AsyncClient(timeout=20)
     try:
         async with session_factory() as db:
-            if settings.reminders_send_hour <= hour < settings.reminders_cutoff_hour:
-                report.planned = await reminder_sender.plan_tomorrow(db, now, settings)
+            if in_window:
+                report.closing = await reminders.notify_closing_tomorrow(db, now)
                 await db.commit()
-            sent = await reminder_sender.send_pending(db, client, now, settings)
-            report.sent, report.failed, report.missed = sent.sent, sent.failed, sent.missed
+            if sending:
+                if in_window:
+                    report.planned = await reminder_sender.plan_tomorrow(db, now, settings)
+                    await db.commit()
+                sent = await reminder_sender.send_pending(db, client, now, settings)
+                report.sent, report.failed, report.missed = sent.sent, sent.failed, sent.missed
     finally:
         if own_client:
             await client.aclose()
-    if report.planned or report.sent or report.failed or report.missed:
+    if report.closing or report.planned or report.sent or report.failed or report.missed:
         logger.info(
-            "Reminders: planned %d, sent %d, failed %d, missed %d",
-            report.planned, report.sent, report.failed, report.missed,
+            "Evening run: closing notices %d, reminders planned %d, sent %d, failed %d, missed %d",
+            report.closing, report.planned, report.sent, report.failed, report.missed,
         )
     return report
 
 
 async def run_forever() -> None:
     """Run until cancelled. An error in one pass is logged and the next pass
-    tries again - a reminder loop that dies on its first exception stays dead
-    until someone notices, and nobody would."""
-    logger.info("Reminder worker started (mode: %s)", get_settings().reminders_send_mode)
+    tries again - a loop that dies on its first exception stays dead until
+    someone notices, and nobody would."""
+    logger.info("Evening worker started (reminders: %s)", get_settings().reminders_send_mode)
     while True:
         try:
             await tick()
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Reminder pass failed")
+            logger.exception("Evening run failed")
         await asyncio.sleep(TICK_SECONDS)

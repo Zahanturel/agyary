@@ -109,10 +109,14 @@ keep the free version (the manual "Remind on WhatsApp" button).
   `app_notifications` are put in front of them: a popup the moment the app
   opens (or resumes), listing only what they have not yet seen; a bell in the
   header keeps everything for 24 hours, then it lapses. They link to the
-  relevant screen. Kinds so far: `reminder_stopped`, `reminder_failed`,
-  `reminders_sent` (a summary after each evening's send).
-- Not built yet: a notification for a memorial's last observance (today it is
-  only the pinned notice on the calendar's last day).
+  relevant screen. Kinds: `reminder_stopped`, `reminder_failed`,
+  `reminders_sent` (a summary after each evening's send), and
+  `memorial_closing` (the evening before a memorial's LAST prayer: "the
+  memorial will close"; once per memorial, and made whether or not sending is
+  on, since it only leaves a notice in the app).
+- Where a mobed finds reminders: a "N reminders to send" line above the
+  calendar when something is due today or tomorrow that is not going out on its
+  own, a Reminders entry in the menu, and a bar at the top of the Behdins tab.
 
 **Replies**
 - Nothing else is acted on: the message asks for nothing. Anything but STOP
@@ -196,9 +200,12 @@ history, same rule as the sign-in number.
   consent. Refusals (4xx) are final; outages are retried three times, then the
   mobed is told. Past the cutoff nothing is sent late. Delivery receipts move a
   message forward only (sent, delivered, read) and a failure tells the mobed once.
-- **The loop** (`services/reminder_worker.py`, started from the app's lifespan
-  only when sending is not `off`): every minute, plan from 19:00 IST, send until
-  21:00. It holds no state, so a restart mid-evening carries on; one uvicorn
+- **The loop** (`services/reminder_worker.py`, started from the app's
+  lifespan; it always runs, because it also makes the closing notices, but with
+  sending `off` it does nothing else): every minute from 19:00 to 21:00 IST it
+  makes the closing notices and, if sending is on, plans tomorrow's reminders
+  and sends them. The app's own log lines are raised to INFO so it can be
+  watched in the server log. It holds no state, so a restart mid-evening carries on; one uvicorn
   worker runs, and the unique index makes an overlap during a deploy harmless.
 - **Safety**: `REMINDERS_SEND_MODE` is `off` by default. `dry_run` plans and
   logs without writing anything. `live` sends only to `REMINDERS_ALLOWLIST`
@@ -236,18 +243,16 @@ history, same rule as the sign-in number.
    weighed once reminders earn.
 2. **A manual "reminded" mark.** Automatic sends now show on the list as sent;
    a reminder sent by hand through the wa.me button still has no mark.
-3. **A notification for a memorial's last observance.** Today it is only the
-   pinned notice on the calendar's last day.
-4. **Native apps.** Keep the PWA. Android via a Trusted Web Activity (Play
+3. **Native apps.** Keep the PWA. Android via a Trusted Web Activity (Play
    Store) and iOS via a Capacitor wrapper are possible later; neither gates
    this feature.
-5. **Payment gateway / automated subscriptions.** Manual until volume asks.
-6. **Moving sign-in to an outbound OTP.** Rejected for now: the inbound code
+4. **Payment gateway / automated subscriptions.** Manual until volume asks.
+5. **Moving sign-in to an outbound OTP.** Rejected for now: the inbound code
    is free, unphishable, and already built. Revisit only if the username
    change breaks it.
-7. **Passkeys / long-lived sessions** to reduce sign-ins. Good, separate.
-8. **Meta business verification** timing, until Udyam is sorted.
-9. **Price.** Rs 299/month is a guess. Ask two panthakies what they pay for
+6. **Passkeys / long-lived sessions** to reduce sign-ins. Good, separate.
+7. **Meta business verification** timing, until Udyam is sorted.
+8. **Price.** Rs 299/month is a guess. Ask two panthakies what they pay for
    diaries or booking today before fixing it.
-10. **Message volume.** 1.5 per memorial per month is an assumption; replace
+9. **Message volume.** 1.5 per memorial per month is an assumption; replace
    with measured numbers from the pilot.

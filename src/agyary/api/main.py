@@ -33,18 +33,17 @@ if not _app_log.handlers:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Run the evening reminder loop alongside the app - but only when
-    sending is switched on at all, so the default deployment starts nothing."""
-    worker = None
-    if settings.reminders_send_mode != "off":
-        worker = asyncio.create_task(reminder_worker.run_forever())
+    """Run the evening loop alongside the app. It always runs, because it also
+    leaves the in-app "last prayer is tomorrow" notices; but it sends nothing
+    to anyone unless REMINDERS_SEND_MODE says so, and with sending off it does
+    no more than that one cheap check in the evening window."""
+    worker = asyncio.create_task(reminder_worker.run_forever())
     try:
         yield
     finally:
-        if worker is not None:
-            worker.cancel()
-            with suppress(asyncio.CancelledError):
-                await worker
+        worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
 
 
 app = FastAPI(

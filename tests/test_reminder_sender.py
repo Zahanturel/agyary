@@ -414,11 +414,67 @@ async def test_a_tick_before_the_send_hour_plans_nothing(client, db, seeded, mon
 async def test_a_tick_with_sending_off_touches_nothing(client, db, seeded, monkeypatch):
     *_, now = await _scenario(client, db, seeded)
     monkeypatch.setattr(reminder_worker, "get_settings", lambda: _settings(reminders_send_mode="off"))
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
     meta = FakeMeta()
     async with meta.client() as http:
-        report = await reminder_worker.tick(now=now, client=http)
+        report = await reminder_worker.tick(now=now, client=http, session_factory=factory)
     assert (report.planned, report.sent) == (0, 0) and meta.calls == []
     assert await db.scalar(select(func.count()).select_from(Notification)) == 0
+
+
+# --- The last prayer of a memorial ------------------------------------------
+
+async def test_the_mobed_is_told_the_evening_before_a_memorials_last_prayer(client, db, seeded):
+    aid, cid, headers, later, opening, _ = await _scenario(client, db, seeded, enable=False)
+    last = date.fromisoformat(later[-1]["date"])
+    evening = _evening(last - timedelta(days=1))
+
+    assert await reminders.notify_closing_tomorrow(db, evening) == 1
+    await db.commit()
+    [note] = await _owner_notes(client, headers)
+    assert note["kind"] == "memorial_closing" and note["title"] == "Last prayer for Ardeshir Mehta is tomorrow"
+    assert "Delzeen Test" in note["body"] and "will close" in note["body"]
+    assert note["link"].startswith("#/memorial/")
+
+
+async def test_the_closing_notice_is_made_once_however_often_the_loop_asks(client, db, seeded):
+    aid, cid, headers, later, *_ = await _scenario(client, db, seeded, enable=False)
+    evening = _evening(date.fromisoformat(later[-1]["date"]) - timedelta(days=1))
+    assert await reminders.notify_closing_tomorrow(db, evening) == 1
+    await db.commit()
+    for minute in (1, 2, 30):                       # the loop asks every minute of the evening
+        assert await reminders.notify_closing_tomorrow(db, evening + timedelta(minutes=minute)) == 0
+    await db.commit()
+    assert len(await _owner_notes(client, headers)) == 1
+
+
+async def test_no_closing_notice_before_the_last_prayer(client, db, seeded):
+    aid, cid, headers, later, *_ = await _scenario(client, db, seeded, enable=False)
+    middle = _evening(date.fromisoformat(later[0]["date"]) - timedelta(days=1))
+    assert await reminders.notify_closing_tomorrow(db, middle) == 0
+    # Nor the day of it: the notice is for the evening before.
+    assert await reminders.notify_closing_tomorrow(db, _evening(date.fromisoformat(later[-1]["date"]))) == 0
+
+
+async def test_the_closing_notice_comes_even_with_sending_off(client, db, seeded, monkeypatch):
+    aid, cid, headers, later, *_ = await _scenario(client, db, seeded, enable=False)
+    evening = _evening(date.fromisoformat(later[-1]["date"]) - timedelta(days=1))
+    monkeypatch.setattr(reminder_worker, "get_settings", lambda: _settings(reminders_send_mode="off"))
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    meta = FakeMeta()
+    async with meta.client() as http:
+        report = await reminder_worker.tick(now=evening, client=http, session_factory=factory)
+    assert report.closing == 1 and (report.planned, report.sent) == (0, 0) and meta.calls == []
+    assert [n["kind"] for n in await _owner_notes(client, headers)] == ["memorial_closing"]
+
+
+async def test_the_closing_notice_waits_for_the_evening(client, db, seeded, monkeypatch):
+    aid, cid, headers, later, *_ = await _scenario(client, db, seeded, enable=False)
+    morning = _evening(date.fromisoformat(later[-1]["date"]) - timedelta(days=1), hour=9)
+    monkeypatch.setattr(reminder_worker, "get_settings", lambda: _settings(reminders_send_mode="off"))
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    report = await reminder_worker.tick(now=morning, session_factory=factory)
+    assert report.closing == 0 and await _owner_notes(client, headers) == []
 
 
 async def test_the_shipped_defaults_send_nothing():

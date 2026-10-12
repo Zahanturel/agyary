@@ -16,17 +16,21 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
-from agyary.models import AppNotification, Customer, UserCustomer
+from agyary.models import AppNotification, Customer, Memorial, MemorialObservance, UserCustomer
 
 # How long a notification stays up. They are about what to do now, not a log.
 NOTIFICATION_TTL = timedelta(hours=24)
 
 KIND_REMINDER_STOPPED = "reminder_stopped"
+KIND_MEMORIAL_CLOSING = "memorial_closing"
+
+IST = ZoneInfo("Asia/Kolkata")
 
 # What counts as a STOP: the word on its own, in any case, with the odd
 # bit of punctuation. "Stop" inside a longer sentence is not one - someone
@@ -150,3 +154,55 @@ async def record_stop(db: AsyncSession, phone: str, *, now: datetime | None = No
         )
     await db.flush()
     return len(rows)
+
+
+async def notify_closing_tomorrow(db: AsyncSession, now: datetime | None = None) -> int:
+    """Tell each mobed whose memorial has its LAST prayer tomorrow, so the end
+    of a family's observances is not something they find out on the day.
+
+    Independent of WhatsApp: it only leaves a notice in the app, so it runs
+    whether or not reminders are being sent. At most one notice per memorial
+    (it is looked for before it is made, which is what lets the loop call this
+    every minute of the evening). Returns how many were made.
+    """
+    now = now or _now()
+    tomorrow = now.astimezone(IST).date() + timedelta(days=1)
+    last = (
+        select(MemorialObservance.memorial_id, func.max(MemorialObservance.gregorian_date).label("last_date"))
+        .group_by(MemorialObservance.memorial_id)
+        .subquery()
+    )
+    rows = (
+        await db.execute(
+            select(Memorial, Customer.name)
+            .join(last, last.c.memorial_id == Memorial.id)
+            .join(Customer, Customer.id == Memorial.customer_id)
+            .where(last.c.last_date == tomorrow)
+        )
+    ).all()
+
+    made = 0
+    for memorial, behdin_name in rows:
+        link = f"#/memorial/{memorial.id}"
+        already = (
+            await db.execute(
+                select(AppNotification.id).where(
+                    AppNotification.user_id == memorial.created_by_user_id,
+                    AppNotification.kind == KIND_MEMORIAL_CLOSING,
+                    AppNotification.link == link,
+                    AppNotification.created_at > now - timedelta(days=2),
+                )
+            )
+        ).first()
+        if already:
+            continue
+        await notify(
+            db, memorial.created_by_user_id, KIND_MEMORIAL_CLOSING,
+            f"Last prayer for {memorial.departed_name} is tomorrow",
+            f"After tomorrow there are no more prayers for {memorial.departed_name} "
+            f"({behdin_name}). The memorial will close.",
+            link=link, agyary_id=memorial.agyary_id, now=now,
+        )
+        made += 1
+    await db.flush()
+    return made
