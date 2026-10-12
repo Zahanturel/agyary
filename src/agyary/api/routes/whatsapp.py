@@ -62,10 +62,18 @@ def _valid_signature(raw_body: bytes, header_value: str, app_secret: str) -> boo
 
 
 def _extract_text(message: dict) -> str:
-    """Only plain text matters now. The bot also routed button, list and
-    Flow replies; a sign-in is someone sending a code."""
-    if message.get("type") == "text":
+    """What the person said: typed text, or the label of a button they tapped
+    (a Stop button on a reminder, a quick reply)."""
+    kind = message.get("type")
+    if kind == "text":
         return (message.get("text") or {}).get("body", "")
+    if kind == "button":
+        button = message.get("button") or {}
+        return button.get("text") or button.get("payload") or ""
+    if kind == "interactive":
+        reply = message.get("interactive") or {}
+        chosen = reply.get("button_reply") or reply.get("list_reply") or {}
+        return chosen.get("title", "")
     return ""
 
 
@@ -129,12 +137,17 @@ async def _process_message(db: AsyncSession, message: dict) -> None:
     # A family replying STOP to a reminder. Handled before sign-in because
     # honouring it must never depend on anything else about the message.
     if reminders.is_stop(text):
-        told = await reminders.record_stop(db, from_phone)
+        told = await reminders.record_stop(db, from_phone, said=text)
         logger.info("Inbound STOP: %d mobed(s) notified", told)
         return
 
     code = wa_login.extract_code(text)
     if not code:
+        # Anything else a family writes back reaches the mobed whose reminder it
+        # answers - never dropped unread, and never anyone else's (RM-4, D2).
+        context = (message.get("context") or {}).get("id")
+        if text.strip() and await reminders.forward_reply(db, from_phone, text, context_id=context):
+            logger.info("Inbound reply passed to its mobed")
         return
 
     # A replayed delivery finds the attempt already claimed and is ignored -

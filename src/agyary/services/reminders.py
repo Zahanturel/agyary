@@ -34,10 +34,22 @@ KIND_MEMORIAL_CLOSING = "memorial_closing"
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# What counts as a STOP: the word on its own, in any case, with the odd
-# bit of punctuation. "Stop" inside a longer sentence is not one - someone
-# writing "please don't stop the Afringan" must not be unsubscribed.
+# What counts as a STOP (RM-4). The word on its own always does. So does a
+# SHORT message that asks for the messages to stop in the family's own words -
+# "please stop", "no more", "don't send", in Hindi or Gujarati - because a
+# grieving family who writes that and keeps getting messages is the worse
+# mistake: the mobed is shown what they wrote and can turn reminders back on.
+# A long message, or one that asks for something NOT to stop ("please don't
+# stop the Afringan"), is not a STOP; it is passed to the mobed instead.
 _STOP = re.compile(r"^\s*(stop|unsubscribe)\s*[.!]*\s*$", re.IGNORECASE)
+_STOP_SHORT = 60
+_STOP_WORDS = re.compile(
+    r"\b(stop|unsubscribe|unsub|no more|don\'?t send|do not send|band karo|bandh karo|band|bandh)\b"
+    "|बंद"      # Hindi "band" (stop)
+    "|બંધ",     # Gujarati "bandh" (stop)
+    re.IGNORECASE,
+)
+_NOT_STOP = re.compile(r"\b(don\'?t|do not|never)\s+stop\b", re.IGNORECASE)
 
 
 class ReminderError(Exception):
@@ -49,7 +61,10 @@ class ReminderError(Exception):
 
 
 def is_stop(text: str) -> bool:
-    return bool(_STOP.match(text or ""))
+    text = (text or "").replace("’", "'").strip()
+    if _STOP.match(text):
+        return True
+    return len(text) <= _STOP_SHORT and bool(_STOP_WORDS.search(text)) and not _NOT_STOP.search(text)
 
 
 def may_send_to(settings, phone: str) -> bool:
@@ -151,7 +166,7 @@ async def set_reminders(
     return await reminder_state(db, user_id, customer)
 
 
-async def record_stop(db: AsyncSession, phone: str, *, now: datetime | None = None) -> int:
+async def record_stop(db: AsyncSession, phone: str, *, said: str | None = None, now: datetime | None = None) -> int:
     """A person replied STOP from ``phone``. Returns how many mobeds were told.
 
     The STOP is the person's: it is remembered against the number (so a mobed
@@ -186,12 +201,67 @@ async def record_stop(db: AsyncSession, phone: str, *, now: datetime | None = No
             db, customer.owner_user_id, KIND_REMINDER_STOPPED,
             f"{customer.name} stopped reminders",
             f"{customer.name} replied STOP, so WhatsApp reminders to them are now off. "
-            "Turn them back on only if they ask you to.",
+            + (f'They wrote: "{said[:200]}". ' if said and not _STOP.match(said) else "")
+            + "Turn them back on only if they ask you to.",
             link=f"#/behdins/{customer.id}", now=now,
         )
         told += 1
     await db.flush()
     return told
+
+
+KIND_BEHDIN_REPLY = "behdin_reply"
+REPLY_WINDOW = timedelta(days=30)
+
+
+async def forward_reply(
+    db: AsyncSession, phone: str, text: str, *, context_id: str | None = None, now: datetime | None = None
+) -> bool:
+    """Pass what a family wrote back to the mobed whose reminder it answers
+    (RM-4). Returns whether anyone was told.
+
+    Whose: the reminder the message replies to, when WhatsApp says which; else
+    the mobed who last reminded this number in the past month. Only that one
+    mobed, about their own record (D2): another mobed who keeps the same family
+    learns nothing. A number we never reminded reaches nobody - it is someone
+    messaging the number, not a family answering."""
+    from agyary.models import Notification
+
+    now = now or _now()
+    TYPE = "memorial_reminder"
+    reminder = None
+    if context_id:
+        reminder = (
+            await db.execute(
+                select(Notification).where(Notification.notification_type == TYPE,
+                                           Notification.wa_message_id == context_id)
+            )
+        ).scalar_one_or_none()
+    if reminder is None:
+        reminder = (
+            await db.execute(
+                select(Notification)
+                .where(
+                    Notification.notification_type == TYPE,
+                    Notification.recipient_phone == phone,
+                    Notification.status.in_(("sent", "delivered", "read")),
+                    Notification.sent_at > now - REPLY_WINDOW,
+                )
+                .order_by(Notification.sent_at.desc(), Notification.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if reminder is None or reminder.recipient_phone != phone:
+        return False
+    customer = await db.get(Customer, reminder.recipient_id) if reminder.recipient_id else None
+    if customer is None or customer.owner_user_id is None:
+        return False
+    await notify(
+        db, customer.owner_user_id, KIND_BEHDIN_REPLY, f"{customer.name} replied on WhatsApp",
+        f'"{text.strip()[:300]}"', link=f"#/behdins/{customer.id}", now=now,
+    )
+    await db.flush()
+    return True
 
 
 async def notify_closing_tomorrow(db: AsyncSession, now: datetime | None = None) -> int:

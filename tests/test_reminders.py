@@ -78,10 +78,10 @@ async def test_turning_reminders_on_needs_a_session(client, seeded):
 # --- STOP ------------------------------------------------------------------
 
 def test_what_counts_as_a_stop():
-    for text in ("STOP", "stop", "Stop.", "  stop  ", "Unsubscribe", "STOP!"):
+    for text in ("STOP", "stop", "Stop.", "  stop  ", "Unsubscribe", "STOP!", "stop reminders please"):
         assert reminders.is_stop(text), text
-    # A sentence that merely contains the word must not unsubscribe anyone.
-    for text in ("please dont stop the afringan", "stop reminders please", "", "thanks", "stopped"):
+    # A message that asks for something NOT to stop, or never says stop, unsubscribes nobody.
+    for text in ("please dont stop the afringan", "", "thanks", "stopped"):
         assert not reminders.is_stop(text), text
 
 
