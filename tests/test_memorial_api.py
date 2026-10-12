@@ -442,7 +442,7 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     assert text.startswith(f"Reminder from {agyary_name}.\n\n")
     assert text.splitlines()[2].startswith("Tomorrow, ")
     assert "Roj " in text and "Afringan and Baaj for Dinshaw." in text
-    assert text.endswith("You are welcome to attend.")
+    assert text.endswith("We would be glad to have you there.")
     # It already is booked: nothing asks the family to arrange or reply.
     assert "arrange" not in text and "reply" not in text and "observance" not in text.lower()
 

@@ -53,7 +53,7 @@ keep the free version (the manual "Remind on WhatsApp" button).
     Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad): Afringan and Baaj for
     Ardeshir Mehta at 9:00 am.
 
-    You are welcome to attend.
+    We would be glad to have you there.
 
     To stop these reminders, reply STOP.
 

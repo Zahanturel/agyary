@@ -25,13 +25,13 @@ def _parts(today=DAY - timedelta(days=1), services=("Afringan", "Baaj"), **kw):
 def test_the_manual_message_says_when_and_what_without_asking_for_anything():
     assert rm.manual_text(_parts()) == (
         f"Reminder from Goti Adarian.\n\nTomorrow, Thu 14 Mar ({ROJ_MAH}): "
-        "Afringan and Baaj for Dinshaw.\n\nYou are welcome to attend."
+        "Afringan and Baaj for Dinshaw.\n\nWe would be glad to have you there."
     )
 
 
 def test_the_automatic_message_adds_how_to_stop():
     text = rm.template_text(_parts())
-    assert text.endswith("You are welcome to attend.\n\nTo stop these reminders, reply STOP.")
+    assert text.endswith("We would be glad to have you there.\n\nTo stop these reminders, reply STOP.")
     assert text.startswith(rm.manual_text(_parts()))
 
 

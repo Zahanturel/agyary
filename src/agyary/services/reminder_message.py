@@ -27,7 +27,7 @@ from agyary.calendar import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 TEMPLATE_BODY = (
     "Reminder from {{1}}.\n\n"
     "{{2}} ({{3}}): {{4}}\n\n"
-    "You are welcome to attend.\n\n"
+    "We would be glad to have you there.\n\n"
     "To stop these reminders, reply STOP."
 )
 
@@ -37,7 +37,7 @@ TEMPLATE_BODY = (
 MANUAL_BODY = (
     "Reminder from {{1}}.\n\n"
     "{{2}} ({{3}}): {{4}}\n\n"
-    "You are welcome to attend."
+    "We would be glad to have you there."
 )
 
 
