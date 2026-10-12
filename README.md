@@ -19,6 +19,14 @@ they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
   family can be sent a short WhatsApp message - by hand through a `wa.me` link, or
   automatically. See [docs/reminders-plan.md](docs/reminders-plan.md).
 
+## Where to start
+
+- [docs/STATUS.md](docs/STATUS.md): the current state, what is live and what is switched off,
+  runbooks, known gaps and what is left. Read this first.
+- [docs/REVIEW-PROMPT.md](docs/REVIEW-PROMPT.md): the brief for an independent critical review.
+- [docs/reminders-plan.md](docs/reminders-plan.md) and [docs/memorial-plan.md](docs/memorial-plan.md):
+  the design decisions behind the two main features.
+
 ## Stack
 
 Python 3.12, FastAPI, SQLAlchemy (async), Alembic, asyncpg, Postgres 16, managed

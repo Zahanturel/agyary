@@ -1,0 +1,341 @@
+# System status and handoff
+
+Written 12 Oct 2026, at the end of a long build session. It is a snapshot, not a
+spec: anything here can be wrong or stale. Treat each claim as something to
+check against the code and the live system, and trust the code where they differ.
+
+Companion documents: [memorial-plan.md](memorial-plan.md) (the memorial schedule
+and its rules), [reminders-plan.md](reminders-plan.md) (the reminders feature,
+its cost model and decisions), [../DEPLOY.md](../DEPLOY.md) and
+[../deploy/README.md](../deploy/README.md) (first-time server setup), and
+[REVIEW-PROMPT.md](REVIEW-PROMPT.md) (the brief for an independent review).
+
+**Nothing in this repository may contain** a real phone number, a Meta or
+WhatsApp account/phone/app ID, a token, a government ID, or a street address.
+Those live in the server's `.env`, in Meta's console, and with the owner. This
+file refers to them by role.
+
+---
+
+## 1. What the product is
+
+A calendar and booking tool for the priests (mobeds, and the panthaky who runs a
+fire temple, an *agyari*) of Zoroastrian fire temples in India, with WhatsApp
+reminders to the families they serve. The mobed uses a no-build PWA at `/mobed`.
+Families (behdins) never log in; they only receive WhatsApp messages.
+
+Users today: the owner and a handful of alpha mobeds. There is no paying customer
+and no billing. Everything is free during the pilot; limits stand in for a
+paywall (section 8).
+
+The market is small: the seed list has 167 fire temples. The plan is tens of
+paying temples at most, so the design values simplicity and low running cost over
+scale.
+
+## 2. Architecture
+
+```
+ Mobed's phone (PWA, vanilla ES modules + service worker)
+        |  HTTPS
+ Cloudflare (free plan, proxied DNS, Tunnel) --- caches static paths, see 9.4
+        |
+ Oracle Cloud VM (always-free, Ubuntu)  --  docker compose:
+        |   app          one uvicorn process (FastAPI)  + the evening worker task
+        |   db           Postgres 16
+        |   cloudflared  the tunnel to Cloudflare (outbound only, no open ports)
+        |
+ Meta WhatsApp Cloud API  <-->  our webhook (/webhooks/whatsapp) and our sender
+```
+
+- **One process, no queue, no cache, no Redis.** The rate limiter is in memory.
+  The evening worker is an `asyncio` task started in the app's lifespan. This is
+  deliberate at this scale and is a risk the day there is a second process
+  (section 9).
+- **Deploy** is `git push origin master`: GitHub Actions runs the tests, then SSHes
+  to the VM, which backs up the database, builds, migrates with the new image,
+  swaps the container and waits for `/health`. A failed migration leaves the old
+  version serving.
+- **Time** is IST throughout the reminder logic. The server clock is UTC.
+
+### 2.1 Code layout
+
+```
+src/agyary/
+  api/        main.py (app, middleware, lifespan), rate_limit.py, routes/, static/ (the PWAs)
+  core/       config.py (all settings), database.py
+  models/     SQLAlchemy models (24 tables)
+  calendar/   Parsi calendar engine + memorial schedule - pure functions, no DB
+  services/   the rules (see below)
+  messaging/  booking core; named for a bot that no longer exists (see its docstring)
+tests/        29 files, 513 tests, real Postgres (agyary_test)
+alembic/      20 migrations
+```
+
+Services: `memorials` (schedule, reminders list), `reminders` (consent, STOP,
+in-app notifications, closing notices), `reminder_message` (the words),
+`reminder_sender` (planning, sending, receipts), `reminder_worker` (the evening
+loop), `guardrails` (caps, pause, alerts), `otp` (sign-in by WhatsApp code),
+`wa_login` (sign-in by sending us a code), `mobed_auth` (tokens), `behdin_directory`,
+`mobed_dashboard`, `phone`.
+
+### 2.2 Data model (24 tables)
+
+- **People and places:** `users` (mobeds), `agyaries`, `agyary_users` (membership and
+  role), `customers` (behdins, unique by E.164 phone), `agyary_customers`,
+  `user_customers` (a mobed's own behdin book; also holds the reminder consent),
+  `customer_saved_names`, `ceremony_names`, `user_preferences`.
+- **Bookings:** `bookings`, `booking_mobeds`, `machis`, `services`, `recurrence_rules`,
+  `bulk_batches`, `payments` (a ledger of UPI links the app does not touch money for).
+- **Memorials:** `memorials`, `memorial_observances`, `memorial_observance_services`.
+- **Messaging and notices:** `notifications` (the outbound WhatsApp queue; one row per
+  reminder), `app_notifications` (what a mobed sees in the app), `wa_login_attempts`,
+  `login_otps`, `app_settings` (the pause flag).
+
+Privacy shape: memorials and behdins are private to the mobed who made them; a
+colleague at the same temple cannot read them. A STOP is the person's
+(`customers.reminders_stopped_at`), so it holds for every mobed.
+
+### 2.3 Key flows
+
+**Sign-in, two ways.** (a) *Send us a code* (always on): the app shows a code and
+opens WhatsApp with it prefilled; the mobed sends it from their own WhatsApp; Meta's
+signed webhook tells us their number; the page polls and signs in. Nothing is sent
+to them, it is free, and the number is proven by Meta. (b) *A code on WhatsApp*
+(`OTP_MODE`, off): the caller types a number, we send a six digit code as an
+Authentication template with a Copy code button, and the app reads it back from the
+clipboard. Weaker (a typed number can be someone else's) and it spends money, so it
+is heavily limited. A web page cannot read WhatsApp, and WebOTP/iPhone autofill are
+SMS-only, so "Copy code" plus Paste is as automatic as it gets.
+
+**Memorials.** From a date of death the engine (`calendar/memorial.py`) computes every
+observance (opening days 1-10, 29th/30th, monthly, yearly, Parabs) in the family's
+calendar. See `memorial-plan.md` for the rules; they were settled with a mobed and are
+the domain heart of the app.
+
+**Reminders.** The evening before a prayer after the opening days, about 19:00 IST, one
+WhatsApp template message: which temple, when, what, for whom. Pipeline: the mobed ticks
+"has agreed to receive reminders" for a behdin (in-person consent, recorded) -> the loop
+plans tomorrow's reminders (`plan_tomorrow`, the only place the rules are applied) ->
+`send_pending` posts each to Meta, one at a time, committing as it goes, re-checking
+consent -> Meta's receipts update the row -> a reply of exactly STOP switches the
+behdin off for every mobed and tells each in the app. Never sent in the first ten days
+(the family is at the temple daily and grieving). One reminder per observance, enforced
+by a partial unique index.
+
+**In-app notifications.** A bell and a popup on open; anything unseen is shown once and
+everything is kept 24 hours. Kinds: `reminder_stopped`, `reminder_failed`,
+`reminders_sent`, `memorial_closing` (the evening before a memorial's last prayer),
+`alert` (for admins).
+
+**Guardrails** (`services/guardrails.py`): ceilings per day/month overall, per mobed and
+per temple; a pause switch that survives restarts; auto-pause on account-level Meta
+errors (invalid token, payment, throttling, template missing/paused) and after N failures
+in a row; alerts to admins; an allowlist for `live`. Failed or blocked reminders are not
+counted. Admin screen shows usage, an estimated cost, recent failures, and the switch.
+
+## 3. What is live and what is off
+
+| Capability | State | Gate |
+|---|---|---|
+| Mobed PWA: calendar, bookings, behdins, memorials, slips | **Live** | none |
+| Sign-in by sending us a code | **Live** | none |
+| Manual reminders (a `wa.me` link the mobed taps) | **Live** | none |
+| In-app notifications, closing notices, Reminders list/notice | **Live** | none |
+| Admin screen, pause switch, spend caps, alerts | **Live** | `ADMIN_PHONES` set |
+| Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
+| Automatic WhatsApp reminders | **Built, OFF** | `REMINDERS_SEND_MODE`; template approval |
+| Sign-in by WhatsApp code | **Built, OFF** | `OTP_MODE`; an approved Authentication template, which Meta currently will not let us create |
+| Play Store app | **Not started** | section 10 |
+| Web Push to mobeds | **Not started** | |
+
+## 4. Configuration
+
+All settings are in `core/config.py` and documented in `.env.example`. Defaults are safe:
+sending is off. Settings that matter operationally:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `REMINDERS_SEND_MODE` | `off` | `off`; `dry_run` (log only, writes nothing); `live` (sends, to the allowlist) |
+| `REMINDERS_ALLOWLIST` | empty | numbers messaged in `live`; `*` = everyone; empty = nobody |
+| `REMINDERS_SEND_HOUR` / `_CUTOFF_HOUR` | 19 / 21 | the IST evening window; unsent after the cutoff is given up on |
+| `REMINDERS_DAILY_CAP` / `_MONTHLY_CAP` | 150 / 2000 | overall ceilings |
+| `REMINDERS_PER_MOBED_DAILY_CAP` / `_PER_AGYARY_` | 40 / 100 | per mobed / per temple |
+| `REMINDERS_BREAKER_FAILURES` | 5 | failures in a row that pause sending |
+| `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
+| `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
+| `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
+| `APP_DEBUG` | true (dev) | MUST be false in production: it enables a sign-in bypass and `/docs` |
+
+## 5. External dependencies and their state
+
+- **Meta WhatsApp Business account.** A number is connected and webhooks are subscribed to
+  `messages` (STOP replies and delivery receipts arrive on it). Billing is prepaid (no auto
+  top-up, on purpose: the balance is the outermost spending limit). A System User token with
+  messaging and management permissions is in the server `.env` and verified.
+- **Templates.** `memorial_reminder` (Utility) was submitted 12 Oct 2026 and was still
+  **pending** at the last check (many hours, no rejection reason). `login_code`
+  (Authentication, Copy code, 5-minute expiry) **cannot be created yet**: both the web form and
+  the Graph API answer error 10 / subcode 2388185, "This WhatsApp business account does not have
+  permission to create message template", flagged non-transient. This happened both before and
+  AFTER business verification, so verification alone did not fix it. Next ideas, in order: wait
+  for the permission to propagate, retry; check the WhatsApp Business Account's status and
+  restrictions in Meta's Account quality / WhatsApp Manager; ask Meta support.
+- **Business verification.** Submitted 12 Oct 2026 using a Udyam registration (sole
+  proprietorship); Meta matched the business to the public record by registration number and
+  address. Meta estimated two business days; the API reported `verified` within about six hours.
+  It raises sending limits and is a prerequisite for several features, but it did NOT by itself
+  unlock the Authentication template.
+- **Why the reminder template is so plain.** Meta's own pre-submission check classed any
+  invitation ("We would be glad to have you there", "Please join us") as Marketing and said
+  it would be rejected as Utility, and refused a shorter version for too many variables for
+  its length. See `reminders-plan.md`.
+- **Cloudflare** (free plan): full proxy, a Tunnel to the VM. The free plan rewrites
+  `Cache-Control: no-cache` to a four hour cache and can edge-cache a service worker (9.4).
+- **Oracle Cloud always-free VM**, **GitHub Actions** (test + deploy), **a Udyam registration**
+  (a micro-enterprise; no GST).
+
+A background watcher in the session that wrote this polled Meta every five minutes (and retried
+creating `login_code` every 30 minutes); it will not survive that session. Check the statuses by
+hand: `GET /{waba-id}/message_templates?fields=name,status,category,rejected_reason` with the
+server's token, run on the server so the token never leaves it.
+
+## 6. Runbooks
+
+**Deploy.** Merge to `master`. Watch the Actions run (`gh run watch`). Then verify like a
+browser would: fetch changed static files WITHOUT a cache-buster, assert 200 first, compare
+bytes against the local tree, read `cf-cache-status`/`Age`.
+
+**Stop all outbound WhatsApp now.** Admin screen -> Pause all sending (takes effect within a
+minute, survives restart). Or set `REMINDERS_SEND_MODE=off` and `OTP_MODE=off` in the server
+`.env` and `docker compose up -d app`.
+
+**Go live with reminders (in order; each step is reversible).**
+1. Template approved (check Meta, or `GET /{waba}/message_templates?name=memorial_reminder`).
+2. Server `.env`: `REMINDERS_SEND_MODE=dry_run`, allowlist empty; redeploy; read the log at 19:00 IST.
+3. `REMINDERS_SEND_MODE=live`, allowlist = the owner's own test numbers only. Create a test
+   memorial for a consenting test behdin whose 30th day is tomorrow, tick the consent box, and
+   watch one real send end to end (planned -> sent -> delivered -> shows on the Reminders list).
+4. Only after a clean evening: widen the allowlist, then `*`. Tell each mobed how consent works.
+
+**Go live with sign-in by WhatsApp code.** Needs business verification, then create the
+Authentication template `login_code` (Copy code, 5-minute expiry and validity), wait for approval,
+set `OTP_MODE=live`. Test on a laptop first with `APP_DEBUG=true` and no token (the code is
+returned in the response).
+
+**Rotate the WhatsApp token.** Create a new System User token in Meta, replace the line in the
+server `.env` (never paste it into chat or git), `docker compose up -d app`, confirm a Graph call
+succeeds, revoke the old one. A clipboard trick that pipes `Get-Clipboard` over SSH failed once when
+the clipboard held the command text instead of the token: check the length and the `EAA` prefix.
+
+**Restore the database.** The deploy script keeps the last ten pre-deploy dumps in the VM user's
+home directory (`pg_dump -Fc`). There is **no scheduled backup** and no off-VM copy (9.2).
+
+## 7. Decisions worth challenging
+
+- **Consent is the mobed's attestation** (a tick-box, recorded with time), not a handshake by the
+  family. Meta accepts documented in-person opt-in. It puts the responsibility on the mobed.
+- **Plain template wording over warm wording** because Meta classified invitations as Marketing
+  (7.5x the price and not approvable as Utility). Warmth is left to the mobed.
+- **Opening days (1-10) are never reminded.** The family is in mourning and at the temple daily.
+- **The "send us a code" sign-in is the primary one** and OTP is the optional second. The earlier
+  design removed an outbound OTP on purpose (the number is proven rather than claimed; nothing to
+  enumerate). OTP was added again at the owner's request.
+- **No plan gating for now**; limits instead.
+- **Reminders go from one shared number**, so the agyari's name is in the text and the number's
+  quality rating is shared by every temple. A runaway temple could hurt all of them (hence the
+  per-temple cap).
+- **Free during the pilot**; pricing (about Rs 299/month per temple, guessed) is unvalidated.
+
+## 8. Cost model
+
+Utility template about Rs 0.115 + 18% GST per delivered message (third-party figures, verify on
+Meta's rate card); Marketing about 7.5x. At the shipped caps the worst month is a few hundred
+rupees (a test enforces it). Prepaid balance with no auto top-up is the hard ceiling. Hosting is
+free (Oracle always-free, Cloudflare free).
+
+## 9. Known gaps, shortcuts and risks (honest list)
+
+Not an exhaustive review; the review brief asks for one. These are the ones known now.
+
+1. **In-memory rate limiter** (`api/rate_limit.py`): resets on every restart/deploy, and only
+   correct with one process. Keyed on `cf-connecting-ip`, which is only trustworthy while the
+   origin is reachable solely through the tunnel.
+2. **No scheduled backups, no off-VM copy, restore never rehearsed.** The only dumps are taken at
+   deploy time and live on the same VM.
+3. **No monitoring or alerting outside the app.** Admin alerts are in-app only: if no admin opens
+   the app, nobody is told. No uptime check, no error tracking, logs only via `docker compose logs`.
+4. **The worker runs inside the web process.** A deploy restarts it; overlap is safe only because of
+   the unique index and `FOR UPDATE SKIP LOCKED`. A second app process would run two loops.
+5. **First real send has never happened.** Every sender test uses a mock transport. Meta's real
+   responses, the template's real parameter handling, and receipts are unproven in production.
+6. **Table growth with no retention.** `app_notifications` rows expire logically but are never
+   deleted; `notifications` (messages) and `memorial_*` rows are kept forever; `wa_login_attempts`
+   and `login_otps` are swept opportunistically. There is no data-retention policy for the deceased's
+   and families' names and numbers. India's DPDP Act (2023) and its rules may apply: consent notice,
+   purpose, retention, erasure. `static/privacy.html` has not been reviewed against it. This is a
+   question for a lawyer, not a claim.
+7. **English only.** Mobeds in Gujarat may prefer Gujarati; the reminder text is English.
+8. **No Web Push** and no installable-app polish beyond the manifest and service worker.
+9. **Graph API version** defaults to `v23.0` (`WHATSAPP_GRAPH_VERSION`); Meta's dashboard showed a
+   newer one for webhooks. Versions expire; this needs a watch.
+10. **CSP allows `style-src 'unsafe-inline'`** (the screens set style attributes). Scripts are strict.
+11. **Service worker + Cloudflare caching** has already caused one deploy that was invisible on a
+    phone. The worker is network-first and `no-cache` headers exist for shell paths, but the free
+    plan can rewrite them. Re-verify after any caching change.
+12. **Tests share one database** (`agyary_test`) and truncate it; two pytest runs at once deadlock.
+13. **Single admin and single Meta business admin**; two-factor is required for no one on the Meta
+    portfolio; one user has no passkey. This account can message grieving families.
+14. **The reminder template is brittle**: once approved, wording changes need a new template (names
+    are locked for a period after deletion), and Meta can re-categorise it.
+15. **`messaging/` package name is misleading** (historical).
+16. **Domain correctness is only as good as the one mobed who settled the rules**; the Parsi calendar
+    engine and the memorial counting deserve an independent check against a second authority.
+
+## 10. What is left (prioritised)
+
+**A. Waiting on Meta.** (1) Approval of `memorial_reminder`, then the live test (section 6).
+(2) Getting permission to create the `login_code` Authentication template (see section 5); only
+then can sign-in by WhatsApp code go live. Business verification is already done.
+
+**B. Independent review, then fixes.** Run the brief in `REVIEW-PROMPT.md` in a fresh session. Do not
+start A's go-live steps until the review's critical/high findings on sending, security and data are
+triaged.
+
+**C. Play Store.** Likely route: a Trusted Web Activity (PWABuilder or Bubblewrap) wrapping the
+existing PWA; a native/Capacitor wrapper only if a native-only capability is needed. Things to settle
+(verify each against Google's current rules, they change): a Play developer account (individual vs
+organisation) and its fee; any closed-testing requirement for new accounts before production
+(historically about 12 testers for 14 days); the app signing key and Digital Asset Links
+(`/.well-known/assetlinks.json` served from our domain, and not mangled by Cloudflare); a manifest
+with `start_url` `/mobed`, scope, 512px icons and maskable icons; screenshots; the Data safety form and
+a privacy policy URL; content rating; target API level; and how the host-based redirect (`mobed.*` ->
+`/mobed`) interacts with the TWA's start URL. iPhone users stay on "Add to Home Screen".
+
+**D. Product backlog.** A manual "reminded" mark; Web Push to mobeds; Gujarati; plans, billing and a
+cost/revenue view (when there is something to charge for); an AI scheduling assistant was discussed and
+deliberately deferred (see the discussion in `reminders-plan.md` ON HOLD); retention and erasure
+tooling; scheduled backups and restore drills; monitoring.
+
+## 11. Working notes for contributors
+
+- **Tests:** `uv run pytest`. One run at a time (shared database). The full suite takes about 9 minutes.
+- **Commits:** author is the owner, no `Co-Authored-By` trailers (see the owner's preference).
+- **Line endings:** the repo is LF (`.gitattributes`); a Windows working tree may show CRLF warnings.
+- **Escapes:** when writing code that contains `\n` through a heredoc on this Windows setup, the escape
+  can be turned into a real newline. Use the editor's file tools and run `ruff` + the tests after.
+- **Browser checks:** use a scratch database and a second port, never the owner's dev server on :8000;
+  the pane blocks the service worker (a console "fetching the script" error is expected).
+- **Secrets:** tokens only in the server `.env` (mode 600). Never in chat, git or logs.
+- **Public repo:** the owner's real number and the Cloudflare zone ID were scrubbed from history; keep
+  them out. A local `.git-scrub-rules.txt` (ignored) records the substitutions.
+
+## 12. How we got here (for orientation)
+
+Built across one long session, in this order: a due-list of reminders; the manual `wa.me` send;
+consent + STOP + in-app notifications; the automatic sender and evening loop; the Meta setup
+(payment, token, templates, webhook, business verification via Udyam); spend guardrails and the admin
+screen; sign-in by WhatsApp code; security headers; this documentation. Notable corrections along the
+way: reminders must never be sent in the opening days and must not ask the family to book anything
+(the mobed already did); the template had to be made plain to be Utility; the first token paste
+captured the command text and had to be repaired; two overlapping test runs deadlocked on the shared
+database.
