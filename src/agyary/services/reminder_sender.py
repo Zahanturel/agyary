@@ -67,6 +67,16 @@ class Report:
     notes: list[str] = field(default_factory=list)
 
 
+# Which dry-run reminders have already been logged, so they are not repeated
+# every tick. Per process; a restart logs them once more, which is what you
+# want when you restart to look.
+_dry_run_logged: set[tuple[int, object]] = set()
+
+
+def reset_dry_run_log() -> None:
+    _dry_run_logged.clear()
+
+
 class _Permanent(Exception):
     """Meta refused it and asking again will not help (a bad number, a
     template that is not approved)."""
@@ -146,7 +156,12 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
         )
 
         if mode == "dry_run":
-            logger.info("DRY RUN - would send to %s:\n%s", customer.phone, reminder_message.template_text(parts))
+            # The loop runs every minute for two hours; say it once.
+            if (obs.id, tomorrow) not in _dry_run_logged:
+                _dry_run_logged.add((obs.id, tomorrow))
+                logger.info(
+                    "DRY RUN - would send to %s:\n%s", customer.phone, reminder_message.template_text(parts)
+                )
             planned += 1
             per_agyary[memorial.agyary_id] = per_agyary.get(memorial.agyary_id, 0) + 1
             continue

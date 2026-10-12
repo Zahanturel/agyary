@@ -466,3 +466,37 @@ async def test_the_reminders_endpoint_says_whether_sending_is_on(client, db, see
     headers = await _member_headers(client, seeded)
     body = (await client.get(f"/api/mobed/agyaries/{aid}/memorial-reminders", headers=headers)).json()
     assert body["delivery"] == "off"
+
+
+# --- Seeing what it does ----------------------------------------------------
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _fresh_dry_run_log():
+    reminder_sender.reset_dry_run_log()
+    yield
+    reminder_sender.reset_dry_run_log()
+
+
+async def test_a_dry_run_says_each_message_once_not_every_minute(client, db, seeded, caplog):
+    *_, now = await _scenario(client, db, seeded)
+    dry = _settings(reminders_send_mode="dry_run")
+    with caplog.at_level("INFO"):
+        for minute in range(5):          # the loop ticks every minute for two hours
+            assert await reminder_sender.plan_tomorrow(db, now + timedelta(minutes=minute), dry) == 1
+    assert caplog.text.count("DRY RUN - would send") == 1
+
+
+def test_the_apps_own_log_lines_reach_the_server_log():
+    # uvicorn only configures its own loggers, so without this the loop's
+    # "planned 1, sent 1" would be dropped on the server. Importing the app
+    # raises the agyary tree to INFO with a handler, and nothing else.
+    import logging
+
+    import agyary.api.main  # noqa: F401
+
+    log = logging.getLogger("agyary")
+    assert log.level == logging.INFO and log.handlers
+    assert logging.getLogger("sqlalchemy.engine").getEffectiveLevel() > logging.INFO

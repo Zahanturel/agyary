@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -16,6 +17,18 @@ from agyary.services import reminder_worker
 
 settings = get_settings()
 settings.validate_runtime_secrets()
+
+# uvicorn configures its own loggers and nothing else, so the app's INFO lines
+# (the reminder loop saying what it planned and sent, a dry run showing what it
+# would send) would otherwise be dropped on the server. Only the "agyary" tree
+# is raised: setting the root to INFO would also switch on SQLAlchemy's
+# statement logging.
+_app_log = logging.getLogger("agyary")
+if not _app_log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    _app_log.addHandler(_handler)
+    _app_log.setLevel(logging.INFO)
 
 
 @asynccontextmanager
