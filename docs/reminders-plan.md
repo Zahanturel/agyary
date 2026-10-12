@@ -120,10 +120,10 @@ charge for.
 - WhatsApp requires the recipient to have opted in, and Meta accepts opt-in
   collected in person if it is documented. The mobed asks the behdin and ticks
   "has agreed to receive reminders" on the behdin's page
-  (`user_customers.reminders_enabled`, with when). It is off by default and
-  nothing is ever sent to someone it has not been turned on for. The agreement
-  is with one mobed, which is why it lives on `user_customers`, not on the
-  behdin. This replaces the earlier wa.me handshake idea, which would have put
+  (`customers.reminders_enabled`, with when, on that mobed's own record of the
+  behdin - each mobed keeps their own, D2). It is off by default and nothing is
+  ever sent to someone it has not been turned on for. The agreement is with one
+  mobed, which is why it lives on that mobed's record. This replaces the earlier wa.me handshake idea, which would have put
   a step on grieving families.
 - STOP always wins. The webhook treats a reply that is exactly "stop" or
   "unsubscribe" (any case, light punctuation - not a sentence that merely
@@ -216,8 +216,8 @@ history, same rule as the sign-in number.
 
 ## How it is built
 
-- **Schema** (migration `b9c0d1e2f3a4`): `user_customers.reminders_enabled`
-  (+ when), `customers.reminders_stopped_at`, `app_notifications`, and
+- **Schema** (migration `b9c0d1e2f3a4`, reshaped by `e2f3a4b5c6d7`): `customers.reminders_enabled`
+  (+ when), `customers.reminders_stopped_at`, `reminder_opt_outs`, `app_notifications`, and
   `notifications.memorial_observance_id` with a partial unique index so a
   reminder is sent at most once per observance. The existing `notifications`
   table (survived the bot teardown) is the outbox.

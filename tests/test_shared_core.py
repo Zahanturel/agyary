@@ -9,11 +9,15 @@ from datetime import date, datetime, timedelta
 from agyary.messaging import booking_service
 from agyary.messaging.geh_times import IST
 from agyary.messaging.mobed_calendar import has_calendar_conflict
-from agyary.models import Agyary, BookingMobed
+from sqlalchemy import select
+
+from agyary.models import Agyary, BookingMobed, User
 
 
 async def _customer(db, phone="+919900033333", name="Test Customer"):
-    return await booking_service.create_customer(db, phone, name)
+    # A behdin is always some mobed's record (D2); any seeded mobed will do here.
+    owner = (await db.execute(select(User.id).order_by(User.id).limit(1))).scalar_one()
+    return await booking_service.create_customer(db, owner, phone, name)
 
 
 async def test_book_machi_slot_confirms_free_slot(db, seeded):

@@ -42,6 +42,14 @@ async def db():
     engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
     async with engine.begin() as conn:
         if not _schema_ready:
+            # A table the models no longer have (one a migration dropped) would
+            # still hold foreign keys into the ones that are about to be dropped
+            # and recreated, so it goes first.
+            existing = (await conn.execute(text(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            ))).scalars().all()
+            for stale in sorted(set(existing) - set(Base.metadata.tables) - {"alembic_version"}):
+                await conn.execute(text(f'DROP TABLE IF EXISTS "{stale}" CASCADE'))
             await conn.run_sync(Base.metadata.drop_all)
             await conn.run_sync(Base.metadata.create_all)
             _schema_ready = True

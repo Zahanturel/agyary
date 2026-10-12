@@ -313,7 +313,7 @@ async def test_update_refuses_to_merge_two_behdins(db, client, seeded):
         json={"phone": "+919944400012"},
         headers=headers,
     )
-    assert r.status_code == 400 and "already registered" in r.json()["detail"]
+    assert r.status_code == 400 and "already have a behdin" in r.json()["detail"]
 
 
 async def test_behdin_endpoints_are_scoped_to_the_agyari(db, client, seeded):

@@ -10,6 +10,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -19,17 +20,31 @@ from agyary.models.enums import NAME_SECTIONS, NAME_STATUSES, NAME_TITLES, sql_i
 
 
 class Customer(Base):
-    """Behdins. WhatsApp-only; never see the PWA."""
+    """A behdin, as one mobed keeps them (docs/DECISIONS.md D2).
+
+    One row per mobed per family: the name, the saved names, the events and
+    memorials, and the reminder consent are that mobed's own. Two mobeds who
+    serve the same family each have a row with the same number, and neither
+    can see or touch the other's. Behdins are WhatsApp-only and never see the PWA.
+    """
 
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # The mobed whose record this is. NULL only for a few legacy rows that no
+    # mobed ever entered (bookings made through the old WhatsApp bot).
+    owner_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(200))
-    phone: Mapped[str] = mapped_column(String(20), unique=True)  # E.164
+    phone: Mapped[str] = mapped_column(String(20))  # E.164; unique per owner
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
-    # Set when this person replied STOP to a reminder. It belongs to the
-    # person, not to any one mobed: they told our number to stop, so nobody
-    # may send them reminders until a mobed confirms they have asked again.
+    # Whether this behdin agreed, in person to this mobed, to WhatsApp reminders.
+    # Off until the mobed turns it on; turned off again by a STOP.
+    reminders_enabled: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    reminders_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the person replied STOP. A STOP is the person's, so it reaches
+    # every mobed's record of the number (and any made later, through
+    # ReminderOptOut); each mobed lifts it only for their own record, and only
+    # with "they asked me to".
     reminders_stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -43,9 +58,13 @@ class Customer(Base):
     )
 
     __table_args__ = (
-        # The number is the behdin's identity, so its shape is enforced where
-        # every writer has to pass it, not just in the API's validator.
+        # The number is how a mobed finds the family again, so its shape is
+        # enforced where every writer has to pass it, not just in the API.
         CheckConstraint(r"phone ~ '^\+[1-9][0-9]{7,14}$'", name="phone_e164"),
+        # One record per number in a mobed's book - not one per number overall.
+        UniqueConstraint("owner_user_id", "phone", name="uq_customers_owner_phone"),
+        # STOP and receipts look a number up across every mobed's records.
+        Index("idx_customers_phone", "phone"),
         Index(
             "idx_customers_name_trgm",
             "name",
@@ -53,6 +72,17 @@ class Customer(Base):
             postgresql_ops={"name": "gin_trgm_ops"},
         ),
     )
+
+
+class ReminderOptOut(Base):
+    """A number that replied STOP. The person's, not any mobed's: it outlives
+    every record of the number, so a mobed who adds the number later still
+    starts with reminders stopped."""
+
+    __tablename__ = "reminder_opt_outs"
+
+    phone: Mapped[str] = mapped_column(String(20), primary_key=True)
+    stopped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class AgyaryCustomer(Base):

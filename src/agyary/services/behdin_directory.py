@@ -7,17 +7,19 @@ person first" step - but it can't be the only way, because there was no
 way to correct a mistyped number, or to set up a family's names ahead of
 the day they book.
 
-Scoping: a behdin is a global row keyed by phone (one person, one record,
-however many fire temples they visit), but reachable here only through an
-agyari the caller is a member of, via the agyary_customers junction. So
-this exposes "the behdins of a temple I work at", never the whole
-customer table.
+Scoping (docs/DECISIONS.md D2): a behdin record is one mobed's own. Two
+mobeds who serve the same family each keep a record with the same number,
+and nothing about one is visible to, or changeable by, the other - typing a
+number a colleague already has makes a record of one's own and reveals
+nothing. Within one mobed's book the number is the identity: one record per
+number, however many fire temples they visit with that mobed. A record is
+also reachable only through an agyari the caller is a member of, via the
+agyary_customers junction.
 
-The saved-name pool is the same ``customer_saved_names`` rows the WhatsApp
-flows already read and write (booking_service.saved_pairs /
-saved_farmayeshne / replace_saved_section), not a parallel copy. A behdin
-who set their departed pair over WhatsApp should see the mobed reading it
-back to them, and vice versa.
+The saved-name pool is the same ``customer_saved_names`` rows the booking
+core reads and writes (booking_service.saved_pairs / saved_farmayeshne /
+replace_saved_section), not a parallel copy - and, being keyed by the
+record, it is that mobed's own too.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from agyary.models import (
     Machi,
     Memorial,
     Payment,
-    UserCustomer,
+    ReminderOptOut,
 )
 
 
@@ -56,24 +58,16 @@ async def is_linked(db: AsyncSession, agyary_id: int, customer_id: int) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def owns(db: AsyncSession, user_id: int, customer_id: int) -> bool:
-    """Whether this behdin is in this mobed's own book."""
-    row = await db.get(UserCustomer, (user_id, customer_id))
-    return row is not None
-
-
-async def claim(db: AsyncSession, user_id: int, customer_id: int) -> None:
-    """Record that this mobed deals with this behdin. Idempotent."""
-    if not await owns(db, user_id, customer_id):
-        db.add(UserCustomer(user_id=user_id, customer_id=customer_id))
-        await db.flush()
+def owns(user_id: int, customer: Customer | None) -> bool:
+    """Whether this record is in this mobed's own book."""
+    return customer is not None and customer.owner_user_id == user_id
 
 
 async def get_scoped(
     db: AsyncSession, agyary_id: int, customer_id: int, user_id: int
 ) -> Customer | None:
-    """A behdin, but only if they are BOTH one of this agyari's and one of
-    this mobed's own.
+    """A behdin, but only if they are BOTH one of this agyari's and this
+    mobed's own record, and still in their book.
 
     Both checks matter and neither is redundant. Agyari membership stops
     cross-tenant reads; ownership stops a mobed reading a colleague's
@@ -82,11 +76,9 @@ async def get_scoped(
     a filtered list is not a permission.
     """
     customer = await db.get(Customer, customer_id)
-    if customer is None:
+    if not owns(user_id, customer) or not customer.is_active:
         return None
     if not await is_linked(db, agyary_id, customer.id):
-        return None
-    if not await owns(db, user_id, customer.id):
         return None
     return customer
 
@@ -98,19 +90,17 @@ async def search_mine(
 
     Not the temple's register. A behdin's name and phone number belong to
     them, not to everyone who happens to work at the same fire temple, so
-    the list is scoped to the mobed who registered or served them. Includes
-    someone registered moments ago and never booked for - which is exactly
-    who you are looking for right after adding them, and which a
-    booking-derived list cannot see.
+    the list is the mobed's own records. Includes someone registered moments
+    ago and never booked for - which is exactly who you are looking for right
+    after adding them, and which a booking-derived list cannot see.
     """
     q = query.strip()
     stmt = (
         select(Customer)
         .join(AgyaryCustomer, AgyaryCustomer.customer_id == Customer.id)
-        .join(UserCustomer, UserCustomer.customer_id == Customer.id)
         .where(
             AgyaryCustomer.agyary_id == agyary_id,
-            UserCustomer.user_id == user_id,
+            Customer.owner_user_id == user_id,
             Customer.is_active.is_(True),
         )
         .order_by(Customer.name)
@@ -121,28 +111,38 @@ async def search_mine(
     return list((await db.execute(stmt)).scalars())
 
 
+async def resolve_own(db: AsyncSession, user_id: int, phone: str, name: str) -> tuple[Customer, bool]:
+    """This mobed's record of ``phone``: the one they already have (back in
+    their book if they had removed it), or a new one under the typed name.
+    Returns (customer, created). Another mobed's record of the same number is
+    never looked at - it is theirs, and this one is not linked to it."""
+    existing = await booking_service.get_customer_by_phone(db, user_id, phone)
+    if existing is not None:
+        if not existing.is_active:
+            existing.is_active = True
+            await db.flush()
+        return existing, False
+    return await booking_service.create_customer(db, user_id, phone, name), True
+
+
 async def create_or_link(
     db: AsyncSession, agyary_id: int, user_id: int, *, name: str, phone: str
 ) -> tuple[Customer, bool]:
     """Register a behdin at this agyari. Returns (customer, created).
 
-    Phone is globally unique and is the identity, so a number already on
-    file resolves to that existing person and is linked to this agyari
-    rather than rejected as a duplicate - the same rule
-    ``_resolve_customer`` has always applied on the booking path, and the
-    reason a behdin who moves between temples keeps one history.
-
-    Their stored name is left alone in that case. A mobed typing a name
-    they half-remember shouldn't quietly rename someone else's long-
-    standing record; renaming is what the update endpoint is for.
+    Within one mobed's book the number is the identity, so a number they
+    already have resolves to their existing record and is linked to this
+    agyari rather than rejected as a duplicate - the same rule
+    ``_resolve_customer`` applies on the booking path, and the reason a
+    behdin who moves between temples keeps one history with their mobed.
+    The stored name is left alone in that case; renaming is what the update
+    endpoint is for. A number only a colleague has is a new record.
     """
     name, phone = name.strip(), phone.strip()
     if not name:
         raise BehdinError("Name is required")
 
-    existing = await booking_service.get_customer_by_phone(db, phone)
-    created = existing is None
-    customer = existing or await booking_service.create_customer(db, phone, name)
+    customer, created = await resolve_own(db, user_id, phone, name)
 
     # Link them to this agyari, but do NOT go through
     # booking_service.ensure_agyary_customer: that stamps first_booking_at,
@@ -152,8 +152,6 @@ async def create_or_link(
     # and the booking path fills it in when a real one arrives.
     if not await is_linked(db, agyary_id, customer.id):
         db.add(AgyaryCustomer(agyary_id=agyary_id, customer_id=customer.id))
-    # ...and into this mobed's own book, which is what the behdin list reads.
-    await claim(db, user_id, customer.id)
     await db.flush()
     return customer, created
 
@@ -161,12 +159,13 @@ async def create_or_link(
 async def update(
     db: AsyncSession, customer: Customer, *, name: str | None = None, phone: str | None = None
 ) -> Customer:
-    """Correct a behdin's name or number.
+    """Correct a behdin's name or number, in this mobed's own record.
 
-    Moving a number onto a person who already has their own record would
-    merge two histories - refused here, because that is a decision with
-    consequences (whose name wins? whose saved names?) and not something to
-    infer from a typo-shaped edit.
+    Moving a number onto a behdin the same mobed already keeps under that
+    number would merge two histories - refused here, because that is a
+    decision with consequences (whose name wins? whose saved names?) and not
+    something to infer from a typo-shaped edit. A colleague's record of the
+    number is no obstacle and is not touched.
     """
     if name is not None:
         cleaned = name.strip()
@@ -179,46 +178,38 @@ async def update(
         if not cleaned:
             raise BehdinError("Phone cannot be blank")
         if cleaned != customer.phone:
-            clash = await booking_service.get_customer_by_phone(db, cleaned)
+            clash = await booking_service.get_customer_by_phone(db, customer.owner_user_id, cleaned)
             if clash is not None:
                 raise BehdinError(
-                    "Another behdin is already registered with that number. "
+                    "You already have a behdin with that number. "
                     "Open their record instead of moving the number."
                 )
             customer.phone = cleaned
+            # A number that replied STOP stays stopped under any record. (A STOP
+            # already on this record is never lifted by a change of number.)
+            opt_out = await db.get(ReminderOptOut, cleaned)
+            if opt_out is not None and customer.reminders_stopped_at is None:
+                customer.reminders_stopped_at = opt_out.stopped_at
 
     await db.flush()
     return customer
 
 
-async def remove_from_book(
-    db: AsyncSession, user_id: int, customer: Customer
-) -> bool:
-    """Delete a behdin from THIS mobed's book. Returns True if the person's
-    record was erased outright, False if it was only taken out of this book.
+async def remove_from_book(db: AsyncSession, customer: Customer) -> bool:
+    """Take a behdin out of this mobed's book. Returns True if the record was
+    erased outright, False if it was only taken out of the list.
 
     Their events are kept either way - a ceremony that was performed is
     history, and a slip must still print after the behdin is gone from the
     list. That is also why the record often cannot go: bookings and machis
-    point at it (customer_id is required), so it stays, unlisted, holding the
-    number. Adding the same number again links them straight back in, history
-    and all, which is the right outcome for an accidental delete.
+    point at it (customer_id is required), so it stays, unlisted and with
+    reminders off, holding the number. Adding the same number again brings
+    them straight back, history and all, which is the right outcome for an
+    accidental delete - but reminders stay off until the mobed asks again.
 
-    The record itself is erased only when nothing is left that needs it: no
-    other mobed has them in their book, and no event or payment refers to
-    them. Then the number is genuinely free again, and their saved names go
-    with them (those cascade).
+    The record is erased only when nothing refers to it: no event, memorial
+    or payment. Then its saved names go with it (those cascade).
     """
-    await db.execute(
-        delete(UserCustomer).where(
-            UserCustomer.user_id == user_id, UserCustomer.customer_id == customer.id
-        )
-    )
-    other_owners = (
-        await db.execute(
-            select(func.count()).select_from(UserCustomer).where(UserCustomer.customer_id == customer.id)
-        )
-    ).scalar_one()
     references = 0
     for model in (Booking, Machi, Memorial, Payment):
         references += (
@@ -226,7 +217,10 @@ async def remove_from_book(
                 select(func.count()).select_from(model).where(model.customer_id == customer.id)
             )
         ).scalar_one()
-    if other_owners or references:
+    if references:
+        customer.is_active = False
+        customer.reminders_enabled = False
+        customer.reminders_enabled_at = None
         await db.flush()
         return False
 

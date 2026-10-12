@@ -35,6 +35,7 @@ from agyary.models import (
     CustomerSavedName,
     Machi,
     Payment,
+    ReminderOptOut,
     Service,
     User,
 )
@@ -45,13 +46,23 @@ class SlotTakenError(Exception):
     """The requested machi slot was booked concurrently."""
 
 
-async def get_customer_by_phone(db: AsyncSession, phone: str) -> Customer | None:
-    result = await db.execute(select(Customer).where(Customer.phone == phone))
+async def get_customer_by_phone(db: AsyncSession, owner_user_id: int, phone: str) -> Customer | None:
+    """This mobed's own record of a number, if they have one. Never anyone
+    else's: another mobed's record of the same family is theirs (D2)."""
+    result = await db.execute(
+        select(Customer).where(Customer.owner_user_id == owner_user_id, Customer.phone == phone)
+    )
     return result.scalar_one_or_none()
 
 
-async def create_customer(db: AsyncSession, phone: str, name: str = "") -> Customer:
-    customer = Customer(phone=phone, name=name)
+async def create_customer(db: AsyncSession, owner_user_id: int, phone: str, name: str = "") -> Customer:
+    """A new record in this mobed's book. A number that replied STOP starts
+    stopped, however recently the mobed met them."""
+    opt_out = await db.get(ReminderOptOut, phone)
+    customer = Customer(
+        owner_user_id=owner_user_id, phone=phone, name=name,
+        reminders_stopped_at=opt_out.stopped_at if opt_out else None,
+    )
     db.add(customer)
     await db.flush()
     return customer

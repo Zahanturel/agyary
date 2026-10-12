@@ -153,7 +153,7 @@ async def test_a_taken_slot_is_skipped_without_stalling_the_marker(db, seeded):
 
     # Occupy the month after the horizon, before the recurrence reaches it.
     blocked_mah = START_MAH + mobed_dashboard.RECURRENCE_HORIZON_PERIODS + 1
-    other = await booking_service.create_customer(db, "+919900055555", "Behdin Other")
+    other = await booking_service.create_customer(db, _source.created_by_user_id, "+919900055555", "Behdin Other")
     taken = await booking_service.book_machi_slot(
         db, agyary, other, roj=ROJ, mah=blocked_mah, year=YEAR, geh=GEH,
         gregorian=_greg(agyary, blocked_mah), purpose="patet", names=[],

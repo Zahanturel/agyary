@@ -38,7 +38,6 @@ from agyary.models import (
     MemorialObservanceService,
     Notification,
     Service,
-    UserCustomer,
 )
 from agyary.models.enums import CALENDAR_SYSTEMS
 from agyary.services import mobed_dashboard, reminder_message
@@ -464,14 +463,11 @@ async def reminders_due(
         await db.execute(
             select(
                 MemorialObservance, Memorial, Customer.name, Customer.phone,
-                UserCustomer.reminders_enabled, Customer.reminders_stopped_at,
+                Customer.reminders_enabled & (Customer.owner_user_id == user_id),
+                Customer.reminders_stopped_at,
             )
             .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
             .join(Customer, Customer.id == Memorial.customer_id)
-            .outerjoin(
-                UserCustomer,
-                (UserCustomer.user_id == user_id) & (UserCustomer.customer_id == Memorial.customer_id),
-            )
             .options(selectinload(MemorialObservance.services))
             .where(
                 Memorial.created_by_user_id == user_id,

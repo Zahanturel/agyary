@@ -81,8 +81,9 @@ loop), `guardrails` (caps, pause, alerts), `otp` (sign-in by WhatsApp code),
 ### 2.2 Data model (24 tables)
 
 - **People and places:** `users` (mobeds), `agyaries`, `agyary_users` (membership and
-  role), `customers` (behdins, unique by E.164 phone), `agyary_customers`,
-  `user_customers` (a mobed's own behdin book; also holds the reminder consent),
+  role), `customers` (behdins: one record per mobed per family, `owner_user_id`, the
+  number unique within one mobed's book; also holds the reminder consent),
+  `reminder_opt_outs` (numbers that replied STOP), `agyary_customers`,
   `customer_saved_names`, `ceremony_names`, `user_preferences`.
 - **Bookings:** `bookings`, `booking_mobeds`, `machis`, `services`, `recurrence_rules`,
   `bulk_batches`, `payments` (a ledger of UPI links the app does not touch money for).
@@ -91,9 +92,11 @@ loop), `guardrails` (caps, pause, alerts), `otp` (sign-in by WhatsApp code),
   reminder), `app_notifications` (what a mobed sees in the app), `wa_login_attempts`,
   `login_otps`, `app_settings` (the pause flag).
 
-Privacy shape: memorials and behdins are private to the mobed who made them; a
-colleague at the same temple cannot read them. A STOP is the person's
-(`customers.reminders_stopped_at`), so it holds for every mobed.
+Privacy shape (D2): memorials and behdins are private to the mobed who made them; a
+colleague at the same temple cannot read them, and typing a number a colleague has
+makes a record of one's own. A STOP is the person's: it stops every mobed's record of
+the number and is remembered in `reminder_opt_outs` for records made later; a mobed
+lifts it ("they asked me to") for their own record only.
 
 ### 2.3 Key flows
 

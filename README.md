@@ -10,8 +10,9 @@ they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
   calendars (Shenshai, Kadmi, Fasli) next to the Gregorian one, per-fire-temple
   Machi Board, and a shared print-ready slip for each ceremony.
 - **Behdins.** Each mobed keeps their own book of the families they look after,
-  with saved names reused on every booking. A behdin is a person keyed by phone
-  number; one mobed's book is never visible to a colleague.
+  with saved names reused on every booking. Each mobed's record of a family is
+  their own: a colleague who serves the same family keeps a separate record, and
+  neither can see or change the other's (docs/DECISIONS.md D2).
 - **Memorials.** From a date of death the app works out every observance a
   family keeps (the opening days, the 30th day, monthly, yearly, the Parabs) and
   puts them on the calendar. See [docs/memorial-plan.md](docs/memorial-plan.md).

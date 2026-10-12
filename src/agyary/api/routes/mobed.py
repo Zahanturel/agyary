@@ -405,6 +405,7 @@ async def put_preferences(
 # ---------------------------------------------------------------------------
 # Agyari search / join
 # ---------------------------------------------------------------------------
+
 def _agyary_summary(a: Agyary) -> dict:
     return {
         "id": a.id,
@@ -852,7 +853,7 @@ async def delete_behdin(
     behdin_directory.remove_from_book. ``erased`` says whether the record
     itself went too, or only their place in this mobed's list."""
     customer = await _require_behdin(db, agyary_id, customer_id, user)
-    erased = await behdin_directory.remove_from_book(db, user.id, customer)
+    erased = await behdin_directory.remove_from_book(db, customer)
     await db.commit()
     return {"deleted": True, "erased": erased}
 

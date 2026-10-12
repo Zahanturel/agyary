@@ -1,11 +1,12 @@
 """WhatsApp reminders to a family: who has agreed, and what a STOP does.
 
 The agreement is made in person. A mobed asks the behdin and turns reminders
-on for them (``UserCustomer.reminders_enabled``); nothing is ever sent to
-someone it has not been turned on for. A behdin can withdraw at any time by
-replying STOP to a reminder, which is recorded on the person
-(``Customer.reminders_stopped_at``), switches reminders off for every mobed
-who had them on, and tells each of those mobeds in the app.
+on for their own record of them (``Customer.reminders_enabled``); nothing is
+ever sent to someone it has not been turned on for. A behdin can withdraw at
+any time by replying STOP to a reminder. That is the person's, not any
+mobed's: it is remembered against the number (``ReminderOptOut``), stops
+every mobed's record of it (``Customer.reminders_stopped_at``), and tells
+each mobed who had reminders on, in the app.
 
 A STOP is final until a mobed says otherwise. Turning reminders back on for
 someone who stopped needs an explicit confirmation, because the only honest
@@ -19,10 +20,11 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
-from agyary.models import AppNotification, Customer, Memorial, MemorialObservance, UserCustomer
+from agyary.models import AppNotification, Customer, Memorial, MemorialObservance, ReminderOptOut
 
 # How long a notification stays up. They are about what to do now, not a log.
 NOTIFICATION_TTL = timedelta(hours=24)
@@ -78,9 +80,8 @@ async def notify(
 
 async def reminder_state(db: AsyncSession, user_id: int, customer: Customer) -> dict:
     """Whether reminders are on for this behdin, and whether they ever said STOP."""
-    row = await db.get(UserCustomer, (user_id, customer.id))
     return {
-        "enabled": bool(row and row.reminders_enabled),
+        "enabled": bool(customer.owner_user_id == user_id and customer.reminders_enabled),
         "stopped_at": customer.reminders_stopped_at.isoformat() if customer.reminders_stopped_at else None,
         # So the screen can say plainly whether anything is being sent yet.
         "delivery": get_settings().reminders_send_mode,
@@ -96,10 +97,13 @@ async def set_reminders(
     confirm_restart: bool = False,
     now: datetime | None = None,
 ) -> dict:
-    """Turn reminders on or off for one of this mobed's behdins."""
+    """Turn reminders on or off for one of this mobed's behdins.
+
+    Lifting a STOP ("they asked me to") lifts it for this mobed's record only:
+    the person asked this mobed. Every other mobed's record of the number stays
+    stopped, and so does the number itself for anyone who adds it later."""
     now = now or _now()
-    row = await db.get(UserCustomer, (user_id, customer.id))
-    if row is None:
+    if customer.owner_user_id != user_id:
         raise ReminderError("That behdin is not in your book.", "not_in_book")
 
     if enabled:
@@ -111,11 +115,11 @@ async def set_reminders(
                     "stopped",
                 )
             customer.reminders_stopped_at = None
-        row.reminders_enabled = True
-        row.reminders_enabled_at = now
+        customer.reminders_enabled = True
+        customer.reminders_enabled_at = now
     else:
-        row.reminders_enabled = False
-        row.reminders_enabled_at = None
+        customer.reminders_enabled = False
+        customer.reminders_enabled_at = None
     await db.flush()
     return await reminder_state(db, user_id, customer)
 
@@ -123,37 +127,44 @@ async def set_reminders(
 async def record_stop(db: AsyncSession, phone: str, *, now: datetime | None = None) -> int:
     """A person replied STOP from ``phone``. Returns how many mobeds were told.
 
+    The STOP is the person's: it is remembered against the number (so a mobed
+    who adds it later starts stopped), and it stops every mobed's record of it.
+    Each mobed who had reminders on is told, about their own record.
+
     Idempotent: Meta redelivers webhooks, and people send STOP twice. The
-    second one finds them already stopped and does nothing, so no mobed is
-    told twice.
+    second one finds every record already stopped and tells nobody again.
     """
     now = now or _now()
-    customer = (
-        await db.execute(select(Customer).where(Customer.phone == phone))
-    ).scalar_one_or_none()
-    if customer is None or customer.reminders_stopped_at is not None:
-        return 0
-
-    customer.reminders_stopped_at = now
-    rows = (
+    await db.execute(
+        pg_insert(ReminderOptOut)
+        .values(phone=phone, stopped_at=now)
+        .on_conflict_do_update(index_elements=[ReminderOptOut.phone], set_={"stopped_at": now})
+    )
+    records = (
         await db.execute(
-            select(UserCustomer).where(
-                UserCustomer.customer_id == customer.id, UserCustomer.reminders_enabled.is_(True)
-            )
+            select(Customer).where(Customer.phone == phone, Customer.reminders_stopped_at.is_(None))
         )
     ).scalars().all()
-    for row in rows:
-        row.reminders_enabled = False
-        row.reminders_enabled_at = None
+
+    told = 0
+    for customer in records:
+        customer.reminders_stopped_at = now
+        if not customer.reminders_enabled:
+            continue
+        customer.reminders_enabled = False
+        customer.reminders_enabled_at = None
+        if customer.owner_user_id is None:
+            continue
         await notify(
-            db, row.user_id, KIND_REMINDER_STOPPED,
+            db, customer.owner_user_id, KIND_REMINDER_STOPPED,
             f"{customer.name} stopped reminders",
             f"{customer.name} replied STOP, so WhatsApp reminders to them are now off. "
             "Turn them back on only if they ask you to.",
             link=f"#/behdins/{customer.id}", now=now,
         )
+        told += 1
     await db.flush()
-    return len(rows)
+    return told
 
 
 async def notify_closing_tomorrow(db: AsyncSession, now: datetime | None = None) -> int:

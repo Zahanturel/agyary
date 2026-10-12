@@ -40,7 +40,6 @@ from agyary.models import (
     MemorialObservance,
     Notification,
     Service,
-    UserCustomer,
 )
 from agyary.services import guardrails, reminder_message, reminders
 from agyary.services.memorials import OPENING_DAYS
@@ -136,16 +135,13 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
             .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
             .join(Customer, Customer.id == Memorial.customer_id)
             .join(Agyary, Agyary.id == Memorial.agyary_id)
-            .join(
-                UserCustomer,
-                (UserCustomer.user_id == Memorial.created_by_user_id)
-                & (UserCustomer.customer_id == Memorial.customer_id),
-            )
             .options(selectinload(MemorialObservance.services))
             .where(
                 MemorialObservance.gregorian_date == tomorrow,
                 MemorialObservance.day_number > OPENING_DAYS,
-                UserCustomer.reminders_enabled.is_(True),
+                # The memorial's own mobed's record of the family, with their consent.
+                Customer.owner_user_id == Memorial.created_by_user_id,
+                Customer.reminders_enabled.is_(True),
                 Customer.reminders_stopped_at.is_(None),
                 Customer.is_active.is_(True),
             )
@@ -335,8 +331,7 @@ async def _withdrawn(db: AsyncSession, n: Notification) -> str | None:
     if customer.reminders_stopped_at is not None:
         return "Replied STOP before it was sent"
     owner, _ = await _owner_and_name(db, n)
-    row = await db.get(UserCustomer, (owner, customer.id)) if owner is not None else None
-    if row is None or not row.reminders_enabled:
+    if owner is None or customer.owner_user_id != owner or not customer.reminders_enabled:
         return "Reminders were turned off before it was sent"
     return None
 

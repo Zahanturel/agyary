@@ -32,7 +32,6 @@ from agyary.models import (
     Payment,
     RecurrenceRule,
     Service,
-    UserCustomer,
     UserPreferences,
 )
 from agyary.models.enums import ADMIN_ROLES, DEFAULT_SECONDARY_CALENDAR_SYSTEM, SLOT_RELEASING_STATUSES
@@ -329,7 +328,7 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
     without this any signed-in account could count up ids and read them all.
     """
     customer = await db.get(Customer, customer_id)
-    if customer is None or await db.get(UserCustomer, (user_id, customer_id)) is None:
+    if customer is None or customer.owner_user_id != user_id:
         return None
 
     machis = (
@@ -400,23 +399,17 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
 
 
 async def _resolve_customer(
-    db: AsyncSession, phone: str, name: str, actor_user_id: int | None = None
+    db: AsyncSession, phone: str, name: str, actor_user_id: int
 ) -> Customer:
-    """Same shared lookup both surfaces hit (doc 05) - reuses exactly the
-    customer pool the WhatsApp flows already use, not a second saved-name
-    system for the mobed side.
-
-    ``actor_user_id`` puts the behdin into that mobed's own book. Serving
-    someone is how most behdins get there: without this, a walk-in entered
-    through the event flow would never show up in the mobed's behdin list.
+    """The acting mobed's own record of this number - the one they have, or
+    a new one under the typed name (behdin_directory.resolve_own). Serving
+    someone is how most behdins get into a mobed's book: a walk-in entered
+    through the event flow shows up in their behdin list. A colleague's
+    record of the same number is never used, read or linked (D2).
     """
-    customer = await booking_service.get_customer_by_phone(db, phone)
-    if customer is None:
-        customer = await booking_service.create_customer(db, phone, name)
-    if actor_user_id is not None:
-        from agyary.services import behdin_directory
+    from agyary.services import behdin_directory
 
-        await behdin_directory.claim(db, actor_user_id, customer.id)
+    customer, _ = await behdin_directory.resolve_own(db, actor_user_id, phone, name)
     return customer
 
 
@@ -887,26 +880,24 @@ async def get_booking_detail(
 
 
 async def _apply_behdin_edit(
-    db: AsyncSession, ceremony, behdin_phone: str, behdin_name: str,
-    actor_user_id: int | None = None,
+    db: AsyncSession, ceremony, behdin_phone: str, behdin_name: str, actor_user_id: int,
 ) -> None:
-    """Re-point a ceremony to the customer identified by (possibly edited)
-    phone, creating them if new - the PWA
-    gives the mobed the flexibility to correct a walk-in's number."""
+    """Re-point a ceremony to the record of the (possibly edited) phone,
+    creating it if new - the PWA gives the mobed the flexibility to correct a
+    walk-in's number. The record is the one in the book of the mobed whose
+    event it is (its creator; the editor only for an event nobody created in
+    the app), never a colleague's (D2)."""
+    from agyary.services import behdin_directory
+
     phone, name = behdin_phone.strip(), behdin_name.strip()
     if not phone:
         return
-    customer = await booking_service.get_customer_by_phone(db, phone)
-    if customer is None:
-        customer = await booking_service.create_customer(db, phone, name)
+    owner = ceremony.created_by_user_id or actor_user_id
     # An existing behdin keeps the name they have. Renaming happens in behdin
-    # management and nowhere else: this row is shared, so an event form that
-    # rewrote it would rename the person for every mobed who knows them.
+    # management and nowhere else, so an event form never silently renames
+    # the person in the mobed's book.
+    customer, _ = await behdin_directory.resolve_own(db, owner, phone, name)
     ceremony.customer_id = customer.id
-    if actor_user_id is not None:
-        from agyary.services import behdin_directory
-
-        await behdin_directory.claim(db, actor_user_id, customer.id)
     await db.flush()
 
 
@@ -1269,9 +1260,7 @@ async def _preview_customer(
     Only the reader's own: the preview writes nothing, so answering for any
     number on file would let anyone type numbers and read back each family's
     stored name and saved names, without a trace."""
-    customer = await booking_service.get_customer_by_phone(db, phone)
-    if customer is not None and await db.get(UserCustomer, (reader_user_id, customer.id)) is None:
-        customer = None
+    customer = await booking_service.get_customer_by_phone(db, reader_user_id, phone)
     return (customer.name if customer else typed_name.strip()), phone, customer
 
 

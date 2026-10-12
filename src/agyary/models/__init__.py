@@ -10,7 +10,7 @@ from agyary.models.app_setting import AppSetting
 from agyary.models.booking import Booking, BookingMobed
 from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
-from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName
+from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName, ReminderOptOut
 from agyary.models.login_otp import LoginOtp
 from agyary.models.machi import Machi
 from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
@@ -20,7 +20,6 @@ from agyary.models.preferences import UserPreferences
 from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
 from agyary.models.user import AgyaryUser, User
-from agyary.models.user_customer import UserCustomer
 from agyary.models.wa_login import WaLoginAttempt
 
 __all__ = [
@@ -43,9 +42,9 @@ __all__ = [
     "Notification",
     "Payment",
     "RecurrenceRule",
+    "ReminderOptOut",
     "Service",
     "User",
-    "UserCustomer",
     "UserPreferences",
     "WaLoginAttempt",
 ]

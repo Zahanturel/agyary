@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from agyary.models import Customer, UserCustomer
+from agyary.models import Customer
 from agyary.services import reminders
 from tests.test_mobed_api import NEW_MOBED_PHONE, _member_headers
 
@@ -64,7 +64,9 @@ async def test_the_agreement_is_with_one_mobed_only(client, db, seeded):
     assert (await client.put(_url(aid, cid), json={"enabled": True}, headers=other)).status_code == 404
 
     await client.put(_url(aid, cid), json={"enabled": True}, headers=headers)
-    row = await db.get(UserCustomer, (await _user_id(db, NEW_MOBED_PHONE), cid))
+    row = await db.get(Customer, cid)
+    await db.refresh(row)
+    assert row.owner_user_id == await _user_id(db, NEW_MOBED_PHONE)
     assert row.reminders_enabled and row.reminders_enabled_at is not None
 
 

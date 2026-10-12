@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from agyary.models import Customer, CustomerSavedName, UserCustomer
+from agyary.models import Customer, CustomerSavedName
 from tests.test_mobed_api import _member_headers
 
 PHONE = "+919944400901"
@@ -93,12 +93,13 @@ async def test_deleting_leaves_another_mobeds_book_alone(db, client, seeded):
     mine = await _member_headers(client, seeded)
     theirs = await _member_headers(client, seeded, name="Other Mobed", phone=OTHER)
     b = await _add(client, aid, mine)
-    await _add(client, aid, theirs)          # same number: linked into their book too
+    t = await _add(client, aid, theirs)      # same number: a record of their own (D2)
+    assert t["id"] != b["id"]
 
     r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}", headers=mine)
-    assert r.json()["erased"] is False       # someone else still has them
-    assert b["id"] in await _listed(client, aid, theirs)
-    assert (await db.execute(select(UserCustomer).where(UserCustomer.customer_id == b["id"]))).scalars().all()
+    assert r.json()["erased"] is True        # mine had nothing referring to it
+    assert await _listed(client, aid, theirs) == [t["id"]]
+    assert await db.get(Customer, t["id"]) is not None
 
 
 async def test_you_cannot_delete_a_behdin_who_is_not_yours(db, client, seeded):
