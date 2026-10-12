@@ -1252,10 +1252,19 @@ async def get_booking_slip(
 # ---------------------------------------------------------------------------
 # Preview: the slip as it WILL print, before anything is saved
 # ---------------------------------------------------------------------------
-async def _preview_customer(db: AsyncSession, phone: str, typed_name: str) -> tuple[str, str, Customer | None]:
-    """Who the slip will name. A number already on file keeps its stored name
-    (the same rule saving applies); one that isn't yet shows what was typed."""
+async def _preview_customer(
+    db: AsyncSession, phone: str, typed_name: str, reader_user_id: int
+) -> tuple[str, str, Customer | None]:
+    """Who the slip will name. A number already in this mobed's own book keeps
+    its stored name (the same rule saving applies); any other number - new, or
+    on file only in a colleague's book - shows what was typed.
+
+    Only the reader's own: the preview writes nothing, so answering for any
+    number on file would let anyone type numbers and read back each family's
+    stored name and saved names, without a trace."""
     customer = await booking_service.get_customer_by_phone(db, phone)
+    if customer is not None and await db.get(UserCustomer, (reader_user_id, customer.id)) is None:
+        customer = None
     return (customer.name if customer else typed_name.strip()), phone, customer
 
 
@@ -1276,7 +1285,7 @@ async def preview_booking_slip(
     service = await booking_service.get_service_by_id(db, agyary.id, service_id)
     if service is None:
         return None
-    name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name)
+    name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name, reader_user_id)
     pool_empty = await _pool_is_empty(db, customer)
     if names is None:
         names = await _auto_names(db, customer.id, service.name) if customer else []
@@ -1295,7 +1304,7 @@ async def preview_machi_slip(
     geh: int, purpose: str, names: list[dict] | None, editing_machi_id: int | None = None,
     recurring: str | None = None,
 ) -> dict:
-    name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name)
+    name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name, reader_user_id)
     pool_empty = await _pool_is_empty(db, customer)
     if names is None:
         names = (
