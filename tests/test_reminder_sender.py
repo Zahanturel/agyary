@@ -42,17 +42,21 @@ def _evening(day_before: date, hour: int = 19, minute: int = 30) -> datetime:
 class FakeMeta:
     """Stands in for graph.facebook.com and records what it was sent."""
 
-    def __init__(self, status: int = 200, body: dict | None = None):
+    def __init__(self, status: int = 200, body: dict | None = None, code: int | None = None):
         self.status, self.calls = status, []
         self.body = body
+        self.code = code            # Meta's own error code, e.g. 190 or 131026
 
     def client(self) -> httpx.AsyncClient:
         def handler(request: httpx.Request) -> httpx.Response:
             self.calls.append(request)
             body = self.body
             if body is None:
+                error = {"message": "Template not approved"}
+                if self.code is not None:
+                    error["code"] = self.code
                 body = ({"messages": [{"id": f"wamid.{len(self.calls)}"}]} if self.status == 200
-                        else {"error": {"message": "Template not approved"}})
+                        else {"error": error})
             return httpx.Response(self.status, json=body)
         return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
@@ -169,8 +173,7 @@ async def test_live_sends_only_to_the_allowlist(client, db, seeded):
 
 async def test_one_fire_temple_cannot_send_more_than_its_daily_cap(client, db, seeded, monkeypatch):
     *_, now = await _scenario(client, db, seeded)
-    monkeypatch.setattr(reminder_sender, "PER_AGYARY_DAILY_CAP", 0)
-    assert await reminder_sender.plan_tomorrow(db, now, _settings()) == 0
+    assert await reminder_sender.plan_tomorrow(db, now, _settings(reminders_per_agyary_daily_cap=0)) == 0
 
 
 # --- Sending ----------------------------------------------------------------

@@ -160,6 +160,27 @@ async def claim(db: AsyncSession, code: str, phone: str) -> bool:
     return True
 
 
+async def create_claimed(db: AsyncSession, phone: str) -> str:
+    """An attempt that is claimed from the start, for a phone already proven by
+    another route (a code sent to it and typed back). Returns the poll secret
+    for the cookie. Reusing this row is what lets that route share the rest of
+    the flow - the first-time name step, the session, the cookie - unchanged."""
+    settings = get_settings()
+    poll_secret = secrets.token_urlsafe(32)
+    now = datetime.now(UTC)
+    db.add(
+        WaLoginAttempt(
+            code=generate_code(),
+            poll_secret_hash=_hash_secret(poll_secret),
+            expires_at=now + timedelta(seconds=settings.wa_login_ttl_seconds),
+            claimed_phone=phone,
+            claimed_at=now,
+        )
+    )
+    await db.flush()
+    return poll_secret
+
+
 async def peek_claimed_phone(db: AsyncSession, poll_secret: str) -> str | None:
     """The phone this browser's attempt was claimed by, or None if it is
     still waiting. Does NOT consume the row.

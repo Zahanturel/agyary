@@ -6,10 +6,12 @@ Alembic autogeneration and metadata.create_all depend on.
 
 from agyary.models.agyary import Agyary
 from agyary.models.app_notification import AppNotification
+from agyary.models.app_setting import AppSetting
 from agyary.models.booking import Booking, BookingMobed
 from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName
+from agyary.models.login_otp import LoginOtp
 from agyary.models.machi import Machi
 from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
 from agyary.models.notification import Notification
@@ -26,12 +28,14 @@ __all__ = [
     "AgyaryCustomer",
     "AgyaryUser",
     "AppNotification",
+    "AppSetting",
     "Booking",
     "BookingMobed",
     "BulkBatch",
     "CeremonyName",
     "Customer",
     "CustomerSavedName",
+    "LoginOtp",
     "Machi",
     "Memorial",
     "MemorialObservance",

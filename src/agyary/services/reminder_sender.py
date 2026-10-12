@@ -42,7 +42,7 @@ from agyary.models import (
     Service,
     UserCustomer,
 )
-from agyary.services import reminder_message, reminders
+from agyary.services import guardrails, reminder_message, reminders
 from agyary.services.memorials import OPENING_DAYS
 
 logger = logging.getLogger(__name__)
@@ -51,11 +51,20 @@ IST = ZoneInfo("Asia/Kolkata")
 TYPE = "memorial_reminder"
 
 # A reminder that will not send is retried this many times, then given up on
-# and the mobed told, rather than hammered all evening.
+# and the mobed told, rather than hammered all evening. The spend ceilings (per
+# day, month, mobed and fire temple) are in guardrails and the settings.
 MAX_ATTEMPTS = 3
-# One fire temple cannot send more than this in an evening. The shared number
-# has one reputation with Meta for everybody; a runaway agyari must not spend it.
-PER_AGYARY_DAILY_CAP = 300
+
+# Meta error codes that say something is wrong with the ACCOUNT, not with one
+# recipient, so carrying on only repeats the problem: an invalid or expired
+# token (190), a payment or eligibility problem (131042), a locked account
+# (131031), spam or throughput limits (131048, 130429, 80007), a policy block
+# (368), and a template that is missing, paused or disabled (132001, 132015,
+# 132016). Any of them pauses all sending.
+ACCOUNT_CODES = {190, 131042, 131031, 131048, 130429, 80007, 368, 132001, 132015, 132016}
+# Codes that are about one recipient (not on WhatsApp, not allowed to receive):
+# they fail that reminder but never count toward pausing everything.
+RECIPIENT_CODES = {131026, 131021, 131030}
 
 
 @dataclass
@@ -80,7 +89,16 @@ def reset_dry_run_log() -> None:
 
 class _Permanent(Exception):
     """Meta refused it and asking again will not help (a bad number, a
-    template that is not approved)."""
+    template that is not approved). ``code`` is Meta's error code, if it gave one."""
+
+    def __init__(self, message: str, code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class _AccountProblem(_Permanent):
+    """Something is wrong with the account itself - the token, payment, a
+    throttle, the template - so every send will hit it. Pauses all sending."""
 
 
 class _Transient(Exception):
@@ -136,13 +154,20 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
     ).all()
 
     service_names: dict[int, dict[int, str]] = {}
-    per_agyary: dict[int, int] = {}
+    used = await guardrails.usage(db, now)
+    blocked: dict[str, int] = {}
     planned = 0
     for obs, memorial, customer, agyary_name in rows:
         if mode == "live" and not _may_send_to(settings, customer.phone):
             continue
-        if per_agyary.get(memorial.agyary_id, 0) >= PER_AGYARY_DAILY_CAP:
-            logger.warning("Reminder cap reached for agyari %s", memorial.agyary_id)
+
+        # The ceilings: a reminder over any of them is not sent, the mobed is
+        # told (so they can send it by hand), and the admins are alerted below.
+        limit = used.blocker(settings, memorial.created_by_user_id, memorial.agyary_id)
+        if limit:
+            blocked[limit] = blocked.get(limit, 0) + 1
+            if mode == "live":
+                await _record_blocked(db, settings, obs, memorial, customer, limit, now)
             continue
 
         if memorial.agyary_id not in service_names:
@@ -164,7 +189,7 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
                     "DRY RUN - would send to %s:\n%s", customer.phone, reminder_message.template_text(parts)
                 )
             planned += 1
-            per_agyary[memorial.agyary_id] = per_agyary.get(memorial.agyary_id, 0) + 1
+            used.add(memorial.created_by_user_id, memorial.agyary_id)
             continue
 
         inserted = await db.execute(
@@ -179,6 +204,7 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
                 template_params={str(i): v for i, v in enumerate(parts.as_params(), start=1)},
                 memorial_observance_id=obs.id,
                 scheduled_at=now,
+                created_at=now,
                 status="pending",
             )
             .on_conflict_do_nothing(
@@ -188,9 +214,51 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
         )
         if inserted.rowcount:
             planned += 1
-            per_agyary[memorial.agyary_id] = per_agyary.get(memorial.agyary_id, 0) + 1
+            used.add(memorial.created_by_user_id, memorial.agyary_id)
+    if blocked:
+        await guardrails.alert_admins(
+            db, settings, "Reminder limit reached",
+            "; ".join(f"{n} reminder{'s' if n != 1 else ''} not sent because of {why}" for why, n in blocked.items())
+            + ". Raise the limit in the server settings if this is expected.",
+            now=now,
+        )
     await db.flush()
     return planned
+
+
+async def _record_blocked(
+    db: AsyncSession, settings: Settings, obs, memorial, customer, limit: str, now: datetime
+) -> None:
+    """Note a reminder a ceiling stopped, and tell its mobed - once. The row is
+    unique on the observance, so the loop asking every minute does not tell
+    them every minute; and it shows on their Reminders list as not sent."""
+    inserted = await db.execute(
+        pg_insert(Notification)
+        .values(
+            agyary_id=memorial.agyary_id,
+            recipient_phone=customer.phone,
+            recipient_type="customer",
+            recipient_id=customer.id,
+            notification_type=TYPE,
+            template_name=settings.whatsapp_reminder_template,
+            memorial_observance_id=obs.id,
+            scheduled_at=now,
+            created_at=now,
+            status="failed",
+            error_message=f"Not sent: {limit} was reached",
+        )
+        .on_conflict_do_nothing(
+            index_elements=[Notification.memorial_observance_id],
+            index_where=text("notification_type = 'memorial_reminder'"),
+        )
+    )
+    if inserted.rowcount:
+        await reminders.notify(
+            db, memorial.created_by_user_id, "reminder_failed", f"Reminder to {customer.name} was not sent",
+            f"We did not send tomorrow's reminder to {customer.name} because {limit} was reached. "
+            "You can still send it yourself with Remind on WhatsApp in the Reminders list.",
+            link="#/reminders", agyary_id=memorial.agyary_id, now=now,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -226,13 +294,17 @@ async def _post(client: httpx.AsyncClient, n: Notification, settings: Settings) 
         except (KeyError, IndexError, ValueError) as exc:
             raise _Transient("Meta accepted the message but sent no id") from exc
 
+    code = None
     try:
-        reason = resp.json()["error"]["message"]
+        error = resp.json()["error"]
+        reason, code = error["message"], error.get("code")
     except (KeyError, ValueError, TypeError):
         reason = f"HTTP {resp.status_code}"
+    if code in ACCOUNT_CODES:
+        raise _AccountProblem(reason, code)
     # 4xx (except "slow down") is a refusal that repeating will not change.
     if 400 <= resp.status_code < 500 and resp.status_code != 429:
-        raise _Permanent(reason)
+        raise _Permanent(reason, code)
     raise _Transient(reason)
 
 
@@ -292,8 +364,13 @@ async def send_pending(
         logger.error("Reminders are live but WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID are not set")
         return report
 
+    paused = await guardrails.paused_reason(db)
+    if paused:
+        logger.warning("Reminder sending is paused (%s); nothing will be sent", paused)
+
     local = now.astimezone(IST)
     sent_for: dict[int, list[str]] = {}
+    streak = 0            # failures in a row, not counting a single bad number
     while True:
         n = (
             await db.execute(
@@ -311,11 +388,18 @@ async def send_pending(
         # Too late to say "tomorrow": it is past the cutoff, or it is a later day.
         late = local.hour >= settings.reminders_cutoff_hour or n.scheduled_at.astimezone(IST).date() != local.date()
         if late:
-            n.status, n.error_message = "failed", "Not sent in time"
-            await _tell_mobed_failed(db, n, "it was not ready before the evening ended", now)
+            n.status, n.error_message = "failed", "Not sent: sending was paused" if paused else "Not sent in time"
+            await _tell_mobed_failed(
+                db, n, "sending was paused" if paused else "it was not ready before the evening ended", now
+            )
             report.missed += 1
             await db.commit()
             continue
+
+        # Paused: leave it pending. If the pause is lifted in time it goes;
+        # if not, the branch above tells the mobed once the evening is over.
+        if paused:
+            break
 
         # Consent is checked again here, not only when planning: a STOP can
         # arrive between the two, and it must win. The mobed was already told
@@ -329,10 +413,22 @@ async def send_pending(
 
         try:
             n.wa_message_id = await _post(client, n, settings)
+        except _AccountProblem as exc:
+            # The account itself is the problem, so the next send would hit it
+            # too. Keep this reminder pending (it was not this one's fault),
+            # stop everything, and tell the admins.
+            n.error_message = str(exc)[:500]
+            await guardrails.pause(
+                db, settings, f"Meta reported a problem with the account ({exc.code}): {exc}", now=now
+            )
+            await db.commit()
+            break
         except _Permanent as exc:
             n.status, n.error_message = "failed", str(exc)[:500]
             await _tell_mobed_failed(db, n, str(exc), now)
             report.failed += 1
+            if exc.code not in RECIPIENT_CODES:
+                streak += 1
         except _Transient as exc:
             n.retry_count += 1
             n.error_message = str(exc)[:500]
@@ -340,6 +436,7 @@ async def send_pending(
                 n.status = "failed"
                 await _tell_mobed_failed(db, n, "WhatsApp did not accept it after several tries", now)
                 report.failed += 1
+                streak += 1
             else:
                 # Leave it pending for the next tick, and stop for now: a
                 # network that is down is down for the rest of the queue too.
@@ -348,12 +445,20 @@ async def send_pending(
         else:
             n.status, n.sent_at, n.error_message = "sent", now, None
             report.sent += 1
+            streak = 0
             owner, name = await _owner_and_name(db, n)
             if owner is not None:
                 sent_for.setdefault(owner, []).append(name)
         # Committed straight away: once Meta has accepted a message, losing the
         # fact that we sent it would send it again.
         await db.commit()
+
+        if streak >= settings.reminders_breaker_failures:
+            await guardrails.pause(
+                db, settings, f"{streak} reminders in a row failed to send, so sending was paused", now=now
+            )
+            await db.commit()
+            break
 
     for owner, names in sent_for.items():
         await reminders.notify(

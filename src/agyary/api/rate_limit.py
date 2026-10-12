@@ -22,15 +22,17 @@ from fastapi import HTTPException, Request
 _hits: dict[str, list[float]] = defaultdict(list)
 
 
-def _client_key(request: Request, scope: str) -> str:
+def client_ip(request: Request) -> str:
     # Cloudflare Tunnel/any reverse proxy sets this; falls back to the
     # direct peer address for local dev/tests.
     ip = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for")
     if ip:
-        ip = ip.split(",")[0].strip()
-    else:
-        ip = request.client.host if request.client else "unknown"
-    return f"{scope}:{ip}"
+        return ip.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _client_key(request: Request, scope: str) -> str:
+    return f"{scope}:{client_ip(request)}"
 
 
 def enforce(request: Request, scope: str, *, max_requests: int, window_seconds: int) -> None:

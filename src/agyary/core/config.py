@@ -51,6 +51,37 @@ class Settings(BaseSettings):
     reminders_send_hour: int = 19
     reminders_cutoff_hour: int = 21
 
+    # --- Sign-in codes sent over WhatsApp --------------------------------------
+    # A second way to sign in alongside the "send us a code" one: type your
+    # number, we WhatsApp you a six digit code (an Authentication template with a
+    # Copy code button), and the app reads it back from your clipboard. It is
+    # business-initiated and costs a few paise per code, and an unauthenticated
+    # endpoint that sends paid messages to any number is exactly what gets
+    # abused, so it is off by default and ringed with limits (services/otp.py).
+    otp_mode: str = "off"                    # off | live
+    otp_template: str = "login_code"
+    otp_ttl_seconds: int = 300
+    otp_daily_cap: int = 100                 # codes sent per IST day, all numbers
+    otp_new_number_hourly_cap: int = 20      # codes to numbers with no account, per hour
+
+    # --- Spend and abuse guardrails -----------------------------------------
+    # Every reminder costs money, and a bug or a bad actor must not be able to
+    # run that up. These are ceilings, not targets: a reminder over any of them
+    # is not sent, the mobed is told so they can send it by hand, and the admins
+    # are alerted. Counted over reminders planned or sent, never failed ones.
+    reminders_daily_cap: int = 150           # all fire temples, per IST day
+    reminders_monthly_cap: int = 2000        # all fire temples, per IST month
+    reminders_per_mobed_daily_cap: int = 40  # one mobed
+    reminders_per_agyary_daily_cap: int = 100  # one fire temple
+    # Only for the estimate on the admin screen; the real price is Meta's.
+    reminders_cost_per_message_inr: float = 0.14
+    # This many failures in a row (not counting a single bad number) pause all
+    # sending until an admin resumes it.
+    reminders_breaker_failures: int = 5
+    # Comma separated E.164 numbers of the people who can see the admin screen,
+    # pause sending, and receive alerts. Empty means nobody is an admin.
+    admin_phones: str = ""
+
     # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
     # another login to remember, and the WhatsApp number is already the
     # identity.
