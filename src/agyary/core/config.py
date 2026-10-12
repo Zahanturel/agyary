@@ -116,6 +116,12 @@ class Settings(BaseSettings):
     # untouched for the whole period. Sign out on the menu screen is the way
     # to end a session deliberately; it clears this cookie server-side.
     jwt_refresh_token_days: int = 3650
+    # But no session lives longer than this, however often it is used (AU-2):
+    # after a year the mobed signs in again.
+    jwt_session_max_days: int = 365
+    # Refresh tokens from before sessions existed are moved into a session on
+    # their next use until this date (YYYY-MM-DD), and refused after it.
+    jwt_legacy_tokens_until: str = "2027-01-31"
 
     # --- Who may sign up ------------------------------------------------------
     # Signing up is creating an account; anyone who already has one always signs

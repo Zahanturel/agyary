@@ -19,19 +19,19 @@ since an unreachable endpoint that hands out privilege is worse than no
 endpoint at all.
 
 JWT pattern: a short-lived access token plus a longer-lived refresh token
-in an httpOnly cookie.
+in an httpOnly cookie, both naming a server-side session that can be ended (AU-2).
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
-from agyary.models import AgyaryUser, User
+from agyary.models import AgyaryUser, User, UserSession
 
 JWT_ALGORITHM = "HS256"
 
@@ -133,28 +133,50 @@ async def ensure_agyary_membership(
     return membership
 
 
-def issue_access_token(user_id: int) -> str:
+# ---------------------------------------------------------------------------
+# Sessions and tokens (AU-2)
+# ---------------------------------------------------------------------------
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+async def start_session(db: AsyncSession, user: User) -> UserSession:
+    """A new signed-in device for ``user``."""
+    now = _now()
+    session = UserSession(user_id=user.id, generation=0, created_at=now, last_used_at=now)
+    db.add(session)
+    await db.flush()
+    return session
+
+
+def issue_access_token(user_id: int, session_id: int) -> str:
     settings = get_settings()
     payload = {
         "sub": str(user_id),
         "type": "access",
+        "sid": session_id,
         "exp": datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_minutes),
     }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=JWT_ALGORITHM)
 
 
-def issue_refresh_token(user_id: int) -> str:
+def _session_ends(session: UserSession) -> datetime:
+    created = session.created_at if session.created_at.tzinfo else session.created_at.replace(tzinfo=UTC)
+    return created + timedelta(days=get_settings().jwt_session_max_days)
+
+
+def issue_refresh_token(user_id: int, session: UserSession) -> str:
+    """The cookie that keeps a device signed in: it names the session and its
+    current generation, and lasts the sliding window but never past the
+    session's own end."""
     settings = get_settings()
-    payload = {
-        "sub": str(user_id),
-        "type": "refresh",
-        "exp": datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_days),
-    }
+    exp = min(datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_days), _session_ends(session))
+    payload = {"sub": str(user_id), "type": "refresh", "sid": session.id, "gen": session.generation, "exp": exp}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=JWT_ALGORITHM)
 
 
-def decode_token(token: str, expected_type: str) -> int:
-    """Returns the user id encoded in the token, or raises TokenError."""
+def decode_token(token: str, expected_type: str) -> dict:
+    """The token's claims, or TokenError. ``sub`` is the user id."""
     settings = get_settings()
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[JWT_ALGORITHM])
@@ -162,4 +184,87 @@ def decode_token(token: str, expected_type: str) -> int:
         raise TokenError("Invalid or expired token") from exc
     if payload.get("type") != expected_type:
         raise TokenError("Wrong token type")
-    return int(payload["sub"])
+    try:
+        payload["sub"] = int(payload["sub"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise TokenError("Invalid token") from exc
+    return payload
+
+
+async def live_session(db: AsyncSession, claims: dict) -> UserSession | None:
+    """The session a token names, if it still stands: not revoked, not past its
+    absolute end, and the token's own user's."""
+    sid = claims.get("sid")
+    if not isinstance(sid, int):
+        return None
+    session = await db.get(UserSession, sid)
+    if session is None or session.revoked_at is not None or session.user_id != claims["sub"]:
+        return None
+    if _now() >= _session_ends(session):
+        return None
+    return session
+
+
+async def rotate(db: AsyncSession, claims: dict) -> UserSession:
+    """Spend a refresh token: the session moves on a generation, or - if this
+    token is an older generation, so somebody kept a copy - the session ends.
+    A token from before sessions existed is moved into a new session, once,
+    until jwt_legacy_tokens_until; "sign out everywhere" refuses those too."""
+    if claims.get("sid") is None:
+        return await _adopt_legacy(db, claims)
+    session = await live_session(db, claims)
+    if session is None:
+        raise TokenError("This sign-in has ended. Please sign in again.")
+    if claims.get("gen") != session.generation:
+        session.revoked_at = _now()
+        await db.flush()
+        raise TokenError("This sign-in was used on another device, so it has been ended. Please sign in again.")
+    session.generation += 1
+    session.last_used_at = _now()
+    await db.flush()
+    return session
+
+
+async def _adopt_legacy(db: AsyncSession, claims: dict) -> UserSession:
+    settings = get_settings()
+    until = date.fromisoformat(settings.jwt_legacy_tokens_until)
+    if _now().date() > until:
+        raise TokenError("This sign-in has ended. Please sign in again.")
+    user = await db.get(User, claims["sub"])
+    if user is None:
+        raise TokenError("User not found")
+    # A legacy token carries no issue time; it was minted for exactly the refresh
+    # window, so its expiry says when.
+    issued = datetime.fromtimestamp(claims["exp"], UTC) - timedelta(days=settings.jwt_refresh_token_days)
+    after = user.tokens_valid_after
+    if after is not None and issued < (after if after.tzinfo else after.replace(tzinfo=UTC)):
+        raise TokenError("This sign-in has ended. Please sign in again.")
+    return await start_session(db, user)
+
+
+async def end_session(db: AsyncSession, session_id: int | None) -> None:
+    if session_id is None:
+        return
+    session = await db.get(UserSession, session_id)
+    if session is not None and session.revoked_at is None:
+        session.revoked_at = _now()
+        await db.flush()
+
+
+async def end_all_sessions(db: AsyncSession, user: User, *, keep: int | None = None) -> int:
+    """End every session of ``user`` but ``keep``, and refuse every token from
+    before sessions existed. Returns how many sessions were ended."""
+    now = _now()
+    rows = (
+        await db.execute(
+            select(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
+        )
+    ).scalars().all()
+    ended = 0
+    for session in rows:
+        if session.id != keep:
+            session.revoked_at = now
+            ended += 1
+    user.tokens_valid_after = now
+    await db.flush()
+    return ended

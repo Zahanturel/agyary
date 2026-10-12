@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     SmallInteger,
     String,
     func,
@@ -31,10 +32,32 @@ class User(Base):
     # this switch off, set for new accounts by REMINDERS_AUTOMATIC_DEFAULT.
     # Sending by hand (the wa.me button) never depends on it.
     automatic_reminders: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # Refresh tokens from before sessions existed (they carry no session) that
+    # were issued before this moment are refused - set by "sign out everywhere".
+    tokens_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class UserSession(Base):
+    """One signed-in device (AU-2). The refresh token names it and carries its
+    generation, which moves on at every refresh: an older generation coming
+    back means the token was copied, and the session ends. Signing out, "sign
+    out other devices" and an admin's "sign out everywhere" end sessions here,
+    and every request checks its session is still live."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    generation: Mapped[int] = mapped_column(Integer, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("idx_user_sessions_user", "user_id"),)
 
 
 class AgyaryUser(Base):

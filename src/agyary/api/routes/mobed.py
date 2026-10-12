@@ -53,19 +53,30 @@ router = APIRouter(prefix="/api/mobed", tags=["mobed"])
 # ---------------------------------------------------------------------------
 # Auth dependency
 # ---------------------------------------------------------------------------
-async def get_current_user(
-    authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
-) -> User:
+async def _current(authorization: str, db: AsyncSession) -> tuple[User, int]:
+    """The signed-in user and their session id. The session is checked on every
+    request, so ending it (sign out, sign out other devices, an admin's sign out
+    everywhere) takes effect at once, not when the access token runs out."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.removeprefix("Bearer ")
     try:
-        user_id = mobed_auth.decode_token(token, "access")
+        claims = mobed_auth.decode_token(token, "access")
     except mobed_auth.TokenError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    user = await db.get(User, user_id)
+    session = await mobed_auth.live_session(db, claims)
+    if session is None:
+        raise HTTPException(status_code=401, detail="This sign-in has ended. Please sign in again.")
+    user = await db.get(User, claims["sub"])
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found")
+    return user, session.id
+
+
+async def get_current_user(
+    authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
+) -> User:
+    user, _ = await _current(authorization, db)
     return user
 
 
@@ -81,11 +92,11 @@ async def _require_membership(db: AsyncSession, agyary_id: int, user: User) -> A
 # ---------------------------------------------------------------------------
 # Auth: session cookies, refresh, me (see services/mobed_auth.py)
 # ---------------------------------------------------------------------------
-def _set_refresh_cookie(response: Response, user_id: int) -> None:
+def _set_refresh_cookie(response: Response, session) -> None:
     settings = get_settings()
     response.set_cookie(
         "refresh_token",
-        mobed_auth.issue_refresh_token(user_id),
+        mobed_auth.issue_refresh_token(session.user_id, session),
         httponly=True,
         # Secure cookies are never sent back over plain HTTP - fine in
         # production (this deploys behind a Cloudflare Tunnel terminating
@@ -131,12 +142,13 @@ async def _wa_login_session(
         return {"status": "needs_name"}
 
     await wa_login.consume(db, poll_secret)
+    session = await mobed_auth.start_session(db, user)
     await db.commit()
     response.delete_cookie("wa_login")
-    _set_refresh_cookie(response, user.id)
+    _set_refresh_cookie(response, session)
     return {
         "status": "signed_in",
-        "access_token": mobed_auth.issue_access_token(user.id),
+        "access_token": mobed_auth.issue_access_token(user.id, session.id),
         "user": await _serialize_user(db, user),
     }
 
@@ -252,14 +264,19 @@ async def refresh(
     if refresh_token is None:
         raise HTTPException(status_code=401, detail="Missing refresh token")
     try:
-        user_id = mobed_auth.decode_token(refresh_token, "refresh")
+        claims = mobed_auth.decode_token(refresh_token, "refresh")
+        user = await db.get(User, claims["sub"])
+        if user is None or not user.is_active:
+            raise mobed_auth.TokenError("User not found")
+        # Each refresh token is good once: the session moves on a generation,
+        # and an older one coming back ends the session (AU-2).
+        session = await mobed_auth.rotate(db, claims)
     except mobed_auth.TokenError as exc:
+        await db.commit()                      # a session ended for reuse stays ended
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    user = await db.get(User, user_id)
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found")
-    _set_refresh_cookie(response, user.id)
-    return {"access_token": mobed_auth.issue_access_token(user.id)}
+    await db.commit()
+    _set_refresh_cookie(response, session)
+    return {"access_token": mobed_auth.issue_access_token(user.id, session.id)}
 
 
 async def _serialize_user(db: AsyncSession, user: User) -> dict:
@@ -290,7 +307,11 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
 
 
 @router.post("/auth/logout")
-async def logout(response: Response) -> dict:
+async def logout(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """End the session.
 
     Needed because the refresh cookie is httpOnly: the client can drop its
@@ -301,6 +322,14 @@ async def logout(response: Response) -> dict:
     match it.
     """
     settings = get_settings()
+    # The session ends on the server too, so a copy of the cookie is worthless.
+    if refresh_token:
+        try:
+            claims = mobed_auth.decode_token(refresh_token, "refresh")
+            await mobed_auth.end_session(db, claims.get("sid"))
+            await db.commit()
+        except mobed_auth.TokenError:
+            pass
     response.delete_cookie(
         "refresh_token",
         httponly=True,
@@ -308,6 +337,19 @@ async def logout(response: Response) -> dict:
         samesite="strict",
     )
     return {"signed_out": True}
+
+
+@router.post("/auth/sessions/sign-out-others")
+async def sign_out_other_devices(
+    authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
+) -> dict:
+    """End every other signed-in device of this mobed - a lost phone, a phone
+    lent to someone, a sign-in they do not recognise - and refuse any token
+    from before sessions existed. This device stays signed in."""
+    user, session_id = await _current(authorization, db)
+    ended = await mobed_auth.end_all_sessions(db, user, keep=session_id)
+    await db.commit()
+    return {"signed_out": ended}
 
 
 @router.get("/auth/me")

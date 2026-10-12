@@ -107,6 +107,10 @@ export const waLoginStart = () => post("/auth/wa/start", {});
 export const waLoginPoll = () => get("/auth/wa/poll");
 export const waLoginComplete = (name) => post("/auth/wa/complete", { name });
 export const logout = () => post("/auth/logout");
+/** End every other signed-in device of this mobed; this one stays. */
+export const signOutOtherDevices = () => post("/auth/sessions/sign-out-others", {});
+/** Admin only: end every signed-in device of the mobed with this number. */
+export const adminSignOutEverywhere = (phone) => post("/admin/sign-out-everywhere", { phone });
 export const getMe = () => get("/auth/me");
 export const updateMyName = (name) => patch("/auth/me", { name });
 

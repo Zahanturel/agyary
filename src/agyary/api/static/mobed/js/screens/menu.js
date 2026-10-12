@@ -11,7 +11,7 @@
  * talking to actual panthakies.
  */
 
-import { updateMyName, getPreferences, putPreferences, logout } from "../api.js";
+import { updateMyName, getPreferences, putPreferences, logout, signOutOtherDevices } from "../api.js";
 import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
@@ -104,6 +104,9 @@ export async function renderMenu() {
 
     <div class="card">
       <button class="ghost" id="mSignOut">Sign out</button>
+      <div style="margin-top:12px"><button class="ghost small" id="mSignOutOthers">Sign out of my other devices</button></div>
+      <p class="meta" style="margin:8px 0 0">For a phone that was lost or lent, or a sign-in you do not recognise.
+        This phone stays signed in.</p>
       <p class="meta" style="margin:10px 0 0" id="mVersion"></p>
     </div>`;
   shellVersion().then((v) => {
@@ -161,6 +164,15 @@ export async function renderMenu() {
   if (!hasTabs) document.getElementById("mAddBehdin").onclick = (e) => {
     e.stopPropagation();
     navigate("#/behdins/new");
+  };
+
+  document.getElementById("mSignOutOthers").onclick = async () => {
+    try {
+      const r = await signOutOtherDevices();
+      showInfo(r.signed_out
+        ? `Signed out of ${r.signed_out} other device${r.signed_out === 1 ? "" : "s"}.`
+        : "You were not signed in anywhere else.");
+    } catch (e) { showError(e.message); }
   };
 
   document.getElementById("mSignOut").onclick = async () => {

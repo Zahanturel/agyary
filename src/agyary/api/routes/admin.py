@@ -19,7 +19,8 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import LoginOtp, Notification, User
-from agyary.services import guardrails
+from agyary.services import guardrails, mobed_auth
+from agyary.services.phone import Phone
 
 router = APIRouter(prefix="/api/mobed/admin", tags=["admin"])
 
@@ -89,6 +90,24 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
             for when, reason, phone in failures
         ],
     }
+
+
+class SignOutIn(BaseModel):
+    phone: Phone
+
+
+@router.post("/sign-out-everywhere")
+async def sign_out_everywhere(
+    payload: SignOutIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> dict:
+    """End every signed-in device of one mobed (AU-2) - a phone that was lost or
+    taken, a sign-in nobody recognises. They can sign in again with WhatsApp."""
+    user = (await db.execute(select(User).where(User.phone == payload.phone))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="No mobed has that number")
+    ended = await mobed_auth.end_all_sessions(db, user)
+    await db.commit()
+    return {"signed_out": ended}
 
 
 class PauseIn(BaseModel):

@@ -8,11 +8,11 @@
  * this screen does, so hiding it is a courtesy and not the protection.
  */
 
-import { adminOverview, adminSetPaused } from "../api.js";
+import { adminOverview, adminSetPaused, adminSignOutEverywhere } from "../api.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar,
 } from "../ui.js";
-import { esc, gregShort, istHm } from "../util.js";
+import { esc, gregShort, istHm, phoneField, readPhone } from "../util.js";
 import { navGuard } from "../router.js";
 
 const rupees = (n) => "Rs " + Number(n).toFixed(2);
@@ -80,6 +80,15 @@ export async function renderAdmin() {
         <div class="list-row"><div class="lr-main"><b>${esc(f.to)}</b>
           <span>${esc(gregShort(f.when.slice(0, 10)))} ${esc(istHm(f.when))} - ${esc(f.reason)}</span></div></div>
       `).join("") : `<p class="meta">None.</p>`}
+    </div>
+
+    <div class="card">
+      <h2>Sign a mobed out everywhere</h2>
+      <p class="meta">Ends every device they are signed in on - a lost or taken phone, or a
+        sign-in nobody recognises. They can sign in again with WhatsApp.</p>
+      <label for="admOut">Their WhatsApp number</label>
+      ${phoneField("admOut", "")}
+      <div style="margin-top:10px"><button class="secondary small" id="admOutGo">Sign them out</button></div>
     </div>`;
 
   const confirm = document.getElementById("admConfirm");
@@ -88,6 +97,15 @@ export async function renderAdmin() {
       await adminSetPaused(paused, reason);
       showInfo(paused ? "Sending paused." : "Sending resumed.");
       renderAdmin();
+    } catch (e) { showError(e.message); }
+  };
+
+  document.getElementById("admOutGo").onclick = async () => {
+    const phone = readPhone("admOut");
+    if (!phone) return showError("Please enter a valid phone number.");
+    try {
+      const r = await adminSignOutEverywhere(phone);
+      showInfo(`Signed out of ${r.signed_out} device${r.signed_out === 1 ? "" : "s"}.`);
     } catch (e) { showError(e.message); }
   };
 
