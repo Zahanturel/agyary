@@ -14,7 +14,7 @@ from agyary.models import (
     Agyary, Customer, Memorial, MemorialObservance, Service,
 )
 from agyary.services import memorials
-from tests.test_mobed_api import _member_headers
+from tests.test_mobed_api import NEW_MOBED_PHONE, _member_headers
 
 PHONE = "+919944400701"
 OTHER_MOBED = "+919911100077"
@@ -346,48 +346,73 @@ def _reminders(client, aid, headers, **params):
     return client.get(f"/api/mobed/agyaries/{aid}/memorial-reminders", params=params, headers=headers)
 
 
-async def test_reminders_list_what_is_coming_and_flag_what_is_due(client, db, seeded):
+async def _user_id(db, phone):
+    from agyary.models import User
+
+    return (await db.execute(select(User.id).where(User.phone == phone))).scalar_one()
+
+
+async def _later_observances(client, db, aid, cid, headers, **over):
+    """A memorial in the far future, and its observances after the opening days."""
+    body = (await _create(client, db, aid, cid, headers, **over)).json()
+    later = [o for o in body["observances"] if o["day_number"] > memorials.OPENING_DAYS]
+    assert later, "the memorial should have observances after the opening days"
+    return later
+
+
+async def test_the_opening_days_are_never_reminded(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
-    # Death 3 days ago, so today is day 4 and day 10 is six days away.
+    # Death 3 days ago: today is day 4 and days 5-10 are ahead - all opening days,
+    # when the family is at the fire temple every day, in mourning.
     death = memorials.today_ist() - timedelta(days=3)
     await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
 
     r = await _reminders(client, aid, headers, days=14)
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["lead_days"] == memorials.REMINDER_LEAD_DAYS
-    items = body["items"]
-    assert [i["day_number"] for i in items] == [4, 5, 6, 7, 8, 9, 10]
-    assert [i["days_away"] for i in items] == [0, 1, 2, 3, 4, 5, 6]
-    # Within the lead time is due; beyond it is merely coming up.
-    assert [i["due"] for i in items] == [True] * 6 + [False]
-    first = items[0]
-    assert first["behdin_name"] == "Behdin Memorial" and first["departed_name"] == "Dinshaw"
-    assert first["customer_id"] == cid and first["calendar"] in {"shenshai", "kadmi", "fasli"}
-    assert {s["name"] for s in first["services"]} == {"Afringan", "Baaj"}
+    assert r.json()["items"] == []
+    assert r.json()["lead_days"] == memorials.REMINDER_LEAD_DAYS == 1
 
 
-async def test_reminders_exclude_the_past_and_respect_the_horizon(client, db, seeded):
+async def test_reminders_start_after_the_opening_and_flag_what_is_due(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
-    death = memorials.today_ist() - timedelta(days=3)
-    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
+    later = await _later_observances(client, db, aid, cid, headers, day_counts=[30])
+    uid = await _user_id(db, NEW_MOBED_PHONE)
+    first = date.fromisoformat(later[0]["date"])
 
-    # Days 1-3 have passed; today is day 4.
-    items = (await _reminders(client, aid, headers, days=0)).json()["items"]
-    assert [i["day_number"] for i in items] == [4] and items[0]["days_away"] == 0
-    items = (await _reminders(client, aid, headers, days=2)).json()["items"]
-    assert [i["day_number"] for i in items] == [4, 5, 6]
+    async def at(today, horizon=14):
+        return await memorials.reminders_due(db, uid, aid, today, horizon)
+
+    # The day before: due. Five days before: coming up, not due.
+    [item, *_] = await at(first - timedelta(days=1))
+    assert item["day_number"] == later[0]["day_number"] > memorials.OPENING_DAYS
+    assert (item["days_away"], item["due"]) == (1, True)
+    assert (await at(first))[0]["due"] is True                       # the day itself
+    [item, *_] = await at(first - timedelta(days=5))
+    assert (item["days_away"], item["due"]) == (5, False)
+    # Once it has passed it is gone.
+    assert all(i["date"] > first.isoformat() for i in await at(first + timedelta(days=1)))
+    # Nothing at all in the opening, however close.
+    assert await at(first - timedelta(days=40), horizon=20) == []
+
+
+async def test_reminders_respect_the_horizon(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    later = await _later_observances(client, db, aid, cid, headers, day_counts=[30])
+    uid = await _user_id(db, NEW_MOBED_PHONE)
+    first = date.fromisoformat(later[0]["date"])
+    assert await memorials.reminders_due(db, uid, aid, first - timedelta(days=3), 2) == []
+    assert len(await memorials.reminders_due(db, uid, aid, first - timedelta(days=3), 3)) >= 1
 
 
 async def test_reminders_are_the_callers_own(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
-    death = memorials.today_ist() - timedelta(days=1)
-    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
-    other = await _member_headers(client, seeded, name="Other", phone=OTHER_MOBED)
+    later = await _later_observances(client, db, aid, cid, headers, day_counts=[30])
+    await _member_headers(client, seeded, name="Other", phone=OTHER_MOBED)
+    first = date.fromisoformat(later[0]["date"])
+    day_before = first - timedelta(days=1)
 
-    assert (await _reminders(client, aid, headers)).json()["items"]
-    r = await _reminders(client, aid, other)
-    assert r.status_code == 200 and r.json()["items"] == []
+    assert await memorials.reminders_due(db, await _user_id(db, NEW_MOBED_PHONE), aid, day_before, 3)
+    assert await memorials.reminders_due(db, await _user_id(db, OTHER_MOBED), aid, day_before, 3) == []
 
 
 async def test_reminder_horizon_is_bounded(client, db, seeded):
@@ -406,18 +431,20 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     from urllib.parse import parse_qs, urlparse
 
     aid, cid, headers = await _setup(client, db, seeded)
-    death = memorials.today_ist() - timedelta(days=1)
-    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
+    later = await _later_observances(client, db, aid, cid, headers, day_counts=[30])
+    uid = await _user_id(db, NEW_MOBED_PHONE)
+    first = date.fromisoformat(later[0]["date"])
 
-    item = (await _reminders(client, aid, headers)).json()["items"][0]
+    [item, *_] = await memorials.reminders_due(db, uid, aid, first - timedelta(days=1), 3)
     assert item["behdin_phone"] == PHONE
     text = item["message"]
-    # Which temple, whose observance, when - and how to ask for it.
     agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == aid))).scalar_one()
-    assert text.startswith(agyary_name)
-    assert "Dinshaw" in text and "Roj " in text
-    assert "the day 2 observance for Dinshaw" in text
-    assert "Afringan and Baaj" in text and "please reply here" in text
+    assert text.startswith(agyary_name + "\n\n")
+    assert text.splitlines()[2].startswith("Tomorrow, ")
+    assert "Roj " in text and "Afringan and Baaj for Dinshaw." in text
+    assert text.endswith("You are welcome to attend.")
+    # It already is booked: nothing asks the family to arrange or reply.
+    assert "arrange" not in text and "reply" not in text and "observance" not in text.lower()
 
     # The link opens a chat with the behdin (no +) and carries exactly that text.
     link = urlparse(item["wa_link"])
@@ -425,11 +452,40 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     assert parse_qs(link.query)["text"] == [text]
 
 
-async def test_a_reminder_with_no_services_still_reads_properly():
+def _obs(**over):
+    from datetime import time as dt_time
     from types import SimpleNamespace
 
-    obs = SimpleNamespace(
-        gregorian_date=date(2030, 3, 14), label="Varsi", gatha_index=None, parsi_roj=1, parsi_mah=1,
-    )
-    text = memorials.reminder_text("Goti Adarian", obs, "Dinshaw", [])
-    assert text == "Goti Adarian\n\nA reminder: the Varsi of Dinshaw is on Thu 14 Mar 2030 (Roj Hormazd, Mah Fravardin)."
+    at = over.pop("at", None)
+    base = dict(gregorian_date=date(2030, 3, 14), label="Varsi", gatha_index=None,
+                parsi_roj=1, parsi_mah=1, time_of_day=dt_time(*at) if at else None)
+    return SimpleNamespace(**{**base, **over})
+
+
+def test_the_wording_says_when_and_where_without_asking_for_anything():
+    day = date(2030, 3, 14)
+    roj_mah = "(Roj Hormazd, Mah Fravardin)"
+    say = lambda today, **kw: memorials.reminder_text(  # noqa: E731
+        "Goti Adarian", _obs(**kw), "Dinshaw", ["Afringan", "Baaj"], today)
+
+    assert say(day - timedelta(days=1)) == (
+        f"Goti Adarian\n\nTomorrow, Thu 14 Mar {roj_mah}: Afringan and Baaj for Dinshaw."
+        "\n\nYou are welcome to attend.")
+    assert "Today, Thu 14 Mar" in say(day)
+    # Further off it is just the date; no "tomorrow" that would be wrong.
+    assert say(day - timedelta(days=4)).splitlines()[2].startswith(f"Thu 14 Mar {roj_mah}")
+
+
+def test_the_wording_includes_the_time_only_when_there_is_one():
+    day = date(2030, 3, 14)
+    put = lambda **kw: memorials.reminder_text(  # noqa: E731
+        "Goti Adarian", _obs(**kw), "Dinshaw", ["Afringan"], day - timedelta(days=1))
+    assert "Afringan for Dinshaw at 9:00 am." in put(at=(9, 0))
+    assert "Afringan for Dinshaw at 5:30 pm." in put(at=(17, 30))
+    assert "at 12:00 pm" in put(at=(12, 0)) and "at 12:05 am" in put(at=(0, 5))
+    assert "Afringan for Dinshaw." in put()
+
+
+def test_the_wording_falls_back_to_the_observance_name_with_no_services():
+    text = memorials.reminder_text("Goti Adarian", _obs(), "Dinshaw", [], date(2030, 3, 10))
+    assert ": Varsi for Dinshaw." in text

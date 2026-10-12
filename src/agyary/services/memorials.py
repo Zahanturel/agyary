@@ -432,10 +432,16 @@ async def calendar_feed(
 # ---------------------------------------------------------------------------
 # Reminders due
 # ---------------------------------------------------------------------------
-# How far ahead of an observance a family is reminded. The same number will
-# drive the automatic sender, so what the mobed sees as "due" here is exactly
-# what would go out.
-REMINDER_LEAD_DAYS = 5
+# A family is reminded the day before. The same number will drive the
+# automatic sender, so what the mobed sees as "due" here is exactly what would
+# go out.
+REMINDER_LEAD_DAYS = 1
+
+# The opening days (1-10) are never reminded. The family is at the fire
+# temple with the mobed every day of them, in mourning; a text would be
+# useless at best and an intrusion at worst. Reminders start with what comes
+# after: the 29th/30th day on, the monthly and yearly series, the Parabs.
+OPENING_DAYS = 10
 
 
 def _parsi_text(obs: MemorialObservance) -> str:
@@ -451,27 +457,36 @@ def _list_and(names: list[str]) -> str:
     return ", ".join(names[:-1]) + " and " + names[-1]
 
 
+def _clock(t: time) -> str:
+    return f"{t.hour % 12 or 12}:{t.minute:02d} {'am' if t.hour < 12 else 'pm'}"
+
+
 def reminder_text(
-    agyary_name: str, obs: MemorialObservance, departed: str, service_names: list[str]
+    agyary_name: str,
+    obs: MemorialObservance,
+    departed: str,
+    service_names: list[str],
+    today: date,
 ) -> str:
     """What a family is told. One wording for the manual send and, later,
     the automatic one, so a mobed sees today exactly what would go out.
 
-    Plain and factual on purpose: it says which temple, whose observance,
-    when, and how to ask for it. Nothing that reads as a promotion.
+    The mobed has already booked this, so it does not ask for anything: it
+    says what is happening, when, and that they are welcome. Plain on
+    purpose - no internal names ("day 31", "observance"), nothing that reads
+    as a promotion.
     """
     d = obs.gregorian_date
-    when = f"{d:%a} {d.day} {d:%b %Y}"
-    # "the Varsi of X", but the opening days are labelled "Day 4", which reads
-    # wrongly after "the".
-    if obs.label.startswith("Day "):
-        what = f"the {obs.label.lower()} observance for {departed}"
-    else:
-        what = f"the {obs.label} of {departed}"
-    text = f"{agyary_name}\n\nA reminder: {what} is on {when} ({_parsi_text(obs)})."
-    if service_names:
-        text += f"\n\nIf you would like {_list_and(service_names)} arranged, please reply here."
-    return text
+    days_away = (d - today).days
+    date_text = f"{d:%a} {d.day} {d:%b}"
+    when = {0: f"Today, {date_text}", 1: f"Tomorrow, {date_text}"}.get(days_away, date_text)
+    what = _list_and(service_names) or obs.label
+    at = f" at {_clock(obs.time_of_day)}" if obs.time_of_day else ""
+    return (
+        f"{agyary_name}\n\n"
+        f"{when} ({_parsi_text(obs)}): {what} for {departed}{at}.\n\n"
+        "You are welcome to attend."
+    )
 
 
 def whatsapp_link(phone: str, text: str) -> str:
@@ -505,6 +520,7 @@ async def reminders_due(
                 Memorial.agyary_id == agyary_id,
                 MemorialObservance.gregorian_date >= today,
                 MemorialObservance.gregorian_date <= end,
+                MemorialObservance.day_number > OPENING_DAYS,
             )
             .order_by(MemorialObservance.gregorian_date, MemorialObservance.day_number)
         )
@@ -516,7 +532,8 @@ async def reminders_due(
         days_away = (obs.gregorian_date - today).days
         serialized = serialize_observance(obs, names)
         text = reminder_text(
-            agyary_name, obs, memorial.departed_name, [s["name"] for s in serialized["services"]]
+            agyary_name, obs, memorial.departed_name,
+            [s["name"] for s in serialized["services"]], today,
         )
         items.append({
             **serialized,

@@ -66,6 +66,10 @@ export async function renderReminders() {
   const due = data.items.filter(o => o.due);
   const later = data.items.filter(o => !o.due);
 
+  // One day ahead means today and tomorrow; say so rather than "within 1 days".
+  const leadText = data.lead_days === 1 ? "the day before" : `${data.lead_days} days before`;
+  const dueText = data.lead_days === 1 ? "today and tomorrow" : `within ${data.lead_days} days`;
+
   const group = (title, note, list) => list.length ? `
     <div class="card">
       <div class="names-group-label" style="margin-top:0"><b>${title}</b><span>${note}</span></div>
@@ -75,13 +79,13 @@ export async function renderReminders() {
   mainEl.innerHTML = `
     <div class="card">
       ${backBar("Reminders")}
-      <p class="meta" style="margin:4px 0 0">Observances in the next ${HORIZON_DAYS} days
-        for the families you look after. Remind a family from
-        ${data.lead_days} days before.</p>
+      <p class="meta" style="margin:4px 0 0">What is coming up in the next ${HORIZON_DAYS} days
+        for the families you look after. Remind a family ${leadText} - not
+        during the first ten days, when they are with you at the fire temple.</p>
     </div>
     ${data.items.length ? "" : `<div class="card">
       <p class="meta" style="margin:0">Nothing in the next ${HORIZON_DAYS} days.</p></div>`}
-    ${group("Remind now", `within ${data.lead_days} days`, due)}
+    ${group("Remind now", dueText, due)}
     ${group("Coming up", "", later)}`;
 
   mainEl.querySelectorAll("[data-oid]").forEach(el => {

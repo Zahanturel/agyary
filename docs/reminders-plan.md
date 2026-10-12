@@ -33,20 +33,34 @@ keep the free version.
   an active plan. The panthaky pays; they do not thereby read colleagues'
   memorials.
 
-**The message** (one approved template, quick-reply buttons)
+**What is reminded, and when** (corrected after the first live test)
+- The mobed has ALREADY booked the observances (creating the memorial is the
+  booking), so a reminder never asks the family to book or arrange anything.
+  It tells them what is happening, when, and that they are welcome.
+- NEVER during the opening, days 1-10 (`OPENING_DAYS`). The family has just
+  lost someone and is at the fire temple with the mobed every day; a text then
+  is useless at best and an intrusion at worst. Reminders start with what
+  follows: the 29th/30th day on, the monthly and yearly series, the Parabs.
+- One reminder, the day before (`REMINDER_LEAD_DAYS = 1`). Each extra message
+  costs money, and a booked date needs no week's notice.
+- The family sees none of our vocabulary: no "observance", "day 31", "booking".
+
+**The message** (one approved template)
 
     <Agyari name>
-    Reminder: <Varsi> of <Ardeshir Mehta> falls on <Roj Ava, Mah Tir>
-    (<Thu 14 Nov>).
-    [Request Afringan]  [Stop reminders]
 
-- Factual and transactional on purpose. No "book now", no promotion: Meta
-  bills a marketing-category template about 7.5x a utility one, and decides
-  the category, not us.
-- Date shown in the calendar the MEMORIAL was counted in, plus Gregorian,
-  exactly as the memorial module already does.
-- Default: one reminder, about five days ahead. A second nudge is an option,
-  not a default (each message costs).
+    Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad): Afringan and Baaj for
+    Ardeshir Mehta at 9:00 am.
+
+    You are welcome to attend.
+
+- "at 9:00 am" only when the mobed has set a time; it is optional and usually
+  blank, so most messages have none. "Tomorrow" / "Today" appear only when true;
+  a message built for a further-off date just shows the date.
+- Factual and transactional on purpose. Meta bills a marketing-category
+  template about 7.5x a utility one and decides the category, not us.
+- Date in the calendar the MEMORIAL was counted in, plus Gregorian.
+- No reply buttons for now (nothing to ask for). STOP is still required.
 - Wording is reviewed by a mobed before it is submitted to Meta. Grieving
   families; tone matters more than cost.
 
@@ -60,11 +74,10 @@ keep the free version.
 - Store: who, which memorial, which agyari, when, the message id. STOP, in any
   form, is honoured at once and recorded. No consent row, no send. Ever.
 
-**Reply routing**
-- A reply carries the id of the message it answers. We map that to the
-  `notifications` row, hence to the agyari and memorial. "Request Afringan"
-  creates a request the panthaky approves, via the approval flow that already
-  exists. Nothing is auto-booked.
+**Replies**
+- A reply carries the id of the message it answers, so a reply can still be
+  routed to the agyari and memorial. There is nothing to act on today: the
+  message asks for nothing. STOP is handled; anything else is ON HOLD.
 
 **Shared-number reputation**
 - Meta rates one number's quality for everybody on it. One agyari's blocked
@@ -77,7 +90,7 @@ Third-party figures, India, 2026: utility about 0.115 INR, marketing about
 0.863 INR, plus 18% GST. A utility template sent inside an open 24-hour window
 is free; so are free-form replies. Direct Cloud API, so no reseller markup.
 
-Assuming about 1.5 reminders per active memorial per month (to be measured):
+Assuming about 1 reminder per active memorial per month (to be measured; fewer than before, since the opening days are never reminded):
 
 | Active memorials | Messages/mo | As utility | As marketing |
 |---|---|---|---|
@@ -153,19 +166,22 @@ Steps 1-2 need none of the Meta setup. Steps 3+ do.
 
 ## ON HOLD
 
-1. **Conversational booking / AI scheduling.** The reply buttons are the safe
-   first step toward it. A free-text bot is a separate, larger feature with
-   its own PII and wrong-booking risk, to be weighed once reminders earn.
-2. **Native apps.** Keep the PWA. Android via a Trusted Web Activity (Play
+1. **Conversational booking / AI scheduling and reply handling.** Reminders
+   ask for nothing, so there are no reply buttons. A free-text bot is a
+   separate, larger feature with its own PII and wrong-booking risk, to be
+   weighed once reminders earn.
+2. **A "reminded" mark** per observance, so a sent reminder drops off the
+   list. Needs a migration; folded into step 3's tables if not wanted sooner.
+3. **Native apps.** Keep the PWA. Android via a Trusted Web Activity (Play
    Store) and iOS via a Capacitor wrapper are possible later; neither gates
    this feature.
-3. **Payment gateway / automated subscriptions.** Manual until volume asks.
-4. **Moving sign-in to an outbound OTP.** Rejected for now: the inbound code
+4. **Payment gateway / automated subscriptions.** Manual until volume asks.
+5. **Moving sign-in to an outbound OTP.** Rejected for now: the inbound code
    is free, unphishable, and already built. Revisit only if the username
    change breaks it.
-5. **Passkeys / long-lived sessions** to reduce sign-ins. Good, separate.
-6. **Meta business verification** timing, until Udyam is sorted.
-7. **Price.** Rs 299/month is a guess. Ask two panthakies what they pay for
+6. **Passkeys / long-lived sessions** to reduce sign-ins. Good, separate.
+7. **Meta business verification** timing, until Udyam is sorted.
+8. **Price.** Rs 299/month is a guess. Ask two panthakies what they pay for
    diaries or booking today before fixing it.
-8. **Message volume.** 1.5 per memorial per month is an assumption; replace
+9. **Message volume.** 1.5 per memorial per month is an assumption; replace
    with measured numbers from the pilot.
