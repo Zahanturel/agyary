@@ -25,6 +25,7 @@ import { renderEditMachi } from "./screens/machi_event.js";
 import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
 import { renderMemorialNew } from "./screens/memorial_new.js";
 import { renderMemorial } from "./screens/memorial.js";
+import { renderReminders } from "./screens/reminders.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
@@ -65,6 +66,8 @@ route("#/behdins/new", renderBehdinNew, { parent: "#/behdins" });
 route("#/behdins/:id", renderBehdinDetail, { parent: "#/behdins" });
 // A memorial is a behdin's: made from their page, and Back returns to it.
 route("#/behdins/:id/memorials/new", renderMemorialNew, { parent: (p) => `#/behdins/${p.id}` });
+// The mobed's own families to remind, from the Behdins tab.
+route("#/reminders", renderReminders, { parent: "#/behdins" });
 route("#/memorial/:id", renderMemorial, { parent: "#/behdins" });
 // Opened from the calendar on one observance's day, landing on that observance.
 route("#/memorial/:id/:oid", renderMemorial, { parent: "#/behdins" });

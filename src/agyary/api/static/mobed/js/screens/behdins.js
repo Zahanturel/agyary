@@ -16,7 +16,7 @@
  */
 
 import {
-  listBehdins, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
+  listBehdins, memorialReminders, customerHistory, getBehdin, updateBehdin, createBehdin, deleteBehdin,
   getSavedNames, putSavedNames, listMemorials, previewNewMemorial, createMemorial,
 } from "../api.js";
 import { state } from "../state.js";
@@ -49,6 +49,12 @@ export async function renderBehdinList() {
   if (!alive()) return;
 
   mainEl.innerHTML = `
+    <div class="card" id="bhReminders" hidden>
+      <div class="section-bar" id="bhRemindersBar">
+        <div class="sb-text"><b>Reminders</b><span id="bhRemindersText"></span></div>
+        <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
+      </div>
+    </div>
     <div class="card">
       <div class="row tight" style="justify-content:space-between;align-items:center">
         <h2 style="margin:0">Behdins</h2>
@@ -58,6 +64,19 @@ export async function renderBehdinList() {
       <input type="text" id="bhFilter" placeholder="Search by name or phone" autocomplete="off">
       <div id="bhRows" style="margin-top:8px"></div>
     </div>`;
+
+  // Not worth holding the list for: the bar appears once it knows, and stays
+  // away if there is nothing to remind or the call fails.
+  memorialReminders(state.currentAgyaryId, 14).then((r) => {
+    const bar = document.getElementById("bhReminders");
+    if (!alive() || !bar || !r.items.length) return;
+    const due = r.items.filter(o => o.due).length;
+    document.getElementById("bhRemindersText").textContent =
+      due ? `${due} to remind now, ${r.items.length - due} coming up`
+          : `${r.items.length} coming up in the next 14 days`;
+    bar.hidden = false;
+    document.getElementById("bhRemindersBar").onclick = () => navigate("#/reminders");
+  }).catch(() => {});
 
   const rowsEl = document.getElementById("bhRows");
   const paint = (list) => {

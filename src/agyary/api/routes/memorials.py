@@ -24,6 +24,7 @@ from agyary.services import memorials
 router = APIRouter(prefix="/api/mobed", tags=["memorials"])
 
 MAX_FEED_RANGE_DAYS = 366
+MAX_REMINDER_HORIZON_DAYS = 60
 
 
 class SeriesIn(BaseModel):
@@ -257,3 +258,20 @@ async def memorial_feed(
     if (to - from_).days + 1 > MAX_FEED_RANGE_DAYS:
         raise HTTPException(status_code=400, detail=f"Range too wide (max {MAX_FEED_RANGE_DAYS} days)")
     return await memorials.calendar_feed(db, user.id, agyary_id, from_, to)
+
+
+@router.get("/agyaries/{agyary_id}/memorial-reminders")
+async def memorial_reminders(
+    agyary_id: int,
+    days: int = Query(default=14, ge=0, le=MAX_REMINDER_HORIZON_DAYS),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Which families this mobed should be reminded about soon: their own
+    memorials' observances from today to ``days`` ahead, each flagged ``due``
+    once inside the reminder lead time."""
+    await _require_membership(db, agyary_id, user)
+    items = await memorials.reminders_due(
+        db, user.id, agyary_id, memorials.today_ist(), days
+    )
+    return {"lead_days": memorials.REMINDER_LEAD_DAYS, "items": items}

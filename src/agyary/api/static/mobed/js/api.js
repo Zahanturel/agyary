@@ -148,6 +148,8 @@ export const deleteSavedName = (aid, cid, rowId) => del(`/agyaries/${aid}/behdin
 // --- Memorials: the observances a family keeps for one departed person ------
 export const memorialFeed = (aid, from, to) =>
   get(`/agyaries/${aid}/memorial-feed?from=${from}&to=${to}`);
+export const memorialReminders = (aid, days) =>
+  get(`/agyaries/${aid}/memorial-reminders?days=${days}`);
 export const listMemorials = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/memorials`);
 export const previewMemorial = (aid, cid, body) =>
   post(`/agyaries/${aid}/behdins/${cid}/memorials/preview`, body);

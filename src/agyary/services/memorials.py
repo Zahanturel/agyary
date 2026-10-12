@@ -18,7 +18,7 @@ asks for that day.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -420,3 +420,58 @@ async def calendar_feed(
             })
     return items
 
+
+
+# ---------------------------------------------------------------------------
+# Reminders due
+# ---------------------------------------------------------------------------
+# How far ahead of an observance a family is reminded. The same number will
+# drive the automatic sender, so what the mobed sees as "due" here is exactly
+# what would go out.
+REMINDER_LEAD_DAYS = 5
+
+
+async def reminders_due(
+    db: AsyncSession, user_id: int, agyary_id: int, today: date, horizon_days: int
+) -> list[dict]:
+    """This mobed's observances from today to ``horizon_days`` ahead, soonest
+    first, each marked ``due`` once it is within the reminder lead time.
+
+    Scoped to the caller like every memorial read: a family's departed are
+    not a colleague's to see, so the list is the mobed's own, not the
+    fire temple's.
+    """
+    if horizon_days < 0:
+        raise MemorialError("horizon must not be negative")
+    end = today + timedelta(days=horizon_days)
+    rows = (
+        await db.execute(
+            select(MemorialObservance, Memorial, Customer.name)
+            .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
+            .join(Customer, Customer.id == Memorial.customer_id)
+            .options(selectinload(MemorialObservance.services))
+            .where(
+                Memorial.created_by_user_id == user_id,
+                Memorial.agyary_id == agyary_id,
+                MemorialObservance.gregorian_date >= today,
+                MemorialObservance.gregorian_date <= end,
+            )
+            .order_by(MemorialObservance.gregorian_date, MemorialObservance.day_number)
+        )
+    ).all()
+    names = await _service_names(db, agyary_id)
+    items = []
+    for obs, memorial, behdin_name in rows:
+        days_away = (obs.gregorian_date - today).days
+        items.append({
+            **serialize_observance(obs, names),
+            "memorial_id": memorial.id,
+            "customer_id": memorial.customer_id,
+            "behdin_name": behdin_name,
+            "departed_name": memorial.departed_name,
+            # The observance's Roj/Mah/year are in THIS memorial's calendar.
+            "calendar": memorial.calendar_system,
+            "days_away": days_away,
+            "due": days_away <= REMINDER_LEAD_DAYS,
+        })
+    return items

@@ -338,3 +338,65 @@ async def test_a_behdin_with_a_memorial_is_not_erased(client, db, seeded):
     r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{cid}", headers=headers)
     assert r.status_code == 200 and r.json() == {"deleted": True, "erased": False}
     assert await db.get(Customer, cid) is not None
+
+
+# --- Reminders due ----------------------------------------------------------
+
+def _reminders(client, aid, headers, **params):
+    return client.get(f"/api/mobed/agyaries/{aid}/memorial-reminders", params=params, headers=headers)
+
+
+async def test_reminders_list_what_is_coming_and_flag_what_is_due(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    # Death 3 days ago, so today is day 4 and day 10 is six days away.
+    death = memorials.today_ist() - timedelta(days=3)
+    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
+
+    r = await _reminders(client, aid, headers, days=14)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["lead_days"] == memorials.REMINDER_LEAD_DAYS
+    items = body["items"]
+    assert [i["day_number"] for i in items] == [4, 5, 6, 7, 8, 9, 10]
+    assert [i["days_away"] for i in items] == [0, 1, 2, 3, 4, 5, 6]
+    # Within the lead time is due; beyond it is merely coming up.
+    assert [i["due"] for i in items] == [True] * 6 + [False]
+    first = items[0]
+    assert first["behdin_name"] == "Behdin Memorial" and first["departed_name"] == "Dinshaw"
+    assert first["customer_id"] == cid and first["calendar"] in {"shenshai", "kadmi", "fasli"}
+    assert {s["name"] for s in first["services"]} == {"Afringan", "Baaj"}
+
+
+async def test_reminders_exclude_the_past_and_respect_the_horizon(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    death = memorials.today_ist() - timedelta(days=3)
+    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
+
+    # Days 1-3 have passed; today is day 4.
+    items = (await _reminders(client, aid, headers, days=0)).json()["items"]
+    assert [i["day_number"] for i in items] == [4] and items[0]["days_away"] == 0
+    items = (await _reminders(client, aid, headers, days=2)).json()["items"]
+    assert [i["day_number"] for i in items] == [4, 5, 6]
+
+
+async def test_reminders_are_the_callers_own(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    death = memorials.today_ist() - timedelta(days=1)
+    await _create(client, db, aid, cid, headers, death=death, monthly=None, day_counts=[])
+    other = await _member_headers(client, seeded, name="Other", phone=OTHER_MOBED)
+
+    assert (await _reminders(client, aid, headers)).json()["items"]
+    r = await _reminders(client, aid, other)
+    assert r.status_code == 200 and r.json()["items"] == []
+
+
+async def test_reminder_horizon_is_bounded(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    assert (await _reminders(client, aid, headers, days=61)).status_code == 422
+    assert (await _reminders(client, aid, headers, days=-1)).status_code == 422
+    assert (await _reminders(client, aid, headers, days=60)).status_code == 200
+
+
+async def test_reminders_need_a_session(client, seeded):
+    r = await client.get(f"/api/mobed/agyaries/{seeded['agyary_id']}/memorial-reminders")
+    assert r.status_code in (401, 403)
