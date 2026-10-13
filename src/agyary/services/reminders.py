@@ -16,6 +16,7 @@ reason to do it is that they asked again.
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -45,22 +46,45 @@ KIND_MEMORIAL_CLOSING = "memorial_closing"
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# What counts as a STOP (RM-4). The word on its own always does. So does a
-# SHORT message that asks for the messages to stop in the family's own words -
-# "please stop", "no more", "don't send", in Hindi or Gujarati - because a
-# grieving family who writes that and keeps getting messages is the worse
-# mistake: the mobed is shown what they wrote and can turn reminders back on.
-# A long message, or one that asks for something NOT to stop ("please don't
-# stop the Afringan"), is not a STOP; it is passed to the mobed instead.
+# What counts as a STOP (RM-4): the whole message is one of these phrases, in
+# any case, with any spacing, trailing punctuation or emoji, and "please" or
+# "thanks" around it - "STOP", " stop. ", "Stop reminders please", "Cancel",
+# "Unsubscribe me", "बंद करो". Only the whole message: a sentence that merely
+# contains the word ("please stop by the agyary tomorrow", "please don't stop
+# the Afringan") is not a STOP; it is passed to the mobed, who sees what was
+# written. The usual SMS keywords (STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT)
+# are all here.
 _STOP = re.compile(r"^\s*(stop|unsubscribe)\s*[.!]*\s*$", re.IGNORECASE)
-_STOP_SHORT = 60
-_STOP_WORDS = re.compile(
-    r"\b(stop|unsubscribe|unsub|no more|don\'?t send|do not send|band karo|bandh karo|band|bandh)\b"
-    "|बंद"      # Hindi "band" (stop)
-    "|બંધ",     # Gujarati "bandh" (stop)
-    re.IGNORECASE,
-)
-_NOT_STOP = re.compile(r"\b(don\'?t|do not|never)\s+stop\b", re.IGNORECASE)
+_STOP_PHRASES = frozenset({
+    "stop", "stopall", "stop all", "stop it", "stop this", "stop these", "end", "quit",
+    "stop reminder", "stop reminders", "stop the reminders", "stop all reminders",
+    "stop message", "stop messages", "stop the messages", "stop all messages", "stop these messages",
+    "stop sending", "stop sending these", "stop sending messages", "stop sending reminders",
+    "unsubscribe", "unsub", "cancel", "cancel reminders", "cancel the reminders", "cancel all reminders",
+    "opt out", "opt-out", "optout",
+    "no more", "no more messages", "no more reminders",
+    "don't send", "dont send", "do not send", "don't send these", "dont send these", "do not send these",
+    "don't send messages", "do not send messages",
+    "band", "bandh", "band karo", "bandh karo", "band kar do", "bandh kar do", "mat bhejo",
+    "बंद", "बंद करो", "बंद कर दो", "मत भेजो",           # Hindi
+    "બંધ", "બંધ કરો", "બંધ કરી દો",                    # Gujarati
+})
+_POLITE_BEFORE = ("please ", "pls ", "plz ", "kindly ")
+_POLITE_AFTER = (" please", " pls", " plz", " thanks", " thank you", " me", " now")
+
+
+def _trim(text: str) -> str:
+    """Drop spaces, punctuation and symbols (emoji included) from both ends -
+    but not the vowel signs Hindi and Gujarati words end in."""
+    def edge(c: str) -> bool:
+        return c.isspace() or unicodedata.category(c)[0] in "PS"
+
+    start, end = 0, len(text)
+    while start < end and edge(text[start]):
+        start += 1
+    while end > start and edge(text[end - 1]):
+        end -= 1
+    return text[start:end]
 
 
 class ReminderError(Exception):
@@ -72,10 +96,17 @@ class ReminderError(Exception):
 
 
 def is_stop(text: str) -> bool:
-    text = (text or "").replace("’", "'").strip()
-    if _STOP.match(text):
-        return True
-    return len(text) <= _STOP_SHORT and bool(_STOP_WORDS.search(text)) and not _NOT_STOP.search(text)
+    text = _trim(" ".join((text or "").replace("’", "'").casefold().split()))
+    while True:
+        before = text
+        for word in _POLITE_BEFORE:
+            if text.startswith(word):
+                text = _trim(text[len(word):])
+        for word in _POLITE_AFTER:
+            if text.endswith(word):
+                text = _trim(text[: -len(word)])
+        if text == before:
+            return text in _STOP_PHRASES
 
 
 def may_send_to(settings, phone: str) -> bool:

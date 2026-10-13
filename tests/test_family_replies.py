@@ -40,6 +40,27 @@ def test_a_message_that_merely_mentions_stopping_is_not_a_stop(said):
     assert not reminders.is_stop(said), said
 
 
+@pytest.mark.parametrize("said", [
+    # Any case, surrounding spaces, trailing punctuation (the owner's question).
+    "Stop", "stop", "STOP", " stop ", "stop.", "stop!", "Stop!!", "stop?", "STOP 🙏", "\tStop\n",
+    # The other common ways of saying it.
+    "Unsubscribe", "UNSUBSCRIBE.", "Stop reminders", "stop reminders.", "Cancel", "cancel", "CANCEL!",
+    "Stop, please", "please unsubscribe", "Cancel reminders",
+])
+def test_stop_is_any_case_with_spaces_and_trailing_punctuation(said):
+    assert reminders.is_stop(said), repr(said)
+
+
+@pytest.mark.parametrize("said", [
+    # Ordinary sentences that happen to contain the word: strict enough not to trip.
+    "Please stop by the agyary tomorrow", "Can we stop at the agyary at 7?", "The bus stop is near",
+    "Stop the Afringan at 10 and start the Baaj", "Cancel the Afringan on Sunday please",
+    "We had to cancel our trip, see you next month", "stopping by later", "nonstop",
+])
+def test_a_sentence_that_contains_the_word_is_not_a_stop(said):
+    assert not reminders.is_stop(said), said
+
+
 def _signed(message: dict) -> tuple[bytes, dict]:
     raw = json.dumps({"entry": [{"changes": [{"value": {"messages": [message]}}]}]}).encode()
     digest = hmac.new(WA_APP_SECRET.encode(), raw, hashlib.sha256).hexdigest()
