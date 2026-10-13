@@ -38,6 +38,24 @@ TEMPLATE_BODY = (
     "To stop these reminders, reply STOP."
 )
 
+# The next version, to be submitted to Meta as a Utility template under this
+# name: the same four blanks in the same order (so nothing about sending
+# changes), one warm closing line that invites nothing and asks for nothing, a
+# footer saying how to stop, and a "Stop reminders" quick-reply button (its tap
+# arrives as that text, which counts as a STOP). The current template keeps
+# working until this one is APPROVED; then WHATSAPP_REMINDER_TEMPLATE is set to
+# this name - a setting, not a deploy.
+TEMPLATE_V2_NAME = "memorial_reminder_v2"
+TEMPLATE_V2_BODY = (
+    "Reminder from {{1}}.\n\n"
+    "This is a notice of prayers scheduled at the fire temple.\n\n"
+    "When: {{2}} ({{3}})\n"
+    "Prayers: {{4}}\n\n"
+    "Our prayers are with your family."
+)
+TEMPLATE_V2_FOOTER = "To stop these reminders, reply STOP"
+TEMPLATE_V2_BUTTON = "Stop reminders"
+
 # The manual message: the same, without the STOP line. A reply to a message a
 # mobed sends from their own WhatsApp goes to the mobed, not to us, so "reply
 # STOP" would promise something we cannot honour.
@@ -115,6 +133,11 @@ def manual_text(parts: Parts) -> str:
     return render(MANUAL_BODY, parts.as_params())
 
 
-def template_text(parts: Parts) -> str:
+def template_body(name: str) -> str:
+    """The approved body for a template name (the current one by default)."""
+    return TEMPLATE_V2_BODY if name == TEMPLATE_V2_NAME else TEMPLATE_BODY
+
+
+def template_text(parts: Parts, name: str = "") -> str:
     """What the family will see from the automatic sender."""
-    return render(TEMPLATE_BODY, parts.as_params())
+    return render(template_body(name), parts.as_params())

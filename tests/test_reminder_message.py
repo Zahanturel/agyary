@@ -81,3 +81,23 @@ def test_the_family_never_sees_our_vocabulary():
         lowered = text.lower()
         for word in ("observance", "booking", "booked", "arrange", "memorial", "day 3"):
             assert word not in lowered
+
+
+def test_the_next_template_keeps_the_blanks_and_adds_only_a_warm_line_and_a_stop_button():
+    # Same four blanks in the same order: switching templates changes nothing
+    # about what is sent, only which approved text Meta fills in.
+    blanks = re.findall(r"\{\{(\d+)\}\}", rm.TEMPLATE_V2_BODY)
+    assert blanks == re.findall(r"\{\{(\d+)\}\}", rm.TEMPLATE_BODY) == ["1", "2", "3", "4"]
+    assert not rm.TEMPLATE_V2_BODY.startswith("{{") and not rm.TEMPLATE_V2_BODY.endswith("}}")
+    # Nothing that invites: Meta classed that as Marketing.
+    for invitation in ("join us", "glad to have you", "welcome", "visit", "offer"):
+        assert invitation not in rm.TEMPLATE_V2_BODY.lower()
+    assert len(rm.TEMPLATE_V2_FOOTER) <= 60 and len(rm.TEMPLATE_V2_BUTTON) <= 25
+    from agyary.services.reminders import is_stop
+    assert is_stop(rm.TEMPLATE_V2_BUTTON)          # tapping the button is a STOP
+
+
+def test_the_text_shown_follows_the_template_in_use():
+    parts = _parts()
+    assert rm.template_text(parts).endswith("reply STOP.")
+    assert rm.template_text(parts, rm.TEMPLATE_V2_NAME).endswith("Our prayers are with your family.")
