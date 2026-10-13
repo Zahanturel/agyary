@@ -1,12 +1,20 @@
 {
-  "name": "Agyary - Mobed",
-  "short_name": "Agyary",
+  "id": "/mobed",
+  "name": "Mobed Diary",
+  "short_name": "Mobed Diary",
+  "description": "A diary for mobeds: ceremonies, families and memorial prayers, with WhatsApp reminders for the families who agree.",
+  "lang": "en",
   "start_url": "/mobed",
   "scope": "/mobed",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#F7F8FA",
   "theme_color": "#232A4D",
+  "categories": ["productivity", "lifestyle"],
   "icons": [
-    { "src": "/mobed-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/mobed-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/mobed-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/mobed-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/mobed-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

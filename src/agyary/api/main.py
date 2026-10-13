@@ -5,7 +5,7 @@ from pathlib import Path
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, Header, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -237,6 +237,36 @@ def mobed_service_worker() -> FileResponse:
 @app.get("/mobed-icon.svg", include_in_schema=False)
 def mobed_icon() -> FileResponse:
     return FileResponse(_STATIC_DIR / "mobed-icon.svg", media_type="image/svg+xml")
+
+
+# PNG icons for installing the app and for the Android (Trusted Web Activity)
+# build, which needs bitmaps; "maskable" keeps the emblem inside the circle
+# Android may crop it to.
+_PNG_ICONS = frozenset({"mobed-icon-192.png", "mobed-icon-512.png", "mobed-icon-maskable-512.png"})
+
+
+@app.get("/{name}.png", include_in_schema=False)
+def mobed_png_icon(name: str) -> FileResponse:
+    if f"{name}.png" not in _PNG_ICONS:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(_STATIC_DIR / f"{name}.png", media_type="image/png")
+
+
+# Digital Asset Links: tells Android that the Play Store app may open this
+# site full-screen, without a browser bar (Trusted Web Activity). It lists the
+# SHA-256 fingerprints of the keys the app is signed with - the upload key, and
+# Google Play's own signing key once the app is on Play (ANDROID_CERT_FINGERPRINTS).
+@app.get("/.well-known/assetlinks.json", include_in_schema=False)
+def asset_links() -> JSONResponse:
+    s = get_settings()
+    prints = [p.strip().upper() for p in s.android_cert_fingerprints.split(",") if p.strip()]
+    if not prints:
+        return JSONResponse([])
+    return JSONResponse([{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {"namespace": "android_app", "package_name": s.android_package_name,
+                   "sha256_cert_fingerprints": prints},
+    }])
 
 
 # Self-hosted Geist variable fonts (OFL-licensed, see static/fonts/LICENSE) -

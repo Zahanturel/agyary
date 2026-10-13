@@ -105,6 +105,14 @@ class Settings(BaseSettings):
     # loop pings after every pass, "/fail" appended when one goes wrong (OP-2).
     # Empty: no pings.
     heartbeat_url: str = ""
+    # The Android app (Trusted Web Activity) and the keys it is signed with,
+    # for /.well-known/assetlinks.json. The default is the upload key; once the
+    # app is on Google Play, add Play's app-signing fingerprint (Play Console ->
+    # Test and release -> App integrity) after it, comma separated.
+    android_package_name: str = "com.gotiadarian.mobeddiary"
+    android_cert_fingerprints: str = (
+        "66:E7:28:89:5A:E3:B8:85:1E:91:1D:72:7E:47:0F:89:27:40:98:4C:3C:13:D0:4D:D4:CF:E8:63:9F:97:E8:90"
+    )
     # Comma separated E.164 numbers of the people who can see the admin screen,
     # pause sending, and receive alerts. Empty means nobody is an admin.
     admin_phones: str = ""
