@@ -1,14 +1,15 @@
 """A plain WhatsApp text message, inside the window a person opened.
 
 When someone messages us, WhatsApp lets us answer with ordinary text (no
-approved template) for 24 hours. The one thing this app answers is a sign-in:
+approved template) for 24 hours. This app answers two things: a sign-in, with
 the confirmation number that proves the screen that started it belongs to the
-person whose phone sent the code (AU-1). Since 1 Oct 2026 such a reply costs
+person whose phone sent the code (AU-1); and a family's first STOP, with one
+kind line (reminders.acknowledge_stop). Since 1 Oct 2026 such a reply costs
 about as much as a utility message.
 
-It is deliberately NOT stopped by the reminders pause: that switch exists to
-stop messages to families, and an admin locked out of signing in could not lift
-it. It needs the same token and number id as everything else that sends.
+The pause is the caller's to check: the STOP reply respects it, the sign-in
+confirmation deliberately does not - an admin locked out of signing in could
+not lift it. It needs the same token and number id as everything else that sends.
 """
 
 from __future__ import annotations
@@ -53,10 +54,10 @@ async def send_text(settings: Settings, phone: str, body: str, client: httpx.Asy
             url, json=_payload(phone, body), headers={"Authorization": f"Bearer {settings.whatsapp_access_token}"}
         )
         if resp.status_code != 200:
-            logger.warning("A sign-in confirmation was not accepted (HTTP %s)", resp.status_code)
+            logger.warning("A text reply was not accepted (HTTP %s)", resp.status_code)
         return resp.status_code == 200
     except httpx.HTTPError as exc:
-        logger.warning("A sign-in confirmation could not be sent: %s", exc.__class__.__name__)
+        logger.warning("A text reply could not be sent: %s", exc.__class__.__name__)
         return False
     finally:
         if own:

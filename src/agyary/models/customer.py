@@ -86,6 +86,8 @@ class ReminderOptOut(Base):
 
     phone: Mapped[str] = mapped_column(String(20), primary_key=True)
     stopped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # When the one kind reply to the STOP went (None: not sent).
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AgyaryCustomer(Base):

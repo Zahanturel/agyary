@@ -172,8 +172,14 @@ async def _process_message(db: AsyncSession, message: dict) -> None:
     # A family replying STOP to a reminder. Handled before sign-in because
     # honouring it must never depend on anything else about the message.
     if reminders.is_stop(text):
+        first = not await reminders.already_stopped(db, from_phone)
         told = await reminders.record_stop(db, from_phone, said=text)
         logger.info("Inbound STOP: %d mobed(s) notified", told)
+        if first:
+            # One kind line back - once per number, never to one that had stopped.
+            context = (message.get("context") or {}).get("id")
+            outcome = await reminders.acknowledge_stop(db, get_settings(), from_phone, context_id=context)
+            logger.info("STOP acknowledgement: %s", outcome)
         return
 
     code = wa_login.extract_code(text)

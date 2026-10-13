@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     # This many failures in a row (not counting a single bad number) pause all
     # sending until an admin resumes it.
     reminders_breaker_failures: int = 5
+    # The kind one-line reply to a family's first STOP: at most this many a day
+    # (each is a paid WhatsApp message since 1 Oct 2026).
+    reminders_stop_ack_daily_cap: int = 20
     # An outside heartbeat check (e.g. a Healthchecks.io ping URL) the evening
     # loop pings after every pass, "/fail" appended when one goes wrong (OP-2).
     # Empty: no pings.

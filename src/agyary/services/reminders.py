@@ -264,21 +264,21 @@ async def record_stop(db: AsyncSession, phone: str, *, said: str | None = None, 
 KIND_BEHDIN_REPLY = "behdin_reply"
 REPLY_WINDOW = timedelta(days=30)
 
+# The one reply a STOP gets (once per number, ever). Plain text inside the
+# window the STOP opened; since 1 Oct 2026 Meta charges it at about the utility
+# rate, so it has its own daily cap.
+STOP_ACK_TEXT = "You will not receive any more reminders from {mobed}. May you and your family be in peace."
 
-async def forward_reply(
-    db: AsyncSession, phone: str, text: str, *, context_id: str | None = None, now: datetime | None = None
-) -> bool:
-    """Pass what a family wrote back to the mobed whose reminder it answers
-    (RM-4). Returns whether anyone was told.
 
-    Whose: the reminder the message replies to, when WhatsApp says which; else
-    the mobed who last reminded this number in the past month. Only that one
-    mobed, about their own record (D2): another mobed who keeps the same family
-    learns nothing. A number we never reminded reaches nobody - it is someone
-    messaging the number, not a family answering."""
+async def _answered_record(
+    db: AsyncSession, phone: str, context_id: str | None, now: datetime
+) -> Customer | None:
+    """The record (and so the mobed) whose reminder a message from ``phone``
+    answers: the reminder it replies to, when WhatsApp says which; else the one
+    last sent to that number in the past month. None for a number we never
+    reminded."""
     from agyary.models import Notification
 
-    now = now or _now()
     TYPE = "memorial_reminder"
     reminder = None
     if context_id:
@@ -303,9 +303,75 @@ async def forward_reply(
             )
         ).scalar_one_or_none()
     if reminder is None or reminder.recipient_phone != phone:
-        return False
+        return None
     customer = await db.get(Customer, reminder.recipient_id) if reminder.recipient_id else None
     if customer is None or customer.owner_user_id is None:
+        return None
+    return customer
+
+
+async def already_stopped(db: AsyncSession, phone: str) -> bool:
+    """Whether this number had replied STOP before (a STOP is never forgotten)."""
+    return await db.get(ReminderOptOut, phone) is not None
+
+
+async def acknowledge_stop(
+    db: AsyncSession, settings, phone: str, *, context_id: str | None = None,
+    now: datetime | None = None, client=None,
+) -> str:
+    """Answer a family's first STOP with one short, kind line naming their
+    mobed. Call it only for a number that had not stopped before - the caller
+    checks, before recording the STOP - so a second STOP, or Meta delivering
+    the same one twice, gets nothing.
+
+    Sent only while reminders are live, not paused, under its own daily cap,
+    and only to a number we actually reminded. Returns what happened."""
+    from agyary.models import User
+    from agyary.services import guardrails, wa_send
+
+    now = now or _now()
+    if settings.reminders_send_mode != "live" or not wa_send.can_send(settings):
+        return "not sending"
+    if await guardrails.paused_reason(db):
+        return "paused"
+    customer = await _answered_record(db, phone, context_id, now)
+    if customer is None:
+        return "never reminded"
+    start, end = guardrails.day_bounds(now)
+    today = (
+        await db.execute(
+            select(func.count()).select_from(ReminderOptOut).where(
+                ReminderOptOut.acknowledged_at >= start, ReminderOptOut.acknowledged_at < end)
+        )
+    ).scalar_one()
+    if today >= settings.reminders_stop_ack_daily_cap:
+        return "over the daily limit"
+    mobed = await db.get(User, customer.owner_user_id)
+    name = (mobed.name or "").strip() if mobed else ""
+    text = STOP_ACK_TEXT.format(mobed=name or "your mobed")
+    if not await wa_send.send_text(settings, phone, text, client=client):
+        return "failed"
+    row = await db.get(ReminderOptOut, phone)
+    if row is not None:
+        row.acknowledged_at = now
+    await db.flush()
+    return "sent"
+
+
+async def forward_reply(
+    db: AsyncSession, phone: str, text: str, *, context_id: str | None = None, now: datetime | None = None
+) -> bool:
+    """Pass what a family wrote back to the mobed whose reminder it answers
+    (RM-4). Returns whether anyone was told.
+
+    Whose: the reminder the message replies to, when WhatsApp says which; else
+    the mobed who last reminded this number in the past month. Only that one
+    mobed, about their own record (D2): another mobed who keeps the same family
+    learns nothing. A number we never reminded reaches nobody - it is someone
+    messaging the number, not a family answering."""
+    now = now or _now()
+    customer = await _answered_record(db, phone, context_id, now)
+    if customer is None:
         return False
     await notify(
         db, customer.owner_user_id, KIND_BEHDIN_REPLY, f"{customer.name} replied on WhatsApp",
