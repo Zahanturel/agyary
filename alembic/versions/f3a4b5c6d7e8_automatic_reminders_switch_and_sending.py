@@ -25,18 +25,22 @@ depends_on: Union[str, Sequence[str], None] = None
 _OLD = "status IN ('pending', 'queued', 'sent', 'delivered', 'read', 'failed')"
 _NEW = "status IN ('pending', 'queued', 'sending', 'sent', 'delivered', 'read', 'failed')"
 
+# op.f(): the name is already final. A bare string is run through the naming
+# convention again ("ck_notifications_ck_notifications_status"), which no
+# database has, and the upgrade fails.
+
 
 def upgrade() -> None:
     op.add_column(
         "users", sa.Column("automatic_reminders", sa.Boolean(), server_default="true", nullable=False)
     )
-    op.drop_constraint("ck_notifications_status", "notifications", type_="check")
-    op.create_check_constraint("ck_notifications_status", "notifications", _NEW)
+    op.drop_constraint(op.f("ck_notifications_status"), "notifications", type_="check")
+    op.create_check_constraint(op.f("ck_notifications_status"), "notifications", _NEW)
 
 
 def downgrade() -> None:
     # A reminder caught mid-send has unknown fate; the old schema calls that failed.
     op.execute("UPDATE notifications SET status = 'failed' WHERE status = 'sending'")
-    op.drop_constraint("ck_notifications_status", "notifications", type_="check")
-    op.create_check_constraint("ck_notifications_status", "notifications", _OLD)
+    op.drop_constraint(op.f("ck_notifications_status"), "notifications", type_="check")
+    op.create_check_constraint(op.f("ck_notifications_status"), "notifications", _OLD)
     op.drop_column("users", "automatic_reminders")
