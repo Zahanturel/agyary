@@ -43,7 +43,12 @@ class ParabsIn(BaseModel):
 
 class MemorialIn(BaseModel):
     departed_name: str
-    death_date: date
+    # The death: a Gregorian date, or Roj and Mah (and Parsi year) in the family's
+    # calendar - one or the other (D5). Mah 13 is a Gatha day, numbered by Roj.
+    death_date: date | None = None
+    death_roj: int | None = None
+    death_mah: int | None = None
+    death_year: int | None = None
     opening: Literal[OPENING_ALL, OPENING_TENTH]
     day_counts: list[int] = []
     monthly: SeriesIn | None = None   # count = months
@@ -62,6 +67,9 @@ def _choice(p: MemorialIn) -> memorials.Choice:
     return memorials.Choice(
         departed_name=p.departed_name,
         death_date=p.death_date,
+        death_roj=p.death_roj,
+        death_mah=p.death_mah,
+        death_year=p.death_year,
         opening=p.opening,
         day_counts=tuple(p.day_counts),
         monthly_months=p.monthly.count if p.monthly else None,
@@ -90,12 +98,13 @@ async def _preview(db: AsyncSession, user: User, payload: MemorialIn) -> dict:
     try:
         choice = _choice(payload)
         system = await memorials.calendar_for(db, user.id, choice)
-        schedule, (roj, mah, year) = memorials.plan(system, choice)
+        schedule, (roj, mah, year), death_date = memorials.plan(system, choice)
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc
     return {
         "calendar": system.value,
         "death": {"roj": roj, "mah": mah, "year": year},
+        "death_date": death_date.isoformat(),
         "count": len(schedule),
         "observances": [
             {

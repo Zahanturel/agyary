@@ -26,7 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from agyary.calendar import CalendarSystem, gregorian_to_parsi
+from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
 from agyary.calendar.memorial import Observance, build_schedule
 from agyary.core.config import get_settings
 from agyary.messaging import booking_service
@@ -64,7 +64,11 @@ class Choice:
     not chosen is None; a series that was chosen has its length, always."""
 
     departed_name: str
-    death_date: date
+    # The death, either as a Gregorian date or as Roj and Mah (and Parsi year)
+    # in the family's calendar (D5) - a death before sunrise belongs to the
+    # previous Parsi day, and the mobed knows which it was. Mah 13 is a Gatha
+    # day, with the Gatha number as the Roj.
+    death_date: date | None
     opening: str
     day_counts: tuple[int, ...] = ()
     monthly_months: int | None = None
@@ -75,6 +79,9 @@ class Choice:
     # decides which day is a Parab and where the Gatha days fall, so it is
     # stored with the memorial rather than assumed later.
     calendar: str | None = None
+    death_roj: int | None = None
+    death_mah: int | None = None
+    death_year: int | None = None
 
 
 def _validate_length(value: int | None, label: str, ceiling: int) -> None:
@@ -96,10 +103,50 @@ async def calendar_for(db: AsyncSession, user_id: int, choice: Choice) -> Calend
     return await mobed_dashboard.reading_system(db, user_id)
 
 
-def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tuple[int, int, int]]:
+def _on_parsi_day(year: int, system: CalendarSystem, roj: int, mah: int) -> date:
+    if mah == 13:
+        return parsi_to_gregorian(year, system, gatha_index=roj)
+    return parsi_to_gregorian(year, system, mah=mah, roj=roj)
+
+
+def resolve_death(system: CalendarSystem, choice: Choice, today: date | None = None) -> date:
+    """The Gregorian date of the death, from whichever way it was given (D5).
+    Roj and Mah without a year mean the most recent such day, today included."""
+    by_date = choice.death_date is not None
+    by_parsi = choice.death_roj is not None or choice.death_mah is not None or choice.death_year is not None
+    if by_date == by_parsi:
+        raise MemorialError("Give the date of death either as a date or as Roj and Mah, not both.")
+    if by_date:
+        return choice.death_date
+    roj, mah = choice.death_roj, choice.death_mah
+    if roj is None or mah is None:
+        raise MemorialError("Give both the Roj and the Mah of the death.")
+    if not 1 <= mah <= 13 or not 1 <= roj <= (6 if mah == 13 else 30):
+        raise MemorialError("That is not a Roj and Mah.")
+    try:
+        if choice.death_year is not None:
+            return _on_parsi_day(choice.death_year, system, roj, mah)
+        today = today or today_ist()
+        current = gregorian_to_parsi(today, system).year
+        candidates = []
+        for year in range(current - 4, current + 1):   # four back: Fasli's sixth Gatha
+            try:
+                when = _on_parsi_day(year, system, roj, mah)
+            except ValueError:
+                continue
+            if when <= today:
+                candidates.append(when)
+        if not candidates:
+            raise MemorialError("That day has not come round in the last few years.")
+        return max(candidates)
+    except (ValueError, OverflowError) as exc:
+        raise MemorialError("That is not a day in this calendar.") from exc
+
+
+def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tuple[int, int, int], date]:
     """The schedule for a choice, without saving anything. Also returns the
-    death as (roj, mah, year) in ``system`` - what the preview shows the
-    mobed, and what gets stored."""
+    death as (roj, mah, year) in ``system`` and as a Gregorian date - what the
+    preview shows the mobed, and what gets stored."""
     name = choice.departed_name.strip()
     if not name:
         raise MemorialError("Please enter the departed person's name.")
@@ -117,7 +164,8 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
 
     # A Gatha death is stored the way machis store one: Mah 13, with the
     # Gatha number in the Roj slot.
-    roj, mah, year = parsi_slot_fields(gregorian_to_parsi(choice.death_date, system))
+    death_date = resolve_death(system, choice)
+    roj, mah, year = parsi_slot_fields(gregorian_to_parsi(death_date, system))
 
     try:
         schedule = build_schedule(
@@ -135,7 +183,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
             f"That makes {len(schedule)} observances, more than the {MAX_OBSERVANCES} allowed. "
             "Shorten the series."
         )
-    return schedule, (roj, mah, year)
+    return schedule, (roj, mah, year), death_date
 
 
 async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: list[int]) -> list[Service]:
@@ -162,7 +210,7 @@ async def create_memorial(
     """Save a memorial. Every observance starts with the same services - the
     set chosen here - and each can be changed on its own afterwards."""
     system = await calendar_for(db, user_id, choice)
-    schedule, (roj, mah, year) = plan(system, choice)
+    schedule, (roj, mah, year), death_date = plan(system, choice)
     services = await _validated_services(db, agyary.id, service_ids)
 
     memorial = Memorial(
@@ -170,7 +218,7 @@ async def create_memorial(
         customer_id=customer.id,
         created_by_user_id=user_id,
         departed_name=choice.departed_name.strip(),
-        death_gregorian=choice.death_date,
+        death_gregorian=death_date,
         death_roj=roj, death_mah=mah, death_year=year,
         calendar_system=system.value,
         opening=choice.opening,
