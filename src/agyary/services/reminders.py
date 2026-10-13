@@ -36,11 +36,11 @@ KIND_REMINDER_STOPPED = "reminder_stopped"
 # name the business that will message them and say how to stop, which is what
 # Meta's opt-in rules expect. Change the words, change the version: each
 # agreement keeps the version that was read out.
-CONSENT_VERSION = "2026-10-a"
+CONSENT_VERSION = "2026-10-b"
 CONSENT_TEXT = (
-    "May Mobed Diary send you a short WhatsApp message the evening before each of "
-    "these prayers? It comes from the Mobed Diary number, not from me. You can stop "
-    "them at any time by replying STOP."
+    "Would you like a short WhatsApp reminder the evening before each of these "
+    "prayers? It will come from the Mobed Diary number, on my behalf. It is entirely "
+    "up to you, and if you ever want them to stop, just reply STOP."
 )
 KIND_MEMORIAL_CLOSING = "memorial_closing"
 

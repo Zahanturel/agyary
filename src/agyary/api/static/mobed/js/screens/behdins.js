@@ -515,7 +515,7 @@ export async function renderBehdinDetail({ id }) {
         return showError(e.message);
       }
       note.innerHTML = `<div class="card" style="margin:8px 0 0">
-          <p style="margin:0 0 8px"><b>Before you turn this on, ask ${esc(record.name)}:</b></p>
+          <p style="margin:0 0 8px"><b>Before you turn this on, please ask ${esc(record.name)}:</b></p>
           <p style="margin:0 0 12px">"${esc(wording.text)}"</p>
           <div class="row tight">
             <button class="small" id="bdConsentYes">They said yes</button>
