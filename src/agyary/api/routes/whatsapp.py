@@ -196,7 +196,7 @@ async def _process_message(db: AsyncSession, message: dict) -> None:
     # to this phone. If nothing can be sent (a laptop, or Meta refusing), the
     # sign-in goes ahead as before rather than locking everyone out.
     settings = get_settings()
-    if wa_send.can_send(settings):
+    if settings.signin_confirmation.strip().lower() == "on" and wa_send.can_send(settings):
         number = await wa_login.require_confirmation(db, attempt)
         if not await wa_send.send_text(settings, from_phone, wa_login.confirmation_message(number)):
             attempt.confirm_hash = None

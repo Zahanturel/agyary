@@ -155,6 +155,12 @@ class Settings(BaseSettings):
     # enough to switch apps on a phone that decides to show you six
     # notifications on the way.
     wa_login_ttl_seconds: int = 600
+    # AU-1: "on" sends a short confirmation number back to the phone a sign-in
+    # code came from, and the sign-in finishes only when it is typed on the
+    # screen that started it - what stops "send us a code" being phished. It is a
+    # real WhatsApp message (about a utility message's price), so it is off until
+    # the owner turns it on; with it off, sign-in works as before.
+    signin_confirmation: str = "off"
 
     def validate_runtime_secrets(self) -> None:
         """Refuse to serve with a blank JWT signing key, or in debug mode in

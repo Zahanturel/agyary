@@ -51,6 +51,7 @@ class Sent:
 
 @pytest.fixture
 def can_send(monkeypatch):
+    monkeypatch.setenv("SIGNIN_CONFIRMATION", "on")
     monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "test-token")
     monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "555000111")
     config.get_settings.cache_clear()
@@ -103,6 +104,17 @@ async def test_the_phone_owner_types_the_number_and_is_signed_in(client, db, see
     assert r.status_code == 200 and r.json()["status"] == "needs_name"
     done = await client.post("/api/mobed/auth/wa/complete", json={"name": "Real Mobed"})
     assert done.json()["status"] == "signed_in" and done.json()["user"]["phone"] == VICTIM
+
+
+async def test_nothing_is_sent_until_the_owner_switches_confirmation_on(client, db, seeded, can_send, monkeypatch):
+    """The confirmation is a real WhatsApp message to the person signing in, so
+    it goes only once the owner turns it on (SIGNIN_CONFIRMATION=on)."""
+    monkeypatch.setenv("SIGNIN_CONFIRMATION", "off")
+    config.get_settings.cache_clear()
+    started = (await client.post("/api/mobed/auth/wa/start")).json()
+    await _code_sent_from(client, started["code"], VICTIM)
+    assert can_send.messages == []
+    assert (await client.get("/api/mobed/auth/wa/poll")).json()["status"] in ("needs_name", "signed_in")
 
 
 # --- AU-4 ---------------------------------------------------------------------
