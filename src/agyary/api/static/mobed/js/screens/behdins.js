@@ -450,7 +450,7 @@ export async function renderBehdinDetail({ id }) {
   document.getElementById("bdSave").onclick = async () => {
     const name = document.getElementById("bdName").value.trim();
     const phone = readPhone("bdPhone");
-    if (!name) return showError("Name cannot be blank.");
+    if (!name) return showError("Please enter a name.");
     if (!phone) return showError("Please enter a valid phone number.");
     try {
       await updateBehdin(aid, cid, { name, phone });

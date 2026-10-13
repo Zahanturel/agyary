@@ -134,7 +134,7 @@ export function shortName(full) {
 
 /** Header line every signed-in screen shares: who you are and where. */
 export function refreshHeader() {
-  if (!state.user) return setHeader("Agyary");
+  if (!state.user) return setHeader("Mobed Diary");
   const agyary = currentAgyary();
   const first = shortName(state.user.name);
   setHeader(agyary ? `${first} · ${agyary.name}` : first);

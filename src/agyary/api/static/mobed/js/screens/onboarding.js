@@ -101,7 +101,7 @@ function renderActivate(a) {
       address: document.getElementById("acAddr").value.trim() || null,
       contact_phone: phoneRes.value,
     };
-    if (!body.name || !body.city) return showError("Name and city are required.");
+    if (!body.name || !body.city) return showError("Please enter the fire temple's name and city.");
     try {
       const res = await activateAgyary(a.id, body);
       state.user = res.user;
@@ -138,7 +138,7 @@ function renderCreate(prefillName) {
       address: document.getElementById("crAddr").value.trim() || null,
       contact_phone: phoneRes.value,
     };
-    if (!body.name || !body.city) return showError("Name and city are required.");
+    if (!body.name || !body.city) return showError("Please enter the fire temple's name and city.");
     try {
       const res = await createAgyary(body);
       state.user = res.user;

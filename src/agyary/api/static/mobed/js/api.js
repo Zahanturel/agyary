@@ -25,7 +25,13 @@ export async function api(path, opts = {}) {
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.accessToken) headers["Authorization"] = "Bearer " + state.accessToken;
 
-  const res = await fetch(base + p, Object.assign({}, opts, { headers, credentials: "include" }));
+  let res;
+  try {
+    res = await fetch(base + p, Object.assign({}, opts, { headers, credentials: "include" }));
+  } catch (e) {
+    if (e && e.name === "AbortError") throw e;
+    throw new ApiError(0, "Could not reach Mobed Diary. Please check your internet connection and try again.");
+  }
 
   // One silent refresh attempt per call. The refresh cookie is httpOnly and
   // sliding, so a 60-minute access token expiring mid-session should be
@@ -37,15 +43,20 @@ export async function api(path, opts = {}) {
   }
 
   if (!res.ok) {
-    let detail = res.statusText;
+    // Our own handlers answer in plain words; anything else gets a plain
+    // sentence rather than "Unprocessable Entity" or "Internal Server Error".
+    let detail = res.status === 422 ? "Something in the form doesn't look right. Please check it and try again."
+      : res.status === 429 ? "That was a lot of tries in a short time. Please wait a minute and try again."
+      : res.status >= 500 ? "Something went wrong on our side. Please try again in a minute."
+      : "That didn't work. Please try again.";
     try {
       const body = await res.json();
       // A FastAPI validation 422's `detail` is a list of structured objects,
-      // not a string - fall back to statusText rather than showing
+      // not a string - keep the plain sentence rather than showing
       // "[object Object]" if it isn't the plain-string shape our own
       // handlers return.
       if (typeof body.detail === "string") detail = body.detail;
-    } catch (e) { /* non-JSON body; statusText it is */ }
+    } catch (e) { /* non-JSON body; the plain sentence it is */ }
     throw new ApiError(res.status, detail);
   }
   return res.status === 204 ? null : res.json();

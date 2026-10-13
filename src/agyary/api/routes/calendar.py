@@ -60,7 +60,7 @@ def range_(
     doing that as 42 separate /convert round trips would be slow and chatty
     on a mobile connection."""
     if end < start:
-        raise HTTPException(status_code=400, detail="end must not be before start")
+        raise HTTPException(status_code=400, detail="The end date is before the start date.")
     if (end - start).days + 1 > _MAX_RANGE_DAYS:
         raise HTTPException(status_code=400, detail=f"Range too large (max {_MAX_RANGE_DAYS} days)")
     days = []
@@ -132,7 +132,7 @@ def from_parsi(
     """
     is_gatha = mah == 13
     if is_gatha and roj > 6:
-        raise HTTPException(status_code=400, detail="Gatha index must be between 1 and 6")
+        raise HTTPException(status_code=400, detail="Please choose one of the Gatha days.")
     kwargs = {"gatha_index": roj} if is_gatha else {"mah": mah, "roj": roj}
 
     try:

@@ -69,7 +69,7 @@ async def _current(authorization: str, db: AsyncSession) -> tuple[User, int]:
         raise HTTPException(status_code=401, detail="This sign-in has ended. Please sign in again.")
     user = await db.get(User, claims["sub"])
     if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="That account could not be found.")
     return user, session.id
 
 
@@ -83,7 +83,7 @@ async def get_current_user(
 async def _require_membership(db: AsyncSession, agyary_id: int, user: User) -> Agyary:
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
-        raise HTTPException(status_code=404, detail="Unknown agyary")
+        raise HTTPException(status_code=404, detail="That fire temple could not be found.")
     if not await mobed_dashboard.is_active_member(db, agyary_id, user.id):
         raise HTTPException(status_code=403, detail="Not a member of this agyary")
     return agyary
@@ -297,7 +297,7 @@ async def wa_login_complete(
 
     name = payload.name.strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required for a first sign-in")
+        raise HTTPException(status_code=400, detail="Please enter your name.")
 
     attempt = await wa_login.peek(db, wa_login_cookie)
     phone = await wa_login.peek_claimed_phone(db, wa_login_cookie)
@@ -432,7 +432,7 @@ async def update_me(
     move their proven number to an unproven one."""
     name = payload.name.strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
+        raise HTTPException(status_code=400, detail="Please enter a name.")
     user.name = name
     await db.commit()
     return await _serialize_user(db, user)
@@ -487,7 +487,7 @@ async def put_preferences(
             f"Choose from: {', '.join(DISPLAY_CALENDAR_SYSTEMS)}",
         )
     if not systems:
-        raise HTTPException(status_code=400, detail="At least one calendar system must stay visible")
+        raise HTTPException(status_code=400, detail="Please keep at least one calendar showing.")
     if payload.default_secondary_system not in CALENDAR_SYSTEMS:
         raise HTTPException(
             status_code=400,
@@ -548,7 +548,7 @@ async def join_agyari(
 ) -> dict:
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
-        raise HTTPException(status_code=404, detail="Unknown agyary")
+        raise HTTPException(status_code=404, detail="That fire temple could not be found.")
     await mobed_auth.ensure_agyary_membership(db, agyary_id, user)
     await db.commit()
     # Include the agyari (with status) so the client knows whether an
@@ -575,7 +575,7 @@ async def activate_agyari(
     flips it to active."""
     agyary = await _require_membership(db, agyary_id, user)
     if not payload.name.strip() or not payload.city.strip():
-        raise HTTPException(status_code=400, detail="Name and city are required")
+        raise HTTPException(status_code=400, detail="Please enter the fire temple's name and city.")
     _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)
     await mobed_dashboard.activate_agyary(
         db, agyary,
@@ -602,7 +602,7 @@ async def create_agyari(
     """Creation fallback: the agyari isn't in the seed list at all. Same
     activation outcome (born active), then the creating mobed joins it."""
     if not payload.name.strip() or not payload.city.strip():
-        raise HTTPException(status_code=400, detail="Name and city are required")
+        raise HTTPException(status_code=400, detail="Please enter the fire temple's name and city.")
     _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)
     agyary = await mobed_dashboard.create_agyary(
         db,
@@ -656,7 +656,7 @@ async def my_day(
         raise HTTPException(status_code=400, detail="Pass both from and to, or neither")
     if from_ is not None and to is not None:
         if to < from_:
-            raise HTTPException(status_code=400, detail="`to` is before `from`")
+            raise HTTPException(status_code=400, detail="The end date is before the start date.")
         if (to - from_).days + 1 > mobed_dashboard.MAX_MY_DAY_RANGE_DAYS:
             raise HTTPException(
                 status_code=400,
@@ -721,7 +721,7 @@ async def create_service(
     await _require_membership(db, agyary_id, user)
     name = payload.name.strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Service name is required")
+        raise HTTPException(status_code=400, detail="Please enter the service's name.")
     _check_template_text(name, "service name", template_text.SERVICE_MAX)
     service = Service(agyary_id=agyary_id, name=name, offsite_capable=payload.offsite_capable, display_order=999)
     db.add(service)
@@ -821,7 +821,7 @@ async def machi_slip(
     await _require_membership(db, agyary_id, user)
     slip = await mobed_dashboard.get_machi_slip(db, agyary_id, machi_id, reader_user_id=user.id)
     if slip is None:
-        raise HTTPException(status_code=404, detail="Unknown machi")
+        raise HTTPException(status_code=404, detail="That machi could not be found.")
     return _slip_response(slip)
 
 
@@ -832,7 +832,7 @@ async def booking_slip(
     await _require_membership(db, agyary_id, user)
     slip = await mobed_dashboard.get_booking_slip(db, agyary_id, booking_id, reader_user_id=user.id)
     if slip is None:
-        raise HTTPException(status_code=404, detail="Unknown booking")
+        raise HTTPException(status_code=404, detail="That booking could not be found.")
     return _slip_response(slip)
 
 
@@ -847,7 +847,7 @@ async def customer_history(
 ) -> dict:
     result = await mobed_dashboard.get_customer_history(db, user.id, customer_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="Unknown customer")
+        raise HTTPException(status_code=404, detail="That behdin could not be found.")
     return result
 
 
@@ -867,7 +867,7 @@ async def _require_behdin(db: AsyncSession, agyary_id: int, customer_id: int, us
         # Deliberately 404, not 403, for a behdin who exists but isn't this
         # mobed's: whether a given person is on file elsewhere - or at all -
         # is not this caller's business, and a 403 would confirm it.
-        raise HTTPException(status_code=404, detail="Unknown behdin")
+        raise HTTPException(status_code=404, detail="That behdin could not be found.")
     return customer
 
 
@@ -1052,7 +1052,7 @@ async def delete_saved_name(
     behdin's options with no explanation."""
     await _require_behdin(db, agyary_id, customer_id, user)
     if not await behdin_directory.delete_saved_name(db, customer_id, row_id):
-        raise HTTPException(status_code=404, detail="Unknown saved name")
+        raise HTTPException(status_code=404, detail="That saved name could not be found.")
     await db.commit()
     return {"deleted": True}
 
@@ -1171,7 +1171,7 @@ async def manual_add_booking(
         remember_names=payload.remember_names,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Unknown service")
+        raise HTTPException(status_code=404, detail="That service could not be found.")
     await db.commit()
     return {
         "booking_id": result.booking.id,
@@ -1205,7 +1205,7 @@ async def preview_booking(
         service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime, names=names,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Unknown service")
+        raise HTTPException(status_code=404, detail="That service could not be found.")
     return _preview_response(result)
 
 
@@ -1249,7 +1249,7 @@ async def machi_detail(
     await _require_membership(db, agyary_id, user)
     detail = await mobed_dashboard.get_machi_detail(db, agyary_id, machi_id, user.id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Unknown machi")
+        raise HTTPException(status_code=404, detail="That machi could not be found.")
     return detail
 
 
@@ -1260,7 +1260,7 @@ async def booking_detail(
     await _require_membership(db, agyary_id, user)
     detail = await mobed_dashboard.get_booking_detail(db, agyary_id, booking_id, user.id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Unknown booking")
+        raise HTTPException(status_code=404, detail="That booking could not be found.")
     return detail
 
 
@@ -1297,7 +1297,7 @@ async def edit_machi(
         names=names, remember_names=payload.remember_names,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Unknown machi")
+        raise HTTPException(status_code=404, detail="That machi could not be found.")
     await db.commit()
     if result.machi is None:
         return {
@@ -1344,7 +1344,7 @@ async def edit_booking(
         remember_names=payload.remember_names,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Unknown booking or service")
+        raise HTTPException(status_code=404, detail="That booking or service could not be found.")
     await db.commit()
     return {"booking_id": result.booking.id, "calendar_conflict": result.calendar_conflict}
 
@@ -1368,7 +1368,7 @@ async def delete_machi(
     except mobed_dashboard.DeleteBlocked as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
-        raise HTTPException(status_code=404, detail="Unknown machi")
+        raise HTTPException(status_code=404, detail="That machi could not be found.")
     await db.commit()
     return {"deleted": True}
 
@@ -1386,7 +1386,7 @@ async def delete_booking(
     except mobed_dashboard.DeleteBlocked as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
-        raise HTTPException(status_code=404, detail="Unknown booking")
+        raise HTTPException(status_code=404, detail="That booking could not be found.")
     await db.commit()
     return {"deleted": True}
 

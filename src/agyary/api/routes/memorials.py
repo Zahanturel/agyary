@@ -90,7 +90,7 @@ async def _own_memorial(db: AsyncSession, agyary_id: int, memorial_id: int, user
     # 404 whether it is missing, someone else's, or at another temple: a
     # family's departed are not for a colleague to confirm the existence of.
     if memorial is None or memorial.agyary_id != agyary_id:
-        raise HTTPException(status_code=404, detail="Unknown memorial")
+        raise HTTPException(status_code=404, detail="That memorial could not be found.")
     return memorial
 
 
@@ -205,7 +205,7 @@ def _parse_time(value: str) -> time:
         hh, mm = value.split(":")
         return time(int(hh), int(mm))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Time must look like 09:30.") from exc
+        raise HTTPException(status_code=400, detail="Please give the time like 09:30.") from exc
 
 
 @router.patch("/agyaries/{agyary_id}/memorials/{memorial_id}/observances/{observance_id}")
@@ -220,7 +220,7 @@ async def update_observance(
     memorial = await _own_memorial(db, agyary_id, memorial_id, user)
     observance = next((o for o in memorial.observances if o.id == observance_id), None)
     if observance is None:
-        raise HTTPException(status_code=404, detail="Unknown observance")
+        raise HTTPException(status_code=404, detail="That prayer day could not be found.")
     try:
         await memorials.update_observance(
             db, memorial, observance,
@@ -264,7 +264,7 @@ async def memorial_feed(
     dates, inclusive - what the calendar overlays on its days."""
     await _require_membership(db, agyary_id, user)
     if to < from_:
-        raise HTTPException(status_code=400, detail="`to` is before `from`")
+        raise HTTPException(status_code=400, detail="The end date is before the start date.")
     if (to - from_).days + 1 > MAX_FEED_RANGE_DAYS:
         raise HTTPException(status_code=400, detail=f"Range too wide (max {MAX_FEED_RANGE_DAYS} days)")
     return await memorials.calendar_feed(db, user.id, agyary_id, from_, to)
@@ -314,6 +314,6 @@ async def mark_reminded(
     await _require_membership(db, agyary_id, user)
     obs = await memorials.mark_reminded(db, user.id, agyary_id, observance_id, payload.reminded)
     if obs is None:
-        raise HTTPException(status_code=404, detail="Unknown observance")
+        raise HTTPException(status_code=404, detail="That prayer day could not be found.")
     await db.commit()
     return {"reminded_by_hand_at": obs.reminded_by_hand_at.isoformat() if obs.reminded_by_hand_at else None}
