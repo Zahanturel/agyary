@@ -261,6 +261,16 @@ async def record_stop(db: AsyncSession, phone: str, *, said: str | None = None, 
     return told
 
 
+async def sweep_expired_notices(db: AsyncSession, now: datetime | None = None) -> int:
+    """Delete in-app notices a week after they expired, rather than keeping
+    them for ever (they are about what to do now, not a record)."""
+    from sqlalchemy import delete
+
+    now = now or _now()
+    result = await db.execute(delete(AppNotification).where(AppNotification.expires_at < now - timedelta(days=7)))
+    return result.rowcount or 0
+
+
 KIND_BEHDIN_REPLY = "behdin_reply"
 REPLY_WINDOW = timedelta(days=30)
 

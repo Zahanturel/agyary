@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -11,6 +12,8 @@ from agyary.calendar import (
 )
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
+
+IST = ZoneInfo("Asia/Kolkata")
 
 # A month grid view needs at most 6 weeks (42 days); this is a guard against
 # abuse, not a real product constraint.
@@ -35,7 +38,9 @@ def _serialize(parsi_date: ParsiDate) -> dict:
 
 @router.get("/today")
 def today(system: CalendarSystem = Query(default=CalendarSystem.SHENSHAI)) -> dict:
-    return _serialize(gregorian_to_parsi(date.today(), system))
+    # India's date, not the server's: in UTC, midnight to 05:30 IST is still
+    # yesterday (DM-2).
+    return _serialize(gregorian_to_parsi(datetime.now(IST).date(), system))
 
 
 @router.get("/convert")

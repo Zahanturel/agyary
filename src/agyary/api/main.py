@@ -81,6 +81,20 @@ _NO_CACHE_PATHS = frozenset({
 })
 
 
+class _NoQueryStrings(logging.Filter):
+    """Access log lines keep the path but drop the query string, which can
+    carry a behdin search or a name (PV-3)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and "?" in args[2]:
+            record.args = args[:2] + (args[2].split("?", 1)[0],) + args[3:]
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_NoQueryStrings())
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     response = await call_next(request)

@@ -77,6 +77,7 @@ async def tick(
         async with session_factory() as db:
             if in_window:
                 report.closing = await reminders.notify_closing_tomorrow(db, now)
+                await reminders.sweep_expired_notices(db, now)
                 await db.commit()
             if sending:
                 if in_window:

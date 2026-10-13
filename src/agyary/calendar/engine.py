@@ -27,7 +27,8 @@ from __future__ import annotations
 
 import calendar as _pycalendar
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from enum import Enum
 
 ROJ_NAMES: tuple[str, ...] = (
@@ -317,7 +318,7 @@ def nearest_occurrence(
     every four years, not annually, so a one-year window would declare a
     perfectly real day nonexistent for three years out of four.
     """
-    reference = on_or_after or date.today()
+    reference = on_or_after or datetime.now(ZoneInfo("Asia/Kolkata")).date()    # India's today
     current_year = gregorian_to_parsi(reference, system).year
 
     candidates = []
