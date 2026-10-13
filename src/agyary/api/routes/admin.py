@@ -19,7 +19,7 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import LoginOtp, Notification, User
-from agyary.services import guardrails, mobed_auth
+from agyary.services import bot_check, guardrails, mobed_auth
 from agyary.services.phone import Phone
 
 router = APIRouter(prefix="/api/mobed/admin", tags=["admin"])
@@ -84,7 +84,10 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
             },
             "estimated_month_cost_inr": guardrails.estimated_cost_inr(s, used.month),
         },
-        "otp": {"mode": s.otp_mode, "today": otp_today, "daily_cap": s.otp_daily_cap},
+        "otp": {
+            "mode": s.otp_mode, "today": otp_today, "daily_cap": s.otp_daily_cap,
+            "bot_check": bot_check.configured(s),
+        },
         "recent_failures": [
             {"when": when.isoformat(), "reason": reason or "", "to": _masked(phone)}
             for when, reason, phone in failures

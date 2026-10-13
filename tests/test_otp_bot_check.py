@@ -1,10 +1,11 @@
 """The conditions for sending sign-in codes (docs/DECISIONS.md D1, D3).
 
 Asking for a code makes us send a paid message to a number the caller typed, so
-once codes are live: a bot check (Cloudflare Turnstile) must be passed for every
-request, sign-in by code is simply unavailable until the check is configured,
-and the per-address limits are counted in the database, where a restart or a
-deploy cannot reset them.
+once the bot check (Cloudflare Turnstile) is configured it must be passed for
+every request, and the per-address limits are counted in the database, where a
+restart or a deploy cannot reset them. Until its keys are set, codes keep working
+as before - the owner put sign-in by code live and made the check follow-up work,
+not a precondition (D3) - and the admin screen says the check is missing.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import pytest
 from agyary.api import rate_limit
 from agyary.core import config
 from agyary.services import bot_check, otp
+from tests.test_mobed_api import NEW_MOBED_PHONE, _member_headers
 from tests.test_otp import Outbox
 from tests.test_reminder_sender import _settings
 
@@ -58,12 +60,21 @@ async def test_codes_need_the_bot_check_once_it_is_configured(client, db, seeded
     assert len(outbox.sent) == 1
 
 
-async def test_sign_in_by_code_is_unavailable_without_a_bot_check(client, db, seeded, monkeypatch, outbox):
+async def test_codes_keep_working_until_the_bot_check_is_set_up(client, db, seeded, monkeypatch, outbox):
     _live(monkeypatch, turnstile=False)
-    assert (await client.get("/api/mobed/auth/options")).json()["otp"] is False
+    assert (await client.get("/api/mobed/auth/options")).json() == {"otp": True, "turnstile_site_key": None}
     r = await client.post("/api/mobed/auth/otp/request", json={"phone": PHONE})
-    assert r.status_code == 503
-    assert outbox.sent == []
+    assert r.status_code == 200, r.text
+    assert len(outbox.sent) == 1
+
+
+async def test_the_admin_screen_says_whether_the_bot_check_is_set_up(client, db, seeded, monkeypatch):
+    monkeypatch.setenv("ADMIN_PHONES", NEW_MOBED_PHONE)
+    _live(monkeypatch, turnstile=False)
+    headers = await _member_headers(client, seeded)
+    assert (await client.get("/api/mobed/admin/overview", headers=headers)).json()["otp"]["bot_check"] is False
+    _live(monkeypatch, turnstile=True)
+    assert (await client.get("/api/mobed/admin/overview", headers=headers)).json()["otp"]["bot_check"] is True
 
 
 async def test_the_login_screen_gets_the_site_key_and_the_page_allows_the_check(client, monkeypatch):

@@ -72,6 +72,9 @@ export async function renderAdmin() {
       <h2>Sign-in codes</h2>
       ${fact("Status", o.otp.mode === "live" ? "On" : "Off")}
       ${fact("Sent today", `${o.otp.today} of ${o.otp.daily_cap}`)}
+      ${fact("Bot check", o.otp.bot_check ? "On" : "Not set up")}
+      ${o.otp.mode === "live" && !o.otp.bot_check ? `<p class="meta" style="margin:8px 0 0">Anyone can ask
+        for codes without passing a bot check. Add the TURNSTILE keys to the server's settings.</p>` : ""}
     </div>
 
     <div class="card">

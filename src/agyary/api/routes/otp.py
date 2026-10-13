@@ -9,8 +9,6 @@ over its limit.
 
 from __future__ import annotations
 
-import logging
-
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -22,8 +20,6 @@ from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.services import bot_check, otp, wa_login
 from agyary.services.phone import Phone
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mobed", tags=["otp"])
 
@@ -42,12 +38,11 @@ class OtpVerifyIn(BaseModel):
 @router.get("/auth/options")
 async def auth_options() -> dict:
     """What sign-in methods this server offers, so the login screen can show
-    the right ones instead of finding out by failing. Codes are offered only
-    when they are live AND the bot check is configured (D3), and the screen is
-    given the check's public site key to show it."""
+    the right ones instead of finding out by failing - and, once the bot check
+    is configured, its public site key, so the screen shows the check."""
     settings = get_settings()
-    offered = settings.otp_mode == "live" and bot_check.configured(settings)
-    return {"otp": offered, "turnstile_site_key": settings.turnstile_site_key.strip() or None}
+    site_key = settings.turnstile_site_key.strip() if bot_check.configured(settings) else ""
+    return {"otp": settings.otp_mode == "live", "turnstile_site_key": site_key or None}
 
 
 def _refused(exc: otp.OtpError) -> HTTPException:
@@ -64,11 +59,10 @@ async def otp_request(
     rate_limit.enforce(request, "otp_request", max_requests=10, window_seconds=600)
     rate_limit.enforce_key(f"otp_request_phone:{payload.phone}", max_requests=5, window_seconds=600)
     settings = get_settings()
-    if settings.otp_mode == "live":
-        # D3: no bot check, no codes - however the rest is configured.
-        if not bot_check.configured(settings):
-            logger.error("OTP_MODE is live but the bot check (TURNSTILE_*) is not configured; refusing codes")
-            raise HTTPException(status_code=503, detail=otp.UNAVAILABLE)
+    # D3: once its keys are set, every request must pass the bot check. Until
+    # then codes work as they did - the owner made the check follow-up work, not
+    # a precondition - and the admin screen says it is missing.
+    if settings.otp_mode == "live" and bot_check.configured(settings):
         if not await bot_check.verify(settings, payload.turnstile_token, rate_limit.client_ip(request)):
             raise HTTPException(status_code=400, detail="Please complete the check and try again.")
     try:

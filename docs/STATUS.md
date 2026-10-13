@@ -147,7 +147,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Admin screen, pause switch, spend caps, alerts | **Live** | `ADMIN_PHONES` set |
 | Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
 | Automatic WhatsApp reminders | **Built, OFF** | `REMINDERS_SEND_MODE`; template approval |
-| Sign-in by WhatsApp code | **Built, OFF** | `OTP_MODE`. The Authentication template `login_code` is now APPROVED, so it could be switched on; the review advises against it for now |
+| Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set; until then the admin screen says it is missing |
 | Play Store app | **Not started** | section 10 |
 | Web Push to mobeds | **Not started** | |
 
@@ -168,7 +168,7 @@ sending is off. Settings that matter operationally:
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
 | `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
 | `APP_DEBUG` | false | `true` only on a laptop: it enables a sign-in bypass and `/docs`. Refused at startup when `APP_ENV=production` |
-| `SIGNUP_MODE` / `SIGNUP_ALLOWLIST` | `invite` / empty | new accounts only for invited numbers and admins until the D1 safeguards ship; `open` = any verified number |
+| `SIGNUP_MODE` / `SIGNUP_ALLOWLIST` | `invite` / empty | `invite`: new accounts only for invited numbers and admins; `open`: any verified number. Production runs `open` (owner decision D1) |
 
 ## 5. External dependencies and their state
 
@@ -183,8 +183,8 @@ sending is off. Settings that matter operationally:
   template", flagged non-transient, before and for a while after business verification. A retry
   through the API at 16:44 UTC on 12 Oct 2026 (about ten hours after verification was submitted)
   **succeeded and the template was APPROVED immediately**. So the block cleared on its own, most
-  likely a propagation delay after verification. The template exists; the app's OTP mode is still
-  OFF, and the independent review recommends leaving it off (see REVIEW.md AU-5, section 5.2).
+  likely a propagation delay after verification. The owner then switched sign-in by code on
+  (`OTP_MODE=live`, DECISIONS.md D3), against the review's advice; its conditions are follow-up work.
 - **Business verification.** Submitted 12 Oct 2026 using a Udyam registration (sole
   proprietorship); Meta matched the business to the public record by registration number and
   address. Meta estimated two business days; the API reported `verified` within about six hours.
