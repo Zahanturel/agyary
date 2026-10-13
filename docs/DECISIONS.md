@@ -72,6 +72,11 @@ turning it off for the free tier later is a configuration change, not a rewrite.
 "Available to all" does not remove the safeguards in D1, the spend caps, the consent
 requirement, the pause switch, or the rule that the opening ten days are never reminded.
 
+**Live as of 13 Oct 2026** (`REMINDERS_SEND_MODE=live`, `REMINDERS_ALLOWLIST=*`). This
+followed a test send to the owner's own number: sent, delivered and read, and a STOP reply was
+honoured. Every family a mobed has recorded consent for is now reminded automatically the
+evening before, unless that mobed's account switch is off.
+
 ## D5. Calendar facts (settled with a mobed; do not reopen)
 
 - **Month 10 is named "Dae-Pa-Adar"** in this app (not "Dae"). Roj 8 is also named

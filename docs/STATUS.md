@@ -146,7 +146,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | In-app notifications, closing notices, Reminders list/notice | **Live** | none |
 | Admin screen, pause switch, spend caps, alerts | **Live** | `ADMIN_PHONES` set |
 | Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
-| Automatic WhatsApp reminders | **Built, OFF** | `REMINDERS_SEND_MODE`; template approval |
+| Automatic WhatsApp reminders | **Live** (13 Oct 2026, owner decision D4) | `REMINDERS_SEND_MODE=live`, `REMINDERS_ALLOWLIST=*`. Each family still needs its mobed to record consent; each account has its own switch (`users.automatic_reminders`) |
 | Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set; until then the admin screen says it is missing |
 | Play Store app | **Not started** | section 10 |
 | Web Push to mobeds | **Not started** | |
@@ -221,6 +221,12 @@ minute, survives restart). Or set `REMINDERS_SEND_MODE=off` and `OTP_MODE=off` i
    memorial for a consenting test behdin whose 30th day is tomorrow, tick the consent box, and
    watch one real send end to end (planned -> sent -> delivered -> shows on the Reminders list).
 4. Only after a clean evening: widen the allowlist, then `*`. Tell each mobed how consent works.
+
+Done 13 Oct 2026. In step 3, one reminder went to the owner's own number: planned 1, sent 1,
+failed 0; Meta reported sent, delivered, read. The owner replied STOP, and it was honoured: the
+number was recorded, every record of it was switched off, the mobed was told in the app, and
+nothing was sent back. The owner then went straight to `*` (D4). To run the test again, add a
+test memorial for a consenting test behdin, and remove any STOP left on that number.
 
 **Go live with sign-in by WhatsApp code.** Needs business verification, then create the
 Authentication template `login_code` (Copy code, 5-minute expiry and validity), wait for approval,
