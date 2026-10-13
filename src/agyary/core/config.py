@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     # This many failures in a row (not counting a single bad number) pause all
     # sending until an admin resumes it.
     reminders_breaker_failures: int = 5
+    # An outside heartbeat check (e.g. a Healthchecks.io ping URL) the evening
+    # loop pings after every pass, "/fail" appended when one goes wrong (OP-2).
+    # Empty: no pings.
+    heartbeat_url: str = ""
     # Comma separated E.164 numbers of the people who can see the admin screen,
     # pause sending, and receive alerts. Empty means nobody is an admin.
     admin_phones: str = ""

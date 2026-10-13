@@ -3,8 +3,12 @@ import logging
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI, Header
-from fastapi.responses import FileResponse, RedirectResponse
+from datetime import datetime, timedelta, timezone
+
+from fastapi import Depends, FastAPI, Header, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.staticfiles import StaticFiles
 
 from agyary.api.routes.admin import router as admin_router
@@ -15,6 +19,7 @@ from agyary.api.routes.otp import router as otp_router
 from agyary.api.routes.reminders import router as reminders_router
 from agyary.api.routes.whatsapp import router as whatsapp_router
 from agyary.core.config import get_settings
+from agyary.core.database import get_db
 from agyary.services import bot_check, reminder_worker
 
 settings = get_settings()
@@ -262,6 +267,26 @@ def privacy_policy() -> FileResponse:
     return FileResponse(_STATIC_DIR / "privacy.html", media_type="text/html")
 
 
+WORKER_STALE = timedelta(minutes=3)
+
+
 @app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
+async def health(deep: bool = False, db: AsyncSession = Depends(get_db)) -> Response:
+    """Plain: the web server answers (the container's own check). With
+    ?deep=1, for an uptime monitor outside: the database answers and the
+    evening loop has finished a pass in the last few minutes (OP-2) - 503
+    otherwise, so a dead loop is noticed even when the site looks fine."""
+    if not deep:
+        return JSONResponse({"status": "ok"})
+    try:
+        await db.execute(text("SELECT 1"))
+        database = "ok"
+    except Exception:  # noqa: BLE001 - any failure is "not ok", reported not raised
+        database = "unreachable"
+    last = reminder_worker.last_pass_at
+    worker = "ok" if last and datetime.now(timezone.utc) - last < WORKER_STALE else "stale"
+    healthy = database == "ok" and worker == "ok"
+    return JSONResponse(
+        {"status": "ok" if healthy else "unhealthy", "database": database, "worker": worker},
+        status_code=200 if healthy else 503,
+    )

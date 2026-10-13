@@ -2,6 +2,12 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    # Bounded logs: without this Docker keeps every line for ever (OP-2).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     # No host port mapping on purpose - the app reaches this over the
     # internal Docker network DSN below; Postgres must never be reachable
     # from outside the host, especially not with the default dev creds.
@@ -20,6 +26,12 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # Bounded logs: without this Docker keeps every line for ever (OP-2).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     env_file:
       - .env
     environment:
@@ -48,6 +60,12 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
+    # Bounded logs: without this Docker keeps every line for ever (OP-2).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       app:
