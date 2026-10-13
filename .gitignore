@@ -53,3 +53,7 @@ _to_delete/
 docs/REVIEW.md
 docs/REVIEW-*.md
 docs/OWNER-TODO.md
+
+# Google Play listing drafts and artwork (owner material, not code)
+docs/play-listing.md
+docs/play-assets/
