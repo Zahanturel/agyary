@@ -77,3 +77,21 @@ async def test_a_memorial_saved_by_roj_and_mah_stores_the_date(client, db, seede
         "calendar": "shenshai", "opening": "tenth_only", "monthly": {"count": 1}, "service_ids": [sid]})
     assert r.status_code == 200, r.text
     assert r.json()["death_date"] == "2026-07-19"
+
+
+async def test_a_death_before_sunrise_is_counted_from_the_parsi_day_it_belonged_to(client, db, seeded):
+    # Died at 4 am on Tue 18 Aug 2026, before sunrise: by Parsi reckoning that is
+    # still the day of Mon 17 Aug. The mobed gives that Parsi day; the schedule
+    # must then run from 17 Aug, not from the 18th printed on the certificate.
+    parsi_day = gregorian_to_parsi(date(2026, 8, 17), SHENSHAI)
+    by_parsi = await _preview(client, seeded, death_roj=parsi_day.roj, death_mah=parsi_day.mah,
+                              death_year=parsi_day.year)
+    assert by_parsi.status_code == 200, by_parsi.text
+    assert by_parsi.json()["death_date"] == "2026-08-17"
+    same_day = await _preview(client, seeded, death_date="2026-08-17")
+    certificate = await _preview(client, seeded, death_date="2026-08-18")
+    assert by_parsi.json()["observances"] == same_day.json()["observances"]
+    assert by_parsi.json()["observances"] != certificate.json()["observances"]
+    # Every observance is a day earlier than counting from the certificate's date.
+    first = date.fromisoformat(by_parsi.json()["observances"][0]["date"])
+    assert (date.fromisoformat(certificate.json()["observances"][0]["date"]) - first).days == 1
