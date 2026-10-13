@@ -11,7 +11,7 @@
  * talking to actual panthakies.
  */
 
-import { updateMyName, getPreferences, putPreferences, logout, signOutOtherDevices } from "../api.js";
+import { updateMyName, getPreferences, putPreferences, logout, signOutOtherDevices, deleteMyAccount } from "../api.js";
 import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
@@ -108,6 +108,11 @@ export async function renderMenu() {
       <p class="meta" style="margin:8px 0 0">For a phone that was lost or lent, or a sign-in you do not recognise.
         This phone stays signed in.</p>
       <p class="meta" style="margin:10px 0 0" id="mVersion"></p>
+    </div>
+
+    <div class="card">
+      <button class="ghost small" id="mDelete">Delete my account</button>
+      <div id="mDeleteConfirm"></div>
     </div>`;
   shellVersion().then((v) => {
     const el = document.getElementById("mVersion");
@@ -173,6 +178,36 @@ export async function renderMenu() {
         ? `Signed out of ${r.signed_out} other device${r.signed_out === 1 ? "" : "s"}.`
         : "You were not signed in anywhere else.");
     } catch (e) { showError(e.message); }
+  };
+
+  // Two steps, in plain words: what goes, and that it cannot be undone.
+  document.getElementById("mDelete").onclick = () => {
+    const box = document.getElementById("mDeleteConfirm");
+    box.innerHTML = `
+      <p style="margin:12px 0 8px"><b>Delete your account?</b></p>
+      <p class="meta" style="margin:0 0 12px">This removes your account and everything in it: your behdins and
+        their saved names, your memorials and reminders, and the machis and bookings you made. It cannot be
+        undone. You can always sign up again later.</p>
+      <div class="row tight">
+        <button class="danger small" id="mDeleteYes">Delete everything</button>
+        <button class="ghost small" id="mDeleteNo">Keep my account</button>
+      </div>`;
+    document.getElementById("mDeleteNo").onclick = () => { box.innerHTML = ""; };
+    document.getElementById("mDeleteYes").onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        await deleteMyAccount();
+      } catch (err) {
+        e.target.disabled = false;
+        return showError(err.message);
+      }
+      clearSession();
+      state.accessToken = null;
+      state.user = null;
+      state.preferences = null;
+      location.hash = "#/login";
+      location.reload();
+    };
   };
 
   document.getElementById("mSignOut").onclick = async () => {

@@ -122,6 +122,8 @@ export const waLoginConfirm = (number) => post("/auth/wa/confirm", { number });
 export const logout = () => post("/auth/logout");
 /** End every other signed-in device of this mobed; this one stays. */
 export const signOutOtherDevices = () => post("/auth/sessions/sign-out-others", {});
+/** Delete this account and everything that is the mobed's. Cannot be undone. */
+export const deleteMyAccount = () => post("/auth/account/delete", { confirm: true });
 /** Admin only: end every signed-in device of the mobed with this number. */
 export const adminSignOutEverywhere = (phone) => post("/admin/sign-out-everywhere", { phone });
 export const getMe = () => get("/auth/me");

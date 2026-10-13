@@ -37,6 +37,7 @@ from agyary.models.enums import (
 )
 from agyary.models.preferences import default_preferences
 from agyary.services import (
+    account,
     behdin_directory,
     guardrails,
     mobed_auth,
@@ -397,6 +398,31 @@ async def logout(
         samesite="strict",
     )
     return {"signed_out": True}
+
+
+class DeleteAccountIn(BaseModel):
+    # The screen asks twice; this is the second answer, so a stray request
+    # with no body deletes nothing.
+    confirm: bool
+
+
+@router.post("/auth/account/delete")
+async def delete_my_account(
+    payload: DeleteAccountIn,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Delete this account and everything that is the mobed's (PV-2; Google
+    Play's account-deletion rule). Signs out everywhere, since the account is
+    gone. Cannot be undone."""
+    if not payload.confirm:
+        raise HTTPException(status_code=400, detail="Nothing was deleted.")
+    await account.delete_account(db, user)
+    await db.commit()
+    settings = get_settings()
+    response.delete_cookie("refresh_token", httponly=True, secure=not settings.app_debug, samesite="strict")
+    return {"deleted": True}
 
 
 @router.post("/auth/sessions/sign-out-others")
