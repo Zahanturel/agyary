@@ -77,6 +77,7 @@ _NO_CACHE_PATHS = frozenset({
     "/mobed-manifest.json",
     "/machi-manifest.json",
     "/privacy",
+    "/delete-account",
 })
 
 
@@ -265,6 +266,13 @@ def machi_service_worker() -> FileResponse:
 @app.get("/privacy", include_in_schema=False)
 def privacy_policy() -> FileResponse:
     return FileResponse(_STATIC_DIR / "privacy.html", media_type="text/html")
+
+
+# How to delete an account, for Google Play's account-deletion rule: like the
+# policy, it must be readable without signing in.
+@app.get("/delete-account", include_in_schema=False)
+def delete_account_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "delete-account.html", media_type="text/html")
 
 
 WORKER_STALE = timedelta(minutes=3)

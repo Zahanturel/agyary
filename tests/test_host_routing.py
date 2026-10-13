@@ -82,6 +82,19 @@ async def test_privacy_policy_is_public_on_every_host(client):
         assert "Meta" in body and "mailto:" in body
 
 
+async def test_the_policy_says_what_the_app_really_does_and_deletion_is_public(client):
+    """It must match the app (PV-1): reminders to families with their consent,
+    STOP, and how to delete. And Google Play needs a deletion page anyone can
+    read without signing in."""
+    policy = (await client.get("/privacy")).text
+    for fact in ("agreed", "STOP", "Delete my account", "Cloudflare", "/delete-account"):
+        assert fact in policy, fact
+    assert "never send" not in policy.lower()
+    page = await client.get("/delete-account", headers={"Host": "mobed.gotiadarian.com"})
+    assert page.status_code == 200 and "<script" not in page.text.lower()
+    assert "Delete everything" in page.text and "privacy@gotiadarian.com" in page.text
+
+
 async def test_both_shells_are_still_reachable_by_path_on_any_host(client):
     """The redirect is a convenience for a bare hostname, not the only way
     in. An installed PWA opens its start_url directly."""
