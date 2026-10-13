@@ -185,6 +185,8 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
             .where(
                 MemorialObservance.gregorian_date == tomorrow,
                 MemorialObservance.day_number > OPENING_DAYS,
+                # The mobed already told the family themselves.
+                MemorialObservance.reminded_by_hand_at.is_(None),
                 # The account sends automatically at all (D4)...
                 User.automatic_reminders.is_(True),
                 # ...for the memorial's own mobed's record of the family, with their consent.

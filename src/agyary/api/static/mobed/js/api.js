@@ -169,6 +169,9 @@ export const getNotifications = () => get("/notifications");
 export const markNotificationsSeen = (ids) => post("/notifications/seen", ids ? { ids } : {});
 export const memorialReminders = (aid, days) =>
   get(`/agyaries/${aid}/memorial-reminders?days=${days}`);
+/** Record (or take back) that the mobed told the family themselves. */
+export const markReminded = (aid, observanceId, reminded) =>
+  put(`/agyaries/${aid}/memorial-observances/${observanceId}/reminded`, { reminded });
 export const listMemorials = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/memorials`);
 export const previewMemorial = (aid, cid, body) =>
   post(`/agyaries/${aid}/behdins/${cid}/memorials/preview`, body);

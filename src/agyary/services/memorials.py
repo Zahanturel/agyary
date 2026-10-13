@@ -18,7 +18,7 @@ asks for that day.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -502,6 +502,30 @@ def whatsapp_link(phone: str, text: str) -> str:
     return f"https://wa.me/{phone.lstrip('+')}?text={quote(text, safe='')}"
 
 
+async def mark_reminded(
+    db: AsyncSession, user_id: int, agyary_id: int, observance_id: int, reminded: bool,
+    now: datetime | None = None,
+) -> MemorialObservance | None:
+    """Record (or take back) that the mobed told the family about this
+    observance themselves. Only on the mobed's own memorials; None otherwise."""
+    obs = (
+        await db.execute(
+            select(MemorialObservance)
+            .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
+            .where(
+                MemorialObservance.id == observance_id,
+                Memorial.created_by_user_id == user_id,
+                Memorial.agyary_id == agyary_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if obs is None:
+        return None
+    obs.reminded_by_hand_at = (now or datetime.now(timezone.utc)) if reminded else None
+    await db.flush()
+    return obs
+
+
 async def reminders_due(
     db: AsyncSession, user_id: int, agyary_id: int, today: date, horizon_days: int
 ) -> list[dict]:
@@ -573,9 +597,11 @@ async def reminders_due(
             "days_away": days_away,
             "due": days_away <= REMINDER_LEAD_DAYS,
             # Will it go on its own, and if it has been tried, how that went.
-            "auto": reminders.goes_automatically(
+            "auto": obs.reminded_by_hand_at is None and reminders.goes_automatically(
                 settings, paused=paused, account_on=account_on, customer=customer, owner_user_id=user_id,
             ),
             "sent_status": sent.get(obs.id),
+            # The mobed told the family themselves.
+            "reminded_by_hand_at": obs.reminded_by_hand_at.isoformat() if obs.reminded_by_hand_at else None,
         })
     return items

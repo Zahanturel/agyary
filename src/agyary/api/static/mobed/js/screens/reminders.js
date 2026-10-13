@@ -15,7 +15,7 @@
  * costs us nothing.
  */
 
-import { memorialReminders } from "../api.js";
+import { memorialReminders, markReminded } from "../api.js";
 import { state } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, refreshHeader, loading, backBar,
@@ -43,8 +43,15 @@ function actionHtml(o, data) {
   if (SENT[o.sent_status]) {
     return `<p class="meta" style="margin:8px 0 0">&#10003; ${SENT[o.sent_status]} to ${esc(o.behdin_name)} on WhatsApp.</p>`;
   }
+  if (o.reminded_by_hand_at) {
+    return `<p class="meta" style="margin:8px 0 0">&#10003; You told ${esc(o.behdin_name)} yourself.
+      <button class="ghost small" data-mark="0" data-obs="${o.id}">Undo</button></p>`;
+  }
+  // Told in person or from their own phone: mark it, and nothing more is sent.
+  const told = `<button class="ghost small" data-mark="1" data-obs="${o.id}">I told them myself</button>`;
   const button = `<div class="row tight" style="margin-top:8px">
       <a class="button small" data-wa href="${esc(o.wa_link)}" target="_blank" rel="noopener">Remind on WhatsApp</a>
+      ${told}
     </div>`;
   if (o.sent_status === "failed") {
     return `<p class="meta" style="margin:8px 0 0">It could not be sent automatically.</p>${button}`;
@@ -53,7 +60,8 @@ function actionHtml(o, data) {
   // really send it (sending live, not paused, this account on, on the allowlist).
   if (o.auto && data.delivery === "live") {
     return `<p class="meta" style="margin:8px 0 0">Will be sent to ${esc(o.behdin_name)} automatically
-      at about ${esc(clockHour(data.send_hour ?? 19))} the evening before.</p>`;
+      at about ${esc(clockHour(data.send_hour ?? 19))} the evening before.</p>
+      <div class="row tight" style="margin-top:8px">${told}</div>`;
   }
   return button;
 }
@@ -117,8 +125,22 @@ export async function renderReminders() {
   mainEl.querySelectorAll("[data-oid]").forEach(el => {
     el.onclick = (e) => {
       // The WhatsApp link opens WhatsApp; it must not also open the memorial.
-      if (e.target.closest("[data-wa]")) return;
+      if (e.target.closest("[data-wa]") || e.target.closest("[data-mark]")) return;
       navigate(`#/memorial/${el.dataset.mid}/${el.dataset.oid}`);
+    };
+  });
+  mainEl.querySelectorAll("[data-mark]").forEach(b => {
+    b.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      b.disabled = true;
+      try {
+        await markReminded(state.currentAgyaryId, b.dataset.obs, b.dataset.mark === "1");
+        renderReminders();
+      } catch (err) {
+        b.disabled = false;
+        showError(err.message);
+      }
     };
   });
 }

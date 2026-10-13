@@ -120,6 +120,9 @@ class MemorialObservance(Base):
     parsi_mah: Mapped[int | None] = mapped_column(SmallInteger)
     parsi_year: Mapped[int] = mapped_column(Integer)
     gatha_index: Mapped[int | None] = mapped_column(SmallInteger)
+    # When the mobed marked that they told the family themselves. The planner
+    # then sends nothing for it, so the family is not told twice.
+    reminded_by_hand_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Time of day in IST, or NULL - the norm.
     time_of_day: Mapped[dt_time | None] = mapped_column(Time)

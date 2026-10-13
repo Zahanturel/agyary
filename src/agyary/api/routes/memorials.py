@@ -295,3 +295,25 @@ async def memorial_reminders(
         "send_hour": settings.reminders_send_hour,
         "items": items,
     }
+
+
+class RemindedIn(BaseModel):
+    reminded: bool
+
+
+@router.put("/agyaries/{agyary_id}/memorial-observances/{observance_id}/reminded")
+async def mark_reminded(
+    agyary_id: int,
+    observance_id: int,
+    payload: RemindedIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """The mobed told the family themselves (or takes that back). Nothing is
+    then sent automatically for it. Only on the mobed's own memorials."""
+    await _require_membership(db, agyary_id, user)
+    obs = await memorials.mark_reminded(db, user.id, agyary_id, observance_id, payload.reminded)
+    if obs is None:
+        raise HTTPException(status_code=404, detail="Unknown observance")
+    await db.commit()
+    return {"reminded_by_hand_at": obs.reminded_by_hand_at.isoformat() if obs.reminded_by_hand_at else None}
