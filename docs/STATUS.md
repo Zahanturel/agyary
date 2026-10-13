@@ -1,6 +1,6 @@
 # System status and handoff
 
-Written 12 Oct 2026, at the end of a long build session. It is a snapshot, not a
+Written 12 Oct 2026, updated 14 Oct 2026. It is a snapshot, not a
 spec: anything here can be wrong or stale. Treat each claim as something to
 check against the code and the live system, and trust the code where they differ.
 
@@ -49,8 +49,7 @@ scale.
 
 - **One process, no queue, no cache, no Redis.** The rate limiter is in memory.
   The evening worker is an `asyncio` task started in the app's lifespan. This is
-  deliberate at this scale and is a risk the day there is a second process
-  (section 9).
+  deliberate at this scale; a second app process would need the worker moved out.
 - **Deploy** is `git push origin master`: GitHub Actions runs the tests, then SSHes
   to the VM, which backs up the database, builds, migrates with the new image,
   swaps the container and waits for `/health`. A failed migration leaves the old
@@ -147,8 +146,12 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Admin screen, pause switch, spend caps, alerts | **Live** | `ADMIN_PHONES` set |
 | Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
 | Automatic WhatsApp reminders | **Live** (13 Oct 2026, owner decision D4) | `REMINDERS_SEND_MODE=live`, `REMINDERS_ALLOWLIST=*`. Each family still needs its mobed to record consent; each account has its own switch (`users.automatic_reminders`) |
-| Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set; until then the admin screen says it is missing |
-| Play Store app | **Not started** | section 10 |
+| Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set |
+| STOP: one kind reply ("You will not receive any more reminders from ...") | **Live** | once per number; its own daily cap (`REMINDERS_STOP_ACK_DAILY_CAP`); respects the pause |
+| "I told them myself" mark on a reminder | **Live** | the planner then sends nothing for it |
+| Delete my account (in the app) and `/delete-account` | **Live** | none |
+| Warmer reminder template with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
+| Play Store app (Trusted Web Activity) | **Ready to build** | `/.well-known/assetlinks.json` and PNG icons live; upload key made; Play Console account |
 | Web Push to mobeds | **Not started** | |
 
 ## 4. Configuration
@@ -164,6 +167,8 @@ sending is off. Settings that matter operationally:
 | `REMINDERS_DAILY_CAP` / `_MONTHLY_CAP` | 150 / 2000 | overall ceilings |
 | `REMINDERS_PER_MOBED_DAILY_CAP` / `_PER_AGYARY_` | 40 / 100 | per mobed / per temple |
 | `REMINDERS_BREAKER_FAILURES` | 5 | failures in a row that pause sending |
+| `REMINDERS_STOP_ACK_DAILY_CAP` | 20 | kind replies to a first STOP, per day |
+| `ANDROID_PACKAGE_NAME` / `ANDROID_CERT_FINGERPRINTS` | the app / the upload key | what `/.well-known/assetlinks.json` lists; add Play's signing key after the first upload |
 | `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
 | `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
@@ -195,7 +200,8 @@ sending is off. Settings that matter operationally:
   it would be rejected as Utility, and refused a shorter version for too many variables for
   its length. See `reminders-plan.md`.
 - **Cloudflare** (free plan): full proxy, a Tunnel to the VM. The free plan rewrites
-  `Cache-Control: no-cache` to a four hour cache and can edge-cache a service worker (9.4).
+  `Cache-Control: no-cache` to a four hour cache unless its Browser Cache TTL is set to respect
+  existing headers.
 - **Oracle Cloud always-free VM**, **GitHub Actions** (test + deploy), **a Udyam registration**
   (a micro-enterprise; no GST).
 
@@ -239,7 +245,7 @@ succeeds, revoke the old one. A clipboard trick that pipes `Get-Clipboard` over 
 the clipboard held the command text instead of the token: check the length and the `EAA` prefix.
 
 **Restore the database.** The deploy script keeps the last ten pre-deploy dumps in the VM user's
-home directory (`pg_dump -Fc`). There is **no scheduled backup** and no off-VM copy (9.2).
+home directory (`pg_dump -Fc`). A scheduled, encrypted off-site copy is planned.
 
 ## 7. Decisions worth challenging
 
@@ -264,68 +270,34 @@ Meta's rate card); Marketing about 7.5x. At the shipped caps the worst month is 
 rupees (a test enforces it). Prepaid balance with no auto top-up is the hard ceiling. Hosting is
 free (Oracle always-free, Cloudflare free).
 
-## 9. Known gaps, shortcuts and risks (honest list)
+## 9. Operating notes
 
-Not an exhaustive review; the review brief asks for one. These are the ones known now.
-
-1. **In-memory rate limiter** (`api/rate_limit.py`): resets on every restart/deploy, and only
-   correct with one process. Keyed on `cf-connecting-ip`, which is only trustworthy while the
-   origin is reachable solely through the tunnel.
-2. **No scheduled backups, no off-VM copy, restore never rehearsed.** The only dumps are taken at
-   deploy time and live on the same VM.
-3. **No monitoring or alerting outside the app.** Admin alerts are in-app only: if no admin opens
-   the app, nobody is told. No uptime check, no error tracking, logs only via `docker compose logs`.
-4. **The worker runs inside the web process.** A deploy restarts it; overlap is safe only because of
-   the unique index and `FOR UPDATE SKIP LOCKED`. A second app process would run two loops.
-5. **First real send has never happened.** Every sender test uses a mock transport. Meta's real
-   responses, the template's real parameter handling, and receipts are unproven in production.
-6. **Table growth with no retention.** `app_notifications` rows expire logically but are never
-   deleted; `notifications` (messages) and `memorial_*` rows are kept forever; `wa_login_attempts`
-   and `login_otps` are swept opportunistically. There is no data-retention policy for the deceased's
-   and families' names and numbers. India's DPDP Act (2023) and its rules may apply: consent notice,
-   purpose, retention, erasure. `static/privacy.html` has not been reviewed against it. This is a
-   question for a lawyer, not a claim.
-7. **English only.** Mobeds in Gujarat may prefer Gujarati; the reminder text is English.
-8. **No Web Push** and no installable-app polish beyond the manifest and service worker.
-9. **Graph API version** defaults to `v23.0` (`WHATSAPP_GRAPH_VERSION`); Meta's dashboard showed a
-   newer one for webhooks. Versions expire; this needs a watch.
-10. **CSP allows `style-src 'unsafe-inline'`** (the screens set style attributes). Scripts are strict.
-11. **Service worker + Cloudflare caching** has already caused one deploy that was invisible on a
-    phone. The worker is network-first and `no-cache` headers exist for shell paths, but the free
-    plan can rewrite them. Re-verify after any caching change.
-12. **Tests share one database** (`agyary_test`) and truncate it; two pytest runs at once deadlock.
-13. **Single admin and single Meta business admin**; two-factor is required for no one on the Meta
-    portfolio; one user has no passkey. This account can message grieving families.
-14. **The reminder template is brittle**: once approved, wording changes need a new template (names
-    are locked for a period after deletion), and Meta can re-categorise it.
-15. **`messaging/` package name is misleading** (historical).
-16. **Domain correctness is only as good as the one mobed who settled the rules**; the Parsi calendar
-    engine and the memorial counting deserve an independent check against a second authority.
+1. **One app process.** The evening worker and the general rate limiter live in it; sign-in
+   codes are limited in the database.
+2. **Graph API version** defaults to `v23.0` (`WHATSAPP_GRAPH_VERSION`); Meta retires versions, so
+   move forward before it expires.
+3. **Templates are fixed once approved.** Changing the words means a new template and a setting
+   change (`WHATSAPP_REMINDER_TEMPLATE`), never a deploy.
+4. **Tests share one database** (`agyary_test`) and truncate it; run one pytest at a time. The suite
+   builds its schema from the models, so `tests/test_migrations_run.py` is what proves the migrations.
+5. **English only** for now; a Gujarati template is a product decision.
+6. **The calendar rules** were settled with a mobed (DECISIONS.md D5); a second authority's review
+   is welcome.
 
 ## 10. What is left (prioritised)
 
-**A. Waiting on Meta.** (1) Approval of `memorial_reminder`, then the live test (section 6).
-(2) Nothing for `login_code`: it is approved. Whether to switch sign-in by WhatsApp code on is a
-decision, not a blocker (the review says not yet). Business verification is done.
+**A. Meta.** Submit `memorial_reminder_v2` (warm closing line, Stop button) as Utility; switch to it
+by setting once approved.
 
-**B. Independent review, then fixes.** Run the brief in `REVIEW-PROMPT.md` in a fresh session. Do not
-start A's go-live steps until the review's critical/high findings on sending, security and data are
-triaged.
+**B. Google Play.** Build the signed bundle with Bubblewrap around `/mobed` (the project and upload
+key live outside the repo), run the closed test (12 testers, 14 days), apply for production, and add
+Play's signing-key fingerprint to `ANDROID_CERT_FINGERPRINTS`. Listing material is prepared.
 
-**C. Play Store.** Likely route: a Trusted Web Activity (PWABuilder or Bubblewrap) wrapping the
-existing PWA; a native/Capacitor wrapper only if a native-only capability is needed. Things to settle
-(verify each against Google's current rules, they change): a Play developer account (individual vs
-organisation) and its fee; any closed-testing requirement for new accounts before production
-(historically about 12 testers for 14 days); the app signing key and Digital Asset Links
-(`/.well-known/assetlinks.json` served from our domain, and not mangled by Cloudflare); a manifest
-with `start_url` `/mobed`, scope, 512px icons and maskable icons; screenshots; the Data safety form and
-a privacy policy URL; content rating; target API level; and how the host-based redirect (`mobed.*` ->
-`/mobed`) interacts with the TWA's start URL. iPhone users stay on "Add to Home Screen".
+**C. Operations.** Scheduled off-site backups with a restore drill; the outside heartbeat and uptime
+checks (`HEARTBEAT_URL`, `/health?deep=1`).
 
-**D. Product backlog.** A manual "reminded" mark; Web Push to mobeds; Gujarati; plans, billing and a
-cost/revenue view (when there is something to charge for); an AI scheduling assistant was discussed and
-deliberately deferred (see the discussion in `reminders-plan.md` ON HOLD); retention and erasure
-tooling; scheduled backups and restore drills; monitoring.
+**D. Product backlog.** Web Push to mobeds; Gujarati; plans and billing when there is something to
+charge for; an AI scheduling assistant (deferred, see `reminders-plan.md` ON HOLD).
 
 ## 11. Working notes for contributors
 

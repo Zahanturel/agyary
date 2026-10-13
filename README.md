@@ -13,12 +13,19 @@ they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
   with saved names reused on every booking. Each mobed's record of a family is
   their own: a colleague who serves the same family keeps a separate record, and
   neither can see or change the other's (docs/DECISIONS.md D2).
-- **Memorials.** From a date of death the app works out every observance a
-  family keeps (the opening days, the 30th day, monthly, yearly, the Parabs) and
-  puts them on the calendar. See [docs/memorial-plan.md](docs/memorial-plan.md).
-- **Reminders.** The evening before a memorial prayer after the opening days, the
-  family can be sent a short WhatsApp message - by hand through a `wa.me` link, or
-  automatically. See [docs/reminders-plan.md](docs/reminders-plan.md).
+- **Memorials.** From a date of death - or its Roj and Mah, for a death before
+  sunrise - the app works out every observance a family keeps (the opening days,
+  the 30th day, monthly, yearly, the Parabs) and puts them on the calendar. See
+  [docs/memorial-plan.md](docs/memorial-plan.md).
+- **Reminders.** The evening before a memorial prayer after the opening days, a
+  family who agreed is sent a short WhatsApp message - automatically, or by the
+  mobed through a `wa.me` link (and marked "I told them myself"). Replying STOP
+  ends them for good, with one kind line back. See
+  [docs/reminders-plan.md](docs/reminders-plan.md).
+- **Your data.** A mobed can delete their account and everything in it from the
+  menu; `/privacy` and `/delete-account` say what is kept and how.
+- **Android.** The PWA is ready to be wrapped for Google Play as a Trusted Web
+  Activity (`/.well-known/assetlinks.json`, PNG and maskable icons).
 
 ## Where to start
 
@@ -113,6 +120,8 @@ switch for admins that survives a restart, and an automatic pause when Meta
 reports an account-level problem or several sends fail in a row. A reminder over
 a limit is not sent, its mobed is told so they can send it by hand, and the admins
 are alerted. Meta's prepaid balance, with no auto top-up, is the outermost limit.
+The kind reply to a family's first STOP has its own daily cap
+(`REMINDERS_STOP_ACK_DAILY_CAP`) and respects the pause.
 Details are in `src/agyary/services/guardrails.py`.
 
 ### Security

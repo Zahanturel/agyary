@@ -91,6 +91,21 @@ evening before, unless that mobed's account switch is off.
   day it was. This replaces any idea of working it out from a time of death. It resolves DM-4.
   Keep showing the death's Roj and Mah on the review step so the mobed confirms it.
 
+## D6. Warmth, and leaving cleanly (14 Oct 2026)
+
+- A family's first STOP gets one short, kind reply naming their mobed: "You will not receive any
+  more reminders from <mobed>. May you and your family be in peace." Never a second one. It is a
+  paid text reply (about the utility rate since 1 Oct 2026), so it has its own daily cap and
+  respects the pause switch.
+- The reminder template gains one warm closing line and a "Stop reminders" button
+  (`memorial_reminder_v2`), with no invitation wording, so it stays Utility. The current template
+  keeps sending until the new one is approved; switching is a setting.
+- A mobed can mark a reminder "I told them myself"; nothing is then sent automatically for it.
+- A mobed can delete their account, and everything that is theirs goes with it, as Google Play
+  requires.
+- The app goes to Google Play as a Trusted Web Activity named "Mobed Diary"
+  (`com.gotiadarian.mobeddiary`).
+
 ## Not decided yet
 
 Separate WhatsApp numbers for sign-in and reminders; price and payer; Gujarati reminders; the
