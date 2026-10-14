@@ -103,8 +103,13 @@ evening before, unless that mobed's account switch is off.
 - A mobed can mark a reminder "I told them myself"; nothing is then sent automatically for it.
 - A mobed can delete their account, and everything that is theirs goes with it, as Google Play
   requires.
-- The app goes to Google Play as a Trusted Web Activity named "Mobed Diary"
-  (`com.gotiadarian.mobeddiary`).
+- The Android app is a Trusted Web Activity named "Mobed Diary" (`com.gotiadarian.mobeddiary`).
+  **Changed 14 Oct 2026:** it is shared directly with the mobeds (the signed APK, in a WhatsApp
+  group the owner runs), not through Google Play for now. No Play fee, closed test or reviewer
+  sign-in is needed. The app shows the live site, so updates reach everyone without a new APK;
+  a new APK is only needed for the name, icon or Android-level changes. Play stays possible later
+  (the listing material is kept), and Google's developer-verification rules for apps installed
+  outside Play may require registering as a developer once they reach India.
 
 ## Not decided yet
 
