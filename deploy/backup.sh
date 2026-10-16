@@ -14,8 +14,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-env_get() {  # env_get NAME -> value from .env, without sourcing the file
-  grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+env_get() {  # env_get NAME -> value from .env (empty if absent), without sourcing the file
+  { grep -E "^$1=" .env || true; } | tail -n1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
 }
 
 recipient=$(env_get BACKUP_AGE_RECIPIENT)
