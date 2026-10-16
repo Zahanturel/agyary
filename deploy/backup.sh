@@ -38,6 +38,8 @@ export RCLONE_CONFIG_R2_ACCESS_KEY_ID="${key_id}"
 export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${secret}"
 export RCLONE_CONFIG_R2_ENDPOINT="https://${account}.r2.cloudflarestorage.com"
 export RCLONE_CONFIG_R2_ACL=private
+# The token is limited to this one bucket, so rclone must not try to create it.
+export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 work=$(mktemp -d)
