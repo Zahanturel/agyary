@@ -92,7 +92,7 @@ async def test_the_policy_says_what_the_app_really_does_and_deletion_is_public(c
     assert "never send" not in policy.lower()
     page = await client.get("/delete-account", headers={"Host": "mobed.gotiadarian.com"})
     assert page.status_code == 200 and "<script" not in page.text.lower()
-    assert "Delete everything" in page.text and "privacy@gotiadarian.com" in page.text
+    assert "Delete everything" in page.text and "contact@gotiadarian.com" in page.text
 
 
 async def test_both_shells_are_still_reachable_by_path_on_any_host(client):
