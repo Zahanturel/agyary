@@ -116,7 +116,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
       <div class="card">
         ${heading}
         ${intro ? `<p class="meta">${intro}</p>` : ""}
-        <label>Departed person</label>
+        <label for="mmName">Departed person</label>
         <input type="text" id="mmName" autocomplete="off" value="${esc(draft.name)}">
         <label>Death</label>
         <div class="choice-group">
@@ -139,7 +139,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <label for="mmDeathYear">Parsi year (leave empty for the most recent)</label>
           <input type="text" id="mmDeathYear" inputmode="numeric" maxlength="4" value="${esc(draft.deathYear)}">
         </div>
-        <label>Calendar</label>
+        <label for="mmCalendar">Calendar</label>
         <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"], ["fasli", "Fasli"]].map(([k, v]) =>
           `<option value="${k}" ${draft.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
       </div>
@@ -170,13 +170,13 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <div class="check-row"><input type="checkbox" id="mmMonthly" ${draft.monthly ? "checked" : ""}>
             <label for="mmMonthly">Every month</label></div>
           <div class="sub-field" id="mmMonthlyBox" style="${draft.monthly ? "" : "display:none"}">
-            <label>For how many months</label>
+            <label for="mmMonths">For how many months</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.months}" id="mmMonths" value="${esc(draft.months)}"></div>
 
           <div class="check-row"><input type="checkbox" id="mmYearly" ${draft.yearly ? "checked" : ""}>
             <label for="mmYearly">Every year</label></div>
           <div class="sub-field" id="mmYearlyBox" style="${draft.yearly ? "" : "display:none"}">
-            <label>For how many years</label>
+            <label for="mmYears">For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.years}" id="mmYears" value="${esc(draft.years)}"></div>
 
           <div class="check-row"><input type="checkbox" id="mmParab" ${draft.parab ? "checked" : ""}>
@@ -184,7 +184,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <div class="sub-field" id="mmParabBox" style="${draft.parab ? "" : "display:none"}">
             ${radio("mmParabWhich", "mmParabFT", "fravardin_tir", draft.parabWhich === "fravardin_tir", "Fravardin and Tir only")}
             ${radio("mmParabWhich", "mmParabAll", "all", draft.parabWhich === "all", "All Parabs")}
-            <label>For how many years</label>
+            <label for="mmParabYears">For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.parabYears}" id="mmParabYears" value="${esc(draft.parabYears)}"></div>
         </div>
       </div>`;

@@ -131,7 +131,7 @@ export function phoneField(id, existingValue) {
   const { cc, local } = existingValue ? splitE164(existingValue) : { cc: "91", local: "" };
   return `<div class="phone-field">
     <div class="cc-group"><span class="cc-plus">+</span>
-      <input type="tel" class="cc-input" id="${id}_cc" inputmode="numeric" maxlength="3" value="${esc(cc)}"></div>
+      <input type="tel" class="cc-input" id="${id}_cc" aria-label="Country code" inputmode="numeric" maxlength="3" value="${esc(cc)}"></div>
     <input type="tel" id="${id}" inputmode="numeric" maxlength="12"
       placeholder="98765 43210" value="${esc(local)}"></div>`;
 }

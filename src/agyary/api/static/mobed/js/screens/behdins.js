@@ -62,7 +62,7 @@ export async function renderBehdinList() {
         <button class="icon-add" id="bhAdd" title="Add a behdin" aria-label="Add a behdin">+</button>
       </div>
       <p class="meta">The behdins you look after.</p>
-      <input type="text" id="bhFilter" placeholder="Search by name or phone" autocomplete="off">
+      <input type="text" id="bhFilter" aria-label="Search by name or phone" placeholder="Search by name or phone" autocomplete="off">
       <div id="bhRows" style="margin-top:8px"></div>
     </div>`;
 
@@ -146,10 +146,10 @@ export function renderBehdinNew() {
         <button class="secondary" id="bnImport" style="margin-bottom:12px">
           Import from contacts
         </button>` : ""}
-      <label>Name</label>
+      <label for="bnName">Name</label>
       <input type="text" id="bnName" placeholder="e.g. Behdin Zubin Mistry"
              autocomplete="off" value="${esc(prefillName)}">
-      <label>WhatsApp number</label>${phoneField("bnPhone")}
+      <label for="bnPhone">WhatsApp number</label>${phoneField("bnPhone")}
     </div>
 
     <div class="card">
@@ -394,8 +394,8 @@ export async function renderBehdinDetail({ id }) {
   mainEl.innerHTML = `
     <div class="card">
       ${backBar(esc(record.name))}
-      <label>Name</label><input type="text" id="bdName" value="${esc(record.name)}">
-      <label>WhatsApp number</label>${phoneField("bdPhone", record.phone)}
+      <label for="bdName">Name</label><input type="text" id="bdName" value="${esc(record.name)}">
+      <label for="bdPhone">WhatsApp number</label>${phoneField("bdPhone", record.phone)}
       <p class="meta" style="margin-top:6px">
         <a class="tel" href="tel:${esc(record.phone)}">Call ${esc(record.phone)}</a></p>
       <div style="margin-top:12px"><button class="small" id="bdSave">Save details</button></div>
