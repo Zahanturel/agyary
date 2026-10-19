@@ -59,6 +59,7 @@ export function buildMemorialBody(draft) {
   const bad = (target, message) => problems.push({ target, message });
   if (!draft.name.trim()) bad("#mmName", "Please enter the departed person's name.");
   const byParsi = draft.deathBy === "parsi";
+  if (draft.deathBy === "today") draft.death = todayIst();   // today as of saving, not as of ticking
   if (!byParsi && !draft.death) bad("#mmDeath", "Please enter the date of death.");
   if (byParsi) {
     if (!draft.deathMah) bad("#mmDeathMah", "Please choose the Mah of the death.");
@@ -153,13 +154,15 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
         <input type="text" id="mmName" autocomplete="off" value="${esc(draft.name)}">
         <label>Death</label>
         <div class="choice-group">
-          ${radio("mmDeathBy", "mmDeathByDate", "date", draft.deathBy !== "parsi", "By the date")}
+          ${radio("mmDeathBy", "mmDeathByDate", "date", draft.deathBy === "date", "By the date")}
+          ${radio("mmDeathBy", "mmDeathByToday", "today", draft.deathBy === "today", "Today's date")}
           ${radio("mmDeathBy", "mmDeathByParsi", "parsi", draft.deathBy === "parsi",
             "By Roj and Mah (for a death before sunrise, give the Parsi day it belonged to)")}
         </div>
         <div id="mmDeathDateBox" style="${draft.deathBy === "parsi" ? "display:none" : ""}">
           <label for="mmDeath">Date of death</label>
-          <input type="date" id="mmDeath" max="${todayIst()}" value="${esc(draft.death)}">
+          <input type="date" id="mmDeath" max="${todayIst()}" value="${esc(draft.deathBy === "today" ? todayIst() : draft.death)}"
+            ${draft.deathBy === "today" ? "disabled" : ""}>
           <p class="meta" id="mmParsi" style="margin:6px 0 0"></p>
         </div>
         <div id="mmDeathParsiBox" style="${draft.deathBy === "parsi" ? "" : "display:none"}">
@@ -251,6 +254,13 @@ export function wireMemorialForm(root, draft, onChange) {
     const label = await parsiLabel(draft.death, draft.calendar);
     if (note.isConnected) note.textContent = label;
   };
+  // "Today's date" fills the same date block, but it cannot be edited.
+  const applyToday = () => {
+    const today = draft.deathBy === "today";
+    if (today) { draft.death = todayIst(); $("#mmDeath").value = draft.death; }
+    $("#mmDeath").disabled = today;
+  };
+  applyToday();
   readParsi();
 
   $("#mmName").oninput = (e) => { draft.name = e.target.value; };
@@ -258,6 +268,8 @@ export function wireMemorialForm(root, draft, onChange) {
   root.querySelectorAll("[name=mmDeathBy]").forEach(r => {
     r.onchange = () => {
       draft.deathBy = r.value;
+      applyToday();
+      readParsi();
       $("#mmDeathDateBox").style.display = r.value === "parsi" ? "none" : "";
       $("#mmDeathParsiBox").style.display = r.value === "parsi" ? "" : "none";
     };

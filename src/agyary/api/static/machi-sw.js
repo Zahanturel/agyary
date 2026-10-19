@@ -1,7 +1,7 @@
 // Machi app shell cache — same strategy as the mobed SW (network-first,
 // cache-fallback for offline launch). Shares CSS, fonts, and most JS
 // modules with the mobed app; only the entry points differ.
-const CACHE_NAME = "machi-shell-v19";
+const CACHE_NAME = "machi-shell-v20";
 const SHELL_FILES = [
   "/machi",
   "/machi-manifest.json",
