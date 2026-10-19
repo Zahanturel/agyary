@@ -74,6 +74,7 @@ class Choice:
     day_counts: tuple[int, ...] = ()
     monthly_months: int | None = None
     yearly_years: int | None = None
+    fravardin_roj_months: int | None = None   # Roj Fravardin every month, for this many months
     parabs: str | None = None
     parab_years: int | None = None
     # The deceased's birthday, as a date or as Roj and Mah (one or the other),
@@ -209,6 +210,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
         raise MemorialError(str(exc)) from exc
     _validate_length(choice.monthly_months, "Monthly observances", MAX_MONTHLY_MONTHS)
     _validate_length(choice.yearly_years, "Yearly observances", MAX_YEARLY_YEARS)
+    _validate_length(choice.fravardin_roj_months, "Roj Fravardin months", MAX_MONTHLY_MONTHS)
     _validate_length(choice.parab_years, "Parab years", MAX_PARAB_YEARS)
     if (choice.parabs is None) != (choice.parab_years is None):
         raise MemorialError("Choose how many years the Parabs should run for.")
@@ -231,6 +233,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
             parabs=choice.parabs, parab_years=choice.parab_years or 0,
             birthday=birthday, birthday_years=choice.birthday_years or 0,
             start_from=choice.start_from,
+            fravardin_roj_months=choice.fravardin_roj_months or 0,
         )
     except ValueError as exc:
         raise MemorialError(str(exc)) from exc
@@ -292,6 +295,7 @@ async def create_memorial(
         day_counts=sorted(set(choice.day_counts)),
         monthly_months=choice.monthly_months,
         yearly_years=choice.yearly_years,
+        fravardin_roj_months=choice.fravardin_roj_months,
         parabs=choice.parabs,
         parab_years=choice.parab_years,
         birthday_roj=birthday[0] if birthday else None,
@@ -408,6 +412,7 @@ def serialize_memorial(
         "day_counts": memorial.day_counts,
         "monthly_months": memorial.monthly_months,
         "yearly_years": memorial.yearly_years,
+        "fravardin_roj_months": memorial.fravardin_roj_months,
         "parabs": memorial.parabs,
         "parab_years": memorial.parab_years,
         "birthday": ({"roj": memorial.birthday_roj, "mah": memorial.birthday_mah,

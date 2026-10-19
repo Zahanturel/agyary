@@ -555,3 +555,27 @@ def test_starting_late_birthday_and_parabs_run_from_the_start():
     assert all(o.gregorian_date >= start for o in late)
     assert sum(o.label == "Birthday" for o in late) == 2
     assert sum(o.label.endswith("Parab") for o in late) == 2   # each Parab once
+
+
+def test_roj_fravardin_every_month_for_n_months():
+    from agyary.calendar.memorial import FRAVARDIN_ROJ
+    sched = _late(fravardin_roj_months=14)
+    assert len(sched) == 14 and all(o.label == "Roj Fravardin" for o in sched)
+    assert {o.roj for o in sched} == {FRAVARDIN_ROJ} == {19}
+    mahs = [o.mah for o in sched]
+    assert all((b - a) % 12 == 1 for a, b in zip(mahs, mahs[1:]))   # one per Mah, in order
+    dates = [o.gregorian_date for o in sched]
+    assert dates == sorted(dates) and len(set(dates)) == 14
+
+
+def test_roj_fravardin_starting_late_counts_from_the_next_one():
+    whole = _late(fravardin_roj_months=12)
+    start = whole[5].gregorian_date
+    late = _late(fravardin_roj_months=4, start_from=start)
+    assert [o.gregorian_date for o in late] == [o.gregorian_date for o in whole[5:9]]
+
+
+def test_roj_fravardin_in_the_mah_of_fravardin_is_a_parab_only_once():
+    sched = _late(fravardin_roj_months=12, parabs="fravardin_tir", parab_years=1)
+    dates = [o.gregorian_date for o in sched]
+    assert len(dates) == len(set(dates))

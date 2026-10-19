@@ -64,6 +64,7 @@ class MemorialIn(BaseModel):
     day_counts: list[int] = []
     monthly: SeriesIn | None = None   # count = months
     yearly: SeriesIn | None = None    # count = years
+    fravardin_roj: SeriesIn | None = None   # Roj Fravardin every month; count = months
     parabs: ParabsIn | None = None   # years = how many years they run
     birthday: BirthdayIn | None = None
     # Book nothing before this date; the counting still starts at the death.
@@ -90,6 +91,7 @@ def _choice(p: MemorialIn) -> memorials.Choice:
         day_counts=tuple(p.day_counts),
         monthly_months=p.monthly.count if p.monthly else None,
         yearly_years=p.yearly.count if p.yearly else None,
+        fravardin_roj_months=p.fravardin_roj.count if p.fravardin_roj else None,
         parabs=p.parabs.which if p.parabs else None,
         parab_years=p.parabs.years if p.parabs else None,
         calendar=p.calendar,

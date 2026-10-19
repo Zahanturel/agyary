@@ -205,6 +205,32 @@ def _parab_observances(
     return out
 
 
+def _fravardin_roj_observances(
+    death: tuple[int, int, int], death_date: date, system: CalendarSystem,
+    months: int, not_before: date | None = None, extra_years: int = 0,
+) -> list[Observance]:
+    """Roj Fravardin of each Mah after the death, ``months`` of them (from
+    ``not_before`` on, when given). The day of death itself is not repeated."""
+    start, base_year = _start(*death)
+    out: list[Observance] = []
+    for year in range(death[2], death[2] + months // MONTHS_PER_YEAR + 3 + extra_years):
+        for mah in range(1, MONTHS_PER_YEAR + 1):
+            try:
+                when = parsi_to_gregorian(year, system, mah=mah, roj=FRAVARDIN_ROJ)
+            except ValueError:
+                continue
+            if when <= death_date or (not_before and when < not_before):
+                continue
+            out.append(Observance(
+                code=f"fravroj_{year}_{mah}", label="Roj Fravardin",
+                day_number=_position(FRAVARDIN_ROJ, mah, year, start, base_year),
+                roj=FRAVARDIN_ROJ, mah=mah, year=year, gregorian_date=when,
+            ))
+            if len(out) == months:
+                return out
+    return out
+
+
 def _birthday_observances(
     death: tuple[int, int, int], death_date: date, system: CalendarSystem,
     birthday: tuple[int, int], years: int,
@@ -240,7 +266,10 @@ _NAMED_SPAN = {30: ("m", 1), 60: ("m", 2), 180: ("m", 6), 360: ("y", 1)}
 _DECI_OF = {29: 30, 59: 60, 179: 180, 359: 360}
 
 # Which wins when two observances land on one date (lower wins).
-_RANK = {"lit": 0, "y": 1, "m": 2, "deci": 3, "parab": 4, "birthday": 5}
+_RANK = {"lit": 0, "y": 1, "m": 2, "deci": 3, "parab": 4, "fravardin_roj": 5, "birthday": 6}
+
+# Roj Fravardin is the 19th Roj. Some families keep it every month.
+FRAVARDIN_ROJ = ROJ_NAMES.index("Fravardin") + 1
 
 
 def _position(roj: int, mah: int, year: int, start: int, base_year: int) -> int:
@@ -286,6 +315,7 @@ def build_schedule(
     birthday: tuple[int, int] | None = None,
     birthday_years: int = 0,
     start_from: date | None = None,
+    fravardin_roj_months: int = 0,
 ) -> list[Observance]:
     """Every observance the family chose, soonest first. Dates already past
     are included: this is a diary, and a family arriving late still wants
@@ -311,6 +341,10 @@ def build_schedule(
     chosen length starting from the first date that is still to come - "6
     months" is six months of observances ahead, not six counted from the death.
 
+    ``fravardin_roj_months`` is how many months Roj Fravardin is kept: that Roj of
+    each Mah after the death, from the next one still to come when ``start_from``
+    is given.
+
     ``birthday`` is the deceased's (roj, mah); it repeats for ``birthday_years``
     years after the death and is the lowest-ranked observance on a shared date.
 
@@ -328,7 +362,7 @@ def build_schedule(
     unknown = [d for d in day_counts if d not in NAMED_DAYS]
     if unknown:
         raise ValueError(f"Not an observance day: {unknown}")
-    if monthly_months < 0 or yearly_years < 0 or parab_years < 0:
+    if monthly_months < 0 or yearly_years < 0 or parab_years < 0 or fravardin_roj_months < 0:
         raise ValueError("Counts cannot be negative")
     if parabs is not None and parabs not in PARABS:
         raise ValueError(f"parabs must be one of {PARABS}, got {parabs!r}")
@@ -438,6 +472,9 @@ def build_schedule(
             found = [o for o in found if o.gregorian_date >= start_from]
             found = sorted(found, key=lambda o: o.gregorian_date)[: parab_years * per_year]
         ranked += [(_RANK["parab"], o) for o in found]
+    if fravardin_roj_months:
+        ranked += [(_RANK["fravardin_roj"], o) for o in _fravardin_roj_observances(
+            death, death_date, system, fravardin_roj_months, start_from, gone)]
     if birthday is not None:
         ranked += [(_RANK["birthday"], o)
                    for o in _birthday_observances(death, death_date, system, birthday,

@@ -59,6 +59,9 @@ function choicesText(m) {
   const parts = OPENING_TEXT[m.opening] ? [OPENING_TEXT[m.opening]] : [];
   if (m.day_counts && m.day_counts.length) parts.push(`${m.day_counts.map(d => d + "th").join(", ")} day`);
   if (m.monthly_months) parts.push(`monthly for ${m.monthly_months} month${m.monthly_months > 1 ? "s" : ""}`);
+  if (m.fravardin_roj_months) {
+    parts.push(`Roj Fravardin monthly for ${m.fravardin_roj_months} month${m.fravardin_roj_months > 1 ? "s" : ""}`);
+  }
   if (m.yearly_years) parts.push(`yearly for ${m.yearly_years} year${m.yearly_years > 1 ? "s" : ""}`);
   if (m.parabs) {
     parts.push(`${m.parabs === "all" ? "all Parabs" : "Fravardin and Tir Parabs"} for ${m.parab_years} year${m.parab_years > 1 ? "s" : ""}`);

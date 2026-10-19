@@ -500,3 +500,18 @@ async def test_starting_late_books_only_what_is_still_ahead(client, db, seeded):
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
                           json=body, headers=headers)
     assert r.status_code == 400 and "already passed" in r.json()["detail"]
+
+
+async def test_roj_fravardin_every_month_is_saved_and_returned(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Afringan")
+    body = _body(DEATH, opening="none", day_counts=[], monthly=None,
+                 fravardin_roj={"count": 3}, service_ids=ids)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials", json=body, headers=headers)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["fravardin_roj_months"] == 3 and out["total"] == 3
+    assert all(o["label"] == "Roj Fravardin" for o in out["observances"])
+    bad = {**body, "fravardin_roj": {"count": 0}}
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview", json=bad, headers=headers)
+    assert r.status_code == 400

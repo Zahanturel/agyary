@@ -62,6 +62,8 @@ class Memorial(Base):
     yearly_years: Mapped[int | None] = mapped_column(SmallInteger)
     parabs: Mapped[str | None] = mapped_column(String(20))
     parab_years: Mapped[int | None] = mapped_column(SmallInteger)
+    # Roj Fravardin kept every month, for this many months; NULL when not chosen.
+    fravardin_roj_months: Mapped[int | None] = mapped_column(SmallInteger)
     # The deceased's birthday by Roj and Mah (never a Gatha day), repeated
     # for birthday_years years; NULL when not chosen.
     birthday_roj: Mapped[int | None] = mapped_column(SmallInteger)
@@ -95,6 +97,9 @@ class Memorial(Base):
         CheckConstraint(
             "(birthday_roj IS NULL) = (birthday_mah IS NULL) AND (birthday_roj IS NULL) = (birthday_years IS NULL)",
             name="birthday_whole",
+        ),
+        CheckConstraint(
+            "fravardin_roj_months IS NULL OR fravardin_roj_months >= 1", name="fravardin_roj_length"
         ),
         Index("idx_memorials_customer", "customer_id"),
         Index("idx_memorials_owner", "created_by_user_id", "agyary_id"),

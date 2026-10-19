@@ -45,6 +45,7 @@ export function blankMemorialDraft() {
     startFrom: "death",
     deathBy: "date", deathRoj: "", deathMah: "", deathYear: "",
     monthly: false, months: "", yearly: false, years: "",
+    fravRoj: false, fravRojMonths: "",
     parab: false, parabWhich: null, parabYears: "",
     // The deceased's birthday: a date fills in its Roj and Mah, or give Roj and Mah.
     birthday: false, birthDate: "", birthRoj: "", birthMah: "", birthYears: "",
@@ -87,11 +88,11 @@ export function buildMemorialBody(draft) {
     opening: "none",
     start_from: draft.startFrom === "today" ? todayIst() : null,
     day_counts: draft.days.slice().sort((a, b) => a - b),
-    monthly: null, yearly: null, parabs: null, birthday: null,
+    monthly: null, yearly: null, fravardin_roj: null, parabs: null, birthday: null,
     service_ids: draft.services,
   };
   if (!draft.services.length) bad("#mmServices", "Choose at least one prayer: Afringan, Farokshi, Baaj or Satum.");
-  if (!draft.days.length && !draft.monthly && !draft.yearly && !draft.parab && !draft.birthday) {
+  if (!draft.days.length && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
     bad("#mmSchedule", "Choose at least one day, or something that repeats.");
   }
   if (draft.monthly) {
@@ -101,6 +102,10 @@ export function buildMemorialBody(draft) {
   if (draft.yearly) {
     const n = count(draft.years, "#mmYears", "yearly observances", "years", MAX.years);
     if (n) body.yearly = { count: n };
+  }
+  if (draft.fravRoj) {
+    const n = count(draft.fravRojMonths, "#mmFravRojMonths", "Roj Fravardin observances", "months", MAX.months);
+    if (n) body.fravardin_roj = { count: n };
   }
   if (draft.parab) {
     if (!draft.parabWhich) bad("#mmParabWhichBox", "Choose which Parabs: Fravardin and Tir only, or all of them.");
@@ -224,6 +229,12 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
             <label for="mmYears">For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.years}" id="mmYears" value="${esc(draft.years)}"></div>
 
+          <div class="check-row"><input type="checkbox" id="mmFravRoj" ${draft.fravRoj ? "checked" : ""}>
+            <label for="mmFravRoj">Roj Fravardin, every month</label></div>
+          <div class="sub-field" id="mmFravRojBox" style="${draft.fravRoj ? "" : "display:none"}">
+            <label for="mmFravRojMonths">For how many months</label>
+            <input type="number" inputmode="numeric" min="1" max="${MAX.months}" id="mmFravRojMonths" value="${esc(draft.fravRojMonths)}"></div>
+
           <div class="check-row"><input type="checkbox" id="mmParab" ${draft.parab ? "checked" : ""}>
             <label for="mmParab">Parabs</label></div>
           <div class="sub-field" id="mmParabBox" style="${draft.parab ? "" : "display:none"}">
@@ -318,6 +329,7 @@ export function wireMemorialForm(root, draft, onChange) {
   };
   series("#mmMonthly", "#mmMonthlyBox", "#mmMonths", "monthly", "months");
   series("#mmYearly", "#mmYearlyBox", "#mmYears", "yearly", "years");
+  series("#mmFravRoj", "#mmFravRojBox", "#mmFravRojMonths", "fravRoj", "fravRojMonths");
   series("#mmParab", "#mmParabBox", "#mmParabYears", "parab", "parabYears");
   root.querySelectorAll("[name=mmParabWhich]").forEach(r => {
     r.onchange = () => { draft.parabWhich = r.value; };
