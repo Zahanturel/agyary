@@ -29,6 +29,8 @@ import {
 } from "../ui.js";
 import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
+import { flagProblems } from "../fielderrors.js";
+import { loadDraft, saveDraft, clearDraft } from "../drafts.js";
 
 export async function renderBehdinList() {
   chrome(true);
@@ -82,12 +84,49 @@ export async function renderBehdinList() {
   const rowsEl = document.getElementById("bhRows");
   const paint = (list) => {
     rowsEl.innerHTML = list.length
-      ? list.map(c => `<div class="search-result" data-cid="${c.id}">
-          <div>${esc(c.name)}</div><div class="addr">${esc(c.phone)}</div></div>`).join("")
+      ? list.map(c => `<div class="search-result bh-row" data-cid="${c.id}">
+          <div class="bh-main"><div>${esc(c.name)}</div><div class="addr">${esc(c.phone)}</div></div>
+          <button type="button" class="row-x" data-del aria-label="Delete ${esc(c.name)}" title="Delete this behdin">&times;</button>
+        </div>`).join("")
       : `<p class="meta">No behdins yet - add one above, or they appear here when you book for them.</p>`;
     rowsEl.querySelectorAll("[data-cid]").forEach(el => {
-      el.onclick = () => navigate(`#/behdins/${el.dataset.cid}`);
+      el.onclick = (e) => {
+        const row = e.currentTarget;
+        const c = list.find(b => String(b.id) === row.dataset.cid);
+        if (e.target.closest("[data-del]")) return askDelete(row, c);
+        if (e.target.closest(".row-confirm")) return;
+        navigate(`#/behdins/${row.dataset.cid}`);
+      };
     });
+  };
+
+  /** The x on a row: ask in place, then delete. Same call as the Delete button
+   *  on the behdin's own page, so the same rules apply (the server says if
+   *  something, such as a memorial, stops it). */
+  const askDelete = (row, c) => {
+    if (row.querySelector(".row-confirm")) return;
+    row.classList.add("row-pending");
+    row.insertAdjacentHTML("beforeend", `<div class="row-confirm" style="flex-basis:100%">
+      <span>Delete ${esc(c.name)}?</span>
+      <span class="row"><button type="button" class="ghost small" data-keep>Keep</button>
+      <button type="button" class="danger small" data-yes>Delete</button></span></div>`);
+    row.querySelector("[data-keep]").onclick = () => {
+      row.classList.remove("row-pending");
+      row.querySelector(".row-confirm").remove();
+    };
+    row.querySelector("[data-yes]").onclick = async (ev) => {
+      ev.currentTarget.disabled = true;
+      try {
+        await deleteBehdin(state.currentAgyaryId, c.id);
+      } catch (err) {
+        row.classList.remove("row-pending");
+        row.querySelector(".row-confirm").remove();
+        return showError("Couldn't delete: " + err.message);
+      }
+      rows = rows.filter(b => b.id !== c.id);
+      row.remove();
+      showInfo(`${c.name} removed.`);
+    };
   };
   paint(rows);
 
@@ -153,7 +192,7 @@ export function renderBehdinNew() {
     </div>
 
     <div class="card">
-      <h2>Saved names</h2>
+      <h2>Names for prayers</h2>
       <p class="meta">Reused whenever this behdin books - here or over
         WhatsApp. Leave it for later if you don't have them to hand.</p>
       <div id="savedRegion"></div>
@@ -172,11 +211,28 @@ export function renderBehdinNew() {
     </div>
     <div id="bnPreview" style="display:none"></div>`;
 
-  document.getElementById("bnCancel").onclick = () => back(backTarget);
-  document.getElementById("bnName").focus();
+  // What was typed here stays until the behdin is saved or this is cancelled -
+  // going to the calendar and coming back finds the form as it was left.
+  const draftKey = `behdin-new:${returnTo || ""}`;
+  const held = loadDraft(draftKey) || {};
+  const formRoot = document.getElementById("bnForm");
+  const snapshot = () => ({
+    name: document.getElementById("bnName").value,
+    cc: document.getElementById("bnPhone_cc").value,
+    phone: document.getElementById("bnPhone").value,
+    names: collectNames(region, false, "gujrela_nu"),
+    memOn: !!(memOn && memOn.checked),
+    mdraft,
+  });
+  const keep = () => saveDraft(draftKey, snapshot());
+  document.getElementById("bnCancel").onclick = () => { clearDraft(draftKey); back(backTarget); };
 
   const region = document.getElementById("savedRegion");
-  renderNamesEditor(region, false, "gujrela_nu", []);
+  renderNamesEditor(region, false, "gujrela_nu", held.names || []);
+  if (held.name && !prefillName) document.getElementById("bnName").value = held.name;
+  if (held.cc) document.getElementById("bnPhone_cc").value = held.cc;
+  if (held.phone) document.getElementById("bnPhone").value = held.phone;
+  if (!document.getElementById("bnName").value) document.getElementById("bnName").focus();
 
   if (canPickContacts()) {
     document.getElementById("bnImport").onclick = async () => {
@@ -214,6 +270,7 @@ export function renderBehdinNew() {
   // The memorial, if one is being set up here. Its form is built the first
   // time the box is ticked, and loaded then: it is not needed to add a behdin.
   let mem = null, mdraft = null, mservices = [];
+  let removed = new Set();   // dates taken out on the review screen
   const saveBtn = document.getElementById("bnSave");
   const memOn = memorialOk ? document.getElementById("bnMemOn") : null;
   if (memOn) {
@@ -221,18 +278,19 @@ export function renderBehdinNew() {
       const box = document.getElementById("bnMemForm");
       saveBtn.textContent = memOn.checked ? "Review schedule" : "Add behdin";
       box.style.display = memOn.checked ? "" : "none";
-      if (!memOn.checked || mdraft) return;   // off, or already built: just show/hide
+      if (!memOn.checked || mem) return keep();   // off, or already built: just show/hide
       try {
         const [form, { prayerServices }] = await Promise.all([
           import("../memorial_form.js"), import("./memorial.js"),
         ]);
         mservices = await prayerServices(state.currentAgyaryId);
         mem = form;
-        mdraft = form.blankMemorialDraft();
+        mdraft = { ...form.blankMemorialDraft(), ...(held.mdraft || {}) };
         box.innerHTML = form.memorialFormHtml(mdraft, mservices, {
           heading: "<h2>Someone they have lost</h2>",
         });
-        form.wireMemorialForm(box, mdraft);
+        form.wireMemorialForm(box, mdraft, keep);
+        keep();
       } catch (e) {
         memOn.checked = false;
         box.style.display = "none";
@@ -240,22 +298,29 @@ export function renderBehdinNew() {
         showError("Couldn't load the memorial form: " + e.message);
       }
     };
+    // Back from a detour: the memorial part of the form returns as it was.
+    if (held.memOn) { memOn.checked = true; memOn.onchange(); }
   }
+  // Every keystroke and choice in the form is kept (the memorial's controls
+  // update mdraft first, then bubble up to here).
+  formRoot.addEventListener("input", keep);
+  formRoot.addEventListener("change", keep);
+  region.addEventListener("names-changed", keep);
 
   /** What the mobed typed, checked - or null after saying what is wrong. */
   const validate = () => {
     const name = document.getElementById("bnName").value.trim();
     const phone = readPhone("bnPhone");
-    if (!name) return showError("Please enter the behdin's name.");
-    if (!phone) return showError("Please enter a valid phone number.");
+    const problems = [];
+    if (!name) problems.push({ target: "#bnName", message: "Please enter the behdin's name." });
+    if (!phone) problems.push({ target: "#bnForm .phone-field", message: "Please enter a valid phone number." });
 
     const rows = collectNames(region, false, "gujrela_nu");
     // Check the names BEFORE creating anybody, or a bad pair leaves a
     // half-made behdin behind and the mobed retypes the lot.
-    if (rows.length) {
-      const problem = validateNames(rows);
-      if (problem) return showError(problem);
-    }
+    const namesProblem = rows.length ? validateNames(rows) : null;
+    if (namesProblem) problems.push({ target: "#savedRegion", message: namesProblem });
+    if (problems.length) { flagProblems(formRoot, problems); return null; }
     return { name, phone, rows };
   };
 
@@ -271,6 +336,7 @@ export function renderBehdinNew() {
       btn.disabled = false;
       return showError(e.message);
     }
+    clearDraft(draftKey);   // saved: nothing left to hold on to
     if (!created.created && !returnTo && !memorialBody) {
       showInfo(`${created.name} was already on file - opening their record.`);
     }
@@ -300,7 +366,7 @@ export function renderBehdinNew() {
 
     if (memorialBody) {
       try {
-        const made = await createMemorial(aid, created.id, memorialBody);
+        const made = await createMemorial(aid, created.id, { ...memorialBody, exclude_codes: [...removed] });
         if (namesProblem) flashError(namesProblem);
         return navigate(`#/memorial/${made.id}`, { replace: true });
       } catch (e) {
@@ -323,12 +389,13 @@ export function renderBehdinNew() {
     formEl.style.display = "none";
     previewEl.style.display = "";
     previewEl.innerHTML = `
-      ${mem.schedulePreviewHtml(body, preview, mservices, { heading: backBar("Review the schedule") })}
+      ${mem.schedulePreviewHtml(body, preview, mservices, { heading: backBar("Review the schedule"), removed })}
       <p class="meta">For ${esc(v.name)}. Nothing is saved until you confirm.</p>
       <div class="wizard-nav" style="margin-top:4px">
         <button class="ghost" id="bnPrevBack">Change</button>
         <button id="bnPrevGo">Add behdin and memorial</button>
       </div>`;
+    mem.wireSchedulePreview(previewEl, preview, removed);
     window.scrollTo(0, 0);
     document.getElementById("bnPrevBack").onclick = () => {
       previewEl.style.display = "none";
@@ -342,9 +409,10 @@ export function renderBehdinNew() {
     if (!v) return;
     if (memOn && memOn.checked) {
       const built = mem.buildMemorialBody(mdraft);
-      if (built.error) return showError(built.error);
+      if (mem.showMemorialProblems(formRoot, built)) return;
       saveBtn.disabled = true;
       try {
+        removed = new Set();   // a changed form is a new schedule
         showPreview(v, built.body, await previewNewMemorial(state.currentAgyaryId, built.body));
       } catch (e) {
         showError(e.message);
@@ -429,7 +497,7 @@ export async function renderBehdinDetail({ id }) {
     </div>` : ""}
 
     <div class="card">
-      <h2>Saved names</h2>
+      <h2>Names for prayers</h2>
       <p class="meta">Reused whenever this behdin books - here or over WhatsApp.</p>
       <div id="savedRegion"></div>
       <div style="margin-top:14px"><button class="small" id="bdSaveNames">Save names</button></div>
@@ -569,7 +637,7 @@ export async function renderBehdinDetail({ id }) {
       // also the level the "a pair is two names" rule lives at.
       await putSavedNames(aid, cid, "pair", rows.filter(n => n.section === "pair"));
       await putSavedNames(aid, cid, "farmayeshne", rows.filter(n => n.section === "farmayeshne"));
-      showInfo("Saved names updated.");
+      showInfo("Names for prayers updated.");
     } catch (e) {
       showError(e.message);
     }

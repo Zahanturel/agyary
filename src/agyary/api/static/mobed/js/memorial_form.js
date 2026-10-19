@@ -18,51 +18,61 @@
 import { primarySystem, state } from "./state.js";
 import { esc, gregLabel, todayIst, parsiLabel, MAH_NAMES_JS } from "./util.js";
 import { parsiText } from "./screens/memorial.js";
+import { flagProblems } from "./fielderrors.js";
+import { convertDate } from "./api.js";
 
 // The named days a family can add on top of the opening. The spellings are
 // provisional (the mobeds settle them) and mirror NAMED_DAYS in
 // calendar/memorial.py, which is what labels the saved schedule. The 10th is
-// part of the opening, so it is not listed here.
+// Dasmi is the 10th day, chosen here like the rest; days 1 to 9 are not offered.
 const NAMED_DAYS = [
-  [29, "Deci"], [30, "Masiso"], [59, "Deci"], [60, "Bamsi"],
+  [10, "Dasmi"], [29, "Deci"], [30, "Masiso"], [59, "Deci"], [60, "Bamsi"],
   [179, "Deci"], [180, "Chamsi"], [359, "Deci"], [360, "Varsi"],
 ];
 
-const MAX = { months: 120, years: 50, parabYears: 25 };
+const MAX = { months: 120, years: 50, parabYears: 25, birthYears: 50 };
 
 // A death on a Gatha day is given as Mah "Gatha days" (13) and the Gatha's number.
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht", "Sixth (Fasli leap years)"];
 
 export function blankMemorialDraft() {
   return {
-    name: "", death: "", calendar: primarySystem(), opening: null, days: [],
+    name: "", death: "", calendar: primarySystem(), days: [],
     // How the death is given (D5): a Gregorian date, or its Parsi day - a death
     // before sunrise belongs to the previous Parsi day, and the mobed knows which.
     deathBy: "date", deathRoj: "", deathMah: "", deathYear: "",
     monthly: false, months: "", yearly: false, years: "",
     parab: false, parabWhich: null, parabYears: "",
+    // The deceased's birthday: a date fills in its Roj and Mah, or give Roj and Mah.
+    birthday: false, birthDate: "", birthRoj: "", birthMah: "", birthYears: "",
     services: [],
   };
 }
 
-/** The request body, or an error message if something is missing. Every check
+/** The request body, or `problems` - one per field that needs attention, each
+ *  with the `target` selector of its control (see fielderrors.js) - plus
+ *  `error`, the first message, for callers with nowhere to point. Every check
  *  here is also made by the server; this is for a clear message before the
  *  round trip. */
 export function buildMemorialBody(draft) {
-  if (!draft.name.trim()) return { error: "Please enter the departed person's name." };
+  const problems = [];
+  const bad = (target, message) => problems.push({ target, message });
+  if (!draft.name.trim()) bad("#mmName", "Please enter the departed person's name.");
   const byParsi = draft.deathBy === "parsi";
-  if (!byParsi && !draft.death) return { error: "Please enter the date of death." };
-  if (byParsi && (!draft.deathRoj || !draft.deathMah)) return { error: "Please choose the Roj and the Mah of the death." };
-  if (byParsi && draft.deathYear && !/^\d{3,4}$/.test(String(draft.deathYear).trim())) {
-    return { error: "The Parsi year is a number such as 1396, or leave it empty." };
+  if (!byParsi && !draft.death) bad("#mmDeath", "Please enter the date of death.");
+  if (byParsi) {
+    if (!draft.deathMah) bad("#mmDeathMah", "Please choose the Mah of the death.");
+    if (!draft.deathRoj) bad("#mmDeathRoj", "Please choose the Roj of the death.");
+    if (draft.deathYear && !/^\d{3,4}$/.test(String(draft.deathYear).trim())) {
+      bad("#mmDeathYear", "The Parsi year is a number such as 1396, or leave it empty.");
+    }
   }
-  if (!draft.opening) return { error: "Choose how the opening is kept: days 1 to 10, or the 10th day only." };
 
-  const count = (raw, label, unit, max) => {
+  const count = (raw, target, label, unit, max) => {
     const n = Number(raw);
-    if (!raw || !Number.isInteger(n) || n < 1) return { error: `Say how many ${unit} the ${label} should run for.` };
-    if (n > max) return { error: `The ${label} can run for at most ${max} ${unit}.` };
-    return { n };
+    if (!raw || !Number.isInteger(n) || n < 1) { bad(target, `Say how many ${unit} the ${label} should run for.`); return null; }
+    if (n > max) { bad(target, `The ${label} can run for at most ${max} ${unit}.`); return null; }
+    return n;
   };
   const body = {
     departed_name: draft.name.trim(),
@@ -71,29 +81,45 @@ export function buildMemorialBody(draft) {
     death_mah: byParsi ? Number(draft.deathMah) : null,
     death_year: byParsi && draft.deathYear ? Number(draft.deathYear) : null,
     calendar: draft.calendar,
-    opening: draft.opening,
+    opening: "none",
     day_counts: draft.days.slice().sort((a, b) => a - b),
-    monthly: null, yearly: null, parabs: null,
+    monthly: null, yearly: null, parabs: null, birthday: null,
     service_ids: draft.services,
   };
+  if (!draft.services.length) bad("#mmServices", "Choose at least one prayer: Afringan, Farokshi, Baaj or Satum.");
+  if (!draft.days.length && !draft.monthly && !draft.yearly && !draft.parab && !draft.birthday) {
+    bad("#mmSchedule", "Choose at least one day, or something that repeats.");
+  }
   if (draft.monthly) {
-    const r = count(draft.months, "monthly observances", "months", MAX.months);
-    if (r.error) return r;
-    body.monthly = { count: r.n };
+    const n = count(draft.months, "#mmMonths", "monthly observances", "months", MAX.months);
+    if (n) body.monthly = { count: n };
   }
   if (draft.yearly) {
-    const r = count(draft.years, "yearly observances", "years", MAX.years);
-    if (r.error) return r;
-    body.yearly = { count: r.n };
+    const n = count(draft.years, "#mmYears", "yearly observances", "years", MAX.years);
+    if (n) body.yearly = { count: n };
   }
   if (draft.parab) {
-    if (!draft.parabWhich) return { error: "Choose which Parabs: Fravardin and Tir only, or all of them." };
-    const r = count(draft.parabYears, "Parabs", "years", MAX.parabYears);
-    if (r.error) return r;
-    body.parabs = { which: draft.parabWhich, years: r.n };
+    if (!draft.parabWhich) bad("#mmParabWhichBox", "Choose which Parabs: Fravardin and Tir only, or all of them.");
+    const n = count(draft.parabYears, "#mmParabYears", "Parabs", "years", MAX.parabYears);
+    if (n && draft.parabWhich) body.parabs = { which: draft.parabWhich, years: n };
   }
-  if (!draft.services.length) return { error: "Choose at least one service: Afringan, Farokshi or Baaj." };
+  if (draft.birthday) {
+    if (!draft.birthMah) bad("#mmBirthMah", "Please choose the Mah of the birthday.");
+    if (!draft.birthRoj) bad("#mmBirthRoj", "Please choose the Roj of the birthday.");
+    const n = count(draft.birthYears, "#mmBirthYears", "birthday", "years", MAX.birthYears);
+    if (n && draft.birthMah && draft.birthRoj) {
+      body.birthday = { roj: Number(draft.birthRoj), mah: Number(draft.birthMah), years: n };
+    }
+  }
+  if (problems.length) return { problems, error: problems[0].message };
   return { body };
+}
+
+/** Point at what is wrong in the form below `root`; true if the draft had problems. */
+export function showMemorialProblems(root, built) {
+  if (!built.problems) return false;
+  flagProblems(root, built.problems);
+  return true;
 }
 
 /** The Roj picker: the thirty Roj, or the Gatha days when the Mah is "Gatha days". */
@@ -103,6 +129,13 @@ function rojOptionsHtml(draft) {
     : ((state.calendarOptions && state.calendarOptions.roj) || []).map(o => o.title);
   return `<option value="">Choose</option>` + names.map((n, i) =>
     `<option value="${i + 1}" ${String(draft.deathRoj) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("");
+}
+
+/** The birthday's Roj picker: the thirty Roj (never a Gatha day). */
+function birthRojOptionsHtml(draft) {
+  const names = ((state.calendarOptions && state.calendarOptions.roj) || []).map(o => o.title);
+  return `<option value="">Choose</option>` + names.map((n, i) =>
+    `<option value="${i + 1}" ${String(draft.birthRoj) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("");
 }
 
 /** The form: who and when, then one card holding every option. `heading` goes
@@ -153,13 +186,8 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
             <input type="checkbox" data-svc="${s.id}" ${draft.services.includes(s.id) ? "checked" : ""}>${esc(s.name)}</label>`).join("")}
         </div>
 
-        <div class="names-group-label"><b>First days</b></div>
-        <div class="choice-group">
-          ${radio("mmOpening", "mmOpenAll", "days_1_to_10", draft.opening === "days_1_to_10", "Days 1 to 10")}
-          ${radio("mmOpening", "mmOpenTenth", "tenth_only", draft.opening === "tenth_only", "10th day only")}
-        </div>
-
         <div class="names-group-label"><b>Named days</b></div>
+        <div id="mmSchedule">
         <div class="choice-group">${NAMED_DAYS.map(([n, name]) => `
           <div class="check-row"><input type="checkbox" data-day="${n}" id="mmDay${n}" ${has(n) ? "checked" : ""}>
             <label for="mmDay${n}">${n}th day · ${name}</label></div>`).join("")}
@@ -182,18 +210,40 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <div class="check-row"><input type="checkbox" id="mmParab" ${draft.parab ? "checked" : ""}>
             <label for="mmParab">Parabs</label></div>
           <div class="sub-field" id="mmParabBox" style="${draft.parab ? "" : "display:none"}">
+            <div id="mmParabWhichBox">
             ${radio("mmParabWhich", "mmParabFT", "fravardin_tir", draft.parabWhich === "fravardin_tir", "Fravardin and Tir only")}
-            ${radio("mmParabWhich", "mmParabAll", "all", draft.parabWhich === "all", "All Parabs")}
+            ${radio("mmParabWhich", "mmParabAll", "all", draft.parabWhich === "all", "All Parabs")}</div>
             <label for="mmParabYears">For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.parabYears}" id="mmParabYears" value="${esc(draft.parabYears)}"></div>
+
+          <div class="check-row"><input type="checkbox" id="mmBirthday" ${draft.birthday ? "checked" : ""}>
+            <label for="mmBirthday">Birthday of the departed</label></div>
+          <div class="sub-field" id="mmBirthdayBox" style="${draft.birthday ? "" : "display:none"}">
+            <label for="mmBirthDate">Date of birth (fills in the Roj and Mah)</label>
+            <input type="date" id="mmBirthDate" max="${todayIst()}" value="${esc(draft.birthDate)}">
+            <p class="meta" id="mmBirthNote" style="margin:6px 0 0"></p>
+            <label for="mmBirthMah">Mah</label>
+            <select id="mmBirthMah"><option value="">Choose</option>${MAH_NAMES_JS.map((n, i) =>
+              `<option value="${i + 1}" ${String(draft.birthMah) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+            <label for="mmBirthRoj">Roj</label>
+            <select id="mmBirthRoj">${birthRojOptionsHtml(draft)}</select>
+            <label for="mmBirthYears">For how many years</label>
+            <input type="number" inputmode="numeric" min="1" max="${MAX.birthYears}" id="mmBirthYears" value="${esc(draft.birthYears)}"></div>
+        </div>
         </div>
       </div>`;
 }
 
 /** Hook the form's controls up to `draft`. `root` is the element holding the
  *  form's HTML. */
-export function wireMemorialForm(root, draft) {
+export function wireMemorialForm(root, draft, onChange) {
   const $ = (sel) => root.querySelector(sel);
+  // Anything the mobed touches updates `draft` first (below), then bubbles
+  // here, so the caller can keep a copy of the draft that outlives this screen.
+  if (onChange) {
+    root.addEventListener("input", () => onChange(draft));
+    root.addEventListener("change", () => onChange(draft));
+  }
 
   const readParsi = async () => {
     const note = $("#mmParsi");
@@ -220,9 +270,6 @@ export function wireMemorialForm(root, draft) {
   $("#mmDeathRoj").onchange = (e) => { draft.deathRoj = e.target.value; };
   $("#mmDeathYear").oninput = (e) => { draft.deathYear = e.target.value; };
   $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); };
-  root.querySelectorAll("[name=mmOpening]").forEach(r => {
-    r.onchange = () => { draft.opening = r.value; };
-  });
   root.querySelectorAll("[data-day]").forEach(cb => {
     cb.onchange = () => {
       const n = Number(cb.dataset.day);
@@ -247,6 +294,38 @@ export function wireMemorialForm(root, draft) {
     r.onchange = () => { draft.parabWhich = r.value; };
   });
 
+  // The birthday: a date gives the Roj and Mah (read in the family's calendar);
+  // or they are chosen directly. Either way the Roj and Mah are what is used.
+  $("#mmBirthday").onchange = (e) => {
+    draft.birthday = e.target.checked;
+    $("#mmBirthdayBox").style.display = e.target.checked ? "" : "none";
+    if (!e.target.checked) {
+      Object.assign(draft, { birthDate: "", birthRoj: "", birthMah: "", birthYears: "" });
+      $("#mmBirthDate").value = ""; $("#mmBirthMah").value = ""; $("#mmBirthRoj").value = "";
+      $("#mmBirthYears").value = ""; $("#mmBirthNote").textContent = "";
+    }
+  };
+  $("#mmBirthMah").onchange = (e) => { draft.birthMah = e.target.value; };
+  $("#mmBirthRoj").onchange = (e) => { draft.birthRoj = e.target.value; };
+  $("#mmBirthYears").oninput = (e) => { draft.birthYears = e.target.value; };
+  const readBirth = async () => {
+    const note = $("#mmBirthNote");
+    note.textContent = "";
+    if (!draft.birthDate) return;
+    try {
+      const p = await convertDate(draft.birthDate, draft.calendar);
+      if (!note.isConnected) return;
+      if (p.is_gatha) { note.textContent = "That day is a Gatha day - give the birthday as a Roj and Mah instead."; return; }
+      draft.birthMah = String(p.mah); draft.birthRoj = String(p.roj);
+      $("#mmBirthMah").value = draft.birthMah; $("#mmBirthRoj").value = draft.birthRoj;
+      note.textContent = `Roj ${p.roj_name}, Mah ${p.mah_name}`;
+      if (onChange) onChange(draft);
+    } catch (e) { /* leave it for the mobed to choose */ }
+  };
+  $("#mmBirthDate").onchange = (e) => { draft.birthDate = e.target.value; readBirth(); };
+  // The calendar decides what Roj and Mah a date is.
+  $("#mmCalendar").addEventListener("change", () => { if (draft.birthDate) readBirth(); });
+
   root.querySelectorAll("[data-svc]").forEach(cb => {
     cb.onchange = () => {
       const n = Number(cb.dataset.svc);
@@ -258,29 +337,69 @@ export function wireMemorialForm(root, draft) {
 
 /** Every date the memorial would have, as a pair of cards - nothing is saved
  *  yet. `heading` goes at the top of the first card. */
-export function schedulePreviewHtml(body, preview, services, { heading = "" } = {}) {
+export function schedulePreviewHtml(body, preview, services, { heading = "", removed = new Set() } = {}) {
   const today = todayIst();
   const names = body.service_ids
     .map(sid => (services.find(s => s.id === sid) || {}).name).filter(Boolean).join(", ");
-  const passed = preview.observances.filter(o => o.date < today).length;
+  const kept = preview.observances.filter(o => !removed.has(o.code));
+  const passed = kept.filter(o => o.date < today).length;
   return `
       <div class="card">
         ${heading}
         <p class="meta" style="margin:4px 0 0">${esc(body.departed_name)} · died ${esc(gregLabel(preview.death_date || body.death_date))}
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
-        <p style="margin:12px 0 0;font-size:var(--text-sm)"><b>${preview.count} observance${preview.count === 1 ? "" : "s"}</b>,
+        <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>,
           each with ${esc(names)}.</p>
         ${passed ? `<p class="meta" style="margin:4px 0 0">${passed} of these ${passed === 1 ? "has" : "have"}
           already passed - they stay on the calendar.</p>` : ""}
       </div>
 
       <div class="card">
-        ${preview.observances.map((o, i) => `
-          <div class="obs ${o.date < today ? "past" : ""} ${i === preview.observances.length - 1 ? "last" : ""}">
+        <div id="schedRows">${kept.map(o => `
+          <div class="obs ${o.date < today ? "past" : ""}" data-code="${esc(o.code)}">
             <div class="obs-head" style="cursor:default">
               <div class="obs-title"><b>${esc(o.label)}</b><span>${esc(parsiText(o))}</span></div>
               <div class="obs-when">${esc(gregLabel(o.date))}</div>
+              <button type="button" class="row-x" data-remove aria-label="Remove ${esc(o.label)} on ${esc(gregLabel(o.date))}"
+                title="Remove this date">&times;</button>
             </div>
-          </div>`).join("")}
+          </div>`).join("")}</div>
       </div>`;
+}
+
+
+/** Make the x on each date work: it asks "Remove this date?" in place, and a yes
+ *  drops the row and adds its code to `removed` (which the caller sends as
+ *  exclude_codes when it saves). Nothing else changes. `root` holds the preview. */
+export function wireSchedulePreview(root, preview, removed, onChange) {
+  const rows = root.querySelector("#schedRows");
+  const count = root.querySelector("#schedCount");
+  const total = () => preview.observances.length - removed.size;
+  rows.addEventListener("click", (e) => {
+    const x = e.target.closest("[data-remove]");
+    const row = e.target.closest(".obs");
+    if (!row) return;
+    if (x) {
+      if (row.querySelector(".row-confirm")) return;
+      row.classList.add("row-pending");
+      row.insertAdjacentHTML("beforeend", `<div class="row-confirm"><span>Remove this date?</span>
+        <span class="row"><button type="button" class="ghost small" data-keep>Keep</button>
+        <button type="button" class="small" data-yes>Remove</button></span></div>`);
+      return;
+    }
+    if (e.target.closest("[data-keep]")) {
+      row.classList.remove("row-pending");
+      row.querySelector(".row-confirm").remove();
+    } else if (e.target.closest("[data-yes]")) {
+      if (total() <= 1) {   // an empty schedule is not a memorial
+        row.classList.remove("row-pending");
+        row.querySelector(".row-confirm").innerHTML = "<span>Keep at least one date.</span>";
+        return;
+      }
+      removed.add(row.dataset.code);
+      row.remove();
+      count.textContent = `${total()} observance${total() === 1 ? "" : "s"}`;
+      if (onChange) onChange(removed);
+    }
+  });
 }

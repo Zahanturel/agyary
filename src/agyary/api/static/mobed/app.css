@@ -392,3 +392,20 @@ body.has-tabs .fab { bottom: calc(76px + var(--safe-bottom)); }
 .otp-input { font-family: var(--font-mono); font-size: 30px; letter-spacing: .35em; text-align: center;
   padding: var(--space-3) var(--space-2); }
 .otp-input::placeholder { letter-spacing: .35em; color: var(--ink-100); }
+
+/* A field that needs attention: outlined where it is, with the reason beneath. */
+.has-error { outline: 2px solid var(--danger-600); outline-offset: 2px; border-radius: var(--radius-sm, 6px); }
+.field-msg { color: var(--danger-600); font-size: var(--text-sm); margin: var(--space-1) 0 var(--space-2); }
+
+/* The cancel (x) beside a row on the review screen and in lists. */
+.row-x { background: none; border: 0; color: var(--muted); font-size: 20px; line-height: 1; padding: 6px 10px;
+  min-height: 0; cursor: pointer; border-radius: 6px; flex: 0 0 auto; }
+.row-x:hover, .row-x:focus-visible { color: var(--danger-600); background: var(--danger-tint); }
+.row-pending { background: var(--danger-tint); border-radius: 8px; }
+.row-confirm { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--danger-600); }
+.row-confirm .row { gap: var(--space-2); }
+.obs:has(.row-x:hover), .obs:has(.row-x:focus-visible) { background: var(--danger-tint); }
+.bh-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.bh-row .bh-main { flex: 1 1 auto; min-width: 0; }
+.bh-row.row-pending { background: var(--danger-tint); }

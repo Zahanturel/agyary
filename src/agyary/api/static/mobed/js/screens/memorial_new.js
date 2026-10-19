@@ -21,7 +21,9 @@ import { navigate, back, navGuard } from "../router.js";
 import { prayerServices } from "./memorial.js";
 import {
   blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialForm, schedulePreviewHtml,
+  wireSchedulePreview, showMemorialProblems,
 } from "../memorial_form.js";
+import { loadDraft, saveDraft, clearDraft } from "../drafts.js";
 
 export async function renderMemorialNew({ id }) {
   chrome(true);
@@ -42,7 +44,14 @@ export async function renderMemorialNew({ id }) {
   }
   if (!alive()) return;
 
-  const draft = blankMemorialDraft();
+  // What was typed stays until the memorial is saved or cancelled, so going
+  // back to the calendar (or anywhere) and returning finds the form as it was.
+  const draftKey = `memorial:${aid}:${cid}`;
+  const draft = { ...blankMemorialDraft(), ...(loadDraft(draftKey) || {}) };
+  const keep = () => saveDraft(draftKey, draft);
+  // Dates taken out on the review screen; kept while the form is changed and
+  // reviewed again, dropped with the draft.
+  let removed = new Set();
 
   function showForm() {
     mainEl.innerHTML = `
@@ -54,15 +63,16 @@ export async function renderMemorialNew({ id }) {
         <button class="ghost" id="mmCancel">Cancel</button>
         <button id="mmReview">Review schedule</button>
       </div>`;
-    wireMemorialForm(mainEl, draft);
+    wireMemorialForm(mainEl, draft, keep);
 
-    document.getElementById("mmCancel").onclick = () => back(`#/behdins/${cid}`);
+    document.getElementById("mmCancel").onclick = () => { clearDraft(draftKey); back(`#/behdins/${cid}`); };
     document.getElementById("mmReview").onclick = async () => {
       const built = buildMemorialBody(draft);
-      if (built.error) return showError(built.error);
+      if (showMemorialProblems(mainEl, built)) return;
       const btn = document.getElementById("mmReview");
       btn.disabled = true;
       try {
+        removed = new Set();   // a changed form is a new schedule
         showPreview(built.body, await previewMemorial(aid, cid, built.body));
       } catch (e) {
         btn.disabled = false;
@@ -73,17 +83,19 @@ export async function renderMemorialNew({ id }) {
 
   function showPreview(body, preview) {
     mainEl.innerHTML = `
-      ${schedulePreviewHtml(body, preview, services, { heading: backBar("Review the schedule") })}
+      ${schedulePreviewHtml(body, preview, services, { heading: backBar("Review the schedule"), removed })}
       <div class="wizard-nav" style="margin-top:4px">
         <button class="ghost" id="mmEdit">Change</button>
         <button id="mmCreate">Create memorial</button>
       </div>`;
+    wireSchedulePreview(mainEl, preview, removed);
     document.getElementById("mmEdit").onclick = () => showForm();
     document.getElementById("mmCreate").onclick = async () => {
       const btn = document.getElementById("mmCreate");
       btn.disabled = true;
       try {
-        const made = await createMemorial(aid, cid, body);
+        const made = await createMemorial(aid, cid, { ...body, exclude_codes: [...removed] });
+        clearDraft(draftKey);
         // The form is finished; the memorial takes its place in history.
         navigate(`#/memorial/${made.id}`, { replace: true });
       } catch (e) {

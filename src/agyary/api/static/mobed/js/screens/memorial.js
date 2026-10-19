@@ -25,7 +25,7 @@ import { back, navGuard } from "../router.js";
 
 // The services a memorial is made of. If a fire temple has renamed or removed
 // all of them, fall back to everything it offers rather than showing nothing.
-const PRAYER_NAMES = ["afringan", "farokshi", "baaj"];
+const PRAYER_NAMES = ["afringan", "farokshi", "baaj", "satum"];
 
 /** The services offered for a memorial at this fire temple, in catalog order. */
 export async function prayerServices(aid) {
@@ -56,12 +56,15 @@ export function parsiText(o) {
 const OPENING_TEXT = { days_1_to_10: "Days 1 to 10", tenth_only: "10th day only" };
 
 function choicesText(m) {
-  const parts = [OPENING_TEXT[m.opening] || m.opening];
+  const parts = OPENING_TEXT[m.opening] ? [OPENING_TEXT[m.opening]] : [];
   if (m.day_counts && m.day_counts.length) parts.push(`${m.day_counts.map(d => d + "th").join(", ")} day`);
   if (m.monthly_months) parts.push(`monthly for ${m.monthly_months} month${m.monthly_months > 1 ? "s" : ""}`);
   if (m.yearly_years) parts.push(`yearly for ${m.yearly_years} year${m.yearly_years > 1 ? "s" : ""}`);
   if (m.parabs) {
     parts.push(`${m.parabs === "all" ? "all Parabs" : "Fravardin and Tir Parabs"} for ${m.parab_years} year${m.parab_years > 1 ? "s" : ""}`);
+  }
+  if (m.birthday) {
+    parts.push(`birthday for ${m.birthday.years} year${m.birthday.years > 1 ? "s" : ""}`);
   }
   return parts.join(" · ");
 }

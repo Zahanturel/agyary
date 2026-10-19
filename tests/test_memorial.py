@@ -488,3 +488,34 @@ def test_a_gatha_death_in_the_sixth_gatha_of_a_fasli_leap_cycle():
         assert (sched[1].mah, sched[1].roj, sched[1].year) == (1, 1, year + 1)
         return
     raise AssertionError("no leap Fasli year found")
+
+
+def test_dasmi_is_chosen_like_any_named_day_with_no_opening():
+    from agyary.calendar.memorial import OPENING_NONE
+    kw = dict(death_roj=2, death_mah=1, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+              opening=OPENING_NONE)
+    assert build_schedule(**kw) == []
+    only = build_schedule(**kw, day_counts=(10, 30))
+    assert [o.day_number for o in only] == [10, 31]
+    assert only[0].label == "Dasmi"
+
+
+def test_birthday_repeats_on_its_roj_and_mah_after_the_death():
+    from agyary.calendar.memorial import OPENING_NONE
+    sched = build_schedule(
+        death_roj=2, death_mah=1, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+        opening=OPENING_NONE, birthday=(9, 5), birthday_years=3,
+    )
+    assert [o.label for o in sched] == ["Birthday"] * 3
+    assert [(o.roj, o.mah) for o in sched] == [(9, 5)] * 3
+    assert [o.year for o in sched] == [YEAR, YEAR + 1, YEAR + 2]
+
+
+def test_a_birthday_needs_years_and_a_real_roj_and_mah():
+    from agyary.calendar.memorial import OPENING_NONE
+    kw = dict(death_roj=2, death_mah=1, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+              opening=OPENING_NONE)
+    with pytest.raises(ValueError):
+        build_schedule(**kw, birthday=(9, 5), birthday_years=0)
+    with pytest.raises(ValueError):
+        build_schedule(**kw, birthday=(9, 13), birthday_years=2)

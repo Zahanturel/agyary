@@ -450,3 +450,32 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     link = urlparse(item["wa_link"])
     assert (link.scheme, link.netloc, link.path) == ("https", "wa.me", "/" + PHONE.lstrip("+"))
     assert parse_qs(link.query)["text"] == [text]
+
+
+async def test_no_opening_dasmi_birthday_and_removed_dates(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Afringan", "Satum")
+    body = _body(DEATH, opening="none", day_counts=[10, 30], monthly=None,
+                 birthday={"roj": 9, "mah": 5, "years": 2}, service_ids=ids)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
+                          json=body, headers=headers)
+    assert r.status_code == 200, r.text
+    labels = [o["label"] for o in r.json()["observances"]]
+    assert labels.count("Birthday") == 2 and "Dasmi" in labels and "Masiso" in labels
+    assert not any(l.startswith("Day ") for l in labels)
+
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials",
+                          json={**body, "exclude_codes": ["day_10"]}, headers=headers)
+    assert r.status_code == 200, r.text
+    saved = [o["label"] for o in r.json()["observances"]]
+    assert "Dasmi" not in saved and "Masiso" in saved and saved.count("Birthday") == 2
+
+    # a birthday given as a date is turned into its Roj and Mah; with no length it is refused
+    bad = {**body, "birthday": {"roj": 9, "mah": 5, "years": 0}}
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
+                          json=bad, headers=headers)
+    assert r.status_code == 400
+    ok = {**body, "birthday": {"birth_date": "1950-06-01", "years": 1}}
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
+                          json=ok, headers=headers)
+    assert r.status_code == 200, r.text

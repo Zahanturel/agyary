@@ -62,6 +62,11 @@ class Memorial(Base):
     yearly_years: Mapped[int | None] = mapped_column(SmallInteger)
     parabs: Mapped[str | None] = mapped_column(String(20))
     parab_years: Mapped[int | None] = mapped_column(SmallInteger)
+    # The deceased's birthday by Roj and Mah (never a Gatha day), repeated
+    # for birthday_years years; NULL when not chosen.
+    birthday_roj: Mapped[int | None] = mapped_column(SmallInteger)
+    birthday_mah: Mapped[int | None] = mapped_column(SmallInteger)
+    birthday_years: Mapped[int | None] = mapped_column(SmallInteger)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -87,6 +92,10 @@ class Memorial(Base):
             "monthly_months IS NULL OR monthly_months >= 1", name="monthly_length"
         ),
         CheckConstraint("yearly_years IS NULL OR yearly_years >= 1", name="yearly_length"),
+        CheckConstraint(
+            "(birthday_roj IS NULL) = (birthday_mah IS NULL) AND (birthday_roj IS NULL) = (birthday_years IS NULL)",
+            name="birthday_whole",
+        ),
         Index("idx_memorials_customer", "customer_id"),
         Index("idx_memorials_owner", "created_by_user_id", "agyary_id"),
     )

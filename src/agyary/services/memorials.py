@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
-from agyary.calendar.memorial import Observance, build_schedule
+from agyary.calendar.memorial import OPENING_NONE, Observance, build_schedule
 from agyary.core.config import get_settings
 from agyary.messaging import booking_service
 from agyary.messaging.availability import parsi_slot_fields
@@ -51,6 +51,7 @@ IST = ZoneInfo("Asia/Kolkata")
 MAX_MONTHLY_MONTHS = 120
 MAX_YEARLY_YEARS = 50
 MAX_PARAB_YEARS = 25
+MAX_BIRTHDAY_YEARS = 50
 MAX_OBSERVANCES = 800
 
 
@@ -69,12 +70,18 @@ class Choice:
     # previous Parsi day, and the mobed knows which it was. Mah 13 is a Gatha
     # day, with the Gatha number as the Roj.
     death_date: date | None
-    opening: str
+    opening: str = OPENING_NONE
     day_counts: tuple[int, ...] = ()
     monthly_months: int | None = None
     yearly_years: int | None = None
     parabs: str | None = None
     parab_years: int | None = None
+    # The deceased's birthday, as a date or as Roj and Mah (one or the other),
+    # repeated for birthday_years years.
+    birthday_date: date | None = None
+    birthday_roj: int | None = None
+    birthday_mah: int | None = None
+    birthday_years: int | None = None
     # The calendar the family keeps, or None for the mobed's own primary. It
     # decides which day is a Parab and where the Gatha days fall, so it is
     # stored with the memorial rather than assumed later.
@@ -143,6 +150,34 @@ def resolve_death(system: CalendarSystem, choice: Choice, today: date | None = N
         raise MemorialError("That is not a day in this calendar.") from exc
 
 
+def resolve_birthday(system: CalendarSystem, choice: Choice) -> tuple[int, int] | None:
+    """The birthday as (roj, mah), from a date or from Roj and Mah; None when
+    no birthday was chosen. A date is read in the family's calendar."""
+    given = [choice.birthday_date, choice.birthday_roj, choice.birthday_mah]
+    if all(g is None for g in given):
+        if choice.birthday_years is not None:
+            raise MemorialError("Give the birthday as a date or as Roj and Mah.")
+        return None
+    if choice.birthday_years is None:
+        raise MemorialError("Choose how many years the birthday should repeat for.")
+    if choice.birthday_date is not None:
+        if choice.birthday_roj is not None or choice.birthday_mah is not None:
+            raise MemorialError("Give the birthday either as a date or as Roj and Mah, not both.")
+        try:
+            p = gregorian_to_parsi(choice.birthday_date, system)
+        except (ValueError, OverflowError) as exc:
+            raise MemorialError("That is not a day in this calendar.") from exc
+        if p.mah == 13 or p.mah is None:
+            raise MemorialError("That birthday falls on a Gatha day; give it as a different date.")
+        return p.roj, p.mah
+    roj, mah = choice.birthday_roj, choice.birthday_mah
+    if roj is None or mah is None:
+        raise MemorialError("Give both the Roj and the Mah of the birthday.")
+    if not (1 <= mah <= 12 and 1 <= roj <= 30):
+        raise MemorialError("A birthday is a Roj and a Mah (not a Gatha day).")
+    return roj, mah
+
+
 def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tuple[int, int, int], date]:
     """The schedule for a choice, without saving anything. Also returns the
     death as (roj, mah, year) in ``system`` and as a Gregorian date - what the
@@ -162,6 +197,9 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
     if (choice.parabs is None) != (choice.parab_years is None):
         raise MemorialError("Choose how many years the Parabs should run for.")
 
+    birthday = resolve_birthday(system, choice)
+    _validate_length(choice.birthday_years, "Birthdays", MAX_BIRTHDAY_YEARS)
+
     # A Gatha death is stored the way machis store one: Mah 13, with the
     # Gatha number in the Roj slot.
     death_date = resolve_death(system, choice)
@@ -175,6 +213,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
             monthly_months=choice.monthly_months or 0,
             yearly_years=choice.yearly_years or 0,
             parabs=choice.parabs, parab_years=choice.parab_years or 0,
+            birthday=birthday, birthday_years=choice.birthday_years or 0,
         )
     except ValueError as exc:
         raise MemorialError(str(exc)) from exc
@@ -189,7 +228,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
 async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: list[int]) -> list[Service]:
     wanted = list(dict.fromkeys(service_ids))  # order kept, duplicates gone
     if not wanted:
-        raise MemorialError("Choose at least one service: Afringan, Farokshi or Baaj.")
+        raise MemorialError("Choose at least one service: Afringan, Farokshi, Baaj or Satum.")
     found = []
     for sid in wanted:
         service = await booking_service.get_service_by_id(db, agyary_id, sid)
@@ -206,12 +245,19 @@ async def create_memorial(
     customer: Customer,
     choice: Choice,
     service_ids: list[int],
+    exclude_codes: tuple[str, ...] = (),
 ) -> Memorial:
     """Save a memorial. Every observance starts with the same services - the
     set chosen here - and each can be changed on its own afterwards."""
     system = await calendar_for(db, user_id, choice)
     schedule, (roj, mah, year), death_date = plan(system, choice)
+    # Dates the mobed removed on the review screen: left out of what is saved.
+    if exclude_codes:
+        schedule = [o for o in schedule if o.code not in set(exclude_codes)]
+        if not schedule:
+            raise MemorialError("Every observance was removed - keep at least one.")
     services = await _validated_services(db, agyary.id, service_ids)
+    birthday = resolve_birthday(system, choice)
 
     memorial = Memorial(
         agyary_id=agyary.id,
@@ -227,6 +273,9 @@ async def create_memorial(
         yearly_years=choice.yearly_years,
         parabs=choice.parabs,
         parab_years=choice.parab_years,
+        birthday_roj=birthday[0] if birthday else None,
+        birthday_mah=birthday[1] if birthday else None,
+        birthday_years=choice.birthday_years if birthday else None,
     )
     memorial.observances = [
         MemorialObservance(
@@ -340,6 +389,8 @@ def serialize_memorial(
         "yearly_years": memorial.yearly_years,
         "parabs": memorial.parabs,
         "parab_years": memorial.parab_years,
+        "birthday": ({"roj": memorial.birthday_roj, "mah": memorial.birthday_mah,
+                      "years": memorial.birthday_years} if memorial.birthday_roj else None),
         **progress(memorial, today),
     }
     if with_observances:

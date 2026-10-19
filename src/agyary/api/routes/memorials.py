@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api.routes.mobed import _require_behdin, _require_membership, get_current_user
-from agyary.calendar.memorial import OPENING_ALL, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
+from agyary.calendar.memorial import OPENING_ALL, OPENING_NONE, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Memorial, User
@@ -41,6 +41,15 @@ class ParabsIn(BaseModel):
     years: int
 
 
+class BirthdayIn(BaseModel):
+    """The deceased's birthday: a date, or Roj and Mah (one or the other)."""
+
+    birth_date: date | None = None
+    roj: int | None = None
+    mah: int | None = None
+    years: int
+
+
 class MemorialIn(BaseModel):
     departed_name: str
     # The death: a Gregorian date, or Roj and Mah (and Parsi year) in the family's
@@ -49,11 +58,14 @@ class MemorialIn(BaseModel):
     death_roj: int | None = None
     death_mah: int | None = None
     death_year: int | None = None
-    opening: Literal[OPENING_ALL, OPENING_TENTH]
+    # The old 1-10 openings are still accepted; new memorials send none and pick
+    # the Dasmi among the named days.
+    opening: Literal[OPENING_ALL, OPENING_TENTH, OPENING_NONE] = OPENING_NONE
     day_counts: list[int] = []
     monthly: SeriesIn | None = None   # count = months
     yearly: SeriesIn | None = None    # count = years
     parabs: ParabsIn | None = None   # years = how many years they run
+    birthday: BirthdayIn | None = None
     # The calendar the family keeps. Left out, it is the mobed's primary.
     calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
 
@@ -61,6 +73,8 @@ class MemorialIn(BaseModel):
 class CreateMemorialIn(MemorialIn):
     # The services every observance starts with; each can be changed later.
     service_ids: list[int]
+    # Observances the mobed took out on the review screen (by code).
+    exclude_codes: list[str] = []
 
 
 def _choice(p: MemorialIn) -> memorials.Choice:
@@ -77,6 +91,10 @@ def _choice(p: MemorialIn) -> memorials.Choice:
         parabs=p.parabs.which if p.parabs else None,
         parab_years=p.parabs.years if p.parabs else None,
         calendar=p.calendar,
+        birthday_date=p.birthday.birth_date if p.birthday else None,
+        birthday_roj=p.birthday.roj if p.birthday else None,
+        birthday_mah=p.birthday.mah if p.birthday else None,
+        birthday_years=p.birthday.years if p.birthday else None,
     )
 
 
@@ -157,7 +175,8 @@ async def create_memorial(
     agyary = await _require_membership(db, agyary_id, user)
     try:
         memorial = await memorials.create_memorial(
-            db, agyary, user.id, customer, _choice(payload), payload.service_ids
+            db, agyary, user.id, customer, _choice(payload), payload.service_ids,
+            tuple(payload.exclude_codes),
         )
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc

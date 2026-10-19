@@ -164,7 +164,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
     const farm = names.filter(n => n.section === "farmayeshne");
     const defStatus = purpose === "gujrela_nu" ? "departed" : "living";
     region.innerHTML = `
-      <div class="names-group-label"><b>Pairs</b><span>two names per pair</span></div>
+      <div class="names-group-label"><b>Departed names</b><span>two names per pair</span></div>
       <div id="fPairs"></div>
       <button class="secondary small" id="addPair" type="button">+ Add pair</button>
       <div class="names-group-label"><b>Farmayeshne</b><span>one name per line</span></div>

@@ -61,7 +61,10 @@ CYCLE_DAYS = DAYS_PER_MONTH * MONTHS_PER_YEAR  # 360
 # 10th alone. Days 1-4 are not a separate option - they are part of "all".
 OPENING_ALL = "days_1_to_10"
 OPENING_TENTH = "tenth_only"
-OPENINGS = (OPENING_ALL, OPENING_TENTH)
+# No opening at all: the family picks the Dasmi (10th day) like any other
+# named day. The two above are kept so memorials saved earlier still read.
+OPENING_NONE = "none"
+OPENINGS = (OPENING_ALL, OPENING_TENTH, OPENING_NONE)
 
 # The named observances, in the mobed's own words, keyed by the family's name
 # for the day ("the 30th"). 10 is the Dasmi, a literal day. 30/60/180/360 are
@@ -202,6 +205,33 @@ def _parab_observances(
     return out
 
 
+def _birthday_observances(
+    death: tuple[int, int, int], death_date: date, system: CalendarSystem,
+    birthday: tuple[int, int], years: int,
+) -> list[Observance]:
+    """The deceased's birthday on its Roj and Mah, the next ``years`` times it
+    comes round after the death. A birthday that falls on the day of death
+    itself is not repeated."""
+    roj, mah = birthday
+    start, base_year = _start(*death)
+    out: list[Observance] = []
+    for year in range(death[2], death[2] + years + 2):
+        try:
+            when = parsi_to_gregorian(year, system, mah=mah, roj=roj)
+        except ValueError:
+            continue
+        if when <= death_date:
+            continue
+        out.append(Observance(
+            code=f"birthday_{year}", label="Birthday",
+            day_number=_position(roj, mah, year, start, base_year),
+            roj=roj, mah=mah, year=year, gregorian_date=when,
+        ))
+        if len(out) == years:
+            break
+    return out
+
+
 # The named days that are month multiples, as ("m", months) / ("y", years):
 # Masiso is the monthly, Bamsi two months, Chamsi six, Varsi a year. Each Deci
 # is the day before its named day.
@@ -209,7 +239,7 @@ _NAMED_SPAN = {30: ("m", 1), 60: ("m", 2), 180: ("m", 6), 360: ("y", 1)}
 _DECI_OF = {29: 30, 59: 60, 179: 180, 359: 360}
 
 # Which wins when two observances land on one date (lower wins).
-_RANK = {"lit": 0, "y": 1, "m": 2, "deci": 3, "parab": 4}
+_RANK = {"lit": 0, "y": 1, "m": 2, "deci": 3, "parab": 4, "birthday": 5}
 
 
 def _position(roj: int, mah: int, year: int, start: int, base_year: int) -> int:
@@ -252,6 +282,8 @@ def build_schedule(
     yearly_years: int = 0,
     parabs: str | None = None,
     parab_years: int = 0,
+    birthday: tuple[int, int] | None = None,
+    birthday_years: int = 0,
 ) -> list[Observance]:
     """Every observance the family chose, soonest first. Dates already past
     are included: this is a diary, and a family arriving late still wants
@@ -269,6 +301,9 @@ def build_schedule(
     be shown whole. There are no default end points either: a series without
     a length is for the caller to refuse (``parabs`` without ``parab_years`` is
     refused here), not for this to fill in.
+
+    ``birthday`` is the deceased's (roj, mah); it repeats for ``birthday_years``
+    years after the death and is the lowest-ranked observance on a shared date.
 
     ``parabs`` is PARAB_ALL or PARAB_FRAVARDIN_TIR, for ``parab_years`` years
     after the death - each Parab once a year, like the yearly observance.
@@ -290,6 +325,11 @@ def build_schedule(
         raise ValueError(f"parabs must be one of {PARABS}, got {parabs!r}")
     if parabs is not None and parab_years < 1:
         raise ValueError("Say how many years the Parabs should run for")
+    if birthday is not None:
+        if not (1 <= birthday[1] <= MONTHS_PER_YEAR and 1 <= birthday[0] <= DAYS_PER_MONTH):
+            raise ValueError("A birthday is given as a Roj and a Mah (not a Gatha day)")
+        if birthday_years < 1:
+            raise ValueError("Say how many years the birthday should repeat for")
 
     death = (death_roj, death_mah, death_year)
     _start(*death)  # validates the death date
@@ -321,7 +361,8 @@ def build_schedule(
         for n in range(1, 11):
             claim(("lit", n), f"day_{n}", f"Day {n}")
     # The 10th is always the mobed's own word for it, however it was reached.
-    wanted[("lit", 10)] = ("day_10", NAMED_DAYS[10])
+    if opening != OPENING_NONE or 10 in day_counts:
+        wanted[("lit", 10)] = ("day_10", NAMED_DAYS[10])
     for n in day_counts:
         if n == 10:
             continue
@@ -360,6 +401,9 @@ def build_schedule(
     ranked = [(_RANK[key[0]], resolve(key, code, label)) for key, (code, label) in wanted.items()]
     if parabs is not None:
         ranked += [(_RANK["parab"], o) for o in _parab_observances(death, system, parabs, parab_years)]
+    if birthday is not None:
+        ranked += [(_RANK["birthday"], o)
+                   for o in _birthday_observances(death, death_date, system, birthday, birthday_years)]
     best: dict[date, tuple[int, Observance]] = {}
     for rank, o in ranked:
         if o.gregorian_date not in best or rank < best[o.gregorian_date][0]:
