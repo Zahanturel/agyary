@@ -995,16 +995,37 @@ async def update_behdin(
 async def delete_behdin(
     agyary_id: int,
     customer_id: int,
+    scope: str = Query(default="list"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """Remove a behdin from this mobed's book. Their events stay - see
-    behdin_directory.remove_from_book. ``erased`` says whether the record
+    """Remove a behdin from this mobed's book. ``scope`` says how much goes with
+    them: ``list`` (default) keeps every event - see
+    behdin_directory.remove_from_book; ``memorials`` also deletes their
+    memorials; ``all`` also deletes their upcoming events (see
+    mobed_dashboard.delete_behdin_scoped). ``erased`` says whether the record
     itself went too, or only their place in this mobed's list."""
+    if scope not in mobed_dashboard.DELETE_SCOPES:
+        raise HTTPException(status_code=400, detail="scope must be list, memorials or all.")
     customer = await _require_behdin(db, agyary_id, customer_id, user)
-    erased = await behdin_directory.remove_from_book(db, customer)
+    agyary = await _require_membership(db, agyary_id, user)
+    done = await mobed_dashboard.delete_behdin_scoped(db, agyary, customer, user.id, scope)
     await db.commit()
-    return {"deleted": True, "erased": erased}
+    if scope == "list":
+        return {"deleted": True, "erased": done["erased"]}
+    return {"deleted": True, **done}
+
+
+@router.get("/agyaries/{agyary_id}/behdins/{customer_id}/delete-summary")
+async def behdin_delete_summary(
+    agyary_id: int,
+    customer_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """What deleting this behdin could take with it - shown before the choice."""
+    await _require_behdin(db, agyary_id, customer_id, user)
+    return await mobed_dashboard.behdin_delete_summary(db, agyary_id, customer_id)
 
 
 # --- Saved name pool (the same rows the WhatsApp flows read/write) ---------

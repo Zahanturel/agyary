@@ -28,6 +28,8 @@ from agyary.models import (
     CeremonyName,
     Customer,
     Machi,
+    Memorial,
+    MemorialObservance,
     Notification,
     Payment,
     RecurrenceRule,
@@ -1045,6 +1047,100 @@ async def delete_booking(
     await db.delete(booking)
     await db.flush()
     return True
+
+
+async def behdin_delete_summary(db: AsyncSession, agyary_id: int, customer_id: int) -> dict:
+    """What deleting this behdin could take with it, for the delete box to show
+    before anything is chosen. "Upcoming" is anything that has not started yet."""
+    now = datetime.now(UTC)
+    today = datetime.now(IST).date()
+
+    async def count(model, *conds) -> int:
+        return (await db.execute(select(func.count()).select_from(model).where(*conds))).scalar_one()
+
+    return {
+        "memorials": await count(Memorial, Memorial.customer_id == customer_id),
+        "memorial_dates_ahead": (await db.execute(
+            select(func.count()).select_from(MemorialObservance)
+            .join(Memorial, Memorial.id == MemorialObservance.memorial_id)
+            .where(Memorial.customer_id == customer_id, MemorialObservance.gregorian_date >= today)
+        )).scalar_one(),
+        "upcoming_events": (
+            await count(Booking, Booking.customer_id == customer_id, Booking.agyary_id == agyary_id,
+                        Booking.ceremony_datetime >= now)
+            + await count(Machi, Machi.customer_id == customer_id, Machi.agyary_id == agyary_id,
+                          Machi.ceremony_datetime >= now)
+        ),
+        "past_events": (
+            await count(Booking, Booking.customer_id == customer_id, Booking.agyary_id == agyary_id,
+                        Booking.ceremony_datetime < now)
+            + await count(Machi, Machi.customer_id == customer_id, Machi.agyary_id == agyary_id,
+                          Machi.ceremony_datetime < now)
+        ),
+        "payments": await count(Payment, Payment.customer_id == customer_id),
+    }
+
+
+DELETE_SCOPES = ("list", "memorials", "all")
+
+
+async def delete_behdin_scoped(
+    db: AsyncSession, agyary: Agyary, customer: Customer, user_id: int, scope: str
+) -> dict:
+    """Delete a behdin, and as much of what hangs off them as was asked for.
+
+    ``list``      only take them out of the list; every event stays.
+    ``memorials`` also delete their memorials and every memorial date.
+    ``all``       also delete their upcoming bookings and machis (a repeating
+                  machi's later occurrences go with it). Ceremonies already
+                  performed stay as history, and so does anything with a
+                  recorded payment - money records are never deleted - and the
+                  behdin's record is then only hidden, not erased.
+
+    Returns what was done, so the screen can say it plainly."""
+    from agyary.services import behdin_directory   # same lazy import as elsewhere in this module
+
+    if scope not in DELETE_SCOPES:
+        raise ValueError(f"scope must be one of {DELETE_SCOPES}")
+    out = {"memorials_deleted": 0, "events_deleted": 0, "events_kept": 0}
+
+    if scope in ("memorials", "all"):
+        for memorial in (await db.execute(
+            select(Memorial).where(Memorial.customer_id == customer.id)
+        )).scalars().all():
+            await db.delete(memorial)
+            out["memorials_deleted"] += 1
+        await db.flush()
+
+    if scope == "all":
+        now = datetime.now(UTC)
+        booking_ids = (await db.execute(
+            select(Booking.id).where(
+                Booking.customer_id == customer.id, Booking.agyary_id == agyary.id,
+                Booking.ceremony_datetime >= now)
+        )).scalars().all()
+        for bid in booking_ids:
+            try:
+                ok = await delete_booking(db, agyary, bid, user_id)
+            except DeleteBlocked:
+                ok = False
+            out["events_deleted" if ok else "events_kept"] += 1
+        machi_ids = (await db.execute(
+            select(Machi.id).where(
+                Machi.customer_id == customer.id, Machi.agyary_id == agyary.id,
+                Machi.ceremony_datetime >= now).order_by(Machi.ceremony_datetime)
+        )).scalars().all()
+        for mid in machi_ids:
+            if await db.get(Machi, mid) is None:
+                continue   # already gone with an earlier occurrence of its series
+            try:
+                ok = await delete_machi(db, agyary, mid, user_id, delete_future=True)
+            except DeleteBlocked:
+                ok = False
+            out["events_deleted" if ok else "events_kept"] += 1
+
+    out["erased"] = await behdin_directory.remove_from_book(db, customer)
+    return out
 
 
 async def delete_machi(

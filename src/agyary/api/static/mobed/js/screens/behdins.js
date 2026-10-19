@@ -17,7 +17,7 @@
 
 import {
   listBehdins, memorialReminders, setBehdinReminders, consentWording, customerHistory, getBehdin, updateBehdin,
-  createBehdin, deleteBehdin,
+  createBehdin,
   getSavedNames, putSavedNames, listMemorials, previewNewMemorial, createMemorial,
 } from "../api.js";
 import { state } from "../state.js";
@@ -30,6 +30,7 @@ import {
 import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
+import { openDeleteBox, deleteResultText } from "../behdin_delete.js";
 import { loadDraft, saveDraft, clearDraft } from "../drafts.js";
 
 export async function renderBehdinList() {
@@ -106,27 +107,18 @@ export async function renderBehdinList() {
   const askDelete = (row, c) => {
     if (row.querySelector(".row-confirm")) return;
     row.classList.add("row-pending");
-    row.insertAdjacentHTML("beforeend", `<div class="row-confirm" style="flex-basis:100%">
-      <span>Delete ${esc(c.name)}?</span>
-      <span class="row"><button type="button" class="ghost small" data-keep>Keep</button>
-      <button type="button" class="danger small" data-yes>Delete</button></span></div>`);
-    row.querySelector("[data-keep]").onclick = () => {
-      row.classList.remove("row-pending");
-      row.querySelector(".row-confirm").remove();
-    };
-    row.querySelector("[data-yes]").onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
-      try {
-        await deleteBehdin(state.currentAgyaryId, c.id);
-      } catch (err) {
-        row.classList.remove("row-pending");
-        row.querySelector(".row-confirm").remove();
-        return showError("Couldn't delete: " + err.message);
-      }
-      rows = rows.filter(b => b.id !== c.id);
-      row.remove();
-      showInfo(`${c.name} removed.`);
-    };
+    row.insertAdjacentHTML("beforeend", `<div class="row-confirm" style="flex-basis:100%;display:block"></div>`);
+    const box = row.querySelector(".row-confirm");
+    const close = () => { row.classList.remove("row-pending"); box.remove(); };
+    openDeleteBox(box, state.currentAgyaryId, c, {
+      onCancel: close,
+      onError: (m) => { close(); showError(m); },
+      onDone: (r) => {
+        rows = rows.filter(b => b.id !== c.id);
+        row.remove();
+        showInfo(deleteResultText(c.name, r));
+      },
+    });
   };
   paint(rows);
 
@@ -600,27 +592,14 @@ export async function renderBehdinDetail({ id }) {
   });
 
   document.getElementById("bdDeleteOpen").onclick = () => {
-    const panel = document.getElementById("bdDeleteConfirm");
-    const n = history && history.history ? history.history.length : 0;
-    panel.innerHTML = `
-      <p class="meta">Remove ${esc(record.name)} from your behdins?
-        ${n ? `Their ${n} event${n > 1 ? "s" : ""} stay on your calendar and slips.` : ""}
-        Adding the same number again brings them back.</p>
-      <div class="row tight">
-        <button class="danger small" id="bdDelOne">Delete</button>
-        <button class="ghost small" id="bdDelCancel">Cancel</button>
-      </div>`;
-    document.getElementById("bdDelCancel").onclick = () => { panel.innerHTML = ""; };
-    document.getElementById("bdDelOne").onclick = async () => {
-      try {
-        await deleteBehdin(aid, cid);
-      } catch (e) {
-        return showError("Couldn't delete: " + e.message);
-      }
-      flashInfo(`${record.name} removed.`);
-      // Their record is gone from the list; do not leave it behind us in history.
-      back("#/behdins");
-    };
+    openDeleteBox(document.getElementById("bdDeleteConfirm"), aid, { id: cid, name: record.name }, {
+      onError: (m) => showError(m),
+      onDone: (r) => {
+        flashInfo(deleteResultText(record.name, r));
+        // Their record is gone from the list; do not leave it behind us in history.
+        back("#/behdins");
+      },
+    });
   };
 
   // The same editor the New Event wizard uses. Rendered in "service" shape

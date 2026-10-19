@@ -111,3 +111,106 @@ async def test_you_cannot_delete_a_behdin_who_is_not_yours(db, client, seeded):
     r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}", headers=theirs)
     assert r.status_code == 404
     assert b["id"] in await _listed(client, aid, mine)
+
+
+async def _memorial(client, db, aid, cid, headers):
+    from tests.test_memorial_api import _create
+    r = await _create(client, db, aid, cid, headers)
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+async def test_the_summary_says_what_a_delete_could_take(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    b = await _add(client, aid, headers)
+    await _book(client, aid, headers)
+    await _memorial(client, db, aid, b["id"], headers)
+    r = await client.get(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}/delete-summary", headers=headers)
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert s["memorials"] == 1 and s["memorial_dates_ahead"] > 0
+    assert s["upcoming_events"] == 1 and s["past_events"] == 0 and s["payments"] == 0
+
+
+async def test_deleting_with_memorials_keeps_the_bookings(db, client, seeded):
+    from agyary.models import Memorial
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    b = await _add(client, aid, headers)
+    bid = await _book(client, aid, headers)
+    await _memorial(client, db, aid, b["id"], headers)
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}?scope=memorials", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["memorials_deleted"] == 1 and r.json()["events_deleted"] == 0
+    assert (await db.execute(select(Memorial))).first() is None
+    slip = await client.get(f"/api/mobed/agyaries/{aid}/bookings/{bid}/slip", headers=headers)
+    assert slip.status_code == 200          # the booking is still there
+
+
+async def test_deleting_everything_removes_upcoming_events_and_memorials(db, client, seeded):
+    from agyary.models import Booking, Memorial, MemorialObservance
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    b = await _add(client, aid, headers)
+    await _book(client, aid, headers)
+    await _memorial(client, db, aid, b["id"], headers)
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}?scope=all", headers=headers)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["memorials_deleted"] == 1 and out["events_deleted"] == 1 and out["events_kept"] == 0
+    assert out["erased"] is True            # nothing left that refers to them
+    assert (await db.execute(select(Booking))).first() is None
+    assert (await db.execute(select(Memorial))).first() is None
+    assert (await db.execute(select(MemorialObservance))).first() is None
+    assert await db.get(Customer, b["id"]) is None
+
+
+async def test_deleting_everything_keeps_performed_ceremonies_as_history(db, client, seeded):
+    from agyary.models import Booking
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    b = await _add(client, aid, headers)
+    past = await client.post(
+        f"/api/mobed/agyaries/{aid}/manual-add/booking",
+        json={"behdin_phone": PHONE, "behdin_name": "Delete Behdin", "service_id": 2,
+              "ceremony_datetime": "2024-01-01T10:00:00", "purpose": "khushali_nu", "names": []},
+        headers=headers)
+    assert past.status_code == 200, past.text
+    await _book(client, aid, headers)       # an upcoming one
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}?scope=all", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["events_deleted"] == 1 and r.json()["erased"] is False
+    left = (await db.execute(select(Booking))).scalars().all()
+    assert len(left) == 1 and left[0].ceremony_datetime.year == 2024
+    assert b["id"] not in await _listed(client, aid, headers)
+
+
+async def test_an_unknown_scope_is_refused(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    b = await _add(client, aid, headers)
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}?scope=everything", headers=headers)
+    assert r.status_code == 400
+    assert await db.get(Customer, b["id"]) is not None
+
+
+async def test_deleting_everything_never_deletes_a_recorded_payment(db, client, seeded):
+    from decimal import Decimal
+    from agyary.models import Booking, Payment
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    b = await _add(client, aid, headers)
+    bid = await _book(client, aid, headers)
+    db.add(Payment(agyary_id=aid, customer_id=b["id"], booking_id=bid, amount=Decimal("500"),
+                   method="cash", status="received"))
+    await db.commit()
+
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/behdins/{b['id']}?scope=all", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["events_kept"] == 1 and r.json()["events_deleted"] == 0 and r.json()["erased"] is False
+    assert (await db.execute(select(Payment))).first() is not None
+    assert await db.get(Booking, bid) is not None
