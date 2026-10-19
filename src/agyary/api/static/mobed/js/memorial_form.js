@@ -40,6 +40,9 @@ export function blankMemorialDraft() {
     name: "", death: "", calendar: primarySystem(), days: [],
     // How the death is given (D5): a Gregorian date, or its Parsi day - a death
     // before sunrise belongs to the previous Parsi day, and the mobed knows which.
+    // Where the schedule starts: the whole of it from the death, or only what is
+    // still ahead from today (a family arriving late). Counting is from the death either way.
+    startFrom: "death",
     deathBy: "date", deathRoj: "", deathMah: "", deathYear: "",
     monthly: false, months: "", yearly: false, years: "",
     parab: false, parabWhich: null, parabYears: "",
@@ -82,6 +85,7 @@ export function buildMemorialBody(draft) {
     death_year: byParsi && draft.deathYear ? Number(draft.deathYear) : null,
     calendar: draft.calendar,
     opening: "none",
+    start_from: draft.startFrom === "today" ? todayIst() : null,
     day_counts: draft.days.slice().sort((a, b) => a - b),
     monthly: null, yearly: null, parabs: null, birthday: null,
     service_ids: draft.services,
@@ -175,6 +179,19 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
         <label for="mmCalendar">Calendar</label>
         <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"], ["fasli", "Fasli"]].map(([k, v]) =>
           `<option value="${k}" ${draft.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+
+        <label>Schedule from</label>
+        <div class="choice-group">
+          ${radio("mmStart", "mmStartDeath", "death", draft.startFrom !== "today", "The day of death (the whole schedule)")}
+          ${radio("mmStart", "mmStartToday", "today", draft.startFrom === "today", "Today (only what is still ahead)")}
+        </div>
+        <div id="mmStartTodayBox" style="${draft.startFrom === "today" ? "" : "display:none"}">
+          <label for="mmStartDate">Today</label>
+          <input type="date" id="mmStartDate" value="${todayIst()}" disabled>
+          <p class="meta" id="mmStartParsi" style="margin:6px 0 0"></p>
+          <p class="meta" style="margin:6px 0 0">Still counted from the death. Days that have already passed are left
+            out, and months, years, Parabs and birthdays run from the next date that is still to come.</p>
+        </div>
       </div>
 
       <div class="card">
@@ -269,7 +286,19 @@ export function wireMemorialForm(root, draft, onChange) {
   };
   $("#mmDeathRoj").onchange = (e) => { draft.deathRoj = e.target.value; };
   $("#mmDeathYear").oninput = (e) => { draft.deathYear = e.target.value; };
-  $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); };
+  const readStart = async () => {
+    const note = $("#mmStartParsi");
+    const label = await parsiLabel(todayIst(), draft.calendar);
+    if (note.isConnected) note.textContent = label;
+  };
+  readStart();
+  root.querySelectorAll("[name=mmStart]").forEach(r => {
+    r.onchange = () => {
+      draft.startFrom = r.value;
+      $("#mmStartTodayBox").style.display = r.value === "today" ? "" : "none";
+    };
+  });
+  $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); readStart(); };
   root.querySelectorAll("[data-day]").forEach(cb => {
     cb.onchange = () => {
       const n = Number(cb.dataset.day);
@@ -350,6 +379,9 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rem
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
         <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>,
           each with ${esc(names)}.</p>
+        ${preview.passed_not_booked ? `<p class="meta" style="margin:4px 0 0">Starting from today:
+          ${preview.passed_not_booked} earlier date${preview.passed_not_booked === 1 ? " was" : "s were"} already past and
+          ${preview.passed_not_booked === 1 ? "is" : "are"} not booked.</p>` : ""}
         ${passed ? `<p class="meta" style="margin:4px 0 0">${passed} of these ${passed === 1 ? "has" : "have"}
           already passed - they stay on the calendar.</p>` : ""}
       </div>

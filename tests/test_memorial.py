@@ -519,3 +519,39 @@ def test_a_birthday_needs_years_and_a_real_roj_and_mah():
         build_schedule(**kw, birthday=(9, 5), birthday_years=0)
     with pytest.raises(ValueError):
         build_schedule(**kw, birthday=(9, 13), birthday_years=2)
+
+
+def _late(**over):
+    from agyary.calendar.memorial import OPENING_NONE
+    kw = dict(death_roj=2, death_mah=1, death_year=YEAR, system=CalendarSystem.SHENSHAI,
+              opening=OPENING_NONE)
+    kw.update(over)
+    return build_schedule(**kw)
+
+
+def test_starting_late_leaves_out_passed_days_and_counts_series_from_the_next_one():
+    whole = _late(day_counts=(10, 29, 30), monthly_months=12)
+    start = whole[4].gregorian_date          # a few months in
+    late = _late(day_counts=(10, 29, 30), monthly_months=6, start_from=start)
+    assert all(o.gregorian_date >= start for o in late)
+    assert not any(o.code in ("day_10", "day_29", "day_30") for o in late)
+    months = [o for o in late if o.code.startswith(("month_", "year_"))]
+    assert len(months) == 6                    # six MORE months, not six from the death
+    # and they are the consecutive monthlies that follow the start
+    assert [o.day_number for o in months] == [months[0].day_number + 30 * i for i in range(6)]
+
+
+def test_starting_late_keeps_named_days_still_to_come():
+    whole = _late(day_counts=(10, 30, 60))
+    start = whole[0].gregorian_date          # Dasmi itself is not before the start
+    late = _late(day_counts=(10, 30, 60), start_from=start)
+    assert [o.code for o in late] == [o.code for o in whole]
+
+
+def test_starting_late_birthday_and_parabs_run_from_the_start():
+    whole = _late(birthday=(9, 5), birthday_years=1, parabs="fravardin_tir", parab_years=1)
+    start = whole[-1].gregorian_date
+    late = _late(birthday=(9, 5), birthday_years=2, parabs="fravardin_tir", parab_years=1, start_from=start)
+    assert all(o.gregorian_date >= start for o in late)
+    assert sum(o.label == "Birthday" for o in late) == 2
+    assert sum(o.label.endswith("Parab") for o in late) == 2   # each Parab once

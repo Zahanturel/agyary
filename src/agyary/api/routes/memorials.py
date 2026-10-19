@@ -66,6 +66,8 @@ class MemorialIn(BaseModel):
     yearly: SeriesIn | None = None    # count = years
     parabs: ParabsIn | None = None   # years = how many years they run
     birthday: BirthdayIn | None = None
+    # Book nothing before this date; the counting still starts at the death.
+    start_from: date | None = None
     # The calendar the family keeps. Left out, it is the mobed's primary.
     calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
 
@@ -91,6 +93,7 @@ def _choice(p: MemorialIn) -> memorials.Choice:
         parabs=p.parabs.which if p.parabs else None,
         parab_years=p.parabs.years if p.parabs else None,
         calendar=p.calendar,
+        start_from=p.start_from,
         birthday_date=p.birthday.birth_date if p.birthday else None,
         birthday_roj=p.birthday.roj if p.birthday else None,
         birthday_mah=p.birthday.mah if p.birthday else None,
@@ -124,6 +127,8 @@ async def _preview(db: AsyncSession, user: User, payload: MemorialIn) -> dict:
         "death": {"roj": roj, "mah": mah, "year": year},
         "death_date": death_date.isoformat(),
         "count": len(schedule),
+        "start_from": choice.start_from.isoformat() if choice.start_from else None,
+        "passed_not_booked": memorials.passed_before_start(system, choice),
         "observances": [
             {
                 "code": o.code, "label": o.label, "day_number": o.day_number,

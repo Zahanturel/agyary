@@ -208,6 +208,7 @@ def _parab_observances(
 def _birthday_observances(
     death: tuple[int, int, int], death_date: date, system: CalendarSystem,
     birthday: tuple[int, int], years: int,
+    not_before: date | None = None, extra_years: int = 0,
 ) -> list[Observance]:
     """The deceased's birthday on its Roj and Mah, the next ``years`` times it
     comes round after the death. A birthday that falls on the day of death
@@ -215,12 +216,12 @@ def _birthday_observances(
     roj, mah = birthday
     start, base_year = _start(*death)
     out: list[Observance] = []
-    for year in range(death[2], death[2] + years + 2):
+    for year in range(death[2], death[2] + years + 2 + extra_years):
         try:
             when = parsi_to_gregorian(year, system, mah=mah, roj=roj)
         except ValueError:
             continue
-        if when <= death_date:
+        if when <= death_date or (not_before and when < not_before):
             continue
         out.append(Observance(
             code=f"birthday_{year}", label="Birthday",
@@ -284,6 +285,7 @@ def build_schedule(
     parab_years: int = 0,
     birthday: tuple[int, int] | None = None,
     birthday_years: int = 0,
+    start_from: date | None = None,
 ) -> list[Observance]:
     """Every observance the family chose, soonest first. Dates already past
     are included: this is a diary, and a family arriving late still wants
@@ -301,6 +303,13 @@ def build_schedule(
     be shown whole. There are no default end points either: a series without
     a length is for the caller to refuse (``parabs`` without ``parab_years`` is
     refused here), not for this to fill in.
+
+    ``start_from`` is for a family that arrives late: the schedule is still
+    counted from the death, but nothing before that date is booked. A named day
+    that has already passed (Dasmi, a Deci, Masiso...) is simply left out, and
+    each repeating series (monthly, yearly, Parabs, birthday) runs for its
+    chosen length starting from the first date that is still to come - "6
+    months" is six months of observances ahead, not six counted from the death.
 
     ``birthday`` is the deceased's (roj, mah); it repeats for ``birthday_years``
     years after the death and is the lowest-ranked observance on a shared date.
@@ -352,29 +361,6 @@ def build_schedule(
             return ("y", k // 12)
         return (kind, k)
 
-    wanted: dict[tuple[str, int], tuple[str, str]] = {}
-
-    def claim(key, code, label):
-        wanted.setdefault(key, (code, label))
-
-    if opening == OPENING_ALL:
-        for n in range(1, 11):
-            claim(("lit", n), f"day_{n}", f"Day {n}")
-    # The 10th is always the mobed's own word for it, however it was reached.
-    if opening != OPENING_NONE or 10 in day_counts:
-        wanted[("lit", 10)] = ("day_10", NAMED_DAYS[10])
-    for n in day_counts:
-        if n == 10:
-            continue
-        if n in _NAMED_SPAN:
-            claim(canon(*_NAMED_SPAN[n]), f"day_{n}", NAMED_DAYS[n])
-        else:
-            claim(("deci", n), f"day_{n}", NAMED_DAYS[n])
-    for k in range(1, yearly_years + 1):
-        claim(("y", k), f"year_{k}", f"Year {k}")
-    for k in range(1, monthly_months + 1):
-        claim(canon("m", k), f"month_{k}", f"Month {k}")
-
     def resolve(key, code, label) -> Observance:
         kind, k = key
         if kind == "lit":
@@ -398,12 +384,64 @@ def build_schedule(
                             _gatha_day(death_year + k, system, death_roj), system)
         return _by_roj_and_mah(code, label, 1 + CYCLE_DAYS * k, death, system)
 
-    ranked = [(_RANK[key[0]], resolve(key, code, label)) for key, (code, label) in wanted.items()]
+    def first_valid(kind: str) -> int:
+        """The first k whose date is not before ``start_from``."""
+        k = 1
+        while resolve(canon(kind, k), "", "").gregorian_date < start_from:
+            k += 1
+            if k > 100000:
+                raise ValueError("start_from is too far from the death")
+        return k
+
+    wanted: dict[tuple[str, int], tuple[str, str]] = {}
+    series_keys: set[tuple[str, int]] = set()
+
+    def claim(key, code, label):
+        wanted.setdefault(key, (code, label))
+
+    if opening == OPENING_ALL:
+        for n in range(1, 11):
+            claim(("lit", n), f"day_{n}", f"Day {n}")
+    # The 10th is always the mobed's own word for it, however it was reached.
+    if opening != OPENING_NONE or 10 in day_counts:
+        wanted[("lit", 10)] = ("day_10", NAMED_DAYS[10])
+    for n in day_counts:
+        if n == 10:
+            continue
+        if n in _NAMED_SPAN:
+            claim(canon(*_NAMED_SPAN[n]), f"day_{n}", NAMED_DAYS[n])
+        else:
+            claim(("deci", n), f"day_{n}", NAMED_DAYS[n])
+    named_keys = set(wanted)
+    y0 = first_valid("y") if start_from and yearly_years else 1
+    m0 = first_valid("m") if start_from and monthly_months else 1
+    for k in range(y0, y0 + yearly_years):
+        claim(("y", k), f"year_{k}", f"Year {k}")
+        series_keys.add(("y", k))
+    for k in range(m0, m0 + monthly_months):
+        claim(canon("m", k), f"month_{k}", f"Month {k}")
+        series_keys.add(canon("m", k))
+
+    ranked = []
+    for key, (code, label) in wanted.items():
+        o = resolve(key, code, label)
+        # A named day that has already passed is not booked when starting late.
+        if (start_from and key in named_keys and key not in series_keys
+                and o.gregorian_date < start_from):
+            continue
+        ranked.append((_RANK[key[0]], o))
+    gone = max(0, ((start_from - death_date).days // CYCLE_DAYS) + 1) if start_from else 0
     if parabs is not None:
-        ranked += [(_RANK["parab"], o) for o in _parab_observances(death, system, parabs, parab_years)]
+        found = _parab_observances(death, system, parabs, parab_years + gone)
+        if start_from:
+            per_year = 2 if parabs == PARAB_FRAVARDIN_TIR else len(PARAB_ROJ_FOR_MAH)
+            found = [o for o in found if o.gregorian_date >= start_from]
+            found = sorted(found, key=lambda o: o.gregorian_date)[: parab_years * per_year]
+        ranked += [(_RANK["parab"], o) for o in found]
     if birthday is not None:
         ranked += [(_RANK["birthday"], o)
-                   for o in _birthday_observances(death, death_date, system, birthday, birthday_years)]
+                   for o in _birthday_observances(death, death_date, system, birthday,
+                                                  birthday_years, start_from, gone)]
     best: dict[date, tuple[int, Observance]] = {}
     for rank, o in ranked:
         if o.gregorian_date not in best or rank < best[o.gregorian_date][0]:

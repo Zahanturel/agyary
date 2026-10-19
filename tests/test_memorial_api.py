@@ -479,3 +479,24 @@ async def test_no_opening_dasmi_birthday_and_removed_dates(client, db, seeded):
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
                           json=ok, headers=headers)
     assert r.status_code == 200, r.text
+
+
+async def test_starting_late_books_only_what_is_still_ahead(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Afringan")
+    start = DEATH + timedelta(days=120)
+    body = _body(DEATH, opening="none", day_counts=[10, 30], monthly={"count": 3},
+                 start_from=start.isoformat(), service_ids=ids)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
+                          json=body, headers=headers)
+    assert r.status_code == 200, r.text
+    pv = r.json()
+    assert pv["count"] == 3 and pv["passed_not_booked"] >= 2
+    assert all(o["date"] >= start.isoformat() for o in pv["observances"])
+    # everything already behind the start date: a plain message, not a crash
+    body["day_counts"] = [10]
+    body["monthly"] = None
+    body["start_from"] = (DEATH + timedelta(days=400)).isoformat()
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview",
+                          json=body, headers=headers)
+    assert r.status_code == 400 and "already passed" in r.json()["detail"]

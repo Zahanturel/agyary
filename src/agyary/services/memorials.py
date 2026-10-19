@@ -82,6 +82,9 @@ class Choice:
     birthday_roj: int | None = None
     birthday_mah: int | None = None
     birthday_years: int | None = None
+    # A family arriving late: count from the death as always, but book nothing
+    # before this date (see build_schedule). None books the whole schedule.
+    start_from: date | None = None
     # The calendar the family keeps, or None for the mobed's own primary. It
     # decides which day is a Parab and where the Gatha days fall, so it is
     # stored with the memorial rather than assumed later.
@@ -178,6 +181,19 @@ def resolve_birthday(system: CalendarSystem, choice: Choice) -> tuple[int, int] 
     return roj, mah
 
 
+def passed_before_start(system: CalendarSystem, choice: Choice) -> int:
+    """How many dates of the whole schedule fall before ``start_from`` and so
+    are not booked - for the review to say so. 0 when there is no start date."""
+    if choice.start_from is None:
+        return 0
+    whole = Choice(**{**choice.__dict__, "start_from": None})
+    try:
+        schedule, _, _ = plan(system, whole)
+    except MemorialError:
+        return 0
+    return sum(1 for o in schedule if o.gregorian_date < choice.start_from)
+
+
 def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tuple[int, int, int], date]:
     """The schedule for a choice, without saving anything. Also returns the
     death as (roj, mah, year) in ``system`` and as a Gregorian date - what the
@@ -214,9 +230,14 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
             yearly_years=choice.yearly_years or 0,
             parabs=choice.parabs, parab_years=choice.parab_years or 0,
             birthday=birthday, birthday_years=choice.birthday_years or 0,
+            start_from=choice.start_from,
         )
     except ValueError as exc:
         raise MemorialError(str(exc)) from exc
+    if not schedule:
+        raise MemorialError(
+            "Nothing is left to book from that date - everything chosen has already passed."
+            if choice.start_from else "Choose at least one day, or something that repeats.")
     if len(schedule) > MAX_OBSERVANCES:
         raise MemorialError(
             f"That makes {len(schedule)} observances, more than the {MAX_OBSERVANCES} allowed. "
