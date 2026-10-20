@@ -104,6 +104,17 @@ def message_text(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") 
     return "\n".join(lines)
 
 
+def short_message(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
+    """A few lines that always fit in a WhatsApp link or next to an attached PDF:
+    who it is for, the mobed's note, and where the dates are."""
+    note = clean_note(note)
+    lines = [f"Memorial prayers for {m['departed_name']}", f"{agyary_name} - {mobed_name}"]
+    if note:
+        lines += ["", note]
+    lines += ["", "All the dates are in the PDF."]
+    return "\n".join(lines)
+
+
 def render_pdf(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> bytes:
     """The schedule as a one-or-more page A4 PDF."""
     note = clean_note(note)

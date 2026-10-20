@@ -383,6 +383,7 @@ async def share_info(
     why = await memorial_share.blocked_reason(db, get_settings(), customer, user.id, datetime.now(timezone.utc))
     return {
         "text": memorial_share.message_text(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
+        "short_text": memorial_share.short_message(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
         "phone": customer.phone,
         "behdin_name": customer.name,
         "can_send": why is None,

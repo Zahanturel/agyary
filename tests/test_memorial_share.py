@@ -128,3 +128,12 @@ async def test_a_refusal_from_meta_is_recorded_and_raised(db, client, seeded):
             agyary_name="A", client=FakeMeta(status=400).client())
     row = (await db.execute(select(Notification))).scalar_one()
     assert row.status == "failed" and "template not approved" in row.error_message
+
+
+async def test_the_short_message_is_short_and_carries_the_note(client, db, seeded):
+    aid, _cid, mid, headers = await _memorial(client, db, seeded)
+    r = await client.get(f"/api/mobed/agyaries/{aid}/memorials/{mid}/share",
+                         params={"note": "Please come at 7am"}, headers=headers)
+    short = r.json()["short_text"]
+    assert "Memorial prayers for Dinshaw" in short and "Please come at 7am" in short
+    assert "in the PDF" in short and len(short) < 400 and "\n- " not in short
