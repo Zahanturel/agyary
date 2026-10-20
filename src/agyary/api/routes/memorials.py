@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api.routes.mobed import _require_behdin, _require_membership, get_current_user
-from agyary.calendar.memorial import OPENING_ALL, OPENING_NONE, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
+from agyary.calendar.memorial import OPENING_5_TO_9, OPENING_ALL, OPENING_NONE, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Memorial, User
@@ -38,7 +38,9 @@ class SeriesIn(BaseModel):
 
 class ParabsIn(BaseModel):
     which: Literal[PARAB_ALL, PARAB_FRAVARDIN_TIR]
-    years: int
+    # Either how many years they run, or how many Parabs - one of the two.
+    years: int | None = None
+    count: int | None = None
 
 
 class BirthdayIn(BaseModel):
@@ -60,7 +62,7 @@ class MemorialIn(BaseModel):
     death_year: int | None = None
     # The old 1-10 openings are still accepted; new memorials send none and pick
     # the Dasmi among the named days.
-    opening: Literal[OPENING_ALL, OPENING_TENTH, OPENING_NONE] = OPENING_NONE
+    opening: Literal[OPENING_ALL, OPENING_TENTH, OPENING_NONE, OPENING_5_TO_9] = OPENING_NONE
     day_counts: list[int] = []
     monthly: SeriesIn | None = None   # count = months
     yearly: SeriesIn | None = None    # count = years
@@ -94,6 +96,7 @@ def _choice(p: MemorialIn) -> memorials.Choice:
         fravardin_roj_months=p.fravardin_roj.count if p.fravardin_roj else None,
         parabs=p.parabs.which if p.parabs else None,
         parab_years=p.parabs.years if p.parabs else None,
+        parab_count=p.parabs.count if p.parabs else None,
         calendar=p.calendar,
         start_from=p.start_from,
         birthday_date=p.birthday.birth_date if p.birthday else None,

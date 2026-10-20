@@ -53,7 +53,7 @@ export function parsiText(o) {
   return `Roj ${optionTitle(opts.roj, o.roj)}, Mah ${optionTitle(opts.mah, o.mah)}`;
 }
 
-const OPENING_TEXT = { days_1_to_10: "Days 1 to 10", tenth_only: "10th day only" };
+const OPENING_TEXT = { days_1_to_10: "Days 1 to 10", tenth_only: "10th day only", days_5_to_9: "Days 5 to 9" };
 
 function choicesText(m) {
   const parts = OPENING_TEXT[m.opening] ? [OPENING_TEXT[m.opening]] : [];
@@ -64,7 +64,9 @@ function choicesText(m) {
   }
   if (m.yearly_years) parts.push(`yearly for ${m.yearly_years} year${m.yearly_years > 1 ? "s" : ""}`);
   if (m.parabs) {
-    parts.push(`${m.parabs === "all" ? "all Parabs" : "Fravardin and Tir Parabs"} for ${m.parab_years} year${m.parab_years > 1 ? "s" : ""}`);
+    const which = m.parabs === "all" ? "all Parabs" : "Fravardin and Tir Parabs";
+    parts.push(m.parab_count ? `${m.parab_count} of the ${which}`
+      : `${which} for ${m.parab_years} year${m.parab_years > 1 ? "s" : ""}`);
   }
   if (m.birthday) {
     parts.push(`birthday for ${m.birthday.years} year${m.birthday.years > 1 ? "s" : ""}`);

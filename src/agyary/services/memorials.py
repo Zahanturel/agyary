@@ -52,6 +52,7 @@ MAX_MONTHLY_MONTHS = 120
 MAX_YEARLY_YEARS = 50
 MAX_PARAB_YEARS = 25
 MAX_BIRTHDAY_YEARS = 50
+MAX_PARAB_COUNT = 300
 MAX_OBSERVANCES = 800
 
 
@@ -77,6 +78,7 @@ class Choice:
     fravardin_roj_months: int | None = None   # Roj Fravardin every month, for this many months
     parabs: str | None = None
     parab_years: int | None = None
+    parab_count: int | None = None   # alternatively: how many Parabs, not how many years
     # The deceased's birthday, as a date or as Roj and Mah (one or the other),
     # repeated for birthday_years years.
     birthday_date: date | None = None
@@ -212,8 +214,14 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
     _validate_length(choice.yearly_years, "Yearly observances", MAX_YEARLY_YEARS)
     _validate_length(choice.fravardin_roj_months, "Roj Fravardin months", MAX_MONTHLY_MONTHS)
     _validate_length(choice.parab_years, "Parab years", MAX_PARAB_YEARS)
-    if (choice.parabs is None) != (choice.parab_years is None):
-        raise MemorialError("Choose how many years the Parabs should run for.")
+    _validate_length(choice.parab_count, "Parabs", MAX_PARAB_COUNT)
+    has_length = choice.parab_years is not None or choice.parab_count is not None
+    if choice.parabs is None and has_length:
+        raise MemorialError("Choose which Parabs: all of them, or Fravardin and Tir only.")
+    if choice.parabs is not None and not has_length:
+        raise MemorialError("Choose how many Parabs to keep.")
+    if choice.parab_years is not None and choice.parab_count is not None:
+        raise MemorialError("Give the Parabs as years or as a number of Parabs, not both.")
 
     birthday = resolve_birthday(system, choice)
     _validate_length(choice.birthday_years, "Birthdays", MAX_BIRTHDAY_YEARS)
@@ -231,6 +239,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
             monthly_months=choice.monthly_months or 0,
             yearly_years=choice.yearly_years or 0,
             parabs=choice.parabs, parab_years=choice.parab_years or 0,
+            parab_count=choice.parab_count or 0,
             birthday=birthday, birthday_years=choice.birthday_years or 0,
             start_from=choice.start_from,
             fravardin_roj_months=choice.fravardin_roj_months or 0,
@@ -298,6 +307,7 @@ async def create_memorial(
         fravardin_roj_months=choice.fravardin_roj_months,
         parabs=choice.parabs,
         parab_years=choice.parab_years,
+        parab_count=choice.parab_count,
         birthday_roj=birthday[0] if birthday else None,
         birthday_mah=birthday[1] if birthday else None,
         birthday_years=choice.birthday_years if birthday else None,
@@ -415,6 +425,7 @@ def serialize_memorial(
         "fravardin_roj_months": memorial.fravardin_roj_months,
         "parabs": memorial.parabs,
         "parab_years": memorial.parab_years,
+        "parab_count": memorial.parab_count,
         "birthday": ({"roj": memorial.birthday_roj, "mah": memorial.birthday_mah,
                       "years": memorial.birthday_years} if memorial.birthday_roj else None),
         **progress(memorial, today),

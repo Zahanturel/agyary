@@ -94,7 +94,7 @@ async def test_a_series_without_a_length_is_refused(client, db, seeded):
     assert r.status_code == 422
     r = await client.post(url, json={**_body(DEATH, service_ids=ids), "monthly": None,
                                      "parabs": {"which": "all"}}, headers=headers)
-    assert r.status_code == 422
+    assert r.status_code == 400   # refused by the service now that the length may be years or a count
 
 
 async def test_lengths_are_bounded(client, db, seeded):

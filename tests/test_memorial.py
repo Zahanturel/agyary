@@ -579,3 +579,36 @@ def test_roj_fravardin_in_the_mah_of_fravardin_is_a_parab_only_once():
     sched = _late(fravardin_roj_months=12, parabs="fravardin_tir", parab_years=1)
     dates = [o.gregorian_date for o in sched]
     assert len(dates) == len(set(dates))
+
+
+def test_parabs_by_count_are_the_next_n_in_date_order():
+    from agyary.calendar.memorial import OPENING_NONE
+    sched = _late(parabs="all", parab_count=6)
+    assert len(sched) == 6 and all(o.label.endswith("Parab") for o in sched)
+    dates = [o.gregorian_date for o in sched]
+    assert dates == sorted(dates)
+    # 24 Parabs is the same as two years of them
+    two_years = _late(parabs="all", parab_years=2)
+    assert [o.gregorian_date for o in _late(parabs="all", parab_count=len(two_years))] == \
+           [o.gregorian_date for o in two_years]
+
+
+def test_parabs_by_count_starting_late_count_from_the_next_one():
+    whole = _late(parabs="all", parab_count=20)
+    start = whole[7].gregorian_date
+    late = _late(parabs="all", parab_count=5, start_from=start)
+    assert [o.gregorian_date for o in late] == [o.gregorian_date for o in whole[7:12]]
+
+
+def test_parabs_need_one_length_only():
+    with pytest.raises(ValueError):
+        _late(parabs="all")
+    with pytest.raises(ValueError):
+        _late(parabs="all", parab_years=1, parab_count=3)
+
+
+def test_days_5_to_9_are_literal_days_and_leave_the_dasmi_to_its_own_choice():
+    sched = _late(opening="days_5_to_9", day_counts=(10,))
+    assert [o.day_number for o in sched] == [5, 6, 7, 8, 9, 10]
+    assert [o.label for o in sched] == ["Day 5", "Day 6", "Day 7", "Day 8", "Day 9", "Dasmi"]
+    assert [o.day_number for o in _late(opening="days_5_to_9")] == [5, 6, 7, 8, 9]

@@ -64,7 +64,9 @@ OPENING_TENTH = "tenth_only"
 # No opening at all: the family picks the Dasmi (10th day) like any other
 # named day. The two above are kept so memorials saved earlier still read.
 OPENING_NONE = "none"
-OPENINGS = (OPENING_ALL, OPENING_TENTH, OPENING_NONE)
+# Days 5 to 9, each on its own, before the Dasmi (which is chosen separately).
+OPENING_5_TO_9 = "days_5_to_9"
+OPENINGS = (OPENING_ALL, OPENING_TENTH, OPENING_NONE, OPENING_5_TO_9)
 
 # The named observances, in the mobed's own words, keyed by the family's name
 # for the day ("the 30th"). 10 is the Dasmi, a literal day. 30/60/180/360 are
@@ -316,6 +318,7 @@ def build_schedule(
     birthday_years: int = 0,
     start_from: date | None = None,
     fravardin_roj_months: int = 0,
+    parab_count: int = 0,
 ) -> list[Observance]:
     """Every observance the family chose, soonest first. Dates already past
     are included: this is a diary, and a family arriving late still wants
@@ -349,7 +352,9 @@ def build_schedule(
     years after the death and is the lowest-ranked observance on a shared date.
 
     ``parabs`` is PARAB_ALL or PARAB_FRAVARDIN_TIR, for ``parab_years`` years
-    after the death - each Parab once a year, like the yearly observance.
+    after the death - each Parab once a year, like the yearly observance - or,
+    instead, for ``parab_count`` Parabs: the next that many after the death (or
+    from ``start_from``), however long that takes.
 
     Only one observance is kept per date. When several land on the same day
     the highest wins: the opening days, then the yearly (Varsi included), then
@@ -366,8 +371,12 @@ def build_schedule(
         raise ValueError("Counts cannot be negative")
     if parabs is not None and parabs not in PARABS:
         raise ValueError(f"parabs must be one of {PARABS}, got {parabs!r}")
-    if parabs is not None and parab_years < 1:
-        raise ValueError("Say how many years the Parabs should run for")
+    if parab_count < 0:
+        raise ValueError("Counts cannot be negative")
+    if parabs is not None and parab_years and parab_count:
+        raise ValueError("Give the Parabs as years or as a number of Parabs, not both")
+    if parabs is not None and parab_years < 1 and parab_count < 1:
+        raise ValueError("Say how many Parabs, or how many years they should run for")
     if birthday is not None:
         if not (1 <= birthday[1] <= MONTHS_PER_YEAR and 1 <= birthday[0] <= DAYS_PER_MONTH):
             raise ValueError("A birthday is given as a Roj and a Mah (not a Gatha day)")
@@ -436,8 +445,11 @@ def build_schedule(
     if opening == OPENING_ALL:
         for n in range(1, 11):
             claim(("lit", n), f"day_{n}", f"Day {n}")
+    if opening == OPENING_5_TO_9:
+        for n in range(5, 10):
+            claim(("lit", n), f"day_{n}", f"Day {n}")
     # The 10th is always the mobed's own word for it, however it was reached.
-    if opening != OPENING_NONE or 10 in day_counts:
+    if opening in (OPENING_ALL, OPENING_TENTH) or 10 in day_counts:
         wanted[("lit", 10)] = ("day_10", NAMED_DAYS[10])
     for n in day_counts:
         if n == 10:
@@ -466,9 +478,16 @@ def build_schedule(
         ranked.append((_RANK[key[0]], o))
     gone = max(0, ((start_from - death_date).days // CYCLE_DAYS) + 1) if start_from else 0
     if parabs is not None:
-        found = _parab_observances(death, system, parabs, parab_years + gone)
-        if start_from:
-            per_year = 2 if parabs == PARAB_FRAVARDIN_TIR else len(PARAB_ROJ_FOR_MAH)
+        per_year = 2 if parabs == PARAB_FRAVARDIN_TIR else len(PARAB_ROJ_FOR_MAH)
+        if parab_count:
+            # A number of Parabs, not a number of years: the next ones, in date order.
+            found = _parab_observances(death, system, parabs, parab_count // per_year + 2 + gone)
+            if start_from:
+                found = [o for o in found if o.gregorian_date >= start_from]
+            found = sorted(found, key=lambda o: o.gregorian_date)[:parab_count]
+        else:
+            found = _parab_observances(death, system, parabs, parab_years + gone)
+        if start_from and not parab_count:
             found = [o for o in found if o.gregorian_date >= start_from]
             found = sorted(found, key=lambda o: o.gregorian_date)[: parab_years * per_year]
         ranked += [(_RANK["parab"], o) for o in found]

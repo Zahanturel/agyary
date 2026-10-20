@@ -26,11 +26,11 @@ import { convertDate } from "./api.js";
 // calendar/memorial.py, which is what labels the saved schedule. The 10th is
 // Dasmi is the 10th day, chosen here like the rest; days 1 to 9 are not offered.
 const NAMED_DAYS = [
-  [10, "Dasmi"], [29, "Deci"], [30, "Masiso"], [59, "Deci"], [60, "Bamsi"],
+  [10, "Dasmi"], [29, "Deci"], [30, "Masiso"], [60, "Bamsi"],
   [179, "Deci"], [180, "Chamsi"], [359, "Deci"], [360, "Varsi"],
 ];
 
-const MAX = { months: 120, years: 50, parabYears: 25, birthYears: 50 };
+const MAX = { months: 120, years: 50, parabCount: 300, birthYears: 50 };
 
 // A death on a Gatha day is given as Mah "Gatha days" (13) and the Gatha's number.
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht", "Sixth (Fasli leap years)"];
@@ -46,7 +46,8 @@ export function blankMemorialDraft() {
     deathBy: "date", deathRoj: "", deathMah: "", deathYear: "",
     monthly: false, months: "", yearly: false, years: "",
     fravRoj: false, fravRojMonths: "",
-    parab: false, parabWhich: null, parabYears: "",
+    fiveToNine: false,   // the 5th to 9th days, before the Dasmi
+    parab: false, parabWhich: null, parabCount: "",
     // The deceased's birthday: a date fills in its Roj and Mah, or give Roj and Mah.
     birthday: false, birthDate: "", birthRoj: "", birthMah: "", birthYears: "",
     services: [],
@@ -65,8 +66,8 @@ export function buildMemorialBody(draft) {
   const byParsi = draft.deathBy === "parsi";
   if (!byParsi && !draft.death) bad("#mmDeath", "Please enter the date of death.");
   if (byParsi) {
-    if (!draft.deathMah) bad("#mmDeathMah", "Please choose the Mah of the death.");
     if (!draft.deathRoj) bad("#mmDeathRoj", "Please choose the Roj of the death.");
+    else if (!draft.deathMah) bad("#mmDeathMah", "Please choose the Mah of the death.");
     if (draft.deathYear && !/^\d{3,4}$/.test(String(draft.deathYear).trim())) {
       bad("#mmDeathYear", "The Parsi year is a number such as 1396, or leave it empty.");
     }
@@ -85,14 +86,14 @@ export function buildMemorialBody(draft) {
     death_mah: byParsi ? Number(draft.deathMah) : null,
     death_year: byParsi && draft.deathYear ? Number(draft.deathYear) : null,
     calendar: draft.calendar,
-    opening: "none",
+    opening: draft.fiveToNine ? "days_5_to_9" : "none",
     start_from: draft.startFrom === "today" ? todayIst() : null,
     day_counts: draft.days.slice().sort((a, b) => a - b),
     monthly: null, yearly: null, fravardin_roj: null, parabs: null, birthday: null,
     service_ids: draft.services,
   };
   if (!draft.services.length) bad("#mmServices", "Choose at least one prayer: Afringan, Farokshi, Baaj or Satum.");
-  if (!draft.days.length && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
+  if (!draft.days.length && !draft.fiveToNine && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
     bad("#mmSchedule", "Choose at least one day, or something that repeats.");
   }
   if (draft.monthly) {
@@ -109,12 +110,12 @@ export function buildMemorialBody(draft) {
   }
   if (draft.parab) {
     if (!draft.parabWhich) bad("#mmParabWhichBox", "Choose which Parabs: Fravardin and Tir only, or all of them.");
-    const n = count(draft.parabYears, "#mmParabYears", "Parabs", "years", MAX.parabYears);
-    if (n && draft.parabWhich) body.parabs = { which: draft.parabWhich, years: n };
+    const n = count(draft.parabCount, "#mmParabCount", "Parabs", "Parabs", MAX.parabCount);
+    if (n && draft.parabWhich) body.parabs = { which: draft.parabWhich, count: n };
   }
   if (draft.birthday) {
-    if (!draft.birthMah) bad("#mmBirthMah", "Please choose the Mah of the birthday.");
     if (!draft.birthRoj) bad("#mmBirthRoj", "Please choose the Roj of the birthday.");
+    if (!draft.birthMah) bad("#mmBirthMah", "Please choose the Mah of the birthday.");
     const n = count(draft.birthYears, "#mmBirthYears", "birthday", "years", MAX.birthYears);
     if (n && draft.birthMah && draft.birthRoj) {
       body.birthday = { roj: Number(draft.birthRoj), mah: Number(draft.birthMah), years: n };
@@ -133,11 +134,15 @@ export function showMemorialProblems(root, built) {
 
 /** The Roj picker: the thirty Roj, or the Gatha days when the Mah is "Gatha days". */
 function rojOptionsHtml(draft) {
-  const names = String(draft.deathMah) === "13"
-    ? GATHAS
-    : ((state.calendarOptions && state.calendarOptions.roj) || []).map(o => o.title);
+  // The Roj comes first, so the Gatha days sit at the end of this list: choosing
+  // one means "Gatha days" for the Mah, and the Mah is not asked.
+  const gatha = String(draft.deathMah) === "13";
+  const names = ((state.calendarOptions && state.calendarOptions.roj) || []).map(o => o.title);
   return `<option value="">Choose</option>` + names.map((n, i) =>
-    `<option value="${i + 1}" ${String(draft.deathRoj) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("");
+    `<option value="${i + 1}" ${!gatha && String(draft.deathRoj) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")
+    + `<optgroup label="Gatha days">` + GATHAS.map((n, i) =>
+      `<option value="g${i + 1}" ${gatha && String(draft.deathRoj) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")
+    + `</optgroup>`;
 }
 
 /** The birthday's Roj picker: the thirty Roj (never a Gatha day). */
@@ -172,12 +177,13 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <p class="meta" id="mmParsi" style="margin:6px 0 0"></p>
         </div>
         <div id="mmDeathParsiBox" style="${draft.deathBy === "parsi" ? "" : "display:none"}">
-          <label for="mmDeathMah">Mah</label>
-          <select id="mmDeathMah"><option value="">Choose</option>${MAH_NAMES_JS.map((n, i) =>
-            `<option value="${i + 1}" ${String(draft.deathMah) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")}
-            <option value="13" ${String(draft.deathMah) === "13" ? "selected" : ""}>Gatha days</option></select>
           <label for="mmDeathRoj">Roj</label>
           <select id="mmDeathRoj">${rojOptionsHtml(draft)}</select>
+          <div id="mmDeathMahBox" style="${String(draft.deathMah) === "13" ? "display:none" : ""}">
+            <label for="mmDeathMah">Mah</label>
+            <select id="mmDeathMah"><option value="">Choose</option>${MAH_NAMES_JS.map((n, i) =>
+              `<option value="${i + 1}" ${String(draft.deathMah) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+          </div>
           <label for="mmDeathYear">Parsi year (leave empty for the most recent)</label>
           <input type="text" id="mmDeathYear" inputmode="numeric" maxlength="4" value="${esc(draft.deathYear)}">
         </div>
@@ -210,7 +216,11 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
 
         <div class="names-group-label"><b>Named days</b></div>
         <div id="mmSchedule">
-        <div class="choice-group">${NAMED_DAYS.map(([n, name]) => `
+        <div class="check-row"><input type="checkbox" id="mmDaysAll">
+          <label for="mmDaysAll"><b>Select all</b></label></div>
+        <div class="choice-group">
+          <div class="check-row"><input type="checkbox" id="mmFiveToNine" ${draft.fiveToNine ? "checked" : ""}>
+            <label for="mmFiveToNine">5th to 9th days</label></div>${NAMED_DAYS.map(([n, name]) => `
           <div class="check-row"><input type="checkbox" data-day="${n}" id="mmDay${n}" ${has(n) ? "checked" : ""}>
             <label for="mmDay${n}">${n}th day · ${name}</label></div>`).join("")}
         </div>
@@ -241,8 +251,8 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
             <div id="mmParabWhichBox">
             ${radio("mmParabWhich", "mmParabFT", "fravardin_tir", draft.parabWhich === "fravardin_tir", "Fravardin and Tir only")}
             ${radio("mmParabWhich", "mmParabAll", "all", draft.parabWhich === "all", "All Parabs")}</div>
-            <label for="mmParabYears">For how many years</label>
-            <input type="number" inputmode="numeric" min="1" max="${MAX.parabYears}" id="mmParabYears" value="${esc(draft.parabYears)}"></div>
+            <label for="mmParabCount">How many Parabs (a year has 12 of them, so 24 is two years)</label>
+            <input type="number" inputmode="numeric" min="1" max="${MAX.parabCount}" id="mmParabCount" value="${esc(draft.parabCount)}"></div>
 
           <div class="check-row"><input type="checkbox" id="mmBirthday" ${draft.birthday ? "checked" : ""}>
             <label for="mmBirthday">Birthday of the departed</label></div>
@@ -250,11 +260,11 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
             <label for="mmBirthDate">Date of birth (fills in the Roj and Mah)</label>
             <input type="date" id="mmBirthDate" max="${todayIst()}" value="${esc(draft.birthDate)}">
             <p class="meta" id="mmBirthNote" style="margin:6px 0 0"></p>
+            <label for="mmBirthRoj">Roj</label>
+            <select id="mmBirthRoj">${birthRojOptionsHtml(draft)}</select>
             <label for="mmBirthMah">Mah</label>
             <select id="mmBirthMah"><option value="">Choose</option>${MAH_NAMES_JS.map((n, i) =>
               `<option value="${i + 1}" ${String(draft.birthMah) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
-            <label for="mmBirthRoj">Roj</label>
-            <select id="mmBirthRoj">${birthRojOptionsHtml(draft)}</select>
             <label for="mmBirthYears">For how many years</label>
             <input type="number" inputmode="numeric" min="1" max="${MAX.birthYears}" id="mmBirthYears" value="${esc(draft.birthYears)}"></div>
         </div>
@@ -290,12 +300,18 @@ export function wireMemorialForm(root, draft, onChange) {
       $("#mmDeathParsiBox").style.display = r.value === "parsi" ? "" : "none";
     };
   });
-  $("#mmDeathMah").onchange = (e) => {
-    draft.deathMah = e.target.value;
-    draft.deathRoj = "";
-    $("#mmDeathRoj").innerHTML = rojOptionsHtml(draft);
+  $("#mmDeathMah").onchange = (e) => { draft.deathMah = e.target.value; };
+  $("#mmDeathRoj").onchange = (e) => {
+    const v = e.target.value;
+    if (v.startsWith("g")) {            // a Gatha day: it has no Mah of its own
+      draft.deathMah = "13"; draft.deathRoj = v.slice(1);
+      $("#mmDeathMahBox").style.display = "none";
+    } else {
+      if (draft.deathMah === "13") { draft.deathMah = ""; $("#mmDeathMah").value = ""; }
+      draft.deathRoj = v;
+      $("#mmDeathMahBox").style.display = "";
+    }
   };
-  $("#mmDeathRoj").onchange = (e) => { draft.deathRoj = e.target.value; };
   $("#mmDeathYear").oninput = (e) => { draft.deathYear = e.target.value; };
   const readStart = async () => {
     const note = $("#mmStartParsi");
@@ -310,12 +326,27 @@ export function wireMemorialForm(root, draft, onChange) {
     };
   });
   $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); readStart(); };
+  const dayBoxes = () => [...root.querySelectorAll("[data-day]")];
+  const syncAll = () => {
+    const all = $("#mmDaysAll");
+    all.checked = draft.fiveToNine && dayBoxes().every(cb => cb.checked);
+  };
   root.querySelectorAll("[data-day]").forEach(cb => {
     cb.onchange = () => {
       const n = Number(cb.dataset.day);
       draft.days = cb.checked ? [...new Set([...draft.days, n])] : draft.days.filter(d => d !== n);
+      syncAll();
     };
   });
+  $("#mmFiveToNine").onchange = (e) => { draft.fiveToNine = e.target.checked; syncAll(); };
+  // "Select all" ticks the 5th to 9th days and every named day, or clears them.
+  $("#mmDaysAll").onchange = (e) => {
+    draft.fiveToNine = e.target.checked;
+    $("#mmFiveToNine").checked = e.target.checked;
+    dayBoxes().forEach(cb => { cb.checked = e.target.checked; });
+    draft.days = e.target.checked ? dayBoxes().map(cb => Number(cb.dataset.day)) : [];
+  };
+  syncAll();
 
   // A series' length only appears once the series is ticked, and unticking it
   // forgets the length - nothing carries over by accident.
@@ -330,7 +361,7 @@ export function wireMemorialForm(root, draft, onChange) {
   series("#mmMonthly", "#mmMonthlyBox", "#mmMonths", "monthly", "months");
   series("#mmYearly", "#mmYearlyBox", "#mmYears", "yearly", "years");
   series("#mmFravRoj", "#mmFravRojBox", "#mmFravRojMonths", "fravRoj", "fravRojMonths");
-  series("#mmParab", "#mmParabBox", "#mmParabYears", "parab", "parabYears");
+  series("#mmParab", "#mmParabBox", "#mmParabCount", "parab", "parabCount");
   root.querySelectorAll("[name=mmParabWhich]").forEach(r => {
     r.onchange = () => { draft.parabWhich = r.value; };
   });
