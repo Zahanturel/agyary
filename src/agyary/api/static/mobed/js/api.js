@@ -164,6 +164,22 @@ export const listBehdins = (aid, q) => get(`/agyaries/${aid}/behdins?q=${encodeU
 export const createBehdin = (aid, name, phone) => post(`/agyaries/${aid}/behdins`, { name, phone });
 export const getBehdin = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}`);
 export const deleteBehdin = (aid, cid, scope = "list") => del(`/agyaries/${aid}/behdins/${cid}?scope=${scope}`);
+export const memorialShareInfo = (aid, mid, note) =>
+  get(`/agyaries/${aid}/memorials/${mid}/share?note=${encodeURIComponent(note || "")}`);
+export const memorialShareSend = (aid, mid, note) => post(`/agyaries/${aid}/memorials/${mid}/share/send`, { note });
+
+/** The schedule PDF as a blob. Not through api(): that always parses JSON. */
+export async function memorialSchedulePdf(aid, mid, note) {
+  const url = `${MOBED_BASE}/agyaries/${aid}/memorials/${mid}/schedule.pdf?note=${encodeURIComponent(note || "")}`;
+  const go = () => fetch(url, { headers: { Authorization: "Bearer " + state.accessToken }, credentials: "include" });
+  let res;
+  try { res = await go(); } catch (e) { throw new ApiError(0, "Could not reach Mobed Diary. Please check your internet connection."); }
+  if (res.status === 401 && await tryRefresh() === true) res = await go();
+  if (!res.ok) throw new ApiError(res.status, "The PDF could not be made. Please try again.");
+  const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+  return { blob: await res.blob(), filename: match ? match[1] : "Memorial-prayers.pdf" };
+}
+
 export const behdinDeleteSummary = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/delete-summary`);
 export const updateBehdin = (aid, cid, body) => patch(`/agyaries/${aid}/behdins/${cid}`, body);
 export const getSavedNames = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}/saved-names`);

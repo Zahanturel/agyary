@@ -22,6 +22,7 @@ import {
 } from "../ui.js";
 import { esc, gregLabel, todayIst } from "../util.js";
 import { back, navGuard } from "../router.js";
+import { shareCardHtml, wireShareCard } from "../memorial_share.js";
 
 // The services a memorial is made of. If a fire temple has renamed or removed
 // all of them, fall back to everything it offers rather than showing nothing.
@@ -122,10 +123,14 @@ export async function renderMemorial({ id, oid }) {
       <div id="obsList"></div>
     </div>
 
+    ${shareCardHtml()}
+
     <div class="card">
       <button class="ghost small" id="memDeleteOpen">Delete memorial</button>
       <div id="memDeleteConfirm" style="margin-top:12px"></div>
     </div>`;
+
+  wireShareCard(document.getElementById("shareCard"), aid, m);
 
   const listEl = document.getElementById("obsList");
 

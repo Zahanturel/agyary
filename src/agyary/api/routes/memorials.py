@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date, time
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,8 +19,8 @@ from agyary.api.routes.mobed import _require_behdin, _require_membership, get_cu
 from agyary.calendar.memorial import OPENING_5_TO_9, OPENING_ALL, OPENING_NONE, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.models import Memorial, User
-from agyary.services import guardrails, memorials
+from agyary.models import Customer, Memorial, User
+from agyary.services import guardrails, memorial_share, memorials
 
 router = APIRouter(prefix="/api/mobed", tags=["memorials"])
 
@@ -346,3 +346,97 @@ async def mark_reminded(
         raise HTTPException(status_code=404, detail="That prayer day could not be found.")
     await db.commit()
     return {"reminded_by_hand_at": obs.reminded_by_hand_at.isoformat() if obs.reminded_by_hand_at else None}
+
+
+# --- Sharing the schedule with the family ----------------------------------
+
+async def _share_parts(db: AsyncSession, agyary_id: int, memorial_id: int, user: User):
+    """The memorial as the screen shows it, the behdin it belongs to, and the
+    fire temple's name - everything a share is built from."""
+    agyary = await _require_membership(db, agyary_id, user)
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    data = (await memorials.summaries(db, agyary_id, [memorial], detailed=True))[0]
+    customer = await db.get(Customer, memorial.customer_id)
+    return data, customer, agyary.name
+
+
+@router.get("/agyaries/{agyary_id}/memorials/{memorial_id}/share")
+async def share_info(
+    agyary_id: int,
+    memorial_id: int,
+    note: str = Query(default="", max_length=600),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """What the Share box shows: the message text (to copy, or to open in the
+    mobed's own WhatsApp), the behdin's number, and whether - and if not, why
+    not - it can be sent from the shared number."""
+    from datetime import datetime, timezone
+
+    data, customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
+    why = await memorial_share.blocked_reason(db, get_settings(), customer, user.id, datetime.now(timezone.utc))
+    return {
+        "text": memorial_share.message_text(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
+        "phone": customer.phone,
+        "behdin_name": customer.name,
+        "can_send": why is None,
+        "cannot_send_because": why,
+        "note_max": memorial_share.NOTE_MAX,
+    }
+
+
+def _pdf_filename(departed: str) -> str:
+    safe = "".join(c if c.isalnum() else "-" for c in departed).strip("-") or "memorial"
+    return f"Memorial-prayers-{safe}.pdf"
+
+
+@router.get("/agyaries/{agyary_id}/memorials/{memorial_id}/schedule.pdf")
+async def schedule_pdf(
+    agyary_id: int,
+    memorial_id: int,
+    note: str = Query(default="", max_length=600),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    data, _customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
+    pdf = memorial_share.render_pdf(data, agyary_name=agyary_name, mobed_name=user.name, note=note)
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{_pdf_filename(data["departed_name"])}"',
+                 "Cache-Control": "no-store"},
+    )
+
+
+class ShareSendIn(BaseModel):
+    note: str = ""
+
+
+@router.post("/agyaries/{agyary_id}/memorials/{memorial_id}/share/send")
+async def share_send(
+    agyary_id: int,
+    memorial_id: int,
+    payload: ShareSendIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Send the PDF to the behdin from the shared number (a template with a
+    document). Refused with the reason when it is off, paused, the family has
+    not agreed, or the mobed is over the daily limit."""
+    from datetime import datetime, timezone
+
+    settings = get_settings()
+    data, customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
+    why = await memorial_share.blocked_reason(db, settings, customer, user.id, datetime.now(timezone.utc))
+    if why:
+        raise HTTPException(status_code=409, detail=why)
+    pdf = memorial_share.render_pdf(data, agyary_name=agyary_name, mobed_name=user.name, note=payload.note)
+    try:
+        await memorial_share.send_pdf(
+            db, settings, agyary_id=agyary_id, customer=customer, user_id=user.id, memorial=data, pdf=pdf,
+            filename=_pdf_filename(data["departed_name"]), mobed_name=user.name, agyary_name=agyary_name,
+        )
+    except RuntimeError as exc:
+        await db.commit()   # keep the failed attempt on record
+        raise HTTPException(status_code=502, detail=f"WhatsApp did not accept it: {exc}") from exc
+    await db.commit()
+    return {"sent": True}

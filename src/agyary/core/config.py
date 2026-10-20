@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     whatsapp_graph_version: str = "v23.0"
     whatsapp_reminder_template: str = "memorial_reminder"
     whatsapp_template_language: str = "en"
+    # A memorial's schedule sent as a PDF from the shared number. off until the
+    # template (a document header and three text variables) is approved by Meta;
+    # then live, which still needs the family's consent and the allowlist.
+    whatsapp_share_template: str = "memorial_schedule"
+    memorial_share_send_mode: str = "off"
+    memorial_share_daily_cap: int = 20
 
     # off: nothing is planned or sent. dry_run: reminders are planned and
     # logged as they would be sent, and nothing leaves the building. live:

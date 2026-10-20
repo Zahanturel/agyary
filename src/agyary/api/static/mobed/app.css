@@ -409,3 +409,5 @@ body.has-tabs .fab { bottom: calc(76px + var(--safe-bottom)); }
 .bh-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
 .bh-row .bh-main { flex: 1 1 auto; min-width: 0; }
 .bh-row.row-pending { background: var(--danger-tint); }
+a.button.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+a.button[aria-disabled="true"] { opacity: .5; pointer-events: none; }
