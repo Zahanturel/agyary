@@ -21,7 +21,7 @@ import { navigate, back, navGuard } from "../router.js";
 import { prayerServices } from "./memorial.js";
 import {
   blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialForm, schedulePreviewHtml,
-  wireSchedulePreview, showMemorialProblems,
+  wireSchedulePreview, showMemorialProblems, newReview, reviewPayload, reviewHasEmptyDate,
 } from "../memorial_form.js";
 import { loadDraft, saveDraft, clearDraft } from "../drafts.js";
 
@@ -51,7 +51,7 @@ export async function renderMemorialNew({ id }) {
   const keep = () => saveDraft(draftKey, draft);
   // Dates taken out on the review screen; kept while the form is changed and
   // reviewed again, dropped with the draft.
-  let removed = new Set();
+  let review = newReview();
 
   function showForm() {
     mainEl.innerHTML = `
@@ -72,7 +72,7 @@ export async function renderMemorialNew({ id }) {
       const btn = document.getElementById("mmReview");
       btn.disabled = true;
       try {
-        removed = new Set();   // a changed form is a new schedule
+        review = newReview();   // a changed form is a new schedule
         showPreview(built.body, await previewMemorial(aid, cid, built.body));
       } catch (e) {
         btn.disabled = false;
@@ -83,18 +83,19 @@ export async function renderMemorialNew({ id }) {
 
   function showPreview(body, preview) {
     mainEl.innerHTML = `
-      ${schedulePreviewHtml(body, preview, services, { heading: backBar("Review the schedule"), removed })}
+      ${schedulePreviewHtml(body, preview, services, { heading: backBar("Review the schedule"), review })}
       <div class="wizard-nav" style="margin-top:4px">
         <button class="ghost" id="mmEdit">Change</button>
         <button id="mmCreate">Create memorial</button>
       </div>`;
-    wireSchedulePreview(mainEl, preview, removed);
+    wireSchedulePreview(mainEl, preview, review, services);
     document.getElementById("mmEdit").onclick = () => showForm();
     document.getElementById("mmCreate").onclick = async () => {
+      if (reviewHasEmptyDate(mainEl, review)) return;
       const btn = document.getElementById("mmCreate");
       btn.disabled = true;
       try {
-        const made = await createMemorial(aid, cid, { ...body, exclude_codes: [...removed] });
+        const made = await createMemorial(aid, cid, { ...body, ...reviewPayload(body, preview, services, review) });
         clearDraft(draftKey);
         // The form is finished; the memorial takes its place in history.
         navigate(`#/memorial/${made.id}`, { replace: true });

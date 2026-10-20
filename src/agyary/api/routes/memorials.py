@@ -80,6 +80,9 @@ class CreateMemorialIn(MemorialIn):
     service_ids: list[int]
     # Observances the mobed took out on the review screen (by code).
     exclude_codes: list[str] = []
+    # Prayers changed for single dates on the review screen: date code -> the
+    # service ids that date should have (instead of the chosen set).
+    service_overrides: dict[str, list[int]] = {}
 
 
 def _choice(p: MemorialIn) -> memorials.Choice:
@@ -139,6 +142,8 @@ async def _preview(db: AsyncSession, user: User, payload: MemorialIn) -> dict:
                 "code": o.code, "label": o.label, "day_number": o.day_number,
                 "date": o.gregorian_date.isoformat(),
                 "roj": o.roj, "mah": o.mah, "year": o.year, "gatha_index": o.gatha_index,
+                # Monthly / yearly days, which Jashan is put on to begin with.
+                "anniversary": memorials.is_anniversary(o.code),
             }
             for o in schedule
         ],
@@ -187,6 +192,7 @@ async def create_memorial(
         memorial = await memorials.create_memorial(
             db, agyary, user.id, customer, _choice(payload), payload.service_ids,
             tuple(payload.exclude_codes),
+            payload.service_overrides,
         )
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc

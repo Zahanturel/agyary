@@ -403,21 +403,72 @@ export function wireMemorialForm(root, draft, onChange) {
   wireServiceToggles($("#mmServices"), (ids) => { draft.services = ids; });
 }
 
+/** The review screen's own state: dates taken out, and the prayers chosen for
+ *  each remaining date. `picks` (date code -> Set of service ids) is filled the
+ *  first time the schedule is drawn, from the prayers chosen on the form. */
+export function newReview() {
+  return { removed: new Set(), picks: null };
+}
+
+const isJashan = (s) => s.name.trim().toLowerCase() === "jashan";
+
+/** The prayers a date starts with: those chosen on the form, Jashan only on
+ *  the monthly and yearly days (the same rule the server applies). */
+function defaultPicks(body, services, o) {
+  const chosen = services.filter(s => body.service_ids.includes(s.id));
+  return new Set(chosen.filter(s => !isJashan(s) || o.anniversary).map(s => s.id));
+}
+
+function summaryText(services, ids) {
+  const names = services.filter(s => ids.has(s.id)).map(s => s.name);
+  return names.length ? names.join(", ") : "No prayer chosen";
+}
+
+/** What to send with the memorial for what was changed on the review screen. */
+export function reviewPayload(body, preview, services, review) {
+  const service_overrides = {};
+  for (const o of preview.observances) {
+    if (review.removed.has(o.code)) continue;
+    const have = review.picks.get(o.code);
+    const start = defaultPicks(body, services, o);
+    if (have.size !== start.size || [...have].some(id => !start.has(id))) {
+      service_overrides[o.code] = [...have].sort((a, b) => a - b);
+    }
+  }
+  return { exclude_codes: [...review.removed], service_overrides };
+}
+
+/** Mark the first date left with no prayer, if any; true when one was found. */
+export function reviewHasEmptyDate(root, review) {
+  const bad = [...review.picks].find(([code, ids]) => ids.size === 0 && !review.removed.has(code));
+  if (!bad) return false;
+  const row = root.querySelector(`.obs[data-code="${CSS.escape(bad[0])}"]`);
+  if (row) {
+    row.classList.add("open");
+    flagProblems(root, [{ target: row.querySelector(".svc-row"), message: "Choose at least one prayer for this date, or remove the date." }]);
+  }
+  return true;
+}
+
 /** Every date the memorial would have, as a pair of cards - nothing is saved
- *  yet. `heading` goes at the top of the first card. */
-export function schedulePreviewHtml(body, preview, services, { heading = "", removed = new Set() } = {}) {
+ *  yet. `heading` goes at the top of the first card. Each date shows its prayers
+ *  and opens (tap it) into on/off buttons, so a single day can be changed before
+ *  anything exists. */
+export function schedulePreviewHtml(body, preview, services, { heading = "", review } = {}) {
+  review = review || newReview();
+  if (!review.picks) {
+    review.picks = new Map(preview.observances.map(o => [o.code, defaultPicks(body, services, o)]));
+  }
   const today = todayIst();
-  const names = body.service_ids
-    .map(sid => (services.find(s => s.id === sid) || {}).name).filter(Boolean).join(", ");
-  const kept = preview.observances.filter(o => !removed.has(o.code));
+  const kept = preview.observances.filter(o => !review.removed.has(o.code));
   const passed = kept.filter(o => o.date < today).length;
   return `
       <div class="card">
         ${heading}
         <p class="meta" style="margin:4px 0 0">${esc(body.departed_name)} · died ${esc(gregLabel(preview.death_date || body.death_date))}
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
-        <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>,
-          each with ${esc(names)}.</p>
+        <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>.
+          Tap a date to change its prayers, or &times; to remove it.</p>
         ${preview.passed_not_booked ? `<p class="meta" style="margin:4px 0 0">Starting from today:
           ${preview.passed_not_booked} earlier date${preview.passed_not_booked === 1 ? " was" : "s were"} already past and
           ${preview.passed_not_booked === 1 ? "is" : "are"} not booked.</p>` : ""}
@@ -428,28 +479,42 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rem
       <div class="card">
         <div id="schedRows">${kept.map(o => `
           <div class="obs ${o.date < today ? "past" : ""}" data-code="${esc(o.code)}">
-            <div class="obs-head" style="cursor:default">
-              <div class="obs-title"><b>${esc(o.label)}</b><span>${esc(parsiText(o))}</span></div>
+            <div class="obs-head" data-open>
+              <div class="obs-title"><b>${esc(o.label)}</b><span>${esc(parsiText(o))}</span>
+                <span class="obs-prayers">${esc(summaryText(services, review.picks.get(o.code)))}</span></div>
               <div class="obs-when">${esc(gregLabel(o.date))}</div>
               <button type="button" class="row-x" data-remove aria-label="Remove ${esc(o.label)} on ${esc(gregLabel(o.date))}"
                 title="Remove this date">&times;</button>
             </div>
+            <div class="svc-row chip-row">${services.map(s =>
+              serviceToggleHtml(s.id, s.name, review.picks.get(o.code).has(s.id))).join("")}</div>
           </div>`).join("")}</div>
       </div>`;
 }
 
 
-/** Make the x on each date work: it asks "Remove this date?" in place, and a yes
- *  drops the row and adds its code to `removed` (which the caller sends as
- *  exclude_codes when it saves). Nothing else changes. `root` holds the preview. */
-export function wireSchedulePreview(root, preview, removed, onChange) {
+/** Make the review work: tap a date to open its prayer buttons; the x asks
+ *  "Remove this date?" in place and a yes drops the row. Everything is kept in
+ *  `review`, which the caller turns into the request with `reviewPayload`.
+ *  `root` holds the preview. */
+export function wireSchedulePreview(root, preview, review, services, onChange) {
   const rows = root.querySelector("#schedRows");
   const count = root.querySelector("#schedCount");
-  const total = () => preview.observances.length - removed.size;
+  const total = () => preview.observances.length - review.removed.size;
+
+  rows.querySelectorAll(".obs").forEach(row => {
+    const code = row.dataset.code;
+    wireServiceToggles(row.querySelector(".svc-row"), (ids) => {
+      review.picks.set(code, new Set(ids));
+      row.querySelector(".obs-prayers").textContent = summaryText(services, review.picks.get(code));
+      if (onChange) onChange(review);
+    });
+  });
+
   rows.addEventListener("click", (e) => {
-    const x = e.target.closest("[data-remove]");
     const row = e.target.closest(".obs");
     if (!row) return;
+    const x = e.target.closest("[data-remove]");
     if (x) {
       if (row.querySelector(".row-confirm")) return;
       row.classList.add("row-pending");
@@ -467,10 +532,12 @@ export function wireSchedulePreview(root, preview, removed, onChange) {
         row.querySelector(".row-confirm").innerHTML = "<span>Keep at least one date.</span>";
         return;
       }
-      removed.add(row.dataset.code);
+      review.removed.add(row.dataset.code);
       row.remove();
       count.textContent = `${total()} observance${total() === 1 ? "" : "s"}`;
-      if (onChange) onChange(removed);
+      if (onChange) onChange(review);
+    } else if (e.target.closest("[data-open]")) {
+      row.classList.toggle("open");   // the buttons themselves do not reach here
     }
   });
 }

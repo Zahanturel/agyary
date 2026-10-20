@@ -262,7 +262,7 @@ export function renderBehdinNew() {
   // The memorial, if one is being set up here. Its form is built the first
   // time the box is ticked, and loaded then: it is not needed to add a behdin.
   let mem = null, mdraft = null, mservices = [];
-  let removed = new Set();   // dates taken out on the review screen
+  let review = null;   // dates taken out and prayers changed on the review screen
   const saveBtn = document.getElementById("bnSave");
   const memOn = memorialOk ? document.getElementById("bnMemOn") : null;
   if (memOn) {
@@ -358,7 +358,7 @@ export function renderBehdinNew() {
 
     if (memorialBody) {
       try {
-        const made = await createMemorial(aid, created.id, { ...memorialBody, exclude_codes: [...removed] });
+        const made = await createMemorial(aid, created.id, memorialBody);
         if (namesProblem) flashError(namesProblem);
         return navigate(`#/memorial/${made.id}`, { replace: true });
       } catch (e) {
@@ -381,19 +381,22 @@ export function renderBehdinNew() {
     formEl.style.display = "none";
     previewEl.style.display = "";
     previewEl.innerHTML = `
-      ${mem.schedulePreviewHtml(body, preview, mservices, { heading: backBar("Review the schedule"), removed })}
+      ${mem.schedulePreviewHtml(body, preview, mservices, { heading: backBar("Review the schedule"), review })}
       <p class="meta">For ${esc(v.name)}. Nothing is saved until you confirm.</p>
       <div class="wizard-nav" style="margin-top:4px">
         <button class="ghost" id="bnPrevBack">Change</button>
         <button id="bnPrevGo">Add behdin and memorial</button>
       </div>`;
-    mem.wireSchedulePreview(previewEl, preview, removed);
+    mem.wireSchedulePreview(previewEl, preview, review, mservices);
     window.scrollTo(0, 0);
     document.getElementById("bnPrevBack").onclick = () => {
       previewEl.style.display = "none";
       formEl.style.display = "";
     };
-    document.getElementById("bnPrevGo").onclick = (e) => saveAll(v, body, e.currentTarget);
+    document.getElementById("bnPrevGo").onclick = (e) => {
+      if (mem.reviewHasEmptyDate(previewEl, review)) return;
+      saveAll(v, { ...body, ...mem.reviewPayload(body, preview, mservices, review) }, e.currentTarget);
+    };
   };
 
   saveBtn.onclick = async () => {
@@ -404,7 +407,7 @@ export function renderBehdinNew() {
       if (mem.showMemorialProblems(formRoot, built)) return;
       saveBtn.disabled = true;
       try {
-        removed = new Set();   // a changed form is a new schedule
+        review = mem.newReview();   // a changed form is a new schedule
         showPreview(v, built.body, await previewNewMemorial(state.currentAgyaryId, built.body));
       } catch (e) {
         showError(e.message);

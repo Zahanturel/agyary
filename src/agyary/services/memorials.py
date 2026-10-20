@@ -292,6 +292,7 @@ async def create_memorial(
     choice: Choice,
     service_ids: list[int],
     exclude_codes: tuple[str, ...] = (),
+    service_overrides: dict[str, list[int]] | None = None,
 ) -> Memorial:
     """Save a memorial. Every observance starts with the same services - the
     set chosen here - and each can be changed on its own afterwards."""
@@ -303,6 +304,14 @@ async def create_memorial(
         if not schedule:
             raise MemorialError("Every observance was removed - keep at least one.")
     services = await _validated_services(db, agyary.id, service_ids)
+    # Prayers the mobed set for single dates on the review screen.
+    overrides: dict[str, list[Service]] = {}
+    for code, ids in (service_overrides or {}).items():
+        if code not in {o.code for o in schedule}:
+            continue   # a date that was removed, or never existed
+        if not ids:
+            raise MemorialError("Every date needs at least one prayer.")
+        overrides[code] = await _validated_services(db, agyary.id, ids)
     birthday = resolve_birthday(system, choice)
 
     memorial = Memorial(
@@ -329,7 +338,7 @@ async def create_memorial(
     for o in schedule:
         # Jashan is kept on the anniversaries only (monthly, yearly and their named
         # days); the mobed turns it on for any other day on its own page.
-        chosen = [s for s in services if not _is_jashan(s) or is_anniversary(o.code)]
+        chosen = overrides.get(o.code) or [s for s in services if not _is_jashan(s) or is_anniversary(o.code)]
         if not chosen:
             raise MemorialError(
                 "Jashan is only put on the monthly and yearly days. Choose another prayer too, "

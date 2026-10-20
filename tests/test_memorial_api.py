@@ -551,3 +551,32 @@ async def test_any_day_can_be_given_jashan_afterwards(client, db, seeded):
                            json={"service_ids": ids}, headers=headers)
     assert r.status_code == 200, r.text
     assert sorted(r.json()["service_ids"]) == sorted(ids)
+
+
+async def test_prayers_changed_for_single_dates_on_the_review_screen_are_saved(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    afr, far, jash = await _service_ids(db, aid, "Afringan", "Farokshi", "Jashan")
+    url = f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials"
+    body = _body(DEATH, opening="none", day_counts=[10, 30], monthly=None, service_ids=[afr, far])
+    pv = (await client.post(url + "/preview", json=body, headers=headers)).json()
+    assert [o["anniversary"] for o in pv["observances"]] == [False, True]      # Dasmi, Masiso
+    r = await client.post(url, json={**body, "service_overrides": {
+        "day_10": [afr, jash],          # Jashan added on the Dasmi, Farokshi taken off it
+        "day_30": [far],                # only Farokshi on the Masiso
+        "day_999": [afr],               # a date that does not exist is ignored
+    }}, headers=headers)
+    assert r.status_code == 200, r.text
+    got = {o["code"]: sorted(o["service_ids"]) for o in r.json()["observances"]}
+    assert got == {"day_10": sorted([afr, jash]), "day_30": [far]}
+
+
+async def test_a_date_cannot_be_left_with_no_prayer_on_the_review_screen(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    afr, = await _service_ids(db, aid, "Afringan")
+    body = _body(DEATH, opening="none", day_counts=[10], monthly=None, service_ids=[afr])
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials",
+                          json={**body, "service_overrides": {"day_10": []}}, headers=headers)
+    assert r.status_code == 400 and "at least one prayer" in r.json()["detail"]
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials",
+                          json={**body, "service_overrides": {"day_10": [999999]}}, headers=headers)
+    assert r.status_code == 400
