@@ -23,10 +23,11 @@ import {
 import { esc, gregLabel, todayIst } from "../util.js";
 import { back, navGuard } from "../router.js";
 import { shareCardHtml, wireShareCard } from "../memorial_share.js";
+import { serviceToggleHtml, wireServiceToggles, selectedServiceIds } from "../service_toggle.js";
 
 // The services a memorial is made of. If a fire temple has renamed or removed
 // all of them, fall back to everything it offers rather than showing nothing.
-const PRAYER_NAMES = ["afringan", "farokshi", "baaj", "satum"];
+const PRAYER_NAMES = ["afringan", "farokshi", "baaj", "satum", "jashan"];
 
 /** The services offered for a memorial at this fire temple, in catalog order. */
 export async function prayerServices(aid) {
@@ -35,7 +36,9 @@ export async function prayerServices(aid) {
     state.formOptionsCache[aid] = { services: all.filter(s => s.is_active) };
   }
   const all = state.formOptionsCache[aid].services;
-  const prayers = all.filter(s => PRAYER_NAMES.includes(s.name.trim().toLowerCase()));
+  // In the order the family would say them, not the catalog's.
+  const rank = (s) => PRAYER_NAMES.indexOf(s.name.trim().toLowerCase());
+  const prayers = all.filter(s => rank(s) >= 0).sort((a, b) => rank(a) - rank(b));
   return prayers.length ? prayers : all.filter(s => s.name.trim().toLowerCase() !== "machi");
 }
 
@@ -153,11 +156,8 @@ export async function renderMemorial({ id, oid }) {
   function editorHtml(o) {
     const have = new Set(o.service_ids);
     return `<div class="obs-edit">
-      <label>Services</label>
-      <div class="chip-row">${services.map(s => `
-        <label class="chip ${have.has(s.id) ? "on" : ""}" style="margin:0">
-          <input type="checkbox" data-svc="${s.id}" ${have.has(s.id) ? "checked" : ""}>${esc(s.name)}</label>`).join("")}
-      </div>
+      <label>Prayers on this day <span class="meta">(tap to turn on or off)</span></label>
+      <div class="chip-row">${services.map(s => serviceToggleHtml(s.id, s.name, have.has(s.id))).join("")}</div>
       <label>Time <span class="meta">(optional)</span></label>
       <input type="time" id="obsTime" value="${esc(o.time || "")}">
       <label>Note <span class="meta">(optional)</span></label>
@@ -179,14 +179,11 @@ export async function renderMemorial({ id, oid }) {
     });
     const row = openId && m.observances.find(o => o.id === openId);
     if (!row) return;
-    listEl.querySelectorAll("[data-svc]").forEach(cb => {
-      cb.onchange = () => cb.closest(".chip").classList.toggle("on", cb.checked);
-    });
+    wireServiceToggles(listEl);
     document.getElementById("obsCancel").onclick = () => { openId = null; paint(); };
     document.getElementById("obsSave").onclick = async () => {
-      const ids = Array.from(listEl.querySelectorAll("[data-svc]"))
-        .filter(cb => cb.checked).map(cb => Number(cb.dataset.svc));
-      if (!ids.length) return showError("Keep at least one service on this observance.");
+      const ids = selectedServiceIds(listEl);
+      if (!ids.length) return showError("Keep at least one prayer on this day.");
       const btn = document.getElementById("obsSave");
       btn.disabled = true;
       try {

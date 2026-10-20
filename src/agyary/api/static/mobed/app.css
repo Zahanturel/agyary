@@ -358,7 +358,7 @@ body.has-tabs .fab { bottom: calc(76px + var(--safe-bottom)); }
 .obs .obs-title b { display: block; font-size: var(--text-sm); font-weight: 600; }
 .obs .obs-title span { font-size: var(--text-xs); color: var(--muted); }
 .obs .obs-when { text-align: right; font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
-.obs.past { opacity: .55; }
+.obs.past .obs-head { opacity: .55; }
 .obs.next .obs-title b::after { content: "Next"; margin-left: var(--space-2); font-size: var(--text-xs);
   background: var(--accent-tint); color: var(--accent-text); padding: 1px var(--space-2); border-radius: var(--radius-pill); }
 .obs.last .obs-title b::after { content: "Last"; margin-left: var(--space-2); font-size: var(--text-xs);
@@ -411,3 +411,18 @@ body.has-tabs .fab { bottom: calc(76px + var(--safe-bottom)); }
 .bh-row.row-pending { background: var(--danger-tint); }
 a.button.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
 a.button[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+
+/* A prayer as a button that is plainly on or off (service_toggle.js). */
+.svc-toggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px;
+  padding: var(--space-2) var(--space-3); border-radius: 999px; font-size: var(--text-sm); font-weight: 500;
+  background: transparent; color: var(--muted); border: 1.5px dashed var(--border); cursor: pointer; }
+.svc-toggle .svc-mark { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center;
+  justify-content: center; font-size: 13px; border: 1.5px solid currentColor; line-height: 1; }
+.svc-toggle .svc-state { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+.svc-toggle .svc-x { display: none; font-size: 18px; line-height: 1; margin-left: 2px; opacity: .85; }
+.svc-toggle:hover { border-color: var(--primary); color: var(--primary); }
+.svc-toggle.on { background: var(--primary); color: #fff; border: 1.5px solid var(--primary); }
+.svc-toggle.on .svc-mark { background: #fff; color: var(--primary); border-color: #fff; }
+.svc-toggle.on .svc-x { display: inline; }
+.svc-toggle.on:hover { opacity: .9; color: #fff; }
+.svc-toggle:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }

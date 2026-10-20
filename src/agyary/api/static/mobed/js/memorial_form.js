@@ -19,6 +19,7 @@ import { primarySystem, state } from "./state.js";
 import { esc, gregLabel, todayIst, parsiLabel, MAH_NAMES_JS } from "./util.js";
 import { parsiText } from "./screens/memorial.js";
 import { flagProblems } from "./fielderrors.js";
+import { serviceToggleHtml, wireServiceToggles } from "./service_toggle.js";
 import { convertDate } from "./api.js";
 
 // The named days a family can add on top of the opening. The spellings are
@@ -209,10 +210,11 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
         <h2>Observances</h2>
 
         <div class="names-group-label"><b>Prayers</b><span>on every day</span></div>
-        <div class="chip-row" id="mmServices">${services.map(s => `
-          <label class="chip ${draft.services.includes(s.id) ? "on" : ""}" style="margin:0">
-            <input type="checkbox" data-svc="${s.id}" ${draft.services.includes(s.id) ? "checked" : ""}>${esc(s.name)}</label>`).join("")}
+        <div class="chip-row" id="mmServices">${services.map(s =>
+          serviceToggleHtml(s.id, s.name, draft.services.includes(s.id))).join("")}
         </div>
+        <p class="meta" style="margin:6px 0 0">Tap a prayer to turn it on or off. Jashan goes on the monthly and
+          yearly days only; any day can be changed afterwards.</p>
 
         <div class="names-group-label"><b>Named days</b></div>
         <div id="mmSchedule">
@@ -398,13 +400,7 @@ export function wireMemorialForm(root, draft, onChange) {
   // The calendar decides what Roj and Mah a date is.
   $("#mmCalendar").addEventListener("change", () => { if (draft.birthDate) readBirth(); });
 
-  root.querySelectorAll("[data-svc]").forEach(cb => {
-    cb.onchange = () => {
-      const n = Number(cb.dataset.svc);
-      cb.closest(".chip").classList.toggle("on", cb.checked);
-      draft.services = cb.checked ? [...new Set([...draft.services, n])] : draft.services.filter(s => s !== n);
-    };
-  });
+  wireServiceToggles($("#mmServices"), (ids) => { draft.services = ids; });
 }
 
 /** Every date the memorial would have, as a pair of cards - nothing is saved

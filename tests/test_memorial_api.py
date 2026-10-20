@@ -515,3 +515,39 @@ async def test_roj_fravardin_every_month_is_saved_and_returned(client, db, seede
     bad = {**body, "fravardin_roj": {"count": 0}}
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials/preview", json=bad, headers=headers)
     assert r.status_code == 400
+
+
+async def test_jashan_is_put_on_the_anniversaries_only(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Afringan", "Jashan")
+    jashan = ids[1]
+    r = await _create(client, db, aid, cid, headers, service_ids=ids,
+                      opening="none", day_counts=[10, 30], monthly={"count": 3})
+    assert r.status_code == 200, r.text
+    for o in r.json()["observances"]:
+        assert ids[0] in o["service_ids"]
+        assert (jashan in o["service_ids"]) == (o["code"] in ("day_30", "month_2", "month_3")), o["code"]
+
+
+async def test_jashan_alone_cannot_cover_days_that_are_not_anniversaries(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Jashan")
+    r = await _create(client, db, aid, cid, headers, service_ids=ids,
+                      opening="none", day_counts=[10, 30], monthly={"count": 3})
+    assert r.status_code == 400 and "Choose another prayer" in r.json()["detail"]
+    # ...but it is fine when every date is an anniversary
+    r = await _create(client, db, aid, cid, headers, service_ids=ids,
+                      opening="none", day_counts=[30], monthly={"count": 3})
+    assert r.status_code == 200, r.text
+
+
+async def test_any_day_can_be_given_jashan_afterwards(client, db, seeded):
+    aid, cid, headers = await _setup(client, db, seeded)
+    ids = await _service_ids(db, aid, "Afringan", "Jashan")
+    made = (await _create(client, db, aid, cid, headers, service_ids=ids[:1],
+                          opening="none", day_counts=[10], monthly=None)).json()
+    obs = made["observances"][0]
+    r = await client.patch(f"/api/mobed/agyaries/{aid}/memorials/{made['id']}/observances/{obs['id']}",
+                           json={"service_ids": ids}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert sorted(r.json()["service_ids"]) == sorted(ids)

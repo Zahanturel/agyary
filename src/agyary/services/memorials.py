@@ -261,7 +261,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
 async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: list[int]) -> list[Service]:
     wanted = list(dict.fromkeys(service_ids))  # order kept, duplicates gone
     if not wanted:
-        raise MemorialError("Choose at least one service: Afringan, Farokshi, Baaj or Satum.")
+        raise MemorialError("Choose at least one prayer: Afringan, Farokshi, Baaj, Satum or Jashan.")
     found = []
     for sid in wanted:
         service = await booking_service.get_service_by_id(db, agyary_id, sid)
@@ -269,6 +269,19 @@ async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: lis
             raise MemorialError("One of those services isn't offered here.")
         found.append(service)
     return found
+
+
+# The codes (see calendar.memorial) of the anniversaries: Masiso / Bamsi / Chamsi
+# / Varsi, the monthly and the yearly series.
+_ANNIVERSARY_DAYS = {"day_30", "day_60", "day_180", "day_360"}
+
+
+def is_anniversary(code: str) -> bool:
+    return code in _ANNIVERSARY_DAYS or code.startswith(("month_", "year_"))
+
+
+def _is_jashan(service: Service) -> bool:
+    return service.name.strip().lower() == "jashan"
 
 
 async def create_memorial(
@@ -312,15 +325,21 @@ async def create_memorial(
         birthday_mah=birthday[1] if birthday else None,
         birthday_years=choice.birthday_years if birthday else None,
     )
-    memorial.observances = [
-        MemorialObservance(
+    memorial.observances = []
+    for o in schedule:
+        # Jashan is kept on the anniversaries only (monthly, yearly and their named
+        # days); the mobed turns it on for any other day on its own page.
+        chosen = [s for s in services if not _is_jashan(s) or is_anniversary(o.code)]
+        if not chosen:
+            raise MemorialError(
+                "Jashan is only put on the monthly and yearly days. Choose another prayer too, "
+                "for the other days.")
+        memorial.observances.append(MemorialObservance(
             code=o.code, label=o.label, day_number=o.day_number,
             gregorian_date=o.gregorian_date,
             parsi_roj=o.roj, parsi_mah=o.mah, parsi_year=o.year, gatha_index=o.gatha_index,
-            services=[MemorialObservanceService(service_id=s.id) for s in services],
-        )
-        for o in schedule
-    ]
+            services=[MemorialObservanceService(service_id=s.id) for s in chosen],
+        ))
     db.add(memorial)
     await db.flush()
     return memorial
