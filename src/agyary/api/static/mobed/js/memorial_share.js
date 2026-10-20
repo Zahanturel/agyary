@@ -13,7 +13,6 @@
  */
 
 import { memorialShareInfo, memorialSchedulePdf, memorialShareSend } from "./api.js";
-import { esc } from "./util.js";
 import { showError, showInfo } from "./ui.js";
 
 // Beyond this a wa.me link may be refused by the browser or WhatsApp, so the link
@@ -40,7 +39,6 @@ export function shareCardHtml() {
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <button class="small" id="shSend" type="button" disabled>Send from the Mobed Diary number</button>
         <p class="meta" id="shSendNote" style="margin:8px 0 0"></p>
-        <div id="shSendConfirm"></div>
       </div>
     </div>`;
 }
@@ -157,25 +155,22 @@ export function wireShareCard(root, aid, memorial) {
     }
   };
 
-  $("#shSend").onclick = () => {
-    const box = $("#shSendConfirm");
-    if (box.firstChild || !info || !info.can_send) return;
-    box.innerHTML = `<p class="meta" style="margin:8px 0">Send the PDF to <b>${esc(info.behdin_name)}</b>
-      (${esc(info.phone)}) from the Mobed Diary number?</p>
-      <div class="row tight"><button class="small" id="shSendYes" type="button">Send</button>
-      <button class="ghost small" id="shSendNo" type="button">Cancel</button></div>`;
-    $("#shSendNo").onclick = () => { box.innerHTML = ""; };
-    $("#shSendYes").onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
-      try {
-        await memorialShareSend(aid, memorial.id, noteEl.value.trim());
-        box.innerHTML = "";
-        showInfo(`Sent to ${info.behdin_name}.`);
-        load();   // the daily limit may now be reached
-      } catch (e) {
-        box.innerHTML = "";
-        showError(e.message);
-      }
-    };
+  // One tap sends: no second "are you sure". The button is disabled while it goes,
+  // so a double tap cannot send twice.
+  $("#shSend").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    if (!info || !info.can_send || btn.disabled) return;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = "Sending...";
+    try {
+      await memorialShareSend(aid, memorial.id, noteEl.value.trim());
+      showInfo(`Sent to ${info.behdin_name}.`);
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.textContent = label;
+      load();   // re-reads whether it can still send (the daily limit may now be reached)
+    }
   };
 }
