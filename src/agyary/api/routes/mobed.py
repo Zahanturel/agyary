@@ -657,7 +657,43 @@ def _booking_summary(entry: mobed_dashboard.MyDayEntry) -> dict:
         "location": b.location,
         "is_offsite": b.is_offsite,
         "status": b.status,
+        "paid": b.payment_status == mobed_dashboard.PAID,
     }
+
+
+class PaidIn(BaseModel):
+    paid: bool
+
+
+@router.put("/agyaries/{agyary_id}/bookings/{booking_id}/paid")
+async def set_booking_paid(
+    agyary_id: int,
+    booking_id: int,
+    payload: PaidIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """The mobed's tick: this behdin has paid for this booking, or has not."""
+    agyary = await _require_membership(db, agyary_id, user)
+    if not await mobed_dashboard.set_booking_paid(db, agyary, booking_id, user.id, payload.paid):
+        raise HTTPException(status_code=404, detail="That booking could not be found.")
+    await db.commit()
+    return {"paid": payload.paid}
+
+
+@router.put("/agyaries/{agyary_id}/machis/{machi_id}/paid")
+async def set_machi_paid(
+    agyary_id: int,
+    machi_id: int,
+    payload: PaidIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    agyary = await _require_membership(db, agyary_id, user)
+    if not await mobed_dashboard.set_machi_paid(db, agyary, machi_id, user.id, payload.paid):
+        raise HTTPException(status_code=404, detail="That machi could not be found.")
+    await db.commit()
+    return {"paid": payload.paid}
 
 
 @router.get("/my-day")
@@ -811,6 +847,8 @@ async def machi_board(
             "status": e.machi.status,
             "behdin_name": e.behdin_name if _mine(e.machi) else "",
             "mine": _mine(e.machi),
+            # Only on the caller's own machis, like the family's name.
+            "paid": (e.machi.payment_status == mobed_dashboard.PAID) if _mine(e.machi) else False,
         }
         for e in entries
     ]

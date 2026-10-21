@@ -1143,6 +1143,40 @@ async def delete_behdin_scoped(
     return out
 
 
+# "Paid" is the mobed's own tick on an event: the behdin has paid or has not. It is
+# the event's payment_status ("received" / "pending"), nothing is calculated or
+# collected - and a recorded Payment row is left exactly as it is.
+PAID, UNPAID = "received", "pending"
+
+
+async def set_booking_paid(
+    db: AsyncSession, agyary: Agyary, booking_id: int, actor_user_id: int, paid: bool
+) -> bool:
+    """Mark a booking paid or unpaid. False means "not found, or not yours"."""
+    booking = await db.get(Booking, booking_id)
+    if booking is None or booking.agyary_id != agyary.id:
+        return False
+    if not await may_touch_booking(db, booking, actor_user_id):
+        return False
+    booking.payment_status = PAID if paid else UNPAID
+    await db.flush()
+    return True
+
+
+async def set_machi_paid(
+    db: AsyncSession, agyary: Agyary, machi_id: int, actor_user_id: int, paid: bool
+) -> bool:
+    """Mark a machi paid or unpaid (that one occurrence, if it repeats)."""
+    machi = await db.get(Machi, machi_id)
+    if machi is None or machi.agyary_id != agyary.id:
+        return False
+    if not await may_modify_machi(db, machi, actor_user_id):
+        return False
+    machi.payment_status = PAID if paid else UNPAID
+    await db.flush()
+    return True
+
+
 async def delete_machi(
     db: AsyncSession, agyary: Agyary, machi_id: int, actor_user_id: int, *, delete_future: bool = False
 ) -> bool:

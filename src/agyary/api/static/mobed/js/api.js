@@ -149,6 +149,9 @@ export const myDay = (from, to) =>
  *  only their own; the machi board app omits it to see the full board. */
 export const machiBoard = (aid, from, to, { mine = true } = {}) =>
   get(`/agyaries/${aid}/machi-board?from=${from}&to=${to}${mine ? "&mine=true" : ""}`);
+/** The mobed's own tick on an event: this behdin has paid, or has not. */
+export const setEventPaid = (kind, aid, id, paid) =>
+  put(`/agyaries/${aid}/${kind === "machi" ? "machis" : "bookings"}/${id}/paid`, { paid });
 export const bookableGehs = (aid, on) => get(`/agyaries/${aid}/bookable-gehs?on=${on}`);
 
 export const calendarOptions = () => get("/reference/calendar-options");

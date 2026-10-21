@@ -8,7 +8,7 @@
  * their events, added the same way any event is.
  */
 
-import { myDay, machiBoard, memorialFeed, memorialReminders } from "../api.js";
+import { myDay, machiBoard, memorialFeed, memorialReminders, setEventPaid } from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
@@ -30,6 +30,8 @@ function serviceItems(rows) {
     short: b.service_name,
     sublabel: b.behdin_name || "-",
     tags: b.is_offsite ? '<span class="tag">Offsite</span>' : "",
+    paid: !!b.paid,
+    agyaryId: b.agyary_id,
   }));
 }
 
@@ -47,6 +49,8 @@ function machiItems(rows) {
     label: `Machi · ${MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose}`,
     short: "Machi",
     sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
+    // Only the mobed's own machis can be ticked (the board is shared, the money is not).
+    paid: m.mine === false ? undefined : !!m.paid,
   }));
 }
 
@@ -145,6 +149,8 @@ async function draw() {
       loadItems,
       rerender: draw,
       viewHash: calendarHash,
+      // The paid / unpaid tick on a day's events.
+      onPay: (kind, id, paid) => setEventPaid(kind, state.currentAgyaryId, id, paid),
       onItem: (kind, id) => {
         const aid = state.currentAgyaryId;
         if (kind === "memorial_closing") return navigate(`#/memorial/${id}`);
