@@ -446,3 +446,7 @@ a.button[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 .pay-chip.paid { background: var(--success); color: #fff; border: 1.5px solid var(--success); }
 .pay-chip.paid .pay-mark { background: #fff; color: var(--success); border-color: #fff; }
 .pay-chip:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
+/* On the memorial page the chip drops under the date when the row is narrow, instead of overflowing. */
+.obs .obs-head:has(.pay-chip) { flex-wrap: wrap; row-gap: var(--space-2); }
+.obs .obs-head .pay-chip { margin-left: auto; }
+.obs .obs-head:has(.pay-chip) .obs-title { flex: 1 1 40%; min-width: 0; }

@@ -293,6 +293,7 @@ async def create_memorial(
     service_ids: list[int],
     exclude_codes: tuple[str, ...] = (),
     service_overrides: dict[str, list[int]] | None = None,
+    all_paid: bool = False,
 ) -> Memorial:
     """Save a memorial. Every observance starts with the same services - the
     set chosen here - and each can be changed on its own afterwards."""
@@ -344,6 +345,7 @@ async def create_memorial(
                 "Jashan is only put on the monthly and yearly days. Choose another prayer too, "
                 "for the other days.")
         memorial.observances.append(MemorialObservance(
+            paid_at=datetime.now(timezone.utc) if all_paid else None,
             code=o.code, label=o.label, day_number=o.day_number,
             gregorian_date=o.gregorian_date,
             parsi_roj=o.roj, parsi_mah=o.mah, parsi_year=o.year, gatha_index=o.gatha_index,
@@ -404,6 +406,7 @@ def progress(memorial: Memorial, today: date) -> dict:
         "next": serialize_observance(upcoming[0]) if upcoming else None,
         "last_date": last.isoformat() if last else None,
         "status": "running" if upcoming else "completed",
+        "paid_count": sum(1 for o in memorial.observances if o.paid_at is not None),
     }
 
 
@@ -414,6 +417,7 @@ def _hhmm(t: time | None) -> str | None:
 def serialize_observance(o: MemorialObservance, names: dict[int, str] | None = None) -> dict:
     return {
         "id": o.id,
+        "paid": o.paid_at is not None,
         "memorial_id": o.memorial_id,
         "code": o.code,
         "label": o.label,
@@ -512,6 +516,24 @@ async def update_observance(
     elif notes is not None:
         observance.notes = notes.strip() or None
     await db.flush()
+
+
+async def set_paid(
+    db: AsyncSession, memorial: Memorial, paid: bool, observance_id: int | None = None
+) -> int:
+    """Tick (or untick) the paid mark on one date of a memorial, or on every date
+    when ``observance_id`` is None. Returns how many dates changed."""
+    now = datetime.now(timezone.utc)
+    changed = 0
+    for o in memorial.observances:
+        if observance_id is not None and o.id != observance_id:
+            continue
+        if paid and o.paid_at is None:
+            o.paid_at, changed = now, changed + 1
+        elif not paid and o.paid_at is not None:
+            o.paid_at, changed = None, changed + 1
+    await db.flush()
+    return changed
 
 
 async def delete_memorial(db: AsyncSession, memorial: Memorial) -> None:

@@ -69,3 +69,53 @@ async def test_another_mobed_cannot_tick_or_see_it(db, client, seeded):
     assert r.status_code == 404
     r = await client.put(f"/api/mobed/agyaries/{aid}/bookings/{bid}/paid", json={}, headers=headers)
     assert r.status_code == 422
+
+
+# --- Memorial dates ----------------------------------------------------------
+
+async def test_memorial_dates_can_be_ticked_one_by_one_and_all_at_once(client, db, seeded):
+    from tests.test_memorial_api import _create, _setup
+    aid, cid, headers = await _setup(client, db, seeded)
+    made = (await _create(client, db, aid, cid, headers)).json()
+    mid, first = made["id"], made["observances"][0]["id"]
+    assert made["paid_count"] == 0 and not any(o["paid"] for o in made["observances"])
+
+    r = await client.put(f"/api/mobed/agyaries/{aid}/memorials/{mid}/observances/{first}/paid",
+                         json={"paid": True}, headers=headers)
+    assert r.status_code == 200 and r.json() == {"paid": True, "paid_count": 1}
+    got = (await client.get(f"/api/mobed/agyaries/{aid}/memorials/{mid}", headers=headers)).json()
+    assert [o["paid"] for o in got["observances"]].count(True) == 1 and got["observances"][0]["paid"]
+
+    r = await client.put(f"/api/mobed/agyaries/{aid}/memorials/{mid}/paid", json={"paid": True}, headers=headers)
+    assert r.json()["paid_count"] == made["total"]
+    r = await client.put(f"/api/mobed/agyaries/{aid}/memorials/{mid}/paid", json={"paid": False}, headers=headers)
+    assert r.json()["paid_count"] == 0
+
+    # the calendar feed carries the tick, so the day list can show it
+    await client.put(f"/api/mobed/agyaries/{aid}/memorials/{mid}/observances/{first}/paid",
+                     json={"paid": True}, headers=headers)
+    feed = (await client.get(f"/api/mobed/agyaries/{aid}/memorial-feed",
+                             params={"from": "2030-01-01", "to": "2030-12-31"}, headers=headers)).json()
+    paid = {i["id"]: i["paid"] for i in feed if i["kind"] == "memorial"}
+    assert paid[first] is True and list(paid.values()).count(True) == 1
+
+
+async def test_a_memorial_can_be_created_already_paid_for(client, db, seeded):
+    from tests.test_memorial_api import _create, _setup
+    aid, cid, headers = await _setup(client, db, seeded)
+    made = (await _create(client, db, aid, cid, headers, all_paid=True)).json()
+    assert made["paid_count"] == made["total"] > 0
+
+
+async def test_another_mobed_cannot_tick_a_memorial(client, db, seeded):
+    from tests.test_memorial_api import OTHER_MOBED, _create, _setup
+    aid, cid, headers = await _setup(client, db, seeded)
+    made = (await _create(client, db, aid, cid, headers)).json()
+    other = await _member_headers(client, seeded, name="Other", phone=OTHER_MOBED)
+    mid, oid = made["id"], made["observances"][0]["id"]
+    for path in (f"/memorials/{mid}/paid", f"/memorials/{mid}/observances/{oid}/paid"):
+        r = await client.put(f"/api/mobed/agyaries/{aid}{path}", json={"paid": True}, headers=other)
+        assert r.status_code == 404, path
+    r = await client.put(f"/api/mobed/agyaries/{aid}/memorials/{mid}/observances/999999/paid",
+                         json={"paid": True}, headers=headers)
+    assert r.status_code == 404

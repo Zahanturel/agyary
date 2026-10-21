@@ -407,7 +407,7 @@ export function wireMemorialForm(root, draft, onChange) {
  *  each remaining date. `picks` (date code -> Set of service ids) is filled the
  *  first time the schedule is drawn, from the prayers chosen on the form. */
 export function newReview() {
-  return { removed: new Set(), picks: null };
+  return { removed: new Set(), picks: null, allPaid: false };
 }
 
 const isJashan = (s) => s.name.trim().toLowerCase() === "jashan";
@@ -435,7 +435,7 @@ export function reviewPayload(body, preview, services, review) {
       service_overrides[o.code] = [...have].sort((a, b) => a - b);
     }
   }
-  return { exclude_codes: [...review.removed], service_overrides };
+  return { exclude_codes: [...review.removed], service_overrides, all_paid: !!review.allPaid };
 }
 
 /** Mark the first date left with no prayer, if any; true when one was found. */
@@ -469,6 +469,8 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rev
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
         <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>.
           Tap a date to change its prayers, or &times; to remove it.</p>
+        <div class="check-row" style="margin-top:8px"><input type="checkbox" id="schedAllPaid" ${review.allPaid ? "checked" : ""}>
+          <label for="schedAllPaid">Already paid for all of these dates</label></div>
         ${preview.passed_not_booked ? `<p class="meta" style="margin:4px 0 0">Starting from today:
           ${preview.passed_not_booked} earlier date${preview.passed_not_booked === 1 ? " was" : "s were"} already past and
           ${preview.passed_not_booked === 1 ? "is" : "are"} not booked.</p>` : ""}
@@ -501,6 +503,9 @@ export function wireSchedulePreview(root, preview, review, services, onChange) {
   const rows = root.querySelector("#schedRows");
   const count = root.querySelector("#schedCount");
   const total = () => preview.observances.length - review.removed.size;
+
+  const allPaid = root.querySelector("#schedAllPaid");
+  if (allPaid) allPaid.onchange = () => { review.allPaid = allPaid.checked; };
 
   rows.querySelectorAll(".obs").forEach(row => {
     const code = row.dataset.code;

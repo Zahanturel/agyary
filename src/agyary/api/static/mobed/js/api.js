@@ -152,6 +152,9 @@ export const machiBoard = (aid, from, to, { mine = true } = {}) =>
 /** The mobed's own tick on an event: this behdin has paid, or has not. */
 export const setEventPaid = (kind, aid, id, paid) =>
   put(`/agyaries/${aid}/${kind === "machi" ? "machis" : "bookings"}/${id}/paid`, { paid });
+export const setObservancePaid = (aid, mid, oid, paid) =>
+  put(`/agyaries/${aid}/memorials/${mid}/observances/${oid}/paid`, { paid });
+export const setMemorialPaid = (aid, mid, paid) => put(`/agyaries/${aid}/memorials/${mid}/paid`, { paid });
 export const bookableGehs = (aid, on) => get(`/agyaries/${aid}/bookable-gehs?on=${on}`);
 
 export const calendarOptions = () => get("/reference/calendar-options");

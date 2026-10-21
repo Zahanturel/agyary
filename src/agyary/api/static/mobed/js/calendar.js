@@ -14,6 +14,7 @@
 import { parsiMonth as fetchParsiMonth, convertDate } from "./api.js";
 import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
 import { navigate } from "./router.js";
+import { payChipHtml, flipPaidChip } from "./paid_chip.js";
 import {
   esc, todayIst, shiftYmd, gregLabel, gregShort,
   parsiLabel, stepParsiMonth, monthYearLabel,
@@ -157,22 +158,13 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
 const KIND_CLASS = { machi: " machi", memorial: " memorial", memorial_closing: " closing" };
 const pinnedFirst = (a, b) => (b.kind === "memorial_closing") - (a.kind === "memorial_closing");
 
-/** The paid / unpaid tick on an event: a button the mobed taps to flip, plain on both
- *  sides so it reads at a glance down the day's list. Only events that can be paid
- *  for (a booking, a machi of theirs) carry one. */
-function payChipHtml(it) {
-  return `<button type="button" class="pay-chip ${it.paid ? "paid" : "unpaid"}" data-pay="${it.kind}:${it.id}"
-    aria-pressed="${it.paid ? "true" : "false"}" title="Tap to mark as ${it.paid ? "not paid" : "paid"}">
-    <span class="pay-mark" aria-hidden="true">${it.paid ? "&#10003;" : "&#8377;"}</span>${it.paid ? "Paid" : "Not paid"}</button>`;
-}
-
 function itemCardHtml(it) {
   const when = it.time ? `${it.time} · ` : it.geh ? `${GEH_NAME_BY_NUM[it.geh]} Geh · ` : "";
   return `<div class="event${KIND_CLASS[it.kind] || ""}" data-cal-item="${it.kind}:${it.id}">
     <div class="ev-row"><div class="ev-main">
       <div class="t">${esc(when)}${esc(it.label)}</div>
       <div class="s">${esc(it.sublabel || "")}</div>
-    </div>${it.paid === undefined ? "" : payChipHtml(it)}</div>
+    </div>${it.paid === undefined ? "" : payChipHtml(it.kind, it.id, it.paid)}</div>
     ${it.tags ? `<div class="meta">${it.tags}</div>` : ""}
   </div>`;
 }
@@ -313,36 +305,15 @@ function wireChrome(container, view, system, opts) {
     el.onclick = (e) => {
       // The paid chip is its own control: it flips the tick and never opens the event.
       const chip = e.target.closest(".pay-chip");
-      if (chip) { e.stopPropagation(); return flipPaid(chip, opts); }
+      if (chip) {
+        e.stopPropagation();
+        const [k, i] = chip.dataset.pay.split(":");
+        return flipPaidChip(chip, opts.onPay && ((paid) => opts.onPay(k, Number(i), paid)));
+      }
       const [kind, id] = el.dataset.calItem.split(":");
       opts.onItem && opts.onItem(kind, Number(id));
     };
   });
-}
-
-/** Flip one event's paid tick. The chip changes at once and is put back, with a
- *  message, if the server refuses - so a lost connection never leaves a false "Paid". */
-async function flipPaid(chip, opts) {
-  if (!opts.onPay || chip.disabled) return;
-  const [kind, id] = chip.dataset.pay.split(":");
-  const was = chip.getAttribute("aria-pressed") === "true";
-  const show = (paid) => {
-    chip.classList.toggle("paid", paid);
-    chip.classList.toggle("unpaid", !paid);
-    chip.setAttribute("aria-pressed", paid ? "true" : "false");
-    chip.title = `Tap to mark as ${paid ? "not paid" : "paid"}`;
-    chip.innerHTML = `<span class="pay-mark" aria-hidden="true">${paid ? "&#10003;" : "&#8377;"}</span>${paid ? "Paid" : "Not paid"}`;
-  };
-  show(!was);
-  chip.disabled = true;
-  try {
-    await opts.onPay(kind, Number(id), !was);
-  } catch (e) {
-    show(was);
-    showError("Couldn't save that: " + e.message);
-  } finally {
-    chip.disabled = false;
-  }
 }
 
 function renderMonthJumpPanel(panel, view, system, go) {

@@ -14,7 +14,7 @@
  */
 
 import {
-  getMemorial, getBehdin, updateObservance, deleteMemorial, listServices,
+  getMemorial, getBehdin, updateObservance, deleteMemorial, listServices, setObservancePaid, setMemorialPaid,
 } from "../api.js";
 import { state } from "../state.js";
 import {
@@ -24,6 +24,7 @@ import { esc, gregLabel, todayIst } from "../util.js";
 import { back, navGuard } from "../router.js";
 import { shareCardHtml, wireShareCard } from "../memorial_share.js";
 import { serviceToggleHtml, wireServiceToggles, selectedServiceIds } from "../service_toggle.js";
+import { payChipHtml, flipPaidChip } from "../paid_chip.js";
 
 // The services a memorial is made of. If a fire temple has renamed or removed
 // all of them, fall back to everything it offers rather than showing nothing.
@@ -119,6 +120,10 @@ export async function renderMemorial({ id, oid }) {
       <p class="meta" style="margin:4px 0 0">${esc(choicesText(m))} · ${esc(m.calendar[0].toUpperCase() + m.calendar.slice(1))} calendar</p>
       <p style="margin:12px 0 0;font-size:var(--text-sm)"><b>${esc(statusText(m))}</b></p>
       <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>
+      <div class="row tight" style="margin-top:12px;align-items:center;justify-content:space-between">
+        <span class="meta" id="paidCount"></span>
+        <button class="ghost small" id="paidAll" type="button"></button>
+      </div>
     </div>
 
     <div class="card">
@@ -148,6 +153,7 @@ export async function renderMemorial({ id, oid }) {
         <div class="obs-title"><b>${esc(o.label)}</b>
           <span>${esc(svc)}${o.time ? ` · ${esc(o.time)}` : ""}${o.notes ? " · note" : ""}</span></div>
         <div class="obs-when">${esc(gregLabel(o.date))}<br>${esc(parsiText(o))}</div>
+        ${payChipHtml("memorial", o.id, !!o.paid)}
       </div>
       ${o.id === openId ? editorHtml(o) : ""}
     </div>`;
@@ -168,8 +174,41 @@ export async function renderMemorial({ id, oid }) {
       </div></div>`;
   }
 
+  // "3 of 36 dates paid", and one button that ticks (or clears) every date.
+  function paintPaid() {
+    const n = m.observances.filter(o => o.paid).length;
+    document.getElementById("paidCount").textContent = `${n} of ${m.observances.length} dates paid`;
+    document.getElementById("paidAll").textContent = n === m.observances.length ? "Mark all not paid" : "Mark all paid";
+  }
+  document.getElementById("paidAll").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    const want = m.observances.some(o => !o.paid);   // anything unpaid: tick the lot
+    btn.disabled = true;
+    try {
+      await setMemorialPaid(aid, mid, want);
+      m.observances.forEach(o => { o.paid = want; });
+      paint();
+    } catch (e) {
+      showError("Couldn't save that: " + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
   function paint() {
+    paintPaid();
     listEl.innerHTML = m.observances.map(rowHtml).join("");
+    listEl.querySelectorAll(".pay-chip").forEach(chip => {
+      chip.onclick = (e) => {
+        e.stopPropagation();   // the chip does not open the date's editor
+        const oid = Number(chip.dataset.pay.split(":")[1]);
+        flipPaidChip(chip, (paid) => setObservancePaid(aid, mid, oid, paid), (paid) => {
+          const o = m.observances.find(x => x.id === oid);
+          if (o) o.paid = paid;
+          paintPaid();
+        });
+      };
+    });
     listEl.querySelectorAll("[data-obs-toggle]").forEach(el => {
       el.onclick = () => {
         const n = Number(el.dataset.obsToggle);

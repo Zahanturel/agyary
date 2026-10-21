@@ -142,6 +142,9 @@ class MemorialObservance(Base):
     # When the mobed marked that they told the family themselves. The planner
     # then sends nothing for it, so the family is not told twice.
     reminded_by_hand_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the mobed ticked this date as paid (NULL = not paid). Their own note, like
+    # the one on a booking: nothing is collected or calculated.
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Time of day in IST, or NULL - the norm.
     time_of_day: Mapped[dt_time | None] = mapped_column(Time)

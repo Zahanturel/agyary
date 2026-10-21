@@ -8,7 +8,7 @@
  * their events, added the same way any event is.
  */
 
-import { myDay, machiBoard, memorialFeed, memorialReminders, setEventPaid } from "../api.js";
+import { myDay, machiBoard, memorialFeed, memorialReminders, setEventPaid, setObservancePaid } from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
@@ -85,6 +85,7 @@ function memorialItems(rows) {
       label: `${r.label} · ${r.departed_name}`,
       short: r.label,
       sublabel: `${r.services.map(s => s.name).join(", ")} · ${r.behdin_name || "-"}`,
+      paid: !!r.paid,
     };
   });
 }
@@ -150,7 +151,9 @@ async function draw() {
       rerender: draw,
       viewHash: calendarHash,
       // The paid / unpaid tick on a day's events.
-      onPay: (kind, id, paid) => setEventPaid(kind, state.currentAgyaryId, id, paid),
+      onPay: (kind, id, paid) => kind === "memorial"
+        ? setObservancePaid(state.currentAgyaryId, memorialOfObservance.get(id), id, paid)
+        : setEventPaid(kind, state.currentAgyaryId, id, paid),
       onItem: (kind, id) => {
         const aid = state.currentAgyaryId;
         if (kind === "memorial_closing") return navigate(`#/memorial/${id}`);

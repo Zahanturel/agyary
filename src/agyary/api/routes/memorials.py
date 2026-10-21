@@ -83,6 +83,8 @@ class CreateMemorialIn(MemorialIn):
     # Prayers changed for single dates on the review screen: date code -> the
     # service ids that date should have (instead of the chosen set).
     service_overrides: dict[str, list[int]] = {}
+    # The family has already paid for every date.
+    all_paid: bool = False
 
 
 def _choice(p: MemorialIn) -> memorials.Choice:
@@ -193,6 +195,7 @@ async def create_memorial(
             db, agyary, user.id, customer, _choice(payload), payload.service_ids,
             tuple(payload.exclude_codes),
             payload.service_overrides,
+            payload.all_paid,
         )
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc
@@ -224,6 +227,45 @@ async def get_memorial(
 ) -> dict:
     memorial = await _own_memorial(db, agyary_id, memorial_id, user)
     return (await memorials.summaries(db, agyary_id, [memorial], detailed=True))[0]
+
+
+class PaidIn(BaseModel):
+    paid: bool
+
+
+@router.put("/agyaries/{agyary_id}/memorials/{memorial_id}/paid")
+async def set_memorial_paid(
+    agyary_id: int,
+    memorial_id: int,
+    payload: PaidIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Tick every date of this memorial as paid (or not paid) in one go - for a family
+    that pays for the whole schedule together."""
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    await memorials.set_paid(db, memorial, payload.paid)
+    await db.commit()
+    fresh = await memorials.get_for_user(db, user.id, memorial_id)
+    return {"paid": payload.paid, "paid_count": sum(1 for o in fresh.observances if o.paid_at is not None)}
+
+
+@router.put("/agyaries/{agyary_id}/memorials/{memorial_id}/observances/{observance_id}/paid")
+async def set_observance_paid(
+    agyary_id: int,
+    memorial_id: int,
+    observance_id: int,
+    payload: PaidIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    if not any(o.id == observance_id for o in memorial.observances):
+        raise HTTPException(status_code=404, detail="That prayer day could not be found.")
+    await memorials.set_paid(db, memorial, payload.paid, observance_id)
+    await db.commit()
+    fresh = await memorials.get_for_user(db, user.id, memorial_id)
+    return {"paid": payload.paid, "paid_count": sum(1 for o in fresh.observances if o.paid_at is not None)}
 
 
 class UpdateObservanceIn(BaseModel):
