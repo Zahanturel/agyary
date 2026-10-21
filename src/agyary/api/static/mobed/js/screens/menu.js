@@ -11,7 +11,7 @@
  * talking to actual panthakies.
  */
 
-import { updateMyName, getPreferences, putPreferences, logout, signOutOtherDevices, deleteMyAccount } from "../api.js";
+import { updateMyName, getPreferences, putPreferences, putDailyReport, logout, signOutOtherDevices, deleteMyAccount } from "../api.js";
 import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
@@ -78,6 +78,18 @@ export async function renderMenu() {
       <div style="margin-top:14px"><button class="small" id="mSavePrefs">Save calendar</button></div>
     </div>
 
+    <div class="card">
+      <h2>Daily report</h2>
+      <p class="meta">Every evening at about 8 pm, a list of what is on your day tomorrow - your services,
+        machis and memorial prayers, with the behdins' names - so you can prepare the day before.
+        It appears in the app${state.user.daily_report_whatsapp ? ` and is sent to your WhatsApp (${esc(state.user.phone)})` : ""}.
+        Nothing is sent when tomorrow is empty.</p>
+      <div class="check-row">
+        <input type="checkbox" id="mDaily" ${state.user.daily_report ? "checked" : ""}>
+        <label for="mDaily">Send me tomorrow's list every evening</label>
+      </div>
+    </div>
+
     ${hasTabs ? `<div class="card">
       <div class="section-bar" id="mRemindersBar">
         <div class="sb-text"><b>Reminders</b>
@@ -127,6 +139,22 @@ export async function renderMenu() {
       refreshHeader();
       showInfo("Saved.");
     } catch (e) { showError(e.message); }
+  };
+
+  // One switch, saved as it is flipped; put back if the save fails.
+  document.getElementById("mDaily").onchange = async (e) => {
+    const box = e.target;
+    box.disabled = true;
+    try {
+      const r = await putDailyReport(box.checked);
+      state.user.daily_report = r.daily_report;
+      showInfo(r.daily_report ? "Daily report on. You will get tomorrow's list each evening." : "Daily report off.");
+    } catch (err) {
+      box.checked = !box.checked;
+      showError(err.message);
+    } finally {
+      box.disabled = false;
+    }
   };
 
   document.getElementById("mSavePrefs").onclick = async () => {

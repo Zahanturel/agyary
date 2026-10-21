@@ -36,6 +36,9 @@ class User(Base):
     # this switch off, set for new accounts by REMINDERS_AUTOMATIC_DEFAULT.
     # Sending by hand (the wa.me button) never depends on it.
     automatic_reminders: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # The mobed's own switch for the daily report: the evening before, what is on
+    # their day tomorrow (services/daily_report.py). Off until they turn it on.
+    daily_report: Mapped[bool] = mapped_column(Boolean, server_default="false")
     # Refresh tokens from before sessions existed (they carry no session) that
     # were issued before this moment are refused - set by "sign out everywhere".
     tokens_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

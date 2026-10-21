@@ -129,6 +129,8 @@ export const adminSignOutEverywhere = (phone) => post("/admin/sign-out-everywher
 export const getMe = () => get("/auth/me");
 export const updateMyName = (name) => patch("/auth/me", { name });
 
+/** The evening-before report on or off, for this mobed. */
+export const putDailyReport = (enabled) => put("/me/daily-report", { enabled });
 export const getPreferences = () => get("/me/preferences");
 export const putPreferences = (prefs) => put("/me/preferences", prefs);
 

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # A memorial's schedule sent as a PDF from the shared number. off until the
     # template (a document header and three text variables) is approved by Meta;
     # then live, which still needs the family's consent and the allowlist.
+    # The daily report to a mobed (services/daily_report.py): in the app whenever they
+    # have asked for it, and on WhatsApp too when the mode is live - which waits for
+    # the template below to be approved. It goes out from daily_report_hour (IST) and
+    # not after the cutoff, so a mobed who turns it on late is not woken for it.
+    whatsapp_daily_report_template: str = "daily_report"
+    daily_report_send_mode: str = "off"
+    daily_report_hour: int = 20
+    daily_report_cutoff_hour: int = 22
     whatsapp_share_template: str = "memorial_schedule"
     memorial_share_send_mode: str = "off"
     memorial_share_daily_cap: int = 20

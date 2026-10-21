@@ -362,6 +362,10 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
     return {
         "id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries,
         "automatic_reminders": user.automatic_reminders,
+        # The mobed's own switch for the evening-before report, and whether it also goes
+        # to WhatsApp yet (otherwise it is in the app only) - so Settings can say so.
+        "daily_report": user.daily_report,
+        "daily_report_whatsapp": get_settings().daily_report_send_mode == "live",
         # Only to show the admin screen's menu entry; the server checks again on every call.
         "is_admin": guardrails.is_admin(get_settings(), user.phone),
     }
@@ -475,6 +479,22 @@ def _preferences_response(prefs: UserPreferences | None) -> dict:
         "default_secondary_system": prefs.default_secondary_system,
         "display_language": prefs.display_language,
     }
+
+
+class DailyReportIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/me/daily-report")
+async def put_daily_report(
+    payload: DailyReportIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Turn the evening-before report on or off for this mobed."""
+    user.daily_report = payload.enabled
+    await db.commit()
+    return {"daily_report": user.daily_report, "daily_report_whatsapp": get_settings().daily_report_send_mode == "live"}
 
 
 @router.get("/me/preferences")
