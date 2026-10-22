@@ -66,3 +66,12 @@ def test_every_service_keeps_its_logs_bounded():
     services = re.findall(r"(?m)^  (\w+):\n", compose.split("\nvolumes:")[0])
     assert {"db", "app", "cloudflared"} <= set(services)
     assert compose.count("max-size:") >= 3 and compose.count("max-file:") >= 3
+
+
+async def test_a_monitor_that_can_only_send_head_gets_the_same_answer(client, db, monkeypatch):
+    """UptimeRobot's free tier sends HEAD only; a 405 would read as the site being down."""
+    monkeypatch.setattr(reminder_worker, "last_pass_at", datetime.now(timezone.utc))
+    assert (await client.head("/health?deep=1")).status_code == 200
+    assert (await client.head("/health")).status_code == 200
+    monkeypatch.setattr(reminder_worker, "last_pass_at", None)
+    assert (await client.head("/health?deep=1")).status_code == 503      # and it still says "down" when it is

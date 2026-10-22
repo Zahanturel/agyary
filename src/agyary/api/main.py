@@ -322,7 +322,8 @@ def delete_account_page() -> FileResponse:
 WORKER_STALE = timedelta(minutes=3)
 
 
-@app.get("/health")
+# HEAD too: the free tier of UptimeRobot can only send HEAD, and a 405 there would read as "down".
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health(deep: bool = False, db: AsyncSession = Depends(get_db)) -> Response:
     """Plain: the web server answers (the container's own check). With
     ?deep=1, for an uptime monitor outside: the database answers and the
