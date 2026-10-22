@@ -21,8 +21,9 @@ bookings on the calendar, tagged with the memorial.
   yearly (day 361, 721, ...).
 - Choices offered: opening = "days 1 to 10" or "10th only" (days 1-4 are not
   a separate option); then any of the named days; monthly; yearly; Parabs.
-- Parab = the day whose Roj is named like the Mah. Mah 10 is Dae-Pa-Adar
-  (renamed from "Dae" across the app) and so is Roj 8, so that is its Parab.
+- Parab = the day whose Roj is named like the Mah. Mah 10 is Dae-Dadar
+  (22 Oct 2026; earlier Dae-Pa-Adar) and the Roj that shares the name is Roj 1
+  (Hormazd), so that is its Parab.
   Offered as "all Parabs" or "Fravardin and
   Tir only" (some families book only those two). Each Parab comes round once
   a year, so it is a repeating series like the yearly one.

@@ -91,11 +91,14 @@ DAY_COUNT_CHOICES = tuple(NAMED_DAYS)  # what the picker offers, in order
 # Tir are the two special ones, which some families book on their own.
 # Keyed by Mah number -> Roj number.
 #
-# Mah 10 is Dae-Pa-Adar, and so is Roj 8, so every Mah has its Parab by name.
+# Mah 10 is Dae-Dadar. Roj 1 (Hormazd) is the Roj that is also called Dae-Dadar, so it
+# is that month's Parab; the other Dae days (Roj 8 Dae-Pa-Adar, 15 Dae-Pa-Meher, 23
+# Dae-Pa-Din) are not Parabs. Every other Mah has its Parab by name.
+DAE_DADAR_ROJ = 1
 PARAB_ROJ_FOR_MAH: dict[int, int] = {
-    mah: ROJ_NAMES.index(name) + 1
+    mah: (DAE_DADAR_ROJ if name == "Dae-Dadar" else ROJ_NAMES.index(name) + 1)
     for mah, name in enumerate(MAH_NAMES, start=1)
-    if name in ROJ_NAMES
+    if name in ROJ_NAMES or name == "Dae-Dadar"
 }
 PARAB_ALL = "all"
 PARAB_FRAVARDIN_TIR = "fravardin_tir"

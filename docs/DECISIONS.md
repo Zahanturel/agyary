@@ -79,11 +79,13 @@ evening before, unless that mobed's account switch is off.
 
 ## D5. Calendar facts (settled with a mobed; do not reopen)
 
-- **Month 10 is named "Dae-Pa-Adar"** in this app (not "Dae"). Roj 8 is also named
-  "Dae-Pa-Adar". The spelling is as in `calendar/engine.py`; keep it.
-- **There is exactly one Parab per month.** For month 10 it is Roj 8, "Dae-Pa-Adar". The
-  other three Creator days of that month are not Parabs for this app. The code already does
-  this. The review's finding DM-1 disagreed with sources; the owner's rule wins. Mark DM-1
+- **Month 10 is named "Dae-Dadar"** in this app (changed 22 Oct 2026 by the owner; it was
+  "Dae-Pa-Adar"). Roj 8 is still named "Dae-Pa-Adar" (and 15 "Dae-Pa-Meher", 23
+  "Dae-Pa-Din"). The spelling is as in `calendar/engine.py`; keep it.
+- **There is exactly one Parab per month.** For month 10 it is Roj 1 (Hormazd), the Roj that
+  shares the name Dae-Dadar (changed 22 Oct 2026; it was Roj 8). The other Dae days of that
+  month are not Parabs for this app. Memorials saved before the change keep the dates they
+  already have. The review's finding DM-1 disagreed with sources; the owner's rule wins. Mark DM-1
   closed (owner decision, no change), and do not raise it again.
 - **A death before sunrise belongs to the previous Parsi day.** The way the app handles this
   is to give the mobed the choice to state the death by **Roj and Mah (and year)** as well as

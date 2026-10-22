@@ -239,17 +239,22 @@ def test_parab_rojs_are_the_roj_named_like_the_mah():
 
     assert sorted(PARAB_ROJ_FOR_MAH) == list(range(1, 13))
     for mah, roj in PARAB_ROJ_FOR_MAH.items():
+        if mah == 10:   # Dae-Dadar: Roj Hormazd is the Roj that is also called Dae-Dadar
+            assert roj == 1
+            continue
         assert ROJ_NAMES[roj - 1] == MAH_NAMES[mah - 1]
     assert PARAB_ROJ_FOR_MAH[1] == 19 and PARAB_ROJ_FOR_MAH[4] == 13
 
 
-def test_dae_parab_is_dae_pa_adar():
+def test_dae_parab_is_dae_dadar_on_roj_hormazd():
     from agyary.calendar import MAH_NAMES, ROJ_NAMES
     from agyary.calendar.memorial import PARAB_ROJ_FOR_MAH
 
-    # Mah 10 and Roj 8 are both Dae-Pa-Adar, so the name rule covers it.
-    assert MAH_NAMES[9] == "Dae-Pa-Adar" and ROJ_NAMES[7] == "Dae-Pa-Adar"
-    assert PARAB_ROJ_FOR_MAH[10] == 8
+    # Month 10 is Dae-Dadar; the Roj that shares that name is Roj 1 (Hormazd). The other
+    # Dae days (Roj 8 Dae-Pa-Adar, 15 Dae-Pa-Meher, 23 Dae-Pa-Din) are not Parabs.
+    assert MAH_NAMES[9] == "Dae-Dadar" and ROJ_NAMES[7] == "Dae-Pa-Adar"
+    assert PARAB_ROJ_FOR_MAH[10] == 1
+    assert len(PARAB_ROJ_FOR_MAH) == 12
 
 
 def test_fravardin_and_tir_parabs_only():
@@ -281,7 +286,7 @@ def test_each_parab_comes_round_once_a_year_for_the_years_asked():
         assert all(o.gregorian_date > death for o in parabs)
         for mah in range(1, 13):
             assert sum(o.mah == mah for o in parabs) == years
-    assert any(o.label == "Dae-Pa-Adar Parab" and o.roj == 8 for o in parabs)
+    assert any(o.label == "Dae-Dadar Parab" and o.roj == 1 and o.mah == 10 for o in parabs)
 
 
 def test_a_parab_on_the_death_day_is_not_an_observance_but_next_years_is():

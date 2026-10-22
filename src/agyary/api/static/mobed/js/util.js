@@ -55,7 +55,7 @@ export function gregShort(ymd) {
 }
 
 export const MAH_NAMES_JS = ["Fravardin", "Ardibehesht", "Khordad", "Tir", "Amardad", "Shahrevar",
-  "Meher", "Avan", "Adar", "Dae-Pa-Adar", "Bahman", "Aspandard"];
+  "Meher", "Avan", "Adar", "Dae-Dadar", "Bahman", "Aspandard"];
 
 /** Mah 1..12, then Gatha (13), then Mah 1 of the next year. */
 export function stepParsiMonth(mah, year, delta) {

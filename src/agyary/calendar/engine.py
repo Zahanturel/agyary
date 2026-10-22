@@ -41,7 +41,7 @@ ROJ_NAMES: tuple[str, ...] = (
 
 MAH_NAMES: tuple[str, ...] = (
     "Fravardin", "Ardibehesht", "Khordad", "Tir", "Amardad", "Shahrevar",
-    "Meher", "Avan", "Adar", "Dae-Pa-Adar", "Bahman", "Aspandard",
+    "Meher", "Avan", "Adar", "Dae-Dadar", "Bahman", "Aspandard",
 )
 
 GATHA_NAMES: tuple[str, ...] = (

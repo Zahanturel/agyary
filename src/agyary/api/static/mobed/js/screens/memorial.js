@@ -28,7 +28,7 @@ import { payChipHtml, flipPaidChip } from "../paid_chip.js";
 
 // The services a memorial is made of. If a fire temple has renamed or removed
 // all of them, fall back to everything it offers rather than showing nothing.
-const PRAYER_NAMES = ["afringan", "farokshi", "baaj", "satum", "jashan"];
+const PRAYER_NAMES = ["afringan", "farokshi", "baaj", "satum", "jashan", "jore nu"];
 
 /** The services offered for a memorial at this fire temple, in catalog order. */
 export async function prayerServices(aid) {

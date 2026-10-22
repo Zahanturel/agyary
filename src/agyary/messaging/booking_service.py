@@ -138,6 +138,7 @@ DEFAULT_SERVICE_SPECS = [
     ("Farokshi", 1, True),
     ("Baaj", 1, True),
     ("Satum", 1, False),
+    ("Jore nu", 1, False),
     ("Navjote", 1, True),
     ("Wedding", 1, True),
     ("Vandidad", 1, False),

@@ -93,7 +93,7 @@ export function buildMemorialBody(draft) {
     monthly: null, yearly: null, fravardin_roj: null, parabs: null, birthday: null,
     service_ids: draft.services,
   };
-  if (!draft.services.length) bad("#mmServices", "Choose at least one prayer: Afringan, Farokshi, Baaj or Satum.");
+  if (!draft.services.length) bad("#mmServices", "Choose at least one prayer.");
   if (!draft.days.length && !draft.fiveToNine && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
     bad("#mmSchedule", "Choose at least one day, or something that repeats.");
   }

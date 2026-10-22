@@ -261,7 +261,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
 async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: list[int]) -> list[Service]:
     wanted = list(dict.fromkeys(service_ids))  # order kept, duplicates gone
     if not wanted:
-        raise MemorialError("Choose at least one prayer: Afringan, Farokshi, Baaj, Satum or Jashan.")
+        raise MemorialError("Choose at least one prayer.")
     found = []
     for sid in wanted:
         service = await booking_service.get_service_by_id(db, agyary_id, sid)

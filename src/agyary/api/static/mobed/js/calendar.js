@@ -321,7 +321,7 @@ function renderMonthJumpPanel(panel, view, system, go) {
     ...Array.from({ length: 12 }, (_, i) =>
       `<option value="${i + 1}" ${view.parsiMonth.mah === i + 1 ? "selected" : ""}>${
         ["Fravardin", "Ardibehesht", "Khordad", "Tir", "Amardad", "Shahrevar",
-          "Meher", "Avan", "Adar", "Dae-Pa-Adar", "Bahman", "Aspandard"][i]}</option>`),
+          "Meher", "Avan", "Adar", "Dae-Dadar", "Bahman", "Aspandard"][i]}</option>`),
     `<option value="13" ${view.parsiMonth.mah === 13 ? "selected" : ""}>Gatha days</option>`,
   ].join("");
   panel.innerHTML = `<div class="card">
