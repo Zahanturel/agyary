@@ -3,6 +3,7 @@ from datetime import time as dt_time
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -52,6 +53,10 @@ class Memorial(Base):
     death_roj: Mapped[int] = mapped_column(SmallInteger)
     death_mah: Mapped[int] = mapped_column(SmallInteger)
     death_year: Mapped[int] = mapped_column(Integer)
+    # Passed away more than a year ago, given by Roj and Mah alone: then the
+    # date and year above are stand-ins that only place the monthly and yearly
+    # days, and are never shown (see services/memorials.serialize_memorial).
+    died_over_a_year_ago: Mapped[bool] = mapped_column(Boolean, server_default="false")
     calendar_system: Mapped[str] = mapped_column(String(10))
 
     # The choices. A series that was not chosen is NULL; one that was chosen

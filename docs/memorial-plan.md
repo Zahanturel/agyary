@@ -49,6 +49,24 @@ bookings on the calendar, tagged with the memorial.
   a Fasli year without that Gatha (the sixth exists only in leap cycles) the
   last Gatha of that year is used. The Deci is always the actual day before.
 
+**Died more than a year ago** (29 Oct 2026; most of a mobed's behdins are old people whose
+monthly and yearly prayers have run for years)
+- The form first asks "Did they pass away more than a year ago?". If yes, only the Roj and Mah of
+  the death are given: no date and no Parsi year (the optional year field is gone from the form).
+- The opening days and the named days (5th to 9th, Dasmi, the Decis, Masiso, Bamsi, Chamsi, Varsi)
+  are over, so they are listed but lighter, marked "already passed", and cannot be ticked. What
+  repeats stays: monthly, yearly, Roj Fravardin, Parabs, the birthday. Everything runs from today.
+- The same greying applies to a recent death, day by day, as each named day goes by: the server says
+  which have passed (`POST .../memorials/day-status`, `named_days_passed`).
+- The death date stored for such a memorial is a stand-in (the latest such Roj and Mah at least 361
+  days back, `memorials.died_over_a_year_ago` = true). It is never shown: the memorial page, the
+  review, the WhatsApp message and the PDF say "passed away more than a year ago" / "Remembered on
+  Roj X, Mah Y". The monthly and yearly days are labelled plainly "Monthly" / "Yearly", never
+  "Month 14", because that count would be made up.
+- Series can run for decades: up to 1200 months, 100 years, 1200 Parabs, 2500 observances in all.
+  Quick picks (10, 25, 50, 100 years) fill the length in one tap. Memorials made earlier are left as
+  they are.
+
 **Calendar**
 - A memorial is counted in the calendar the family keeps - chosen on the form,
   defaulting to the mobed's own primary calendar, stored with the memorial. It

@@ -276,6 +276,10 @@ a.button.small { padding: var(--space-2) var(--space-3); font-size: var(--text-s
 .check-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
 .check-row input[type="checkbox"], .check-row input[type="radio"] { width: auto; min-height: auto; flex: 0 0 auto; }
 .check-row label { margin: 0; color: var(--text); font-size: var(--text-base); font-weight: 400; }
+/* An option that cannot be chosen any more (a day already gone by): still listed, plainly lighter. */
+.check-row.is-passed { opacity: .45; }
+.check-row.is-passed label { color: var(--muted); cursor: default; }
+.check-row .ptag { color: var(--muted); font-size: var(--text-sm); }
 
 @media print {
   header, .no-print, .fab { display: none !important; }

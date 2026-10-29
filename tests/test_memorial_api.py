@@ -99,8 +99,8 @@ async def test_a_series_without_a_length_is_refused(client, db, seeded):
 
 async def test_lengths_are_bounded(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
-    for bad in ({"monthly": {"count": 0}}, {"monthly": {"count": 9999}}, {"yearly": {"count": 99}},
-                {"parabs": {"which": "all", "years": 0}}, {"parabs": {"which": "all", "years": 99}}):
+    for bad in ({"monthly": {"count": 0}}, {"monthly": {"count": 9999}}, {"yearly": {"count": 101}},
+                {"parabs": {"which": "all", "years": 0}}, {"parabs": {"which": "all", "years": 101}}):
         r = await _create(client, db, aid, cid, headers, **bad)
         assert r.status_code == 400, (bad, r.text)
 

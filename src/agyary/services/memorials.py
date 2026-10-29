@@ -17,7 +17,7 @@ asks for that day.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
-from agyary.calendar.memorial import OPENING_NONE, Observance, build_schedule
+from agyary.calendar.memorial import NAMED_DAYS, OPENING_5_TO_9, OPENING_NONE, Observance, build_schedule
 from agyary.core.config import get_settings
 from agyary.messaging import booking_service
 from agyary.messaging.availability import parsi_slot_fields
@@ -48,12 +48,18 @@ IST = ZoneInfo("Asia/Kolkata")
 
 # A schedule is always finite and shown whole before saving; these keep one
 # request from writing an absurd number of rows.
-MAX_MONTHLY_MONTHS = 120
-MAX_YEARLY_YEARS = 50
-MAX_PARAB_YEARS = 25
-MAX_BIRTHDAY_YEARS = 50
-MAX_PARAB_COUNT = 300
-MAX_OBSERVANCES = 800
+# Old people's prayers can run for decades, so these allow up to 100 years:
+# 1200 monthly, 100 yearly, 1200 Parabs.
+MAX_MONTHLY_MONTHS = 1200
+MAX_YEARLY_YEARS = 100
+MAX_PARAB_YEARS = 100
+MAX_BIRTHDAY_YEARS = 100
+MAX_PARAB_COUNT = 1200
+MAX_OBSERVANCES = 2500
+
+# "More than a year ago" means the stand-in death is at least this many days back,
+# so every opening and named day (the last is the 360th) is already behind it.
+OLD_DEATH_DAYS = 361
 
 
 class MemorialError(Exception):
@@ -95,6 +101,11 @@ class Choice:
     death_roj: int | None = None
     death_mah: int | None = None
     death_year: int | None = None
+    # The person passed away more than a year ago and the family wants the
+    # monthly and yearly prayers carried on. The death is then given by Roj and
+    # Mah alone (nobody needs the year), the opening and named days have gone,
+    # and everything runs from today. See resolve_death and plan.
+    long_ago: bool = False
 
 
 def _validate_length(value: int | None, label: str, ceiling: int) -> None:
@@ -124,7 +135,14 @@ def _on_parsi_day(year: int, system: CalendarSystem, roj: int, mah: int) -> date
 
 def resolve_death(system: CalendarSystem, choice: Choice, today: date | None = None) -> date:
     """The Gregorian date of the death, from whichever way it was given (D5).
-    Roj and Mah without a year mean the most recent such day, today included."""
+    Roj and Mah without a year mean the most recent such day, today included.
+
+    For a death more than a year ago (``long_ago``) only the Roj and Mah are
+    known, and the date returned is a stand-in: the latest such day at least
+    OLD_DEATH_DAYS back. It is never shown to anyone; it only places the
+    monthly and yearly days on the right Roj and Mah."""
+    if choice.long_ago and (choice.death_date is not None or choice.death_year is not None):
+        raise MemorialError("For a death more than a year ago, give only the Roj and Mah.")
     by_date = choice.death_date is not None
     by_parsi = choice.death_roj is not None or choice.death_mah is not None or choice.death_year is not None
     if by_date == by_parsi:
@@ -140,6 +158,7 @@ def resolve_death(system: CalendarSystem, choice: Choice, today: date | None = N
         if choice.death_year is not None:
             return _on_parsi_day(choice.death_year, system, roj, mah)
         today = today or today_ist()
+        latest = today - timedelta(days=OLD_DEATH_DAYS) if choice.long_ago else today
         current = gregorian_to_parsi(today, system).year
         candidates = []
         for year in range(current - 4, current + 1):   # four back: Fasli's sixth Gatha
@@ -147,7 +166,7 @@ def resolve_death(system: CalendarSystem, choice: Choice, today: date | None = N
                 when = _on_parsi_day(year, system, roj, mah)
             except ValueError:
                 continue
-            if when <= today:
+            if when <= latest:
                 candidates.append(when)
         if not candidates:
             raise MemorialError("That day has not come round in the last few years.")
@@ -182,6 +201,30 @@ def resolve_birthday(system: CalendarSystem, choice: Choice) -> tuple[int, int] 
     if not (1 <= mah <= 12 and 1 <= roj <= 30):
         raise MemorialError("A birthday is a Roj and a Mah (not a Gatha day).")
     return roj, mah
+
+
+def named_days_passed(system: CalendarSystem, choice: Choice, today: date | None = None) -> dict[str, bool]:
+    """Which of the days a family can pick on top of the repeating ones have
+    already gone by, so the form can show them lighter and not let them be ticked.
+    Keys: "5_to_9" (passed once the 9th is behind), and each named day by number.
+    For a death more than a year ago, all of them. Today itself has not passed."""
+    today = today or today_ist()
+    keys = ["5_to_9"] + [str(n) for n in NAMED_DAYS]
+    if choice.long_ago:
+        return {k: True for k in keys}
+    death = resolve_death(system, choice, today)
+    roj, mah, year = parsi_slot_fields(gregorian_to_parsi(death, system))
+    try:
+        schedule = build_schedule(
+            death_roj=roj, death_mah=mah, death_year=year, system=system,
+            opening=OPENING_5_TO_9, day_counts=tuple(NAMED_DAYS),
+        )
+    except ValueError as exc:
+        raise MemorialError(str(exc)) from exc
+    when = {o.code: o.gregorian_date for o in schedule}
+    out = {str(n): when[f"day_{n}"] < today for n in NAMED_DAYS if f"day_{n}" in when}
+    out["5_to_9"] = when["day_9"] < today
+    return out
 
 
 def passed_before_start(system: CalendarSystem, choice: Choice) -> int:
@@ -226,6 +269,14 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
     birthday = resolve_birthday(system, choice)
     _validate_length(choice.birthday_years, "Birthdays", MAX_BIRTHDAY_YEARS)
 
+    if choice.long_ago:
+        if choice.opening != OPENING_NONE or choice.day_counts:
+            raise MemorialError(
+                "The opening days and the named days (Dasmi, Masiso, Varsi...) have passed for someone who "
+                "died more than a year ago. Choose what repeats instead.")
+        # Everything runs from today: the monthly and yearly days still to come.
+        choice = replace(choice, start_from=choice.start_from or today_ist())
+
     # A Gatha death is stored the way machis store one: Mah 13, with the
     # Gatha number in the Roj slot.
     death_date = resolve_death(system, choice)
@@ -243,6 +294,7 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
             birthday=birthday, birthday_years=choice.birthday_years or 0,
             start_from=choice.start_from,
             fravardin_roj_months=choice.fravardin_roj_months or 0,
+            plain_labels=choice.long_ago,
         )
     except ValueError as exc:
         raise MemorialError(str(exc)) from exc
@@ -322,6 +374,7 @@ async def create_memorial(
         departed_name=choice.departed_name.strip(),
         death_gregorian=death_date,
         death_roj=roj, death_mah=mah, death_year=year,
+        died_over_a_year_ago=choice.long_ago,
         calendar_system=system.value,
         opening=choice.opening,
         day_counts=sorted(set(choice.day_counts)),
@@ -447,8 +500,12 @@ def serialize_memorial(
         "id": memorial.id,
         "customer_id": memorial.customer_id,
         "departed_name": memorial.departed_name,
-        "death_date": memorial.death_gregorian.isoformat(),
-        "death": {"roj": memorial.death_roj, "mah": memorial.death_mah, "year": memorial.death_year},
+        # A death more than a year ago was given by Roj and Mah alone: the stored
+        # date and year are stand-ins and are never handed out.
+        "long_ago": memorial.died_over_a_year_ago,
+        "death_date": None if memorial.died_over_a_year_ago else memorial.death_gregorian.isoformat(),
+        "death": {"roj": memorial.death_roj, "mah": memorial.death_mah,
+                  "year": None if memorial.died_over_a_year_ago else memorial.death_year},
         "calendar": memorial.calendar_system,
         "opening": memorial.opening,
         "day_counts": memorial.day_counts,

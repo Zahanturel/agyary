@@ -115,8 +115,9 @@ export async function renderMemorial({ id, oid }) {
     <div class="card">
       ${backBar(esc(m.departed_name))}
       <p class="meta" style="margin:4px 0 0">
-        ${behdin ? `For <a href="#/behdins/${m.customer_id}">${esc(behdin.name)}</a> · ` : ""}died
-        ${esc(gregLabel(m.death_date))}</p>
+        ${behdin ? `For <a href="#/behdins/${m.customer_id}">${esc(behdin.name)}</a> · ` : ""}${m.long_ago
+          ? `passed away more than a year ago (${esc(parsiText({ ...m.death, gatha_index: m.death.mah === 13 ? m.death.roj : null }))})`
+          : `died ${esc(gregLabel(m.death_date))}`}</p>
       <p class="meta" style="margin:4px 0 0">${esc(choicesText(m))} · ${esc(m.calendar[0].toUpperCase() + m.calendar.slice(1))} calendar</p>
       <p style="margin:12px 0 0;font-size:var(--text-sm)"><b>${esc(statusText(m))}</b></p>
       <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>

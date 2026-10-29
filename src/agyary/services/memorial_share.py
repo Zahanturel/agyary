@@ -83,13 +83,22 @@ def _prayers(o: dict) -> str:
     return ", ".join(s["name"] for s in o["services"] if s["name"])
 
 
+def passed_away(m: dict) -> str:
+    """When they died, for the family: the date and Roj and Mah - or, for someone
+    who died more than a year ago and was entered by Roj and Mah alone, only the
+    Roj and Mah (there is no date to give)."""
+    if m.get("long_ago") or not m.get("death_date"):
+        return f"Remembered on {death_day(m)}"
+    return f"Passed away on {long_date(m['death_date'])} ({death_day(m)})"
+
+
 def message_text(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
     """The message to send the family: who it is for, then every date."""
     note = clean_note(note)
     lines = [
         f"Memorial prayers for {m['departed_name']}",
         f"{agyary_name} - {mobed_name}",
-        f"Passed away on {long_date(m['death_date'])} ({death_day(m)})",
+        passed_away(m),
     ]
     if note:
         lines += ["", note]
@@ -131,12 +140,12 @@ def render_pdf(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") ->
     bold = ParagraphStyle("cb", parent=cell, fontName="Helvetica-Bold")
     esc = lambda t: (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")  # noqa: E731
 
-    died = long_date(m["death_date"]) + " - " + death_day(m)
+    died = passed_away(m)
 
     story = [
         Paragraph("Memorial prayers", title),
         Paragraph(f"For the late <b>{esc(m['departed_name'])}</b>", body),
-        Paragraph(f"Passed away on {esc(died)}", sub),
+        Paragraph(esc(died), sub),
         Paragraph(f"{esc(agyary_name)} &middot; {esc(mobed_name)}", sub),
         Spacer(1, 5 * mm),
     ]

@@ -215,6 +215,9 @@ export const previewMemorial = (aid, cid, body) =>
   post(`/agyaries/${aid}/behdins/${cid}/memorials/preview`, body);
 export const previewNewMemorial = (aid, body) =>
   post(`/agyaries/${aid}/memorials/preview`, body);
+// Which of the days a family can pick have already passed for this death.
+export const memorialDayStatus = (aid, body) =>
+  post(`/agyaries/${aid}/memorials/day-status`, body);
 export const createMemorial = (aid, cid, body) =>
   post(`/agyaries/${aid}/behdins/${cid}/memorials`, body);
 export const getMemorial = (aid, mid) => get(`/agyaries/${aid}/memorials/${mid}`);

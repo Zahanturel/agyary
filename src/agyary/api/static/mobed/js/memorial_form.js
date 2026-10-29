@@ -20,7 +20,7 @@ import { esc, gregLabel, todayIst, parsiLabel, MAH_NAMES_JS } from "./util.js";
 import { parsiText } from "./screens/memorial.js";
 import { flagProblems } from "./fielderrors.js";
 import { serviceToggleHtml, wireServiceToggles } from "./service_toggle.js";
-import { convertDate } from "./api.js";
+import { convertDate, memorialDayStatus } from "./api.js";
 
 // The named days a family can add on top of the opening. The spellings are
 // provisional (the mobeds settle them) and mirror NAMED_DAYS in
@@ -31,7 +31,13 @@ const NAMED_DAYS = [
   [179, "Deci"], [180, "Chamsi"], [359, "Deci"], [360, "Varsi"],
 ];
 
-const MAX = { months: 120, years: 50, parabCount: 300, birthYears: 50 };
+// Prayers for an old person can run for decades, so these go up to 100 years
+// (the server enforces the same limits).
+const MAX = { months: 1200, years: 100, parabCount: 1200, birthYears: 100 };
+
+// The days that only exist in the first year after a death. The key is what the
+// server's day-status answers with.
+const FIRST_YEAR_BOXES = [["5_to_9", "#mmFiveToNine"], ...NAMED_DAYS.map(([n]) => [String(n), `#mmDay${n}`])];
 
 // A death on a Gatha day is given as Mah "Gatha days" (13) and the Gatha's number.
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht", "Sixth (Fasli leap years)"];
@@ -39,12 +45,15 @@ const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoi
 export function blankMemorialDraft() {
   return {
     name: "", death: "", calendar: primarySystem(), days: [],
+    // Passed away more than a year ago: only the Roj and Mah are asked, the first
+    // year's days are gone, and the monthly and yearly prayers carry on from today.
+    longAgo: false,
     // How the death is given (D5): a Gregorian date, or its Parsi day - a death
     // before sunrise belongs to the previous Parsi day, and the mobed knows which.
     // Where the schedule starts: the whole of it from the death, or only what is
     // still ahead from today (a family arriving late). Counting is from the death either way.
     startFrom: "death",
-    deathBy: "date", deathRoj: "", deathMah: "", deathYear: "",
+    deathBy: "date", deathRoj: "", deathMah: "",
     monthly: false, months: "", yearly: false, years: "",
     fravRoj: false, fravRojMonths: "",
     fiveToNine: false,   // the 5th to 9th days, before the Dasmi
@@ -64,14 +73,13 @@ export function buildMemorialBody(draft) {
   const problems = [];
   const bad = (target, message) => problems.push({ target, message });
   if (!draft.name.trim()) bad("#mmName", "Please enter the departed person's name.");
-  const byParsi = draft.deathBy === "parsi";
+  const longAgo = !!draft.longAgo;
+  // More than a year ago is always by Roj and Mah: nobody needs the year.
+  const byParsi = longAgo || draft.deathBy === "parsi";
   if (!byParsi && !draft.death) bad("#mmDeath", "Please enter the date of death.");
   if (byParsi) {
     if (!draft.deathRoj) bad("#mmDeathRoj", "Please choose the Roj of the death.");
     else if (!draft.deathMah) bad("#mmDeathMah", "Please choose the Mah of the death.");
-    if (draft.deathYear && !/^\d{3,4}$/.test(String(draft.deathYear).trim())) {
-      bad("#mmDeathYear", "The Parsi year is a number such as 1396, or leave it empty.");
-    }
   }
 
   const count = (raw, target, label, unit, max) => {
@@ -85,17 +93,21 @@ export function buildMemorialBody(draft) {
     death_date: byParsi ? null : draft.death,
     death_roj: byParsi ? Number(draft.deathRoj) : null,
     death_mah: byParsi ? Number(draft.deathMah) : null,
-    death_year: byParsi && draft.deathYear ? Number(draft.deathYear) : null,
+    death_year: null,
+    long_ago: longAgo,
     calendar: draft.calendar,
-    opening: draft.fiveToNine ? "days_5_to_9" : "none",
-    start_from: draft.startFrom === "today" ? todayIst() : null,
-    day_counts: draft.days.slice().sort((a, b) => a - b),
+    opening: !longAgo && draft.fiveToNine ? "days_5_to_9" : "none",
+    start_from: !longAgo && draft.startFrom === "today" ? todayIst() : null,
+    day_counts: longAgo ? [] : draft.days.slice().sort((a, b) => a - b),
     monthly: null, yearly: null, fravardin_roj: null, parabs: null, birthday: null,
     service_ids: draft.services,
   };
   if (!draft.services.length) bad("#mmServices", "Choose at least one prayer.");
-  if (!draft.days.length && !draft.fiveToNine && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
-    bad("#mmSchedule", "Choose at least one day, or something that repeats.");
+  const picksDay = !longAgo && (draft.days.length || draft.fiveToNine);
+  if (!picksDay && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
+    bad("#mmSchedule", longAgo
+      ? "Choose what repeats: the monthly or yearly prayers, Roj Fravardin, the Parabs or the birthday."
+      : "Choose at least one day, or something that repeats.");
   }
   if (draft.monthly) {
     const n = count(draft.months, "#mmMonths", "monthly observances", "months", MAX.months);
@@ -153,6 +165,13 @@ function birthRojOptionsHtml(draft) {
     `<option value="${i + 1}" ${String(draft.birthRoj) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("");
 }
 
+/** Quick picks for how long a series runs: tapping "25 years" fills the box
+ *  (`perYear` of whatever it counts - 12 for months, 1 for years). */
+function quickYears(inputId, perYear) {
+  return `<div class="chip-row" style="margin-top:6px">${[10, 25, 50, 100].map(y =>
+    `<button type="button" class="ghost small" data-quick="${inputId}" data-n="${y * perYear}">${y} years</button>`).join("")}</div>`;
+}
+
 /** The form: who and when, then one card holding every option. `heading` goes
  *  at the top of the first card; `intro` is a line under it. */
 export function memorialFormHtml(draft, services, { heading = "", intro = "" } = {}) {
@@ -166,18 +185,31 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
         ${intro ? `<p class="meta">${intro}</p>` : ""}
         <label for="mmName">Departed person</label>
         <input type="text" id="mmName" autocomplete="off" value="${esc(draft.name)}">
+
+        <label>Did they pass away more than a year ago?</label>
+        <div class="choice-group">
+          ${radio("mmAgo", "mmAgoNo", "no", !draft.longAgo, "No, within the last year")}
+          ${radio("mmAgo", "mmAgoYes", "yes", draft.longAgo, "Yes, more than a year ago")}
+        </div>
+        <p class="meta" id="mmAgoNote" style="margin:6px 0 0;${draft.longAgo ? "" : "display:none"}">Only the Roj and Mah
+          of the death are needed. The first year's days (the 5th to 9th, Dasmi, Masiso, Varsi and the rest) are over,
+          so what repeats - the monthly and yearly prayers - is carried on from today.</p>
+
+        <div id="mmDeathChoice" style="${draft.longAgo ? "display:none" : ""}">
         <label>Death</label>
         <div class="choice-group">
           ${radio("mmDeathBy", "mmDeathByDate", "date", draft.deathBy !== "parsi", "By the date")}
           ${radio("mmDeathBy", "mmDeathByParsi", "parsi", draft.deathBy === "parsi",
             "By Roj and Mah (for a death before sunrise, give the Parsi day it belonged to)")}
         </div>
-        <div id="mmDeathDateBox" style="${draft.deathBy === "parsi" ? "display:none" : ""}">
+        </div>
+        <div id="mmDeathDateBox" style="${draft.longAgo || draft.deathBy === "parsi" ? "display:none" : ""}">
           <label for="mmDeath">Date of death</label>
           <input type="date" id="mmDeath" max="${todayIst()}" value="${esc(draft.death)}">
           <p class="meta" id="mmParsi" style="margin:6px 0 0"></p>
         </div>
-        <div id="mmDeathParsiBox" style="${draft.deathBy === "parsi" ? "" : "display:none"}">
+        <div id="mmDeathParsiBox" style="${draft.longAgo || draft.deathBy === "parsi" ? "" : "display:none"}">
+          ${draft.longAgo ? `<label>Roj and Mah of the death</label>` : ""}
           <label for="mmDeathRoj">Roj</label>
           <select id="mmDeathRoj">${rojOptionsHtml(draft)}</select>
           <div id="mmDeathMahBox" style="${String(draft.deathMah) === "13" ? "display:none" : ""}">
@@ -185,13 +217,12 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
             <select id="mmDeathMah"><option value="">Choose</option>${MAH_NAMES_JS.map((n, i) =>
               `<option value="${i + 1}" ${String(draft.deathMah) === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
           </div>
-          <label for="mmDeathYear">Parsi year (leave empty for the most recent)</label>
-          <input type="text" id="mmDeathYear" inputmode="numeric" maxlength="4" value="${esc(draft.deathYear)}">
         </div>
         <label for="mmCalendar">Calendar</label>
         <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"], ["fasli", "Fasli"]].map(([k, v]) =>
           `<option value="${k}" ${draft.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
 
+        <div id="mmStartBox" style="${draft.longAgo ? "display:none" : ""}">
         <label>Schedule from</label>
         <div class="choice-group">
           ${radio("mmStart", "mmStartDeath", "death", draft.startFrom !== "today", "The day of death (the whole schedule)")}
@@ -203,6 +234,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <p class="meta" id="mmStartParsi" style="margin:6px 0 0"></p>
           <p class="meta" style="margin:6px 0 0">Still counted from the death. Days that have already passed are left
             out, and months, years, Parabs and birthdays run from the next date that is still to come.</p>
+        </div>
         </div>
       </div>
 
@@ -222,9 +254,9 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <label for="mmDaysAll"><b>Select all</b></label></div>
         <div class="choice-group">
           <div class="check-row"><input type="checkbox" id="mmFiveToNine" ${draft.fiveToNine ? "checked" : ""}>
-            <label for="mmFiveToNine">5th to 9th days</label></div>${NAMED_DAYS.map(([n, name]) => `
+            <label for="mmFiveToNine">5th to 9th days<span class="ptag"></span></label></div>${NAMED_DAYS.map(([n, name]) => `
           <div class="check-row"><input type="checkbox" data-day="${n}" id="mmDay${n}" ${has(n) ? "checked" : ""}>
-            <label for="mmDay${n}">${n}th day · ${name}</label></div>`).join("")}
+            <label for="mmDay${n}">${n}th day · ${name}<span class="ptag"></span></label></div>`).join("")}
         </div>
 
         <div class="names-group-label"><b>Repeating</b></div>
@@ -232,14 +264,16 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           <div class="check-row"><input type="checkbox" id="mmMonthly" ${draft.monthly ? "checked" : ""}>
             <label for="mmMonthly">Every month</label></div>
           <div class="sub-field" id="mmMonthlyBox" style="${draft.monthly ? "" : "display:none"}">
-            <label for="mmMonths">For how many months</label>
-            <input type="number" inputmode="numeric" min="1" max="${MAX.months}" id="mmMonths" value="${esc(draft.months)}"></div>
+            <label for="mmMonths">For how many months (12 to a year)</label>
+            <input type="number" inputmode="numeric" min="1" max="${MAX.months}" id="mmMonths" value="${esc(draft.months)}">
+            ${quickYears("mmMonths", 12)}</div>
 
           <div class="check-row"><input type="checkbox" id="mmYearly" ${draft.yearly ? "checked" : ""}>
             <label for="mmYearly">Every year</label></div>
           <div class="sub-field" id="mmYearlyBox" style="${draft.yearly ? "" : "display:none"}">
             <label for="mmYears">For how many years</label>
-            <input type="number" inputmode="numeric" min="1" max="${MAX.years}" id="mmYears" value="${esc(draft.years)}"></div>
+            <input type="number" inputmode="numeric" min="1" max="${MAX.years}" id="mmYears" value="${esc(draft.years)}">
+            ${quickYears("mmYears", 1)}</div>
 
           <div class="check-row"><input type="checkbox" id="mmFravRoj" ${draft.fravRoj ? "checked" : ""}>
             <label for="mmFravRoj">Roj Fravardin, every month</label></div>
@@ -293,16 +327,70 @@ export function wireMemorialForm(root, draft, onChange) {
   };
   readParsi();
 
-  $("#mmName").oninput = (e) => { draft.name = e.target.value; };
-  $("#mmDeath").onchange = (e) => { draft.death = e.target.value; readParsi(); };
-  root.querySelectorAll("[name=mmDeathBy]").forEach(r => {
+  // Which of the first year's days are already behind us. They stay listed but
+  // lighter and cannot be ticked, so the mobed sees WHY they are not on offer.
+  // For a death more than a year ago that is all of them; otherwise the server
+  // says, from the death as far as it has been given.
+  let passedToken = 0;
+  const setPassed = (passed) => {
+    let changed = false;
+    for (const [key, sel] of FIRST_YEAR_BOXES) {
+      const box = $(sel);
+      const gone = !!passed[key];
+      box.disabled = gone;
+      box.closest(".check-row").classList.toggle("is-passed", gone);
+      box.closest(".check-row").querySelector(".ptag").textContent = gone ? " - already passed" : "";
+      if (gone && box.checked) {
+        changed = true;
+        box.checked = false;
+        if (key === "5_to_9") draft.fiveToNine = false;
+        else draft.days = draft.days.filter(d => String(d) !== key);
+      }
+    }
+    syncAll();
+    if (changed && onChange) onChange(draft);   // only when a ticked day was taken back
+  };
+  const refreshPassed = async () => {
+    const mine = ++passedToken;
+    if (draft.longAgo) return setPassed(Object.fromEntries(FIRST_YEAR_BOXES.map(([k]) => [k, true])));
+    const parsi = draft.deathBy === "parsi";
+    if (parsi ? !(draft.deathRoj && draft.deathMah) : !draft.death) return setPassed({});
+    try {
+      const res = await memorialDayStatus(state.currentAgyaryId, {
+        death_date: parsi ? null : draft.death,
+        death_roj: parsi ? Number(draft.deathRoj) : null,
+        death_mah: parsi ? Number(draft.deathMah) : null,
+        calendar: draft.calendar,
+      });
+      if (mine === passedToken && root.isConnected) setPassed(res.passed || {});
+    } catch (e) { if (mine === passedToken && root.isConnected) setPassed({}); }
+  };
+
+  /** Show the death the way the draft says: by date, by Roj and Mah, or - for a
+   *  death more than a year ago - only the Roj and Mah. */
+  const showDeath = () => {
+    const parsi = draft.longAgo || draft.deathBy === "parsi";
+    $("#mmDeathChoice").style.display = draft.longAgo ? "none" : "";
+    $("#mmDeathDateBox").style.display = parsi ? "none" : "";
+    $("#mmDeathParsiBox").style.display = parsi ? "" : "none";
+    $("#mmStartBox").style.display = draft.longAgo ? "none" : "";
+    $("#mmAgoNote").style.display = draft.longAgo ? "" : "none";
+  };
+  root.querySelectorAll("[name=mmAgo]").forEach(r => {
     r.onchange = () => {
-      draft.deathBy = r.value;
-      $("#mmDeathDateBox").style.display = r.value === "parsi" ? "none" : "";
-      $("#mmDeathParsiBox").style.display = r.value === "parsi" ? "" : "none";
+      draft.longAgo = r.value === "yes";
+      if (draft.longAgo) draft.startFrom = "death";   // it runs from today on its own
+      showDeath();
+      refreshPassed();
     };
   });
-  $("#mmDeathMah").onchange = (e) => { draft.deathMah = e.target.value; };
+
+  $("#mmName").oninput = (e) => { draft.name = e.target.value; };
+  $("#mmDeath").onchange = (e) => { draft.death = e.target.value; readParsi(); refreshPassed(); };
+  root.querySelectorAll("[name=mmDeathBy]").forEach(r => {
+    r.onchange = () => { draft.deathBy = r.value; showDeath(); refreshPassed(); };
+  });
+  $("#mmDeathMah").onchange = (e) => { draft.deathMah = e.target.value; refreshPassed(); };
   $("#mmDeathRoj").onchange = (e) => {
     const v = e.target.value;
     if (v.startsWith("g")) {            // a Gatha day: it has no Mah of its own
@@ -313,8 +401,8 @@ export function wireMemorialForm(root, draft, onChange) {
       draft.deathRoj = v;
       $("#mmDeathMahBox").style.display = "";
     }
+    refreshPassed();
   };
-  $("#mmDeathYear").oninput = (e) => { draft.deathYear = e.target.value; };
   const readStart = async () => {
     const note = $("#mmStartParsi");
     const label = await parsiLabel(todayIst(), draft.calendar);
@@ -327,12 +415,15 @@ export function wireMemorialForm(root, draft, onChange) {
       $("#mmStartTodayBox").style.display = r.value === "today" ? "" : "none";
     };
   });
-  $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); readStart(); };
+  $("#mmCalendar").onchange = (e) => { draft.calendar = e.target.value; readParsi(); readStart(); refreshPassed(); };
   const dayBoxes = () => [...root.querySelectorAll("[data-day]")];
-  const syncAll = () => {
+  const open = () => [$("#mmFiveToNine"), ...dayBoxes()].filter(cb => !cb.disabled);
+  function syncAll() {
     const all = $("#mmDaysAll");
-    all.checked = draft.fiveToNine && dayBoxes().every(cb => cb.checked);
-  };
+    const boxes = open();
+    all.disabled = !boxes.length;
+    all.checked = boxes.length > 0 && boxes.every(cb => cb.checked);
+  }
   root.querySelectorAll("[data-day]").forEach(cb => {
     cb.onchange = () => {
       const n = Number(cb.dataset.day);
@@ -343,12 +434,14 @@ export function wireMemorialForm(root, draft, onChange) {
   $("#mmFiveToNine").onchange = (e) => { draft.fiveToNine = e.target.checked; syncAll(); };
   // "Select all" ticks the 5th to 9th days and every named day, or clears them.
   $("#mmDaysAll").onchange = (e) => {
-    draft.fiveToNine = e.target.checked;
-    $("#mmFiveToNine").checked = e.target.checked;
-    dayBoxes().forEach(cb => { cb.checked = e.target.checked; });
-    draft.days = e.target.checked ? dayBoxes().map(cb => Number(cb.dataset.day)) : [];
+    // Only the days still ahead: a day that has passed stays as it is.
+    const five = $("#mmFiveToNine");
+    if (!five.disabled) { five.checked = e.target.checked; draft.fiveToNine = e.target.checked; }
+    dayBoxes().filter(cb => !cb.disabled).forEach(cb => { cb.checked = e.target.checked; });
+    draft.days = dayBoxes().filter(cb => cb.checked).map(cb => Number(cb.dataset.day));
   };
   syncAll();
+  refreshPassed();
 
   // A series' length only appears once the series is ticked, and unticking it
   // forgets the length - nothing carries over by accident.
@@ -399,6 +492,15 @@ export function wireMemorialForm(root, draft, onChange) {
   $("#mmBirthDate").onchange = (e) => { draft.birthDate = e.target.value; readBirth(); };
   // The calendar decides what Roj and Mah a date is.
   $("#mmCalendar").addEventListener("change", () => { if (draft.birthDate) readBirth(); });
+
+  // "25 years" and the like fill in the length of a series in one tap.
+  root.querySelectorAll("[data-quick]").forEach(btn => {
+    btn.onclick = () => {
+      const input = $("#" + btn.dataset.quick);
+      input.value = btn.dataset.n;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+  });
 
   wireServiceToggles($("#mmServices"), (ids) => { draft.services = ids; });
 }
@@ -465,7 +567,9 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rev
   return `
       <div class="card">
         ${heading}
-        <p class="meta" style="margin:4px 0 0">${esc(body.departed_name)} · died ${esc(gregLabel(preview.death_date || body.death_date))}
+        <p class="meta" style="margin:4px 0 0">${esc(body.departed_name)} · ${preview.long_ago
+          ? "passed away more than a year ago"
+          : "died " + esc(gregLabel(preview.death_date || body.death_date))}
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
         <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>.
           Tap a date to change its prayers, or &times; to remove it.</p>

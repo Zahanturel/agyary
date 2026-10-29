@@ -322,6 +322,7 @@ def build_schedule(
     start_from: date | None = None,
     fravardin_roj_months: int = 0,
     parab_count: int = 0,
+    plain_labels: bool = False,
 ) -> list[Observance]:
     """Every observance the family chose, soonest first. Dates already past
     are included: this is a diary, and a family arriving late still wants
@@ -364,6 +365,10 @@ def build_schedule(
     the monthly (Masiso, Bamsi and Chamsi included), then a Deci, then a Parab.
 
     ``death_mah`` 13 means a Gatha day, with the Gatha number in ``death_roj``.
+
+    ``plain_labels`` is for a death given only by Roj and Mah, more than a year
+    ago: the year is a stand-in then, so "Year 3" or "Month 14" would claim a
+    count nobody knows. The monthly and yearly days are just "Monthly" and "Yearly".
     """
     if opening not in OPENINGS:
         raise ValueError(f"opening must be one of {OPENINGS}, got {opening!r}")
@@ -465,10 +470,10 @@ def build_schedule(
     y0 = first_valid("y") if start_from and yearly_years else 1
     m0 = first_valid("m") if start_from and monthly_months else 1
     for k in range(y0, y0 + yearly_years):
-        claim(("y", k), f"year_{k}", f"Year {k}")
+        claim(("y", k), f"year_{k}", "Yearly" if plain_labels else f"Year {k}")
         series_keys.add(("y", k))
     for k in range(m0, m0 + monthly_months):
-        claim(canon("m", k), f"month_{k}", f"Month {k}")
+        claim(canon("m", k), f"month_{k}", "Monthly" if plain_labels else f"Month {k}")
         series_keys.add(canon("m", k))
 
     ranked = []

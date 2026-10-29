@@ -73,6 +73,19 @@ class MemorialIn(BaseModel):
     start_from: date | None = None
     # The calendar the family keeps. Left out, it is the mobed's primary.
     calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
+    # Passed away more than a year ago: give only Roj and Mah, and the prayers
+    # that repeat are carried on from today (no opening or named days).
+    long_ago: bool = False
+
+
+class DayStatusIn(BaseModel):
+    """Just enough of a death to say which of the pickable days have passed."""
+
+    death_date: date | None = None
+    death_roj: int | None = None
+    death_mah: int | None = None
+    calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
+    long_ago: bool = False
 
 
 class CreateMemorialIn(MemorialIn):
@@ -103,6 +116,7 @@ def _choice(p: MemorialIn) -> memorials.Choice:
         parab_years=p.parabs.years if p.parabs else None,
         parab_count=p.parabs.count if p.parabs else None,
         calendar=p.calendar,
+        long_ago=p.long_ago,
         start_from=p.start_from,
         birthday_date=p.birthday.birth_date if p.birthday else None,
         birthday_roj=p.birthday.roj if p.birthday else None,
@@ -134,8 +148,10 @@ async def _preview(db: AsyncSession, user: User, payload: MemorialIn) -> dict:
         raise _bad_request(exc) from exc
     return {
         "calendar": system.value,
-        "death": {"roj": roj, "mah": mah, "year": year},
-        "death_date": death_date.isoformat(),
+        "long_ago": choice.long_ago,
+        # A death given by Roj and Mah alone has no date or year to show.
+        "death": {"roj": roj, "mah": mah, "year": None if choice.long_ago else year},
+        "death_date": None if choice.long_ago else death_date.isoformat(),
         "count": len(schedule),
         "start_from": choice.start_from.isoformat() if choice.start_from else None,
         "passed_not_booked": memorials.passed_before_start(system, choice),
@@ -150,6 +166,28 @@ async def _preview(db: AsyncSession, user: User, payload: MemorialIn) -> dict:
             for o in schedule
         ],
     }
+
+
+@router.post("/agyaries/{agyary_id}/memorials/day-status")
+async def memorial_day_status(
+    agyary_id: int,
+    payload: DayStatusIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Which of the days a family can pick (5th to 9th, Dasmi, the Decis, Masiso
+    ... Varsi) have already passed for this death, so the form can show them
+    lighter and keep them from being ticked. Saves nothing."""
+    await _require_membership(db, agyary_id, user)
+    try:
+        choice = memorials.Choice(
+            departed_name="-", death_date=payload.death_date, death_roj=payload.death_roj,
+            death_mah=payload.death_mah, calendar=payload.calendar, long_ago=payload.long_ago,
+        )
+        system = await memorials.calendar_for(db, user.id, choice)
+        return {"passed": memorials.named_days_passed(system, choice)}
+    except memorials.MemorialError as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.post("/agyaries/{agyary_id}/memorials/preview")
