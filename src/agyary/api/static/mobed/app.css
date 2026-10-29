@@ -196,7 +196,7 @@ button:disabled { opacity: .5; cursor: default; }
 .geh-block .detail-row .detail { min-width: 0; overflow-wrap: break-word; }
 
 .geh-slots { display: flex; flex-direction: column; gap: var(--space-3); }
-@media (min-width: 900px) { .geh-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 768px) { .geh-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .geh-slot { border: 2px solid var(--border); border-radius: var(--radius-md); background: #fff;
   padding: var(--space-3) var(--space-4); min-height: 76px; }
 .geh-slot-head { font-weight: 700; font-size: var(--text-sm); color: var(--muted);
@@ -358,7 +358,7 @@ body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
 
 /* iPad and laptop: the three places move to a strip down the left side, as
    big as on the phone, and the page uses the width it has. */
-@media (min-width: 900px) {
+@media (min-width: 768px) {
   body.has-tabs { padding-left: 150px; }
   .tabs { top: 0; bottom: 0; right: auto; width: 150px; flex-direction: column; justify-content: flex-start;
     gap: var(--space-2); padding: var(--space-6) var(--space-3); background: var(--primary); border-top: none; }
