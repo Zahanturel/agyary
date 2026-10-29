@@ -297,7 +297,7 @@ a.button.small { padding: var(--space-2) var(--space-3); font-size: var(--text-s
 .list-row .lr-main span { font-size: var(--text-xs); color: var(--muted); }
 
 .check-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; min-height: var(--tap); }
-.check-row input[type="checkbox"], .check-row input[type="radio"] { width: auto; min-height: auto; flex: 0 0 auto; }
+.check-row input[type="checkbox"], .check-row input[type="radio"] { width: 28px; height: 28px; min-height: 0; flex: 0 0 auto; }
 .check-row label { margin: 0; color: var(--text); font-size: var(--text-base); font-weight: 400; }
 /* An option that cannot be chosen any more (a day already gone by): still listed, plainly lighter. */
 .check-row.is-passed { opacity: .45; }
@@ -369,6 +369,24 @@ body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
   body.has-tabs .fab { bottom: var(--space-6); }
 }
 @media print { .tabs { display: none !important; } }
+
+/* --- One question at a time (new machi, new memorial) ---------------------- */
+.step-count { font-size: var(--text-sm); font-weight: 700; color: var(--muted); }
+.step-bar { display: flex; gap: 6px; margin: var(--space-2) 0 var(--space-5); }
+.step-bar i { flex: 1; height: 10px; border-radius: 5px; background: var(--border); }
+.step-bar i.on { background: var(--primary); }
+.step-head { padding: var(--space-2) var(--space-1) 0; }
+.step-q { font-size: 30px; line-height: 1.2; margin: 0 0 var(--space-4); font-weight: 700; }
+.choice { display: flex; align-items: center; gap: var(--space-4); min-height: 76px; padding: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-3); background: #fff; border: 2px solid var(--border); border-radius: var(--radius-md);
+  font-size: var(--text-md); font-weight: 700; color: var(--text); cursor: pointer; }
+.choice input { width: 32px; height: 32px; flex: none; margin: 0; }
+.choice:has(input:checked) { background: var(--primary-tint); border: 3px solid var(--primary); color: var(--primary); }
+.stepped .geh-grid { flex-direction: column; }
+.stepped .geh-btn { flex: none; width: 100%; min-height: 72px; font-size: var(--text-md); font-weight: 700; text-align: left;
+  padding: var(--space-3) var(--space-4); border-width: 2px; border-radius: var(--radius-md); }
+.stepped .geh-btn.selected { border-width: 3px; background: var(--primary-tint); color: var(--primary); }
+.stepped .geh-btn.taken { background: #EEEAE2; font-weight: 400; color: var(--muted); }
 
 /* --- Memorials ----------------------------------------------------------- */
 /* Memorial observances are their own category on the calendar: green, to

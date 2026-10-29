@@ -183,6 +183,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
       <div class="card">
         ${heading}
         ${intro ? `<p class="meta">${intro}</p>` : ""}
+        <div class="mstep" data-mstep="1">
         <label for="mmName">Departed person</label>
         <input type="text" id="mmName" autocomplete="off" value="${esc(draft.name)}">
 
@@ -194,6 +195,8 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
         <p class="meta" id="mmAgoNote" style="margin:6px 0 0;${draft.longAgo ? "" : "display:none"}">Only the Roj and Mah
           of the death are needed. The first year's days (the 5th to 9th, Dasmi, Masiso, Varsi and the rest) are over,
           so what repeats - the monthly and yearly prayers - is carried on from today.</p>
+        </div>
+        <div class="mstep" data-mstep="2">
 
         <div id="mmDeathChoice" style="${draft.longAgo ? "display:none" : ""}">
         <label>Death</label>
@@ -236,9 +239,10 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
             out, and months, years, Parabs and birthdays run from the next date that is still to come.</p>
         </div>
         </div>
+        </div>
       </div>
 
-      <div class="card">
+      <div class="card mstep" data-mstep="3">
         <h2>Observances</h2>
 
         <div class="names-group-label"><b>Prayers</b><span>on every day</span></div>

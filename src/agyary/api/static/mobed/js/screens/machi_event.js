@@ -41,6 +41,8 @@ function blankDraft(prefill = {}) {
     availableGehs: [],
     // null (don't repeat), "monthly" or "yearly" - see the picker below.
     recurring: null,
+    // A new machi is asked one question at a time; which one is kept here.
+    step: 1,
   };
 }
 
@@ -201,13 +203,27 @@ async function render(draft) {
 
   const chosen = draft.behdin;
 
-  mainEl.innerHTML = `
-    <div class="card">
-      <h2>${draft.edit ? "Edit machi" : "New machi"}</h2>
+  // A new machi is asked one question at a time. Editing one is a single page:
+  // everything is already there and only a detail changes.
+  const stepped = !draft.edit;
+  const total = 4;
+  const step = stepped ? Math.min(Math.max(draft.step || 1, 1), total) : 0;
+  const lbl = (text, style = "") => stepped ? "" : `<label ${style ? `style="${style}"` : ""}>${text}</label>`;
+  const sec = (n, question, body) => stepped
+    ? `<div class="step-sec${step === n ? "" : " hidden"}"><h2 class="step-q">${question}</h2>${body}</div>`
+    : `<div>${body}</div>`;
+  const choice = (name, value, text, on) => `<label class="choice${on ? " on" : ""}">
+      <input type="radio" name="${name}" value="${value}" ${on ? "checked" : ""}><span>${text}</span></label>`;
 
-      <!-- Behdin -->
-      <label>Behdin</label>
-      ${chosen ? `
+  mainEl.innerHTML = `
+    <div class="card${stepped ? " stepped" : ""}">
+      ${stepped ? `<div class="step-count">Step ${step} of ${total}</div>
+        <div class="step-bar">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? "on" : ""}"></i>`).join("")}</div>`
+        : `<h2>Edit machi</h2>`}
+
+      ${sec(1, "Who is the machi for?", `
+        ${lbl("Behdin")}
+        ${chosen ? `
         <div class="chosen">
           <div class="who"><b>${esc(chosen.name)}</b><span>${esc(chosen.phone)}</span></div>
           <button class="ghost small" id="bhChange">Change</button>
@@ -217,49 +233,51 @@ async function render(draft) {
         <div style="margin-top:8px">
           <button class="secondary small" id="bhNew">+ Add a new behdin</button>
         </div>
-        <div id="bhNewPanel"></div>`}
+        <div id="bhNewPanel"></div>`}`)}
 
-      <!-- Purpose -->
-      <label style="margin-top:16px">Purpose</label>
-      <select id="mcPurpose">
-        <option value="patet" ${draft.purpose === "patet" ? "selected" : ""}>Patet (for the departed)</option>
-        <option value="tandarosti" ${draft.purpose === "tandarosti" ? "selected" : ""}>Tandarosti (for the living)</option>
-      </select>
+      ${sec(2, "What is it for?", `
+        ${lbl("Purpose", "margin-top:16px")}
+        <div id="mcPurpose">
+          ${choice("mcPurpose", "patet", "Patet, for the departed", draft.purpose === "patet")}
+          ${choice("mcPurpose", "tandarosti", "Tandarosti, for the living", draft.purpose === "tandarosti")}
+        </div>`)}
 
-      <!-- Date + Roj/Mah -->
-      <label style="margin-top:16px">Date</label>
-      <div class="synced" id="syncBox">
-        <input type="date" id="mcDate" value="${esc(draft.gregorian)}">
-        <div class="row" style="margin-top:8px">
-          <div><label>Roj</label><select id="mcRoj">${rojOptions}</select></div>
-          <div><label>Mah</label><select id="mcMah">${mahOptions}</select></div>
+      ${sec(3, "When is it?", `
+        ${lbl("Date", "margin-top:16px")}
+        <div class="synced" id="syncBox">
+          <input type="date" id="mcDate" value="${esc(draft.gregorian)}">
+          <div class="row" style="margin-top:8px">
+            <div><label>Roj</label><select id="mcRoj">${rojOptions}</select></div>
+            <div><label>Mah</label><select id="mcMah">${mahOptions}</select></div>
+          </div>
+          <div class="sync-note" id="syncNote">${esc(draft.parsiLabel || "")}</div>
         </div>
-        <div class="sync-note" id="syncNote">${esc(draft.parsiLabel || "")}</div>
-      </div>
 
-      <!-- Geh -->
-      <label style="margin-top:16px">Geh</label>
-      <div class="geh-grid" id="gehGrid">
-        ${GEHS.map(([num, name]) => {
-          const avail = draft.availableGehs.includes(num);
-          const sel = draft.geh === num;
-          return `<button class="geh-btn${sel ? " selected" : ""}${!avail && !sel ? " taken" : ""}"
-            data-geh="${num}" ${!avail && !sel ? "disabled" : ""}>${esc(name)}</button>`;
-        }).join("")}
-      </div>
+        ${lbl("Geh", "margin-top:16px")}
+        ${stepped ? '<p class="meta" style="margin:12px 0 4px">Choose the time of day</p>' : ""}
+        <div class="geh-grid" id="gehGrid">
+          ${GEHS.map(([num, name]) => {
+            const avail = draft.availableGehs.includes(num);
+            const sel = draft.geh === num;
+            return `<button class="geh-btn${sel ? " selected" : ""}${!avail && !sel ? " taken" : ""}"
+              data-geh="${num}" ${!avail && !sel ? "disabled" : ""}>${esc(name)}${!avail && !sel ? " · taken" : ""}</button>`;
+          }).join("")}
+        </div>`)}
 
-      ${!draft.edit ? `<!-- Recurring -->
-      <label style="margin-top:16px">Repeat</label>
-      <select id="mcRecur">
-        <option value="" ${!draft.recurring ? "selected" : ""}>Don't repeat</option>
-        <option value="monthly" ${draft.recurring === "monthly" ? "selected" : ""}>Every month, same Roj</option>
-        <option value="yearly" ${draft.recurring === "yearly" ? "selected" : ""}>Every year, same Roj &amp; Mah - for a birthday or anniversary</option>
-      </select>` : ""}
+      ${!draft.edit ? sec(4, "Does it repeat?", `
+        <div id="mcRecur">
+          ${choice("mcRecur", "", "Don't repeat", !draft.recurring)}
+          ${choice("mcRecur", "monthly", "Every month, on the same Roj", draft.recurring === "monthly")}
+          ${choice("mcRecur", "yearly", "Every year, on the same Roj and Mah (a birthday or anniversary)", draft.recurring === "yearly")}
+        </div>`) : ""}
 
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
-        <button class="ghost" id="mcCancel">Cancel</button>
-        <button id="mcSave">Review</button>
+        ${stepped
+          ? `<button class="secondary" id="mcBack">${step === 1 ? "Cancel" : "Back"}</button>
+             <button id="mcNext">${step === total ? "Review" : "Next"}</button>`
+          : `<button class="ghost" id="mcCancel">Cancel</button>
+             <button id="mcSave">Review</button>`}
       </div>
     </div>`;
 
@@ -280,11 +298,14 @@ async function render(draft) {
   }
 
   // --- Purpose wiring ---
-  document.getElementById("mcPurpose").onchange = (e) => {
-    draft.purpose = e.target.value;
-    draft.names = null;   // patet and tandarosti take different names
-    keep(draft);
-  };
+  document.querySelectorAll('input[name="mcPurpose"]').forEach(r => {
+    r.onchange = () => {
+      draft.purpose = r.value;
+      draft.names = null;   // patet and tandarosti take different names
+      keep(draft);
+      render(draft);
+    };
+  });
 
   // --- Date wiring ---
   const box = document.getElementById("syncBox");
@@ -325,16 +346,30 @@ async function render(draft) {
   });
 
   // --- Recurring wiring ---
-  const recurEl = document.getElementById("mcRecur");
-  if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.value || null; keep(draft); };
+  document.querySelectorAll('input[name="mcRecur"]').forEach(r => {
+    r.onchange = () => { draft.recurring = r.value || null; keep(draft); render(draft); };
+  });
 
-  // --- Cancel / Save ---
-  document.getElementById("mcCancel").onclick = () => {
+  // --- Cancel / Back / Next / Save ---
+  const cancel = () => {
     state.draft = null;
     if (!draft.edit) clearDraft(DRAFT_KEY);
     back(draft.edit ? `#/machi/${state.currentAgyaryId}/${draft.edit.id}` : "#/board");
   };
-  document.getElementById("mcSave").onclick = () => save(draft);
+  if (stepped) {
+    const go = (n) => { draft.step = n; keep(draft); render(draft); window.scrollTo(0, 0); };
+    document.getElementById("mcBack").onclick = () => (step === 1 ? cancel() : go(step - 1));
+    document.getElementById("mcNext").onclick = () => {
+      if (step === 1 && !draft.behdin) return showError("Please choose who the machi is for.");
+      if (step === 3 && !draft.gregorian) return showError("Please choose a date.");
+      if (step === 3 && !draft.geh) return showError("Please choose the time of day.");
+      if (step === total) return save(draft);
+      go(step + 1);
+    };
+  } else {
+    document.getElementById("mcCancel").onclick = cancel;
+    document.getElementById("mcSave").onclick = () => save(draft);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +453,7 @@ function choose(draft, match) {
   const id = match.id != null ? match.id : match.customer_id;
   draft.behdin = { id, name: match.name, phone: match.phone };
   draft.names = null;   // a different behdin has different saved names
+  if (!draft.edit) draft.step = 2;
   render(draft);
 }
 
