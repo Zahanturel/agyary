@@ -152,7 +152,7 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
       html += `<div class="${cls}" data-cal-day="${day}" role="button" tabindex="0"
         aria-label="${esc(gregLabel(day))}, ${esc(roj)}${n ? `, ${n} event${n > 1 ? "s" : ""}` : ""}">
         <span class="pg-greg-day">${esc(numLabel)}</span>
-        <span class="pg-roj${/[^\s]{8,}/.test(roj) ? " long" : ""}">${esc(roj)}</span>
+        <span class="pg-roj${/[^\s]{11,}/.test(roj) ? " long xlong" : /[^\s]{8,}/.test(roj) ? " long" : ""}">${esc(roj)}</span>
         <span class="pg-events${chips.wrap ? " wrap" : ""}">${shown}${more}</span></div>`;
     }
   }

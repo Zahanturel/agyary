@@ -158,6 +158,7 @@ button:disabled { opacity: .5; cursor: default; }
   .pg-wd { font-size: 16px; }
   .pg-greg-day { font-size: 20px; white-space: nowrap; }
   .pg-roj { font-size: 13px; }
+  .pg-roj.long.xlong { font-size: 9px; }
   .pg-roj.long { font-size: 10.5px; letter-spacing: -.2px; overflow-wrap: normal; }
   .pg-cell { padding: 4px 0 3px; }
 }
