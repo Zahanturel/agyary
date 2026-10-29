@@ -43,6 +43,8 @@ function blankDraft(prefill = {}) {
     time: "10:00",
     parsiLabel: "",
     isGatha: false,
+    // A new event is asked one question at a time; which one is kept here.
+    step: 1,
   };
 }
 
@@ -214,13 +216,25 @@ async function render(draft) {
 
   const chosen = draft.behdin;
 
-  mainEl.innerHTML = `
-    <div class="card">
-      <h2>${draft.edit ? "Edit event" : "New event"}</h2>
+  // A new event is asked one question at a time. Editing one is a single page:
+  // everything is already there and only a detail changes.
+  const stepped = !draft.edit;
+  const total = 4;
+  const step = stepped ? Math.min(Math.max(draft.step || 1, 1), total) : 0;
+  const lbl = (text, style = "") => stepped ? "" : `<label ${style ? `style="${style}"` : ""}>${text}</label>`;
+  const sec = (n, question, body) => stepped
+    ? `<div class="step-sec${step === n ? "" : " hidden"}"><h2 class="step-q">${question}</h2>${body}</div>`
+    : `<div>${body}</div>`;
 
-      <!-- Behdin -->
-      <label>Behdin</label>
-      ${chosen ? `
+  mainEl.innerHTML = `
+    <div class="card${stepped ? " stepped" : ""}">
+      ${stepped ? `<div class="step-count">Step ${step} of ${total}</div>
+        <div class="step-bar">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? "on" : ""}"></i>`).join("")}</div>`
+        : `<h2>Edit event</h2>`}
+
+      ${sec(1, "Who is the event for?", `
+        ${lbl("Behdin")}
+        ${chosen ? `
         <div class="chosen">
           <div class="who"><b>${esc(chosen.name)}</b><span>${esc(chosen.phone)}</span></div>
           <button class="ghost small" id="bhChange">Change</button>
@@ -230,41 +244,44 @@ async function render(draft) {
         <div style="margin-top:8px">
           <button class="secondary small" id="bhNew">+ Add a new behdin</button>
         </div>
-        <div id="bhNewPanel"></div>`}
+        <div id="bhNewPanel"></div>`}`)}
 
-      <!-- Service -->
-      <label style="margin-top:16px">Service</label>
-      <select id="evService">
-        <option value="" ${!draft.service_id ? "selected" : ""} disabled>Select a service...</option>
-        ${opts.services.map(s =>
-          `<option value="${s.id}" ${s.id === draft.service_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}
-        <option value="__new__">+ Add a new service</option>
-      </select>
-      <div id="newServicePanel"></div>
+      ${sec(2, "Which service?", `
+        ${lbl("Service", "margin-top:16px")}
+        <select id="evService">
+          <option value="" ${!draft.service_id ? "selected" : ""} disabled>Select a service...</option>
+          ${opts.services.map(s =>
+            `<option value="${s.id}" ${s.id === draft.service_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}
+          <option value="__new__">+ Add a new service</option>
+        </select>
+        <div id="newServicePanel"></div>`)}
 
-      <!-- Date + Roj/Mah -->
-      <label style="margin-top:16px">Date</label>
-      <div class="synced" id="syncBox">
-        <input type="date" id="evDate" value="${esc(draft.gregorian)}">
-        <div class="row" style="margin-top:8px">
-          <div><label>Roj</label><select id="evRoj">${rojOptions}</select></div>
-          <div><label>Mah</label><select id="evMah">${mahOptions}</select></div>
+      ${sec(3, "Which day?", `
+        ${lbl("Date", "margin-top:16px")}
+        <div class="synced" id="syncBox">
+          <input type="date" id="evDate" value="${esc(draft.gregorian)}">
+          <div class="row" style="margin-top:8px">
+            <div><label>Roj</label><select id="evRoj">${rojOptions}</select></div>
+            <div><label>Mah</label><select id="evMah">${mahOptions}</select></div>
+          </div>
+          <div class="sync-note" id="syncNote">${esc(draft.parsiLabel || "")}</div>
         </div>
-        <div class="sync-note" id="syncNote">${esc(draft.parsiLabel || "")}</div>
-      </div>
-      <div style="margin-top:8px">
-        <button class="ghost small" id="evPick">Pick from the calendar</button>
-      </div>
-      <div id="evPickPanel"></div>
+        <div style="margin-top:8px">
+          <button class="ghost small" id="evPick">Pick from the calendar</button>
+        </div>
+        <div id="evPickPanel"></div>`)}
 
-      <!-- Time -->
-      <label style="margin-top:16px">Time</label>
-      <input type="time" id="evTime" value="${esc(draft.time)}">
+      ${sec(4, "What time?", `
+        ${lbl("Time", "margin-top:16px")}
+        <input type="time" id="evTime" value="${esc(draft.time)}">`)}
 
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
-        <button class="ghost" id="evCancel">Cancel</button>
-        <button id="evSave">Review</button>
+        ${stepped
+          ? `<button class="secondary" id="evBack">${step === 1 ? "Cancel" : "Back"}</button>
+             <button id="evNext">${step === total ? "Review" : "Next"}</button>`
+          : `<button class="ghost" id="evCancel">Cancel</button>
+             <button id="evSave">Review</button>`}
       </div>
     </div>`;
 
@@ -341,13 +358,27 @@ async function render(draft) {
   // --- Time wiring ---
   document.getElementById("evTime").onchange = (e) => { draft.time = e.target.value; keep(draft); };
 
-  // --- Cancel / Save ---
-  document.getElementById("evCancel").onclick = () => {
+  // --- Cancel / Back / Next / Save ---
+  const cancel = () => {
     state.draft = null;
     if (!draft.edit) clearDraft(DRAFT_KEY);
     back(draft.edit ? `#/booking/${aid}/${draft.edit.id}` : "#/calendar");
   };
-  document.getElementById("evSave").onclick = () => save(draft);
+  if (stepped) {
+    const go = (n) => { draft.step = n; keep(draft); render(draft); window.scrollTo(0, 0); };
+    document.getElementById("evBack").onclick = () => (step === 1 ? cancel() : go(step - 1));
+    document.getElementById("evNext").onclick = () => {
+      if (step === 1 && !draft.behdin) return showError("Please choose who the event is for.");
+      if (step === 2 && !draft.service_id) return showError("Please choose a service.");
+      if (step === 3 && !draft.gregorian) return showError("Please choose a day.");
+      if (step === 4 && !draft.time) return showError("Please choose a time.");
+      if (step === total) return save(draft);
+      go(step + 1);
+    };
+  } else {
+    document.getElementById("evCancel").onclick = cancel;
+    document.getElementById("evSave").onclick = () => save(draft);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +462,7 @@ function choose(draft, match) {
   const id = match.id != null ? match.id : match.customer_id;
   draft.behdin = { id, name: match.name, phone: match.phone };
   draft.names = null;   // a different behdin has different saved names
+  if (!draft.edit) draft.step = 2;
   render(draft);
 }
 
