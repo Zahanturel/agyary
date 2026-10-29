@@ -49,16 +49,14 @@ export async function renderSlip({ kind, aid, id }) {
   if (!alive()) return;
 
   mainEl.innerHTML = `
-    <div class="card no-print row tight" style="justify-content:flex-end">
-      <div class="row tight">
-        <button class="secondary small" id="slipEdit">Edit</button>
-        <button class="small" id="slipPrint">Print</button>
-      </div>
-    </div>
     ${slipCardHtml(slip)}
-    <div class="card no-print">
-      <button class="ghost small" id="slipDeleteOpen">Delete</button>
-      <div id="slipDeleteConfirm" style="margin-top:12px"></div>
+    <div class="no-print slip-actions">
+      <button id="slipPrint">Print the slip</button>
+      <div class="row">
+        <button class="secondary" id="slipEdit">Change</button>
+        <button class="secondary danger-outline" id="slipDeleteOpen">Delete</button>
+      </div>
+      <div id="slipDeleteConfirm"></div>
     </div>`;
 
   document.getElementById("slipPrint").onclick = () => window.print();
@@ -91,15 +89,15 @@ export async function renderSlip({ kind, aid, id }) {
     // repeats, so there is nothing to choose between there.
     panel.innerHTML = slip.is_recurring
       ? `<p class="meta">This is part of a recurring arrangement.</p>
-         <div class="row tight">
-           <button class="danger small" id="delOne">Just this one</button>
-           <button class="danger small" id="delFuture">This and every future one</button>
-           <button class="ghost small" id="delCancel">Cancel</button>
+         <div class="stack">
+           <button class="danger" id="delOne">Just this one</button>
+           <button class="danger" id="delFuture">This and every future one</button>
+           <button class="secondary" id="delCancel">Cancel</button>
          </div>`
       : `<p class="meta">Delete this? This can't be undone.</p>
-         <div class="row tight">
-           <button class="danger small" id="delOne">Delete</button>
-           <button class="ghost small" id="delCancel">Cancel</button>
+         <div class="stack">
+           <button class="danger" id="delOne">Delete</button>
+           <button class="secondary" id="delCancel">Cancel</button>
          </div>`;
     document.getElementById("delOne").onclick = () => doDelete(false);
     document.getElementById("delCancel").onclick = () => { panel.innerHTML = ""; };

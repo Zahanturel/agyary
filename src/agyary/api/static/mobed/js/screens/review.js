@@ -105,8 +105,8 @@ export function renderReview(kind) {
     draft.returning = true;
 
     mainEl.innerHTML = `
-      <div class="card no-print">
-        <h2>Check the slip</h2>
+      <div class="step-head no-print">
+        <h2 class="step-q">Check and save</h2>
         <p class="meta">This is what will print. Correct the names below if anything is wrong,
           then save.</p>
       </div>
@@ -127,8 +127,8 @@ export function renderReview(kind) {
           already here. Nothing already saved is removed.</p>
       </div>
       <div class="wizard-nav no-print" style="margin-top:4px">
-        <button class="ghost" id="rvEdit">Edit details</button>
-        <button id="rvConfirm">${draft.edit ? "Confirm & save changes" : "Confirm & save"}</button>
+        <button class="secondary" id="rvEdit">Change details</button>
+        <button class="ok" id="rvConfirm">${draft.edit ? "Save changes" : "Save"}</button>
       </div>`;
 
     const region = document.getElementById("rvNames");
