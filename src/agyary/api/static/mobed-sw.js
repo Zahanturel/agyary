@@ -13,12 +13,12 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v53";
+const CACHE_NAME = "mobed-shell-v54";
 const SHELL_FILES = [
   "/mobed",
   "/mobed-manifest.json",
   "/mobed-icon.svg",
-  "/mobed-fonts/geist-sans.woff2",
+  "/mobed-fonts/figtree.woff2",
   "/mobed-fonts/geist-mono.woff2",
   "/mobed-app/app.css",
   "/mobed-app/js/main.js",

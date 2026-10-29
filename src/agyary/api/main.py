@@ -228,12 +228,17 @@ def asset_links() -> JSONResponse:
     }])
 
 
-# Self-hosted Geist variable fonts (OFL-licensed, see static/fonts/LICENSE) -
+# Self-hosted Figtree (the text) and Geist Mono variable fonts (OFL-licensed, see static/fonts/LICENSE) -
 # no CDN dependency, no npm/build step at runtime. One variable file per
 # family covers the whole 100-900 weight axis.
 @app.get("/mobed-fonts/geist-sans.woff2", include_in_schema=False)
 def font_geist_sans() -> FileResponse:
     return FileResponse(_STATIC_DIR / "fonts" / "geist-sans.woff2", media_type="font/woff2")
+
+
+@app.get("/mobed-fonts/figtree.woff2", include_in_schema=False)
+def font_figtree() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "fonts" / "figtree.woff2", media_type="font/woff2")
 
 
 @app.get("/mobed-fonts/geist-mono.woff2", include_in_schema=False)

@@ -1,8 +1,8 @@
 @font-face {
-  font-family: "Geist Sans";
-  src: url("/mobed-fonts/geist-sans.woff2") format("woff2-variations"),
-       url("/mobed-fonts/geist-sans.woff2") format("woff2");
-  font-weight: 100 900;
+  font-family: "Figtree";
+  src: url("/mobed-fonts/figtree.woff2") format("woff2-variations"),
+       url("/mobed-fonts/figtree.woff2") format("woff2");
+  font-weight: 300 900;
   font-display: swap;
 }
 @font-face {
@@ -19,25 +19,27 @@
   /* Primary - deep indigo/charcoal */
   --indigo-700:#232A4D; --indigo-600:#333C6B; --indigo-100:#E7E9F5;
   /* Accent - warm amber, echoes the flame in the app icon */
-  --amber-600:#B8790E; --amber-500:#E0973A; --amber-100:#FFF1D9;
+  --amber-600:#8A5A00; --amber-500:#F2B04C; --amber-100:#FFF3DC;
   /* Semantic status */
   --success-600:#1F8A4C; --success-100:#E4F5EA;
   --danger-600:#C4362B; --danger-100:#FBE7E5;
 
   /* Semantic aliases - components below reference these, not the raw scale */
-  --bg: var(--ink-50); --surface:#ffffff; --border: var(--ink-200);
-  --text: var(--ink-900); --muted: #586072;
+  --bg: #FBF8F3; --surface:#ffffff; --border: #C9CEDA;
+  --text: #1A1D2B; --muted: #4A5163;
   --primary: var(--indigo-700); --primary-strong: var(--indigo-600); --primary-tint: var(--indigo-100);
   --accent: var(--amber-500); --accent-text: var(--amber-600); --accent-tint: var(--amber-100);
   --success: var(--success-600); --success-tint: var(--success-100);
   --danger: var(--danger-600); --danger-tint: var(--danger-100);
 
-  --font-sans: "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", "SFMono-Regular", Consolas, monospace;
-  --text-xs:14px; --text-sm:15px; --text-base:17px; --text-md:18px; --text-lg:21px;
+  /* Nothing smaller than 18: the people using this are 40 to 60 and not at home with phones. */
+  --text-xs:18px; --text-sm:19px; --text-base:21px; --text-md:24px; --text-lg:28px;
+  --tap: 56px;
 
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px;
-  --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-pill:999px;
+  --radius-sm:12px; --radius-md:16px; --radius-lg:20px; --radius-pill:999px;
   --shadow-sm: 0 1px 2px rgba(23,25,35,.06), 0 1px 1px rgba(23,25,35,.04);
   --shadow-md: 0 4px 16px rgba(23,25,35,.14);
 
@@ -61,7 +63,7 @@ header button.icon-btn {
   border-radius: var(--radius-sm); cursor: pointer; }
 header button.icon-btn:active { background: rgba(255,255,255,.16); }
 header button.icon-btn svg { width: 24px; height: 24px; fill: none; }
-main { flex: 1; padding: var(--space-4); max-width: 640px; width: 100%; margin: 0 auto; }
+main { flex: 1; padding: var(--space-4); max-width: 680px; width: 100%; margin: 0 auto; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: var(--space-4); margin-bottom: var(--space-3); box-shadow: var(--shadow-sm); }
 .card h2 { margin: 0 0 var(--space-1); font-size: var(--text-md); font-weight: 600; }
@@ -72,17 +74,17 @@ main { flex: 1; padding: var(--space-4); max-width: 640px; width: 100%; margin: 
 .tag.role { background: var(--primary-tint); color: var(--primary); }
 .status-confirmed, .status-approved { color: var(--success-600); }
 label { display: block; font-size: var(--text-sm); margin: var(--space-3) 0 var(--space-1); color: var(--muted); font-weight: 500; }
-input, select, textarea { width: 100%; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  font-size: var(--text-base); background: #fff; font-family: inherit; color: var(--text); min-height: 44px; }
+input, select, textarea { width: 100%; padding: var(--space-3); border: 2px solid var(--muted); border-radius: var(--radius-sm);
+  font-size: var(--text-base); background: #fff; font-family: inherit; color: var(--text); min-height: var(--tap); }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-strong); outline-offset: 1px; }
 button { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm);
-  padding: var(--space-3) var(--space-4); font-size: var(--text-base); font-weight: 500; cursor: pointer;
-  font-family: inherit; min-height: 44px; }
-button.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+  padding: var(--space-3) var(--space-5); font-size: var(--text-base); font-weight: 700; cursor: pointer;
+  font-family: inherit; min-height: var(--tap); }
+button.secondary { background: #fff; color: var(--primary); border: 2px solid var(--primary); }
 button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 button.danger { background: var(--danger-600); }
-button.small { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); min-height: 44px; }
-input[type=checkbox], input[type=radio] { width: 22px; height: 22px; accent-color: var(--primary); }
+button.small { padding: var(--space-2) var(--space-4); font-size: var(--text-sm); min-height: 48px; }
+input[type=checkbox], input[type=radio] { width: 28px; height: 28px; min-height: 0; accent-color: var(--primary); }
 button:disabled { opacity: .5; cursor: default; }
 .row { display: flex; gap: var(--space-2); align-items: center; }
 .row > * { flex: 1; }
@@ -322,13 +324,27 @@ a.tel:active { text-decoration: underline; }
   background: var(--surface); border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom); }
 .tabs.hidden { display: none; }
-.tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  background: transparent; color: var(--muted); border-radius: 0; min-height: 56px;
-  padding: var(--space-2) var(--space-2) var(--space-1); font-size: var(--text-xs); font-weight: 500; }
-.tabs button svg { width: 24px; height: 24px; fill: none; }
-.tabs button.active { color: var(--primary); }
-body.has-tabs main { padding-bottom: calc(var(--space-4) + 64px + var(--safe-bottom)); }
-body.has-tabs .fab { bottom: calc(76px + var(--safe-bottom)); }
+.tabs { border-top: 2px solid var(--border); }
+.tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: transparent; color: var(--muted); border-radius: 0; min-height: 72px;
+  padding: var(--space-2); font-size: var(--text-xs); font-weight: 700; border-top: 4px solid transparent; }
+.tabs button svg { width: 30px; height: 30px; fill: none; }
+.tabs button.active { color: var(--primary); background: var(--primary-tint); border-top-color: var(--primary); }
+body.has-tabs main { padding-bottom: calc(var(--space-4) + 88px + var(--safe-bottom)); }
+body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
+
+/* iPad and laptop: the three places move to a strip down the left side, as
+   big as on the phone, and the page uses the width it has. */
+@media (min-width: 900px) {
+  body.has-tabs { padding-left: 150px; }
+  .tabs { top: 0; bottom: 0; right: auto; width: 150px; flex-direction: column; justify-content: flex-start;
+    gap: var(--space-2); padding: var(--space-6) var(--space-3); background: var(--primary); border-top: none; }
+  .tabs button { flex: none; min-height: 100px; border-radius: var(--radius-md); border-top: none;
+    color: #C9CEF0; font-size: 19px; }
+  .tabs button.active { background: var(--accent); color: var(--text); }
+  body.has-tabs main { max-width: 960px; padding-bottom: var(--space-6); }
+  body.has-tabs .fab { bottom: var(--space-6); }
+}
 @media print { .tabs { display: none !important; } }
 
 /* --- Memorials ----------------------------------------------------------- */
