@@ -442,6 +442,8 @@ export async function renderBehdinDetail({ id }) {
   const cid = Number(id);
   const alive = navGuard();
 
+  // The memorial and reminder cards used to depend on which of the two apps this ran in.
+  const hasMemorials = true;
   let record = null, history = null, saved = [], memorials = [];
   try {
     [record, history, saved, memorials] = await Promise.all([
