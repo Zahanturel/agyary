@@ -808,10 +808,10 @@ async def test_machi_board_mine_scopes_to_the_caller(db, client, seeded):
     url = f"/api/mobed/agyaries/{aid}/machi-board"
     window = {"from": "2027-06-01", "to": "2027-06-30"}
 
-    # The other mobed sees it on the agyari-wide board...
+    # A colleague sees nothing of it, however they ask: the board is each mobed's own
+    # (docs/DECISIONS.md D7), so the unfiltered form is not an agyari-wide one for them.
     everyones = await client.get(url, params=window, headers=theirs)
-    assert len(everyones.json()) == 1
-    # ...but not among their own.
+    assert everyones.json() == []
     only_theirs = await client.get(url, params={**window, "mine": "true"}, headers=theirs)
     assert only_theirs.json() == []
     # The mobed who entered it does.

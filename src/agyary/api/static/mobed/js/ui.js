@@ -15,14 +15,12 @@ export function loading() { mainEl.innerHTML = `<div class="empty-state">Loading
  *  full-screen login and onboarding flows. */
 export function chrome(show) {
   menuBtn.classList.toggle("hidden", !show);
-  // Only the mobed app has a bell; the Machi Board has no notifications.
   const bellBtn = document.getElementById("bellBtn");
   if (bellBtn) bellBtn.classList.toggle("hidden", !show);
   if (!show) { fabEl.classList.add("hidden"); showBack(null); showTabs(null); }
 }
 
-/** The bottom tab bar, if this app has one (the mobed app does, the Machi
- *  Board does not). `active` is the tab to highlight, or null to hide the bar.
+/** The bottom tab bar. `active` is the tab to highlight, or null to hide the bar.
  *  The router calls this on every screen from the route's `tab` option, so a
  *  screen never has to remember to turn it off. */
 const tabsEl = document.getElementById("tabs");

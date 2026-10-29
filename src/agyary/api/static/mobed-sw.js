@@ -13,7 +13,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v50";
+const CACHE_NAME = "mobed-shell-v51";
 const SHELL_FILES = [
   "/mobed",
   "/mobed-manifest.json",
@@ -44,6 +44,7 @@ const SHELL_FILES = [
   "/mobed-app/js/screens/onboarding.js",
   "/mobed-app/js/screens/calendar.js",
   "/mobed-app/js/screens/event.js",
+  "/mobed-app/js/screens/machi_calendar.js",
   "/mobed-app/js/screens/machi_event.js",
   "/mobed-app/js/screens/behdins.js",
   "/mobed-app/js/screens/memorial.js",

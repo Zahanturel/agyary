@@ -100,7 +100,7 @@ bookings on the calendar, tagged with the memorial.
 3. Service layer + API + tests (done: preview, create, list, edit one
    observance, delete, calendar feed + closing notice, privacy)
 4. UI (done, checked in the browser on a scratch copy): Behdins as a bottom
-   tab (mobed app only; the Machi Board keeps it in its menu), memorials on
+   tab (the Machi board, once a separate app, is now a tab of the same app), memorials on
    the behdin page, new-memorial form with a date preview before saving,
    memorial page with per-observance edit, green memorial category on the
    calendar, pinned solid "Memorial closes today" notice.

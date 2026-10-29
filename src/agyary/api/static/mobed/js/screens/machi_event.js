@@ -13,10 +13,11 @@ import {
   listBehdins, convertDate, fromParsi, bookableGehs,
   machiDetail,
 } from "../api.js";
-import { state, primarySystem, GEHS } from "../state.js";
+import { state, primarySystem, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderAddBehdin } from "../behdin_add.js";
-import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
-import { esc, todayIst } from "../util.js";
+import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
+import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
+import { esc, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
 function system() {
@@ -46,18 +47,67 @@ function blankDraft(prefill = {}) {
 // ---------------------------------------------------------------------------
 // Entry points
 // ---------------------------------------------------------------------------
+// The unfinished machi the mobed left, kept by drafts.js and offered back (not
+// silently applied) the next time they open a new one.
+const DRAFT_KEY = "machi";
+
+/** Only the content is kept. Roj, Mah and the Parsi label are worked out again
+ *  from the date, and which gehs are free is asked again - none of that is
+ *  worth carrying, and carrying it is how a stale Roj ends up on a new booking. */
+function keep(draft) {
+  if (draft.edit) return;
+  if (!draft.behdin) return clearDraft(DRAFT_KEY);
+  saveDraft(DRAFT_KEY, {
+    behdin: draft.behdin, names: draft.names, purpose: draft.purpose,
+    gregorian: draft.gregorian, geh: draft.geh, recurring: draft.recurring,
+  });
+}
+
+async function open(draft) {
+  state.draft = draft;
+  await syncFromGregorian(draft);
+  await loadAvailableGehs(draft);
+  await render(draft);
+}
+
 export async function renderNewMachi() {
   chrome(true);
   refreshHeader();
   showFab(false);
 
-  if (!state.draft || state.draft.edit || state.draft.prefill) {
-    const prefill = (state.draft && state.draft.prefill) || {};
-    state.draft = blankDraft(prefill);
-  }
-  await syncFromGregorian(state.draft);
-  await loadAvailableGehs(state.draft);
-  render(state.draft);
+  // Already part-way through right here - back from the review step, or from
+  // adding a behdin: carry on, nothing to ask.
+  const held = state.draft;
+  if (held && held.kind === "machi" && !held.edit && !held.prefill) return open(held);
+
+  // Otherwise this is a new machi, started from the + or from a free geh. If
+  // an unfinished one was left, ask before doing anything with it.
+  const prefill = (held && held.prefill) || {};
+  const stored = loadDraft(DRAFT_KEY);
+  if (!stored || !stored.behdin) return open(blankDraft(prefill));
+
+  offerDraft({
+    title: "Unfinished machi",
+    summary: [
+      stored.behdin.name,
+      MACHI_PURPOSE_DISPLAY[stored.purpose] || stored.purpose,
+      `${gregLabel(stored.gregorian)}${stored.geh ? " · " + (GEH_NAME_BY_NUM[stored.geh] || "") + " Geh" : ""}`,
+    ],
+    onStartNew: () => { clearDraft(DRAFT_KEY); open(blankDraft(prefill)); },
+    onContinue: async () => {
+      const draft = blankDraft(prefill);
+      draft.behdin = stored.behdin;
+      draft.names = stored.names || null;
+      draft.purpose = stored.purpose || "patet";
+      draft.recurring = stored.recurring || null;
+      // A date that has gone by is not carried into a new booking.
+      const [date, replaced] = restoredDate(stored.gregorian, prefill.gregorian);
+      draft.gregorian = date;
+      draft.geh = replaced ? (prefill.geh || null) : stored.geh;
+      await open(draft);
+      if (replaced) showInfo(`The date you had chosen has passed, so this is for ${gregLabel(date)}.`);
+    },
+  });
 }
 
 export async function renderEditMachi({ id }) {
@@ -138,6 +188,7 @@ async function loadAvailableGehs(draft) {
 // The single screen
 // ---------------------------------------------------------------------------
 async function render(draft) {
+  keep(draft);
   const calOpts = state.calendarOptions;
   const rojOptions = calOpts.roj.map(o => {
     const v = Number(o.id.replace("roj_", ""));
@@ -232,6 +283,7 @@ async function render(draft) {
   document.getElementById("mcPurpose").onchange = (e) => {
     draft.purpose = e.target.value;
     draft.names = null;   // patet and tandarosti take different names
+    keep(draft);
   };
 
   // --- Date wiring ---
@@ -268,17 +320,19 @@ async function render(draft) {
       draft.geh = Number(btn.dataset.geh);
       document.querySelectorAll(".geh-btn").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
+      keep(draft);
     };
   });
 
   // --- Recurring wiring ---
   const recurEl = document.getElementById("mcRecur");
-  if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.value || null; };
+  if (recurEl) recurEl.onchange = () => { draft.recurring = recurEl.value || null; keep(draft); };
 
   // --- Cancel / Save ---
   document.getElementById("mcCancel").onclick = () => {
     state.draft = null;
-    back(draft.edit ? `#/machi/${state.currentAgyaryId}/${draft.edit.id}` : "#/calendar");
+    if (!draft.edit) clearDraft(DRAFT_KEY);
+    back(draft.edit ? `#/machi/${state.currentAgyaryId}/${draft.edit.id}` : "#/board");
   };
   document.getElementById("mcSave").onclick = () => save(draft);
 }

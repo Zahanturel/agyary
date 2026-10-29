@@ -16,11 +16,18 @@ export const state = {
   parsiCache: {},             // "ymd|system" -> label
   parsiMonthCache: {},        // "system-mah-year" -> day list
 
-  // Calendar view state, shared by the calendar screen and My Day.
+  // Calendar view state, shared by the Calendar and Machi tabs - which is
+  // what keeps the same day on screen when the mobed switches between them.
   calendar: { mode: "month", focus: null, parsiMonth: null, selectedDay: null },
 
+  // The bottom tab the mobed was last on. Screens that belong to no tab of
+  // their own (a slip, an edit, a review) light up this one, and Back lands
+  // on it - see homeHash().
+  lastTab: "calendar",
+
   // In-flight New Event / New Machi wizard, so a mid-flow navigation
-  // doesn't lose it.
+  // doesn't lose it. The copy that survives leaving the form is kept by
+  // drafts.js, which asks before bringing it back.
   draft: null,
 
   // Set to "event" or "machi" just before navigating to #/behdins/new from
@@ -30,6 +37,13 @@ export const state = {
   behdinReturnTo: null,
   behdinPrefillName: null,
 };
+
+/** Where "home" is for the tab the mobed came from: the page Back falls back
+ *  to, and where a deleted slip returns. The calendar and board routes restore
+ *  the shared day and view themselves. */
+export function homeHash() {
+  return { machi: "#/board", behdins: "#/behdins" }[state.lastTab] || "#/calendar";
+}
 
 export const GEHS = [[1, "Havan"], [2, "Rapithwin"], [3, "Uziran"], [4, "Aiwisruthrem"], [5, "Ushahin"]];
 export const GEH_NAME_BY_NUM = Object.fromEntries(GEHS);

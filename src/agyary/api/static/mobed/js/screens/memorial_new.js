@@ -23,7 +23,7 @@ import {
   blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialForm, schedulePreviewHtml,
   wireSchedulePreview, showMemorialProblems, newReview, reviewPayload, reviewHasEmptyDate,
 } from "../memorial_form.js";
-import { loadDraft, saveDraft, clearDraft } from "../drafts.js";
+import { loadDraft, saveDraft, clearDraft, offerDraft } from "../drafts.js";
 
 export async function renderMemorialNew({ id }) {
   chrome(true);
@@ -44,10 +44,10 @@ export async function renderMemorialNew({ id }) {
   }
   if (!alive()) return;
 
-  // What was typed stays until the memorial is saved or cancelled, so going
-  // back to the calendar (or anywhere) and returning finds the form as it was.
+  // What was typed stays until the memorial is saved or cancelled; coming back
+  // asks whether to continue it or start a new one.
   const draftKey = `memorial:${aid}:${cid}`;
-  const draft = { ...blankMemorialDraft(), ...(loadDraft(draftKey) || {}) };
+  let draft = blankMemorialDraft();
   const keep = () => saveDraft(draftKey, draft);
   // Dates taken out on the review screen; kept while the form is changed and
   // reviewed again, dropped with the draft.
@@ -106,5 +106,13 @@ export async function renderMemorialNew({ id }) {
     };
   }
 
-  showForm();
+  const stored = loadDraft(draftKey);
+  if (!stored) return showForm();
+  offerDraft({
+    title: "Unfinished memorial",
+    summary: [behdin.name, stored.name ? `For ${stored.name}` : "The person they lost is not named yet",
+      stored.death ? `Died ${stored.death}` : "No date given yet"],
+    onStartNew: () => { clearDraft(draftKey); draft = blankMemorialDraft(); showForm(); },
+    onContinue: () => { draft = { ...blankMemorialDraft(), ...stored }; showForm(); },
+  });
 }

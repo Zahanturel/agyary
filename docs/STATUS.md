@@ -60,7 +60,7 @@ scale.
 
 ```
 src/agyary/
-  api/        main.py (app, middleware, lifespan), rate_limit.py, routes/, static/ (the PWAs)
+  api/        main.py (app, middleware, lifespan), rate_limit.py, routes/, static/ (the one PWA)
   core/       config.py (all settings), database.py
   models/     SQLAlchemy models (24 tables)
   calendar/   Parsi calendar engine + memorial schedule - pure functions, no DB
@@ -139,7 +139,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 
 | Capability | State | Gate |
 |---|---|---|
-| Mobed PWA: calendar, bookings, behdins, memorials, slips | **Live** | none |
+| Mobed PWA: Machi, Calendar and Behdins tabs, bookings, memorials, slips | **Live** | none |
 | Sign-in by sending us a code | **Live** | none |
 | Manual reminders (a `wa.me` link the mobed taps) | **Live** | none |
 | In-app notifications, closing notices, Reminders list/notice | **Live** | none |

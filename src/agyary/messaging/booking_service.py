@@ -346,8 +346,12 @@ async def create_machi_request(
     purpose: str,
     names: list[dict],
     amount: Decimal | None,
+    owner_user_id: int | None = None,
 ) -> Machi:
     """Create a requested machi; raises SlotTakenError on a slot race.
+
+    ``owner_user_id`` is the mobed whose machi it is. It is set on insert,
+    not afterwards, because it is part of what makes the slot unique.
 
     Uses a SAVEPOINT so the partial-unique-index violation doesn't poison the
     outer transaction (the caller still needs to send alternative messages).
@@ -364,6 +368,7 @@ async def create_machi_request(
         ceremony_datetime=machi_ceremony_datetime(gregorian, geh),
         purpose=purpose,
         amount=amount,
+        created_by_user_id=owner_user_id,
     )
     try:
         async with db.begin_nested():
@@ -412,11 +417,12 @@ def slot_keys(agyary: Agyary, gregorian: date) -> tuple[int, int, int]:
 
 
 async def compute_machi_alternatives(
-    db: AsyncSession, agyary: Agyary, geh: int, gregorian: date
+    db: AsyncSession, agyary: Agyary, geh: int, gregorian: date, owner_user_id: int | None = None
 ) -> MachiSlotAlternatives:
-    same_day = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
+    same_day = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian, owner_user_id), gregorian)
     same_geh_next = await next_days_with_geh(
-        db, agyary.id, CalendarSystem(agyary.calendar_system), gregorian, geh
+        db, agyary.id, CalendarSystem(agyary.calendar_system), gregorian, geh,
+        owner_user_id=owner_user_id,
     )
     return MachiSlotAlternatives(same_day_gehs=same_day, same_geh_next_days=same_geh_next)
 
@@ -433,6 +439,7 @@ async def book_machi_slot(
     gregorian: date,
     purpose: str,
     names: list[dict],
+    owner_user_id: int | None = None,
 ) -> MachiBookingResult:
     """The one function that owns "is this slot valid, is it free, claim it,
     what are the alternatives if not" for machi bookings.
@@ -445,7 +452,7 @@ async def book_machi_slot(
     """
     names = normalize_machi_names(purpose, names)
     roj, mah, year = slot_keys(agyary, gregorian)
-    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
+    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian, owner_user_id), gregorian)
     if geh in free:
         try:
             machi = await create_machi_request(
@@ -460,6 +467,7 @@ async def book_machi_slot(
                 purpose=purpose,
                 names=names,
                 amount=None,
+                owner_user_id=owner_user_id,
             )
             # This function IS the auto-confirm decision - no approval gate
             # follows, so the machi is booked, not merely requested.
@@ -469,7 +477,7 @@ async def book_machi_slot(
         except SlotTakenError:
             pass  # raced between the pre-check and the insert - fall through
 
-    alternatives = await compute_machi_alternatives(db, agyary, geh, gregorian)
+    alternatives = await compute_machi_alternatives(db, agyary, geh, gregorian, owner_user_id)
     return MachiBookingResult(machi=None, alternatives=alternatives)
 
 
@@ -566,12 +574,16 @@ async def rebook_machi_slot(
     # Same day and geh means the machi already holds it - judged by the real day,
     # so a machi stored under another calendar's Roj/Mah is not "moved" by a
     # name-only edit and cannot collide with itself.
+    # The machi's own mobed is who it competes with - not whoever is editing
+    # it - so a panthaky correcting a colleague's machi cannot be blocked by,
+    # or collide with, anything but that colleague's own board.
+    owner = machi.created_by_user_id
     if (gregorian, geh) != (machi.gregorian_date, machi.geh):
-        free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
+        free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian, owner), gregorian)
         if geh not in free:
             return MachiBookingResult(
                 machi=None,
-                alternatives=await compute_machi_alternatives(db, agyary, geh, gregorian),
+                alternatives=await compute_machi_alternatives(db, agyary, geh, gregorian, owner),
             )
         try:
             async with db.begin_nested():
@@ -583,7 +595,7 @@ async def rebook_machi_slot(
         except IntegrityError:  # raced onto a slot taken between check and write
             return MachiBookingResult(
                 machi=None,
-                alternatives=await compute_machi_alternatives(db, agyary, geh, gregorian),
+                alternatives=await compute_machi_alternatives(db, agyary, geh, gregorian, owner),
             )
     machi.purpose = purpose
     await replace_ceremony_names(db, names, machi_id=machi.id)

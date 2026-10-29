@@ -827,12 +827,12 @@ async def machi_board(
     machi history on every call, which a calendar refetching per month-step
     would re-download in full.
 
-    ``mine=true`` narrows it to the machis the caller entered themselves.
-    The mobed app always asks for that. The unfiltered form (the Machi app's
-    shared board) lists every taken slot, but names the family only on the
-    caller's own machis - created by them, assigned to them, or any at a
-    temple they are panthaky of - and flags each with ``mine``. Anyone else's
-    slot reads as taken, by nobody in particular.
+    A mobed's machis are private to them (docs/DECISIONS.md D2): whatever is
+    asked for, a caller who is not the temple's panthaky or caretaker gets
+    only the machis they entered themselves, and never learns that a
+    colleague holds a slot. A panthaky or caretaker keeps full authority over
+    their temple for now (the roles module comes later) and so sees every
+    machi, unless they ask for ``mine=true``, which narrows it to their own.
 
     Recurring machis are topped up here before reading. There is no
     scheduler in this deployment, so if nothing generated them on the way
@@ -844,13 +844,13 @@ async def machi_board(
     await _require_membership(db, agyary_id, user)
     if await mobed_dashboard.ensure_recurrences_generated(db, agyary_id, through=to):
         await db.commit()
+    admin = await mobed_dashboard.is_admin(db, agyary_id, user.id)
     try:
         entries = await mobed_dashboard.list_machi_board(
-            db, agyary_id, from_, to, created_by_user_id=user.id if mine else None
+            db, agyary_id, from_, to, created_by_user_id=user.id if (mine or not admin) else None
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    admin = await mobed_dashboard.is_admin(db, agyary_id, user.id)
 
     def _mine(machi) -> bool:
         return admin or user.id in (machi.created_by_user_id, machi.assigned_mobed_id)
@@ -878,12 +878,13 @@ async def machi_board(
 async def bookable_gehs(
     agyary_id: int, on: date = Query(), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
-    """Which gehs on `on` can still be booked - via the SAME shared
-    availability core the booking path uses, so the Machi Board can show
-    empty/taken/already-passed correctly instead of a generic 'tap to book'
-    that then fails with 'already booked' for a slot that's simply elapsed."""
+    """Which gehs on `on` can still be booked by the caller - via the SAME shared
+    availability core the booking path uses, so the Machi tab can show
+    free/booked/already-passed correctly instead of a generic 'tap to book'
+    that then fails with 'already booked' for a slot that's simply elapsed.
+    Only the caller's own machis count: a colleague's are not visible here."""
     agyary = await _require_membership(db, agyary_id, user)
-    return {"bookable": await mobed_dashboard.bookable_gehs(db, agyary, on)}
+    return {"bookable": await mobed_dashboard.bookable_gehs(db, agyary, on, user.id)}
 
 
 def _slip_response(slip: mobed_dashboard.SlipData) -> dict:

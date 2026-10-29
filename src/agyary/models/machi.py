@@ -31,7 +31,8 @@ from agyary.models.enums import (
 
 
 class Machi(Base):
-    """Slot-based ceremonies: one machi per geh per day per agyary.
+    """Slot-based ceremonies: one machi per geh per day per agyary per mobed
+    (a mobed's board is their own and private - see uq_machis_slot).
 
     ``gregorian_date`` anchors the Parsi day (which starts at sunrise);
     ``ceremony_datetime`` is when the ceremony physically happens. For the
@@ -109,7 +110,11 @@ class Machi(Base):
             f"payment_method IS NULL OR payment_method IN ({sql_in(PAYMENT_METHODS)})",
             name="payment_method",
         ),
-        # THE critical constraint: one active machi per geh per day per agyary.
+        # THE critical constraint: one active machi per geh per day per agyary
+        # per mobed. Each mobed's board is their own and private, so two
+        # mobeds may both hold the same geh without either seeing the other.
+        # A missing owner counts as one bucket (0) - NULLs are distinct in a
+        # unique index, which would let such rows collide silently.
         # Cancelled/declined/rescheduled slots reopen for booking.
         Index(
             "uq_machis_slot",
@@ -118,6 +123,7 @@ class Machi(Base):
             "parsi_mah",
             "parsi_year",
             "geh",
+            text("coalesce(created_by_user_id, 0)"),
             unique=True,
             postgresql_where=text(f"status NOT IN ({sql_in(SLOT_RELEASING_STATUSES)})"),
         ),

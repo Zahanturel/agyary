@@ -17,7 +17,8 @@ import {
 import { state, primarySystem } from "../state.js";
 import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
-import { chrome, mainEl, showFab, showError, refreshHeader, loading } from "../ui.js";
+import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
+import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
 import { esc, istYmd, istHm, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
@@ -48,17 +49,65 @@ function blankDraft(prefill = {}) {
 // ---------------------------------------------------------------------------
 // Entry points
 // ---------------------------------------------------------------------------
+// The unfinished event the mobed left, kept by drafts.js and offered back (not
+// silently applied) the next time they open a new one.
+const DRAFT_KEY = "event";
+
+/** Only the content is kept. Roj, Mah and the Parsi label are worked out again
+ *  from the date - carrying them is how a stale Roj ends up on a new booking. */
+function keep(draft) {
+  if (draft.edit) return;
+  if (!draft.behdin) return clearDraft(DRAFT_KEY);
+  saveDraft(DRAFT_KEY, {
+    behdin: draft.behdin, names: draft.names, service_id: draft.service_id,
+    service_name: draft.service_name, gregorian: draft.gregorian, time: draft.time,
+  });
+}
+
+async function open(draft) {
+  state.draft = draft;
+  await syncFromGregorian(draft);
+  await render(draft);
+}
+
 export async function renderNewEvent() {
   chrome(true);
   refreshHeader();
   showFab(false);
 
-  if (!state.draft || state.draft.edit || state.draft.prefill) {
-    const prefill = (state.draft && state.draft.prefill) || {};
-    state.draft = blankDraft(prefill);
-  }
-  await syncFromGregorian(state.draft);
-  render(state.draft);
+  // Already part-way through right here - back from the review step, or from
+  // adding a behdin: carry on, nothing to ask.
+  const held = state.draft;
+  if (held && held.kind === "booking" && !held.edit && !held.prefill) return open(held);
+
+  // Otherwise this is a new event, started from the +. If an unfinished one
+  // was left, ask before doing anything with it.
+  const prefill = (held && held.prefill) || {};
+  const stored = loadDraft(DRAFT_KEY);
+  if (!stored || !stored.behdin) return open(blankDraft(prefill));
+
+  offerDraft({
+    title: "Unfinished event",
+    summary: [
+      stored.behdin.name,
+      stored.service_name || "No service chosen yet",
+      `${gregLabel(stored.gregorian)}${stored.time ? " · " + stored.time : ""}`,
+    ],
+    onStartNew: () => { clearDraft(DRAFT_KEY); open(blankDraft(prefill)); },
+    onContinue: async () => {
+      const draft = blankDraft(prefill);
+      draft.behdin = stored.behdin;
+      draft.names = stored.names || null;
+      draft.service_id = stored.service_id || null;
+      draft.service_name = stored.service_name || "";
+      draft.time = stored.time || draft.time;
+      // A date that has gone by is not carried into a new booking.
+      const [date, replaced] = restoredDate(stored.gregorian, prefill.gregorian);
+      draft.gregorian = date;
+      await open(draft);
+      if (replaced) showInfo(`The date you had chosen has passed, so this is for ${gregLabel(date)}.`);
+    },
+  });
 }
 
 export async function renderEditEvent({ kind, id }) {
@@ -148,6 +197,7 @@ async function servicesFor(aid) {
 // The single screen
 // ---------------------------------------------------------------------------
 async function render(draft) {
+  keep(draft);
   const aid = state.currentAgyaryId;
   const opts = await servicesFor(aid);
   if (!opts) return;
@@ -242,6 +292,7 @@ async function render(draft) {
     draft.service_id = svc ? svc.id : null;
     draft.service_name = svc ? svc.name : "";
     draft.names = null;   // the default names depend on the service
+    keep(draft);
   };
 
   // --- Date wiring ---
@@ -288,11 +339,12 @@ async function render(draft) {
   };
 
   // --- Time wiring ---
-  document.getElementById("evTime").onchange = (e) => { draft.time = e.target.value; };
+  document.getElementById("evTime").onchange = (e) => { draft.time = e.target.value; keep(draft); };
 
   // --- Cancel / Save ---
   document.getElementById("evCancel").onclick = () => {
     state.draft = null;
+    if (!draft.edit) clearDraft(DRAFT_KEY);
     back(draft.edit ? `#/booking/${aid}/${draft.edit.id}` : "#/calendar");
   };
   document.getElementById("evSave").onclick = () => save(draft);

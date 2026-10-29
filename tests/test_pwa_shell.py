@@ -2,9 +2,8 @@
 
 The shell is cached by an explicit list (there is no build step to generate
 one). A module missing from it works online and then fails offline with a
-module-resolution error and a blank screen - the worst way to find out. Both
-apps share most modules, so adding one for a feature in one app and forgetting
-the other's worker is the easy mistake this catches.
+module-resolution error and a blank screen - the worst way to find out. A module imported
+by the entry point but forgotten in the worker is the easy mistake this catches.
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ JS_ROOT = STATIC / "mobed" / "js"
 
 APPS = {
     "mobed": ("mobed-sw.js", "main.js"),
-    "machi": ("machi-sw.js", "machi_main.js"),
 }
 
 _IMPORT = re.compile(r"""(?:from\s+|import\s*\(\s*)["'](\.{1,2}/[^"']+\.js)["']""")

@@ -7,8 +7,9 @@ they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
 ## What it does
 
 - **Calendar and bookings.** A day, week and month calendar in the Parsi
-  calendars (Shenshai, Kadmi, Fasli) next to the Gregorian one, per-fire-temple
-  Machi Board, and a shared print-ready slip for each ceremony.
+  calendars (Shenshai, Kadmi, Fasli) next to the Gregorian one, a
+  Machi tab (each mobed's own five-geh board), and a print-ready slip for each
+  ceremony. Machi, Calendar and Behdins are the three bottom tabs.
 - **Behdins.** Each mobed keeps their own book of the families they look after,
   with saved names reused on every booking. Each mobed's record of a family is
   their own: a colleague who serves the same family keeps a separate record, and

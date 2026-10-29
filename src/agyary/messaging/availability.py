@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, ParsiDate, gregorian_to_parsi
@@ -46,26 +46,36 @@ class SlotOption:
     gregorian: date
 
 
-async def booked_gehs(db: AsyncSession, agyary_id: int, gregorian: date) -> set[int]:
-    """The gehs already taken on a real day at this fire temple.
+async def booked_gehs(
+    db: AsyncSession, agyary_id: int, gregorian: date, owner_user_id: int | None = None
+) -> set[int]:
+    """The gehs already taken on a real day by one mobed at this fire temple.
 
-    A slot is a day and a geh. It is looked up by the day itself, not by the
-    Roj/Mah/year a client worked out for it: those depend on which calendar the
-    person doing the booking reads, so two mobeds booking the same real day
-    would otherwise look at different slots and both succeed.
+    A slot is a day and a geh, and it is each mobed's own: a mobed's machis
+    are private (docs/DECISIONS.md D2), so what a colleague holds is neither
+    shown nor counted. ``owner_user_id`` None means the rows with no owner
+    (the same bucket the unique index uses), never "everyone's".
+
+    It is looked up by the day itself, not by the Roj/Mah/year a client worked
+    out for it: those depend on which calendar the person doing the booking
+    reads, so one mobed booking the same real day twice would otherwise look
+    at different slots and both succeed.
     """
     result = await db.execute(
         select(Machi.geh).where(
             Machi.agyary_id == agyary_id,
             Machi.gregorian_date == gregorian,
             Machi.status.notin_(SLOT_RELEASING_STATUSES),
+            func.coalesce(Machi.created_by_user_id, 0) == (owner_user_id or 0),
         )
     )
     return set(result.scalars())
 
 
-async def available_gehs(db: AsyncSession, agyary_id: int, gregorian: date) -> list[int]:
-    booked = await booked_gehs(db, agyary_id, gregorian)
+async def available_gehs(
+    db: AsyncSession, agyary_id: int, gregorian: date, owner_user_id: int | None = None
+) -> list[int]:
+    booked = await booked_gehs(db, agyary_id, gregorian, owner_user_id)
     return [geh for geh in ALL_GEHS if geh not in booked]
 
 
@@ -76,13 +86,14 @@ async def next_days_with_geh(
     after: date,
     geh: int,
     count: int = 3,
+    owner_user_id: int | None = None,
 ) -> list[SlotOption]:
-    """The next `count` days after `after` where `geh` is free."""
+    """The next `count` days after `after` where `geh` is free for this mobed."""
     options: list[SlotOption] = []
     for offset in range(1, _SCAN_LIMIT_DAYS + 1):
         day = after + timedelta(days=offset)
         roj, mah, year = parsi_slot_fields(gregorian_to_parsi(day, system))
-        if geh not in await booked_gehs(db, agyary_id, day):
+        if geh not in await booked_gehs(db, agyary_id, day, owner_user_id):
             options.append(SlotOption(roj=roj, mah=mah, year=year, geh=geh, gregorian=day))
             if len(options) >= count:
                 break
@@ -95,6 +106,7 @@ async def next_days_with_any_geh(
     system: CalendarSystem,
     after: date,
     count: int = 3,
+    owner_user_id: int | None = None,
 ) -> list[SlotOption]:
     """The next `count` days after `after` with at least one free geh
     (represented by the first free geh of that day)."""
@@ -102,7 +114,7 @@ async def next_days_with_any_geh(
     for offset in range(1, _SCAN_LIMIT_DAYS + 1):
         day = after + timedelta(days=offset)
         roj, mah, year = parsi_slot_fields(gregorian_to_parsi(day, system))
-        free = await available_gehs(db, agyary_id, day)
+        free = await available_gehs(db, agyary_id, day, owner_user_id)
         if free:
             options.append(SlotOption(roj=roj, mah=mah, year=year, geh=free[0], gregorian=day))
             if len(options) >= count:

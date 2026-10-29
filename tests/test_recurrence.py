@@ -37,12 +37,12 @@ def _greg(agyary: Agyary, mah: int, year: int = YEAR, roj: int = ROJ) -> date:
     return parsi_to_gregorian(year, CalendarSystem(agyary.calendar_system), mah=mah, roj=roj)
 
 
-async def _start_recurring(db, seeded, *, mah: int = START_MAH, roj: int = ROJ, geh: int = GEH, recurring: str = "monthly"):
+async def _start_recurring(db, seeded, *, mah: int = START_MAH, roj: int = ROJ, geh: int = GEH, recurring: str = "monthly", actor: int = 1):
     agyary = await _agyary(db, seeded)
     result = await mobed_dashboard.manual_add_machi(
         db,
         agyary,
-        actor_user_id=1,
+        actor_user_id=actor,
         behdin_phone="+919900044444",
         behdin_name="Behdin Recurring",
         roj=roj,
@@ -147,8 +147,9 @@ async def test_reading_within_the_horizon_generates_nothing(db, seeded):
 
 
 async def test_a_taken_slot_is_skipped_without_stalling_the_marker(db, seeded):
-    """Somebody else holds that geh. The month is still done with - retrying
-    it on every calendar render would be churn that never succeeds."""
+    """The mobed already holds that geh for another family. The month is still
+    done with - retrying it on every calendar render would be churn that never
+    succeeds. (A colleague's machi never blocks a series: slots are per mobed.)"""
     agyary, _source, rule = await _start_recurring(db, seeded)
 
     # Occupy the month after the horizon, before the recurrence reaches it.
@@ -157,6 +158,7 @@ async def test_a_taken_slot_is_skipped_without_stalling_the_marker(db, seeded):
     taken = await booking_service.book_machi_slot(
         db, agyary, other, roj=ROJ, mah=blocked_mah, year=YEAR, geh=GEH,
         gregorian=_greg(agyary, blocked_mah), purpose="patet", names=[],
+        owner_user_id=_source.created_by_user_id,
     )
     assert taken.machi is not None, "the blocking machi should book"
 
@@ -249,11 +251,12 @@ async def test_the_board_returns_instances_past_the_horizon(db, client, seeded):
     generated yet, and the machi is there."""
     from tests.test_mobed_api import _member_headers
 
-    agyary, _source, rule = await _start_recurring(db, seeded)
+    headers = await _member_headers(client, seeded)
+    me = (await client.get("/api/mobed/auth/me", headers=headers)).json()["id"]
+    agyary, _source, rule = await _start_recurring(db, seeded, actor=me)
     await db.commit()
 
     target = _greg(agyary, START_MAH + 7)
-    headers = await _member_headers(client, seeded)
     r = await client.get(
         f"/api/mobed/agyaries/{agyary.id}/machi-board",
         params={"from": target.isoformat(), "to": target.isoformat()},

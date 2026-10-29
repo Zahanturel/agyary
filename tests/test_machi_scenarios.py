@@ -1,6 +1,7 @@
 """Machi booking, end to end, under the conditions that go wrong.
 
-A machi is one slot - one geh on one day at one fire temple - and once it is
+A machi is one slot - one geh on one day at one fire temple, on one mobed's own
+board (colleagues' boards are invisible to each other) - and once it is
 booked it must not be overwritten, double-booked or quietly lost. These run the
 scenarios that threaten that: two people wanting the same slot at once, mobeds
 who read different calendars, values a client should never send, edits, deletes,
@@ -96,14 +97,15 @@ async def mobeds(client, seeded, n=2):
 # --- The slot cannot be taken twice ------------------------------------------------
 
 async def test_a_booked_slot_cannot_be_booked_again_and_the_first_is_untouched(db, client, seeded):
+    """A slot is each mobed's own: the same mobed cannot book it twice."""
     aid = seeded["agyary_id"]
-    a, b = await mobeds(client, seeded)
+    a, _ = await mobeds(client, seeded)
     first = await book(client, aid, a, phone="+919933300011")
     assert first.json()["confirmed"] is True
     machi_id = first.json()["machi_id"]
     owner = (await db.get(Machi, machi_id)).customer_id
 
-    second = await book(client, aid, b, phone="+919933300012")
+    second = await book(client, aid, a, phone="+919933300012")
     assert second.status_code == 200 and second.json()["confirmed"] is False
     assert GEH not in second.json()["alternatives"]["same_day_gehs"]
 
@@ -115,10 +117,10 @@ async def test_a_booked_slot_cannot_be_booked_again_and_the_first_is_untouched(d
 
 async def test_simultaneous_requests_for_one_slot_book_exactly_one(db, client, seeded):
     aid = seeded["agyary_id"]
-    heads = await mobeds(client, seeded, n=2)
+    (head,) = await mobeds(client, seeded, n=1)
     async with separate_sessions():
         results = await asyncio.gather(*[
-            book(client, aid, heads[i % 2], phone=f"+91993330002{i}") for i in range(6)
+            book(client, aid, head, phone=f"+91993330002{i}") for i in range(6)
         ])
     assert all(r.status_code == 200 for r in results), [r.text for r in results]
     assert sorted(r.json()["confirmed"] for r in results) == [False] * 5 + [True]
@@ -127,39 +129,39 @@ async def test_simultaneous_requests_for_one_slot_book_exactly_one(db, client, s
 
 async def test_a_released_slot_can_be_booked_again(db, client, seeded):
     aid = seeded["agyary_id"]
-    (a, b) = await mobeds(client, seeded)
+    (a,) = await mobeds(client, seeded, n=1)
     first = (await book(client, aid, a, phone="+919933300031")).json()
     assert (await client.delete(f"/api/mobed/agyaries/{aid}/machis/{first['machi_id']}", headers=a)).status_code == 200
-    again = await book(client, aid, b, phone="+919933300032")
+    again = await book(client, aid, a, phone="+919933300032")
     assert again.json()["confirmed"] is True
 
 
 # --- Mobeds who read a different calendar from the temple ------------------------
 
-async def test_two_mobeds_reading_different_calendars_cannot_double_book_a_day(db, client, seeded):
-    """The temple is Shenshai. A Kadmi-reading mobed's browser sends Kadmi Roj/Mah;
-    the same real day and geh must still count as taken."""
+async def test_one_mobed_switching_calendars_cannot_double_book_a_day(db, client, seeded):
+    """The temple is Shenshai. Once the mobed reads Kadmi, their browser sends Kadmi
+    Roj/Mah; the same real day and geh must still count as taken."""
     aid = seeded["agyary_id"]
-    shenshai_mobed, kadmi_mobed = await mobeds(client, seeded)
-    await set_primary(client, shenshai_mobed, "shenshai")
-    await set_primary(client, kadmi_mobed, "kadmi")
+    (mobed,) = await mobeds(client, seeded, n=1)
+    await set_primary(client, mobed, "shenshai")
     assert keys(DAY, "shenshai") != keys(DAY, "kadmi")        # the premise: the keys differ
 
-    first = await book(client, aid, shenshai_mobed, system="shenshai", phone="+919933300041")
+    first = await book(client, aid, mobed, system="shenshai", phone="+919933300041")
     assert first.json()["confirmed"] is True
-    second = await book(client, aid, kadmi_mobed, system="kadmi", phone="+919933300042")
+    await set_primary(client, mobed, "kadmi")
+    second = await book(client, aid, mobed, system="kadmi", phone="+919933300042")
     assert second.json()["confirmed"] is False, "the same day and geh was booked twice"
     assert await count(db, gregorian_date=DAY, geh=GEH) == 1
 
 
 async def test_what_the_form_shows_free_matches_what_booking_allows(db, client, seeded):
     aid = seeded["agyary_id"]
-    a, b = await mobeds(client, seeded)
-    await set_primary(client, b, "kadmi")
+    (a,) = await mobeds(client, seeded, n=1)
     assert (await book(client, aid, a, phone="+919933300051")).json()["confirmed"] is True
-    shown = (await client.get(f"/api/mobed/agyaries/{aid}/bookable-gehs", params={"on": DAY.isoformat()}, headers=b)).json()
+    await set_primary(client, a, "kadmi")
+    shown = (await client.get(f"/api/mobed/agyaries/{aid}/bookable-gehs", params={"on": DAY.isoformat()}, headers=a)).json()
     assert GEH not in shown["bookable"]                        # the geh picker greys it out
-    forced = await book(client, aid, b, system="kadmi", phone="+919933300052")
+    forced = await book(client, aid, a, system="kadmi", phone="+919933300052")
     assert forced.json()["confirmed"] is False                 # and forcing it still fails
 
 
@@ -216,9 +218,9 @@ async def test_editing_with_impossible_values_is_refused_too(db, client, seeded)
 
 async def test_moving_a_machi_onto_a_taken_slot_leaves_it_where_it_was(db, client, seeded):
     aid = seeded["agyary_id"]
-    a, b = await mobeds(client, seeded)
+    (a,) = await mobeds(client, seeded, n=1)
     mine = (await book(client, aid, a, geh=2, phone="+919933300081")).json()
-    await book(client, aid, b, geh=3, phone="+919933300082")
+    await book(client, aid, a, geh=3, phone="+919933300082")
     r = await client.put(f"/api/mobed/agyaries/{aid}/machis/{mine['machi_id']}",
                          json=body(geh=3, phone="+919933300081"), headers=a)
     assert r.json()["confirmed"] is False
@@ -241,14 +243,14 @@ async def test_a_name_only_edit_is_not_blocked_by_the_machi_itself(db, client, s
 
 async def test_a_repeating_series_reports_the_dates_it_could_not_book(db, client, seeded):
     aid = seeded["agyary_id"]
-    a, b = await mobeds(client, seeded)
-    # A colleague already holds the same geh one Parsi month on.
+    (a,) = await mobeds(client, seeded, n=1)
+    # The same mobed already holds the same geh one Parsi month on (for another family).
     month_on = keys(DAY, "shenshai")
     from agyary.calendar import parsi_to_gregorian
     next_mah = (month_on[1] % 12) + 1
     next_year = month_on[2] + (1 if month_on[1] == 12 else 0)
     taken = parsi_to_gregorian(next_year, CalendarSystem("shenshai"), mah=next_mah, roj=month_on[0])
-    assert (await book(client, aid, b, day=taken, phone="+919933300101")).json()["confirmed"] is True
+    assert (await book(client, aid, a, day=taken, phone="+919933300101")).json()["confirmed"] is True
 
     r = await book(client, aid, a, phone="+919933300102", recurring="monthly")
     assert r.json()["confirmed"] is True
@@ -257,12 +259,12 @@ async def test_a_repeating_series_reports_the_dates_it_could_not_book(db, client
 
 async def test_the_preview_warns_about_a_series_before_anything_is_booked(db, client, seeded):
     aid = seeded["agyary_id"]
-    a, b = await mobeds(client, seeded)
+    (a,) = await mobeds(client, seeded, n=1)
     from agyary.calendar import parsi_to_gregorian
     roj, mah, year = keys(DAY, "shenshai")
     taken = parsi_to_gregorian(year + (1 if mah == 12 else 0), CalendarSystem("shenshai"),
                                mah=(mah % 12) + 1, roj=roj)
-    await book(client, aid, b, day=taken, phone="+919933300111")
+    await book(client, aid, a, day=taken, phone="+919933300111")
     r = await client.post(f"/api/mobed/agyaries/{aid}/slip-preview/machi",
                           json={**body(phone="+919933300112"), "recurring": "monthly"}, headers=a)
     assert r.status_code == 200, r.text
@@ -284,12 +286,12 @@ async def test_a_machi_on_a_gatha_day_cannot_be_made_to_repeat(db, client, seede
 
 # --- Who can see and change what ---------------------------------------------------------
 
-async def test_a_colleague_sees_the_slot_as_taken_but_cannot_change_the_machi(db, client, seeded):
+async def test_a_colleague_sees_nothing_of_the_slot_and_cannot_change_the_machi(db, client, seeded):
     aid = seeded["agyary_id"]
     a, b = await mobeds(client, seeded)
     made = (await book(client, aid, a, phone="+919933300131")).json()
     shown = (await client.get(f"/api/mobed/agyaries/{aid}/bookable-gehs", params={"on": DAY.isoformat()}, headers=b)).json()
-    assert GEH not in shown["bookable"]
+    assert GEH in shown["bookable"]                          # not their slot, so not taken for them
     assert (await client.put(f"/api/mobed/agyaries/{aid}/machis/{made['machi_id']}",
                              json=body(geh=4, phone="+919933300131"), headers=b)).status_code == 404
     assert (await client.delete(f"/api/mobed/agyaries/{aid}/machis/{made['machi_id']}", headers=b)).status_code == 404

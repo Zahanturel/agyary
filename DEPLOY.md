@@ -99,19 +99,17 @@ on the VM, and without buying/managing a TLS certificate yourself.
    use a cheap/free subdomain provider, or a domain you already own).
 2. Go to **Zero Trust → Networks → Tunnels → Create a tunnel**, choose
    "Cloudflared", name it (e.g. `agyary-alpha`).
-3. Add **two Public Hostnames**, both pointing at the same tunnel and the
-   same service — `mobed.<your-domain>` and `machi.<your-domain>`, service
-   type `HTTP`, service URL `app:8000`. That hostname is the `app` service
-   name from `docker-compose.yml`, resolved over the Docker network the
-   compose file already sets up, not `localhost`. Cloudflare creates the
-   CNAME for each.
+3. Add **one Public Hostname** — `mobed.<your-domain>`, service type `HTTP`,
+   service URL `app:8000`. That hostname is the `app` service name from
+   `docker-compose.yml`, resolved over the Docker network the compose file
+   already sets up, not `localhost`. Cloudflare creates the CNAME.
 
-   Both hostnames are deliberately the same service. A tunnel ingress rule
-   matches on hostname and path but cannot prepend one, so both arrive at
-   `/`; the app reads the `Host` header and redirects to `/mobed` or
-   `/machi` (see `app_path_for_host` in `api/main.py`). Nothing needs
-   configuring in the dashboard for that, and nothing about the routing
-   lives outside the repo.
+   There is one app: Machi is a tab of the Mobed Diary, not a site of its own.
+   A tunnel ingress rule cannot prepend a path, so the bare hostname arrives at
+   `/` and the app redirects it to `/mobed` (`root` in `api/main.py`). If a
+   `machi.<your-domain>` hostname and CNAME from the earlier two-app setup are
+   still there, delete them in the Cloudflare dashboard (Zero Trust → Tunnels →
+   Public Hostnames, and DNS); until then it just opens the same app.
 
 4. The WhatsApp webhook is the same app on every hostname. Point Meta at
    `https://mobed.<your-domain>/webhooks/whatsapp` and subscribe it to the

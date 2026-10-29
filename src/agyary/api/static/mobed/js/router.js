@@ -1,6 +1,7 @@
 "use strict";
 
 import { drainFlash, showBack, showTabs } from "./ui.js";
+import { state } from "./state.js";
 
 // A hash router, kept deliberately small: pattern -> handler, with :params.
 // Hash rather than a real path because the PWA is served from a single
@@ -30,9 +31,11 @@ const trail = [];
  * a function of the route params. A route WITH a parent shows the header
  * Back control; the roots (calendar, login, onboarding) have none.
  *
- * opts.tab: which bottom tab this screen belongs to ("calendar", "behdins"),
- * which also shows the tab bar. Omit it and the bar is hidden - forms,
- * slips and the menu have a Back instead.
+ * opts.tab: which bottom tab this screen belongs to ("machi", "calendar",
+ * "behdins"), which also shows the tab bar. "inherit" shows the bar with the
+ * tab the mobed came from lit - for a slip, an edit or a review, which can be
+ * reached from more than one tab. Omit it and the bar is hidden: Settings
+ * (the menu), sign-in and onboarding.
  *
  * opts.stepBack: the parent is the PREVIOUS STEP of a flow, not merely an
  * earlier screen - Back swaps to it in place instead of walking history.
@@ -147,7 +150,10 @@ export async function resolve() {
   showBack(parent
     ? () => (found.route.stepBack ? navigate(parent, { replace: true }) : back(parent))
     : null);
-  showTabs(found.route.tab);
+  let tab = found.route.tab;
+  if (tab === "inherit") tab = state.lastTab;
+  else if (tab) state.lastTab = tab;
+  showTabs(tab);
   window.scrollTo(0, 0);
   await found.route.handler(found.params);
   // Any message queued by a guard (or by the screen we just left) is shown

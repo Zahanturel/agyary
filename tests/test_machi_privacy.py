@@ -46,19 +46,68 @@ async def test_detail_and_slip_are_only_for_the_machis_own_mobed(client, db, see
         assert BEHDIN_PHONE not in theirs.text and "Dead A" not in theirs.text, what
 
 
-async def test_board_shows_a_colleagues_slot_as_booked_without_the_family(client, db, seeded):
+WINDOW = "from=2030-08-01&to=2030-08-31"
+
+
+async def _book(client, aid, headers, geh=1, name="Their Family", phone="+919944400799"):
+    return await client.post(f"/api/mobed/agyaries/{aid}/manual-add/machi", headers=headers, json={
+        "behdin_phone": phone, "behdin_name": name, "roj": 1, "mah": 1,
+        "year": 1400, "geh": geh, "gregorian": "2030-08-15", "purpose": "patet",
+    })
+
+
+async def test_a_colleague_sees_nothing_of_anothers_board(client, db, seeded):
     aid = seeded["agyary_id"]
     owner, mid = await _owners_machi(client, seeded)
-    window = "from=2030-08-01&to=2030-08-31"
 
-    [own] = (await client.get(f"/api/mobed/agyaries/{aid}/machi-board?{window}", headers=owner)).json()
+    [own] = (await client.get(f"/api/mobed/agyaries/{aid}/machi-board?{WINDOW}", headers=owner)).json()
     assert own["id"] == mid and own["behdin_name"] == "Private Family" and own["mine"] is True
 
     colleague = await _member_headers(client, seeded, name="Colleague", phone="+919944400703")
-    r = await client.get(f"/api/mobed/agyaries/{aid}/machi-board?{window}&mine=false", headers=colleague)
-    [theirs] = r.json()
-    # The slot is still visibly taken - that is what the shared board is for...
-    assert theirs["id"] == mid and theirs["geh"] == 1 and theirs["gregorian_date"] == "2030-08-15"
-    # ...but not by whom.
-    assert theirs["behdin_name"] == "" and theirs["mine"] is False
-    assert "Private Family" not in r.text
+    # Asking for the whole temple's board, as the old shared board did, changes nothing.
+    for query in ("", "&mine=false", "&mine=true"):
+        r = await client.get(f"/api/mobed/agyaries/{aid}/machi-board?{WINDOW}{query}", headers=colleague)
+        assert r.status_code == 200 and r.json() == [], query
+        assert "Private Family" not in r.text
+
+
+async def test_a_colleagues_machi_does_not_make_a_geh_look_taken(client, db, seeded):
+    aid = seeded["agyary_id"]
+    owner, _ = await _owners_machi(client, seeded)  # geh 1 on 2030-08-15
+    colleague = await _member_headers(client, seeded, name="Colleague", phone="+919944400704")
+
+    mine = (await client.get(f"/api/mobed/agyaries/{aid}/bookable-gehs?on=2030-08-15", headers=owner)).json()
+    theirs = (await client.get(f"/api/mobed/agyaries/{aid}/bookable-gehs?on=2030-08-15", headers=colleague)).json()
+    assert 1 not in mine["bookable"]
+    assert theirs["bookable"] == [1, 2, 3, 4, 5]
+
+
+async def test_two_mobeds_can_hold_the_same_geh_and_neither_is_told(client, db, seeded):
+    aid = seeded["agyary_id"]
+    owner, owners_id = await _owners_machi(client, seeded)
+    colleague = await _member_headers(client, seeded, name="Colleague", phone="+919944400705")
+
+    made = await _book(client, aid, colleague, geh=1)
+    assert made.status_code == 200, made.text
+    assert made.json()["machi_id"] != owners_id
+    assert "Private Family" not in made.text and BEHDIN_PHONE not in made.text
+
+    # Their own second try at the same geh is refused, as it always was.
+    again = await _book(client, aid, colleague, geh=1, name="Another", phone="+919944400798")
+    assert again.status_code != 200 or again.json().get("machi_id") is None
+
+    # And the first mobed's board is exactly as it was.
+    [own] = (await client.get(f"/api/mobed/agyaries/{aid}/machi-board?{WINDOW}", headers=owner)).json()
+    assert own["id"] == owners_id
+
+
+async def test_the_preview_does_not_leak_a_colleagues_slot(client, db, seeded):
+    aid = seeded["agyary_id"]
+    await _owners_machi(client, seeded)
+    colleague = await _member_headers(client, seeded, name="Colleague", phone="+919944400706")
+    r = await client.post(f"/api/mobed/agyaries/{aid}/slip-preview/machi", headers=colleague, json={
+        "behdin_phone": "+919944400797", "behdin_name": "Someone", "roj": 1, "mah": 1, "year": 1400,
+        "geh": 1, "gregorian": "2030-08-15", "purpose": "patet",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["slot_available"] is True

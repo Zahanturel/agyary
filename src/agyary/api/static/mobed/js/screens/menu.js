@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * The menu, behind the header icon: who you are, and which calendar you read in.
- * In the Machi Board app, which has no tab bar, your behdins are here too; in
- * the mobed app they are a tab of their own.
+ * Settings, behind the header icon: who you are, and which calendar you read in.
+ * Your behdins are a tab of their own, not here. This is the one place the
+ * tab bar is not shown.
  *
  * Everything management-shaped - the fire temple's own details,
  * the service catalog - is deliberately absent. Those belong to the agyari
@@ -13,6 +13,7 @@
 
 import { updateMyName, getPreferences, putPreferences, putDailyReport, logout, signOutOtherDevices, deleteMyAccount } from "../api.js";
 import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
+import { clearAllDrafts } from "../drafts.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
 } from "../ui.js";
@@ -38,8 +39,6 @@ export async function renderMenu() {
   const prefs = state.preferences;
   const visible = prefs.visible_calendar_systems || ["gregorian", "shenshai"];
   const agyary = currentAgyary();
-  // The mobed app has Behdins as a tab; the Machi Board has no tab bar.
-  const hasTabs = !!document.getElementById("tabs");
 
   mainEl.innerHTML = `
     <div class="card">
@@ -90,7 +89,7 @@ export async function renderMenu() {
       </div>
     </div>
 
-    ${hasTabs ? `<div class="card">
+    <div class="card">
       <div class="section-bar" id="mRemindersBar">
         <div class="sb-text"><b>Reminders</b>
           <span>Families to remind about memorial prayers</span></div>
@@ -103,16 +102,7 @@ export async function renderMenu() {
           <span>Sending limits, cost and the pause switch</span></div>
         <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
       </div>
-    </div>` : ""}` : `<div class="card">
-      <div class="section-bar" id="mBehdinBar">
-        <div class="sb-text"><b>Manage your behdins</b>
-          <span>Names, numbers and their saved name lists</span></div>
-        <div class="sb-actions">
-          <button class="icon-add" id="mAddBehdin" title="Add a behdin" aria-label="Add a behdin">+</button>
-          <span class="chev">&rsaquo;</span>
-        </div>
-      </div>
-    </div>`}
+    </div>` : ""}
 
     <div class="card">
       <button class="ghost" id="mSignOut">Sign out</button>
@@ -180,24 +170,9 @@ export async function renderMenu() {
     } catch (e) { showError(e.message); }
   };
 
-  if (hasTabs) document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
+  document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
   const adminBar = document.getElementById("mAdminBar");
   if (adminBar) adminBar.onclick = () => navigate("#/admin");
-
-  // The whole bar opens the list; the + is a shortcut straight to adding.
-  if (!hasTabs) document.getElementById("mBehdinBar").onclick = (e) => {
-    if (e.target.closest("#mAddBehdin")) return;
-    navigate("#/behdins");
-  };
-  // Straight to the one-page add screen - name, number, import-from-contacts
-  // and the saved names all in one place. It used to unfold a second panel
-  // here that could only do name and number, so adding saved names meant
-  // saving, opening the behdin, and editing them in: three steps for one
-  // job, and the reason this shortcut existed at all was to avoid steps.
-  if (!hasTabs) document.getElementById("mAddBehdin").onclick = (e) => {
-    e.stopPropagation();
-    navigate("#/behdins/new");
-  };
 
   document.getElementById("mSignOutOthers").onclick = async () => {
     try {
@@ -230,6 +205,7 @@ export async function renderMenu() {
         return showError(err.message);
       }
       clearSession();
+      clearAllDrafts();
       state.accessToken = null;
       state.user = null;
       state.preferences = null;
@@ -244,6 +220,7 @@ export async function renderMenu() {
     // next load.
     try { await logout(); } catch (e) { /* clear locally regardless */ }
     clearSession();
+    clearAllDrafts();
     state.accessToken = null;
     state.user = null;
     state.offline = false;

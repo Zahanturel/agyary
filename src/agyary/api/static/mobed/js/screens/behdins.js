@@ -31,7 +31,7 @@ import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js
 import { navigate, back, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { openDeleteBox, deleteResultText } from "../behdin_delete.js";
-import { loadDraft, saveDraft, clearDraft } from "../drafts.js";
+import { loadDraft, saveDraft, clearDraft, offerDraft } from "../drafts.js";
 
 export async function renderBehdinList() {
   chrome(true);
@@ -165,10 +165,26 @@ export function renderBehdinNew() {
   const backTarget = returnTo ? RETURN_TARGETS[returnTo] : "#/behdins";
 
   // A new behdin often comes because someone has died: give the date and the
-  // whole schedule is laid out from it. Only in the mobed app (the Machi Board
-  // has no memorial screens), and not when this page is a detour from a form.
-  const memorialOk = !returnTo && !!document.getElementById("tabs");
+  // whole schedule is laid out from it. Not when this page is a detour from a form.
+  const memorialOk = !returnTo;
 
+  // What was typed stays until the behdin is saved or this is cancelled -
+  // going to another tab and coming back asks whether to continue it.
+  const draftKey = `behdin-new:${returnTo || ""}`;
+  const stored = loadDraft(draftKey);
+  const ctx = { returnTo, prefillName, backTarget, memorialOk, draftKey, RETURN_TARGETS };
+  if (!stored || !(stored.name || stored.phone || (stored.names || []).length || stored.memOn)) {
+    return buildBehdinNew(ctx, {});
+  }
+  offerDraft({
+    title: "Unfinished behdin",
+    summary: [stored.name || "No name yet", stored.phone ? `${stored.cc || ""} ${stored.phone}`.trim() : "No number yet"],
+    onStartNew: () => { clearDraft(draftKey); buildBehdinNew(ctx, {}); },
+    onContinue: () => buildBehdinNew(ctx, stored),
+  });
+}
+
+function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKey, RETURN_TARGETS }, held) {
   mainEl.innerHTML = `
     <div id="bnForm">
     <div class="card">
@@ -203,10 +219,6 @@ export function renderBehdinNew() {
     </div>
     <div id="bnPreview" style="display:none"></div>`;
 
-  // What was typed here stays until the behdin is saved or this is cancelled -
-  // going to the calendar and coming back finds the form as it was left.
-  const draftKey = `behdin-new:${returnTo || ""}`;
-  const held = loadDraft(draftKey) || {};
   const formRoot = document.getElementById("bnForm");
   const snapshot = () => ({
     name: document.getElementById("bnName").value,
@@ -430,8 +442,6 @@ export async function renderBehdinDetail({ id }) {
   const cid = Number(id);
   const alive = navGuard();
 
-  // Memorials live in the mobed app; the Machi Board has no screens for them.
-  const hasMemorials = !!document.getElementById("tabs");
   let record = null, history = null, saved = [], memorials = [];
   try {
     [record, history, saved, memorials] = await Promise.all([
@@ -440,7 +450,7 @@ export async function renderBehdinDetail({ id }) {
       // be empty for a behdin someone else booked for.
       customerHistory(cid).catch(() => null),
       getSavedNames(aid, cid).catch(() => []),
-      hasMemorials ? listMemorials(aid, cid).catch(() => []) : [],
+      listMemorials(aid, cid).catch(() => []),
     ]);
   } catch (e) {
     if (!alive()) return;

@@ -37,9 +37,16 @@
 
 <main id="main"></main>
 
-<!-- The two places a mobed lives: their calendar and their behdins. Shown on
-     those screens only; forms and slips have a Back instead. -->
+<!-- The three places a mobed lives: their machi board, their calendar and
+     their behdins. Shown on every screen except Settings, sign-in and
+     onboarding; the tab they came from stays lit on a form or a slip. -->
 <nav id="tabs" class="tabs hidden" aria-label="Main">
+  <button data-tab="machi" aria-label="Machi">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3.5" y="4" width="17" height="16" rx="2.5" stroke="currentColor" stroke-width="2"/>
+      <path d="M3.5 8.8h17M3.5 12.4h17M3.5 16h17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><span>Machi</span>
+  </button>
   <button data-tab="calendar" aria-label="Calendar">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="2"/>

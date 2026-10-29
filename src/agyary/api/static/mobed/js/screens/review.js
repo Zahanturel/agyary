@@ -22,6 +22,7 @@ import {
   previewBooking, previewMachi, addBooking, editBooking, addMachi, editMachi,
 } from "../api.js";
 import { state, GEH_NAME_BY_NUM } from "../state.js";
+import { clearDraft } from "../drafts.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import { slipCardHtml } from "./slip.js";
 import { chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading } from "../ui.js";
@@ -220,6 +221,7 @@ export function renderReview(kind) {
 
         state.calendar.focus = draft.gregorian;
         state.draft = null;
+        if (!draft.edit) clearDraft(isMachi ? "machi" : "event");   // saved: nothing left to continue
         // Neither the form nor this review may stay behind the slip in
         // history. An edit pops back to the slip it was opened from.
         if (draft.edit) return returnTo(slipHash);
@@ -228,7 +230,7 @@ export function renderReview(kind) {
         // it used to return to whichever calendar day the mobed happened to be
         // on (or had left in the address from a previous visit), so a saved
         // event looked as though it had not been.
-        await navigate(`#/calendar/day/${draft.gregorian}`, { replace: true });
+        await navigate(`#/${isMachi ? "board" : "calendar"}/day/${draft.gregorian}`, { replace: true });
         // Said on the slip, where the mobed lands - not on the calendar they pass through.
         const skipped = (res.skipped || []).map(x => gregLabel(x.gregorian));
         if (skipped.length) {

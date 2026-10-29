@@ -113,6 +113,24 @@ evening before, unless that mobed's account switch is off.
   (the listing material is kept), and Google's developer-verification rules for apps installed
   outside Play may require registering as a developer once they reach India.
 
+## D7. One app, and a machi is each mobed's own (29 Oct 2026)
+
+- **Machi is a tab of the Mobed Diary, not an app of its own.** The bottom tabs are Machi,
+  Calendar and Behdins, shown on every screen except Settings, sign-in and onboarding. The
+  separate Machi app (machi.gotiadarian.com) never shipped and is gone, with its manifest and
+  service worker. The Machi and Calendar tabs share one day and one Day/Month view, so switching
+  between them never moves the date.
+- **A mobed's machis are private, like their behdins (D2).** A machi slot is one geh, one day,
+  one temple, *per mobed*: two mobeds at a temple may both hold the same geh and neither can tell.
+  The board shows a mobed only their own machis, and a colleague's never makes a geh look taken.
+  The panthaky (and caretaker) keep full authority over their temple for now and see every machi
+  there; the roles-and-permissions module will replace that. Migration `a9b0c1d2e3f4`.
+- **Half-filled forms are kept until saved, discarded or sign-out, and never applied unasked.**
+  Opening a form with a saved draft asks "Continue from last time" or "Start a new one". Only
+  content is kept (behdin, purpose, names); Roj and Mah are always worked out from the date, and a
+  booking date that has already passed is not restored (the day being viewed is used, and the
+  mobed is told). Signing out or deleting the account wipes every draft on the phone.
+
 ## Not decided yet
 
 Separate WhatsApp numbers for sign-in and reminders; price and payer; Gujarati reminders; the

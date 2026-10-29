@@ -38,17 +38,23 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  *  shared link, lands on the same view. Month is identified by any day inside
  *  it; the Parsi month is derived from that, never stored separately, which is
  *  what kept a stale month on screen after paging days. */
-export function calendarHash(view) {
-  return `#/calendar/${view.mode}/${view.focus || todayIst()}`;
+export function calendarHash(view, root = "calendar") {
+  return `#/${root}/${view.mode}/${view.focus || todayIst()}`;
+}
+
+/** The Machi tab's view of the same day: one view object, two tabs, so
+ *  switching between them never moves the date or the Day/Month choice. */
+export function boardHash(view) {
+  return calendarHash(view, "board");
 }
 
 /** Load the route's params into the view. Returns the canonical hash to
  *  redirect to when the params are missing or malformed, else null. */
-export function applyCalendarRoute(view, { mode, date } = {}) {
+export function applyCalendarRoute(view, { mode, date } = {}, root = "calendar") {
   if (!MODES.includes(mode) || !YMD.test(date || "")) {
     // Includes an old #/calendar/week/... link: there is no Week view any
     // more, so it lands on the month rather than a dead page.
-    return calendarHash({ mode: MODES.includes(view.mode) ? view.mode : "month", focus: view.focus });
+    return calendarHash({ mode: MODES.includes(view.mode) ? view.mode : "month", focus: view.focus }, root);
   }
   view.mode = mode;
   view.focus = date;

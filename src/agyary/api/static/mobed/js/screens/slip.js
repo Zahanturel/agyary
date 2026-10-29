@@ -8,7 +8,7 @@
 
 import { machiSlip, bookingSlip, deleteMachi, deleteBooking } from "../api.js";
 import { chrome, mainEl, showFab, showError, refreshHeader, loading, flashInfo } from "../ui.js";
-import { state } from "../state.js";
+import { state, homeHash } from "../state.js";
 import { esc } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
@@ -82,7 +82,7 @@ export async function renderSlip({ kind, aid, id }) {
     flashInfo("Deleted.");
     // Back, not a fresh push: the slip is gone, so it must not stay behind us
     // in history as a page that can only say "couldn't load".
-    back("#/calendar");
+    back(homeHash());
   };
 
   document.getElementById("slipDeleteOpen").onclick = () => {

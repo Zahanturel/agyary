@@ -5,7 +5,7 @@ from pathlib import Path
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,11 +71,8 @@ app = FastAPI(
 # make a stale copy harmless.
 _NO_CACHE_PATHS = frozenset({
     "/mobed",
-    "/machi",
     "/mobed-sw.js",
-    "/machi-sw.js",
     "/mobed-manifest.json",
-    "/machi-manifest.json",
     "/privacy",
     "/delete-account",
 })
@@ -140,11 +137,7 @@ async def security_headers(request, call_next):
     # authority - which is exactly how a shipped deploy stayed invisible on a
     # phone while every server-side check passed.
     path = request.url.path
-    if (
-        path in _NO_CACHE_PATHS
-        or path.startswith("/mobed-app")
-        or path.startswith("/machi-app")
-    ):
+    if path in _NO_CACHE_PATHS or path.startswith("/mobed-app"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -159,52 +152,18 @@ app.include_router(whatsapp_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _MOBED_DIR = _STATIC_DIR / "mobed"
-_MACHI_DIR = _STATIC_DIR / "machi"
-
-
-# Which PWA a bare hostname belongs to, keyed on the leftmost DNS label.
-# Deliberately not the full domain: this then works identically on
-# gotiadarian.com, a staging domain, or a machine name, and there is no
-# production hostname buried in the app.
-#
-# The alternative was a Cloudflare Transform Rule rewriting the path in the
-# dashboard. Same result, but it is invisible from the repo - when routing
-# misbehaves later, nothing in the code would explain why. A tunnel ingress
-# rule cannot do this itself: it matches on hostname and path, it does not
-# prepend one, so every hostname arrives here at "/".
-_HOST_APPS = {"mobed": "/mobed", "machi": "/machi"}
-_DEFAULT_APP = "/mobed"
-
-
-def app_path_for_host(host: str | None) -> str:
-    """The app a request to "/" on ``host`` should land in.
-
-    Anything unrecognised - an IP, localhost, the apex domain, a missing
-    Host header - falls back to the mobed app, which is the product.
-    """
-    if not host:
-        return _DEFAULT_APP
-    label = host.split(":")[0].split(".")[0].lower()
-    return _HOST_APPS.get(label, _DEFAULT_APP)
 
 
 @app.get("/", include_in_schema=False)
-def root(host: str | None = Header(default=None)) -> RedirectResponse:
-    """Send a bare hostname to the PWA that hostname is for.
-
-    mobed.gotiadarian.com and machi.gotiadarian.com are the same app behind
-    the same tunnel, so the Host header is the only thing distinguishing
-    them. Without this, "/" would 404 - which is exactly what someone hits
-    when a shared link drops the path.
+def root() -> RedirectResponse:
+    """Send a bare hostname to the app. There is one app (Machi is a tab of it),
+    on whatever hostname: without this, "/" would 404 - which is exactly what
+    someone hits when a shared link drops the path.
 
     307, never 301: a permanent redirect is cached by browsers indefinitely
-    and would outlive any change to this mapping. Vary: Host because the
-    response genuinely differs by it, and a shared cache that missed that
-    would serve one app's users the other app.
+    and would outlive any change to where the app lives.
     """
-    response = RedirectResponse(url=app_path_for_host(host), status_code=307)
-    response.headers["Vary"] = "Host"
-    return response
+    return RedirectResponse(url="/mobed", status_code=307)
 
 
 @app.get("/mobed", include_in_schema=False)
@@ -282,27 +241,8 @@ def font_geist_mono() -> FileResponse:
     return FileResponse(_STATIC_DIR / "fonts" / "geist-mono.woff2", media_type="font/woff2")
 
 
-# --- Machi PWA ---------------------------------------------------------------
-# A separate shell with its own route table, manifest and SW, sharing the
-# same JS modules, CSS, fonts and API as the mobed app.
-
-@app.get("/machi", include_in_schema=False)
-def machi_ui() -> FileResponse:
-    return FileResponse(_MACHI_DIR / "index.html", media_type="text/html")
-
-
-@app.get("/machi-manifest.json", include_in_schema=False)
-def machi_manifest() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "machi-manifest.json", media_type="application/manifest+json")
-
-
-@app.get("/machi-sw.js", include_in_schema=False)
-def machi_service_worker() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "machi-sw.js", media_type="application/javascript")
-
-
 # --- Privacy policy ----------------------------------------------------------
-# Served by both apps on every hostname, deliberately unauthenticated and
+# Served on every hostname, deliberately unauthenticated and
 # JS-free: Meta will not publish the app without a policy URL its reviewer
 # can fetch, and a reviewer is not going to sign in with WhatsApp to read it.
 # A flat file rather than a PWA route for the same reason - it has to render

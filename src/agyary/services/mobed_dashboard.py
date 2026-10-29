@@ -203,10 +203,13 @@ class MachiBoardEntry:
     behdin_name: str
 
 
-async def bookable_gehs(db: AsyncSession, agyary: Agyary, gregorian: date) -> list[int]:
-    """The gehs a machi can still be booked into on `gregorian` at this agyari,
-    via the SAME shared availability core the booking path uses (available_gehs
-    + drop_elapsed_gehs).
+async def bookable_gehs(
+    db: AsyncSession, agyary: Agyary, gregorian: date, owner_user_id: int | None = None
+) -> list[int]:
+    """The gehs a machi can still be booked into on `gregorian` by this mobed
+    at this agyari, via the SAME shared availability core the booking path uses
+    (available_gehs + drop_elapsed_gehs). Only the mobed's own machis count as
+    taking a geh: nothing about a colleague's board is revealed here.
 
     Past dates are allowed here on purpose, for now: this is the mobed's own
     manual entry (walk-ins logged after the fact, corrections to something
@@ -215,7 +218,7 @@ async def bookable_gehs(db: AsyncSession, agyary: Agyary, gregorian: date) -> li
     manually recording what already happened. drop_elapsed_gehs still
     correctly no-ops for any day that isn't literally today, so this doesn't
     change same-day elapsed-geh behaviour at all."""
-    return drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
+    return drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian, owner_user_id), gregorian)
 
 
 MAX_BOARD_RANGE_DAYS = 366
@@ -497,16 +500,17 @@ def _series_dates(system: CalendarSystem, roj: int, mah: int, year: int, pattern
 
 
 async def series_conflicts(
-    db: AsyncSession, agyary: Agyary, gregorian: date, geh: int, recurring: str
+    db: AsyncSession, agyary: Agyary, gregorian: date, geh: int, recurring: str,
+    owner_user_id: int | None = None,
 ) -> list[date]:
     """The dates in the next stretch of a series where this geh is already
-    booked - what the mobed is warned about BEFORE choosing to repeat."""
+    booked by this mobed - what they are warned about BEFORE choosing to repeat."""
     roj, mah, year = booking_service.slot_keys(agyary, gregorian)
     pattern = RECURRENCE_PATTERN_CHOICES[recurring]
     dates = _series_dates(
         CalendarSystem(agyary.calendar_system), roj, mah, year, pattern, SERIES_PREVIEW_PERIODS[pattern]
     )
-    return [d for d in dates if geh in await booked_gehs(db, agyary.id, d)]
+    return [d for d in dates if geh in await booked_gehs(db, agyary.id, d, owner_user_id)]
 
 
 async def manual_add_machi(
@@ -528,10 +532,8 @@ async def manual_add_machi(
 ) -> MachiAddResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
     the exact same shared function the WhatsApp flow uses (module 1) -
-    never a second slot-check implementation. created_by_user_id is set
-    here, after the shared core hands back a real row, rather than
-    threading it into book_machi_slot itself - that function is shared
-    with the WhatsApp path and shouldn't grow a PWA-only parameter.
+    never a second slot-check implementation. The acting mobed is passed in
+    as the owner, because a slot is each mobed's own (see uq_machis_slot).
 
     ``names`` follows the same auto-pull rule as manual_add_booking: leave
     it out and the behdin's saved names are attached automatically, keyed
@@ -551,12 +553,10 @@ async def manual_add_machi(
         names = await _saved_names_for(db, customer.id, living_only=purpose == "tandarosti")
     result = await booking_service.book_machi_slot(
         db, agyary, customer, roj=roj, mah=mah, year=year, geh=geh,
-        gregorian=gregorian, purpose=purpose, names=names,
+        gregorian=gregorian, purpose=purpose, names=names, owner_user_id=actor_user_id,
     )
     skipped: list[date] = []
     if result.machi is not None:
-        result.machi.created_by_user_id = actor_user_id
-        await db.flush()
         await _remember(db, customer.id, names if explicit_names else None, remember_names)
         if recurring:
             skipped = await _create_recurring_machis(
@@ -673,9 +673,9 @@ async def generate_recurrence_instances(
         result = await booking_service.book_machi_slot(
             db, agyary, customer, roj=roj, mah=mah, year=year,
             geh=source.geh, gregorian=greg, purpose=source.purpose, names=names,
+            owner_user_id=source.created_by_user_id,
         )
         if result.machi is not None:
-            result.machi.created_by_user_id = source.created_by_user_id
             result.machi.recurrence_rule_id = rule.id
             result.machi.is_recurring_instance = True
             created += 1
@@ -1450,17 +1450,20 @@ async def preview_machi_slip(
     # day and geh alone is trivially fine - the machi already holds it.
     # Asked the way saving asks it: by the real day and geh, through the same
     # availability core, so the answer cannot differ from what confirming would find.
-    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian), gregorian)
+    # Whose board it is judged on: the machi's own mobed when editing, else the reader's.
+    editing = await db.get(Machi, editing_machi_id) if editing_machi_id is not None else None
+    owner = editing.created_by_user_id if editing is not None else reader_user_id
+    free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian, owner), gregorian)
     available = geh in free
-    if not available and editing_machi_id is not None:
-        machi = await db.get(Machi, editing_machi_id)
+    if not available and editing is not None:
+        machi = editing
         available = bool(
             machi and machi.agyary_id == agyary.id and (machi.gregorian_date, machi.geh) == (gregorian, geh)
         )
     conflicts: list[date] = []
     if recurring and editing_machi_id is None:
         refuse_repeating_gatha(recurring, booking_service.slot_keys(agyary, gregorian)[1])
-        conflicts = await series_conflicts(db, agyary, gregorian, geh, recurring)
+        conflicts = await series_conflicts(db, agyary, gregorian, geh, recurring, owner)
     return {
         "slip": slip, "names": names, "pool_empty": pool_empty, "slot_available": available,
         "series_conflicts": [d.isoformat() for d in conflicts],

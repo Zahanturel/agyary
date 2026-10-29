@@ -1,27 +1,28 @@
 "use strict";
 
 /**
- * Machi board calendar — the agyary's 5-slot geh board.
+ * The Machi tab - the five-geh board for the day, and the same calendar the
+ * Calendar tab shows for week and month.
  *
- * Day view shows all 5 gehs as visual blocks: booked (with behdin/purpose),
- * available (tap to book), or taken/elapsed. Week and month views use the
- * standard calendar item list.
+ * Day view shows all 5 gehs as blocks: booked (with behdin/purpose), free (tap
+ * to book), or already passed. It is the mobed's OWN board: a machi is private
+ * to the mobed who made it (docs/DECISIONS.md D2), so a colleague's bookings
+ * never appear and never make a geh look taken. (A panthaky, who has authority
+ * over the temple, is sent every machi there by the server and sees them all.)
+ *
+ * It reads and writes the one shared calendar view (state.calendar), so
+ * switching to the Calendar tab and back keeps the same day.
  */
 
 import { machiBoard, bookableGehs } from "../api.js";
 import { state, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
-import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
-import { chrome, mainEl, showFab, showError, showInfo, refreshHeader } from "../ui.js";
+import { renderCalendar, applyCalendarRoute, boardHash } from "../calendar.js";
+import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
 import { esc, todayIst } from "../util.js";
 import { navigate } from "../router.js";
 
 let dayGehs = [];
 let dayMachis = [];
-
-// The board is shared so everyone can see which gehs are taken, but who a
-// colleague's machi is for is theirs: the server leaves the name blank and
-// marks the slot `mine: false`, and the app does not offer to open it.
-const OTHERS = "Booked by another mobed";
 
 function machiItems(rows) {
   return rows.map(m => ({
@@ -39,7 +40,7 @@ function machiItems(rows) {
     // cell, and this breaks it at a syllable instead of mid-letter.
     short: `${(GEH_NAME_BY_NUM[m.geh] || "").replace("Aiwisruthrem", "Aiwis­ruthrem")} - ${
       m.purpose === "tandarosti" ? "Tandarosti" : "Patet"}`,
-    sublabel: `${m.mine === false ? OTHERS : (m.behdin_name || "-")} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
+    sublabel: `${m.behdin_name || "-"} · ${GEH_NAME_BY_NUM[m.geh] || ""} Geh`,
   }));
 }
 
@@ -66,31 +67,32 @@ async function loadItems({ from, to }) {
 }
 
 function gehSlotHtml(items) {
-  const byGeh = {};
-  for (const m of dayMachis) byGeh[m.geh] = m;
-
   let html = '<div class="geh-slots">';
   for (const [num, name] of GEHS) {
-    const m = byGeh[num];
+    // Normally one. More than one only for a panthaky looking at a temple
+    // where two mobeds hold the same geh - each is shown, none hidden.
+    const here = dayMachis.filter(m => m.geh === num);
     const available = dayGehs.includes(num);
 
-    if (m) {
-      const purpose = MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose;
-      const tap = m.mine === false ? "" : ` data-cal-item="machi:${m.id}"`;
-      html += `<div class="geh-slot booked"${tap}>
+    if (here.length) {
+      html += here.map(m => {
+        const purpose = MACHI_PURPOSE_DISPLAY[m.purpose] || m.purpose;
+        return `<div class="geh-slot booked" data-cal-item="machi:${m.id}">
         <div class="geh-slot-head">${esc(name)}</div>
         <div class="geh-slot-purpose">${esc(purpose)}</div>
-        <div class="geh-slot-behdin">${esc(m.mine === false ? OTHERS : (m.behdin_name || "-"))}</div>
+        <div class="geh-slot-behdin">${esc(m.behdin_name || "-")}</div>
       </div>`;
+      }).join("");
     } else if (available) {
       html += `<div class="geh-slot open" data-geh-book="${num}">
         <div class="geh-slot-head">${esc(name)}</div>
         <div class="geh-slot-open">Available</div>
       </div>`;
     } else {
+      // Not free and nothing of yours in it: the geh's time has gone.
       html += `<div class="geh-slot taken">
         <div class="geh-slot-head">${esc(name)}</div>
-        <div class="geh-slot-taken">Taken</div>
+        <div class="geh-slot-taken">Passed</div>
       </div>`;
     }
   }
@@ -107,12 +109,20 @@ function wireSlots(container) {
   });
 }
 
+/** The + on this tab adds a machi, on the day being looked at. */
+function addMachi() {
+  state.draft = state.calendar.mode === "day" && state.calendar.focus
+    ? { prefill: { gregorian: state.calendar.focus } }
+    : null;
+  navigate("#/machi/new");
+}
+
 export async function renderMachiCalendarScreen(params) {
   chrome(true);
   refreshHeader();
-  showFab(true, "Add a machi");
+  showFab(true, "Add a machi", addMachi);
   state.calendar.focus = state.calendar.focus || todayIst();
-  const redirect = applyCalendarRoute(state.calendar, params);
+  const redirect = applyCalendarRoute(state.calendar, params, "board");
   if (redirect) return navigate(redirect, { replace: true });
   mainEl.innerHTML = `<div id="cal"></div>`;
   await draw();
@@ -126,7 +136,7 @@ async function draw() {
       view: state.calendar,
       loadItems,
       rerender: draw,
-      viewHash: calendarHash,
+      viewHash: boardHash,
       // Up to five gehs can be booked on a day, and which ones is the point of
       // the board, so a cell lists them all rather than "+3 more".
       monthChips: 5,
@@ -134,10 +144,7 @@ async function draw() {
       renderDay: gehSlotHtml,
       wireDay: wireSlots,
       onItem: (kind, id) => {
-        const m = dayMachis.find(x => x.id === Number(id));
-        if (m && m.mine === false) return showInfo(`${OTHERS}.`);
-        const aid = state.currentAgyaryId;
-        navigate(`#/machi/${aid}/${id}`);
+        navigate(`#/machi/${state.currentAgyaryId}/${id}`);
       },
     });
   } catch (e) {
