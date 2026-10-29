@@ -158,6 +158,7 @@ button:disabled { opacity: .5; cursor: default; }
   .pg-wd { font-size: 16px; }
   .pg-greg-day { font-size: 20px; white-space: nowrap; }
   .pg-roj { font-size: 13px; }
+  .pg-roj.long { font-size: 10.5px; letter-spacing: -.2px; overflow-wrap: normal; }
   .pg-cell { padding: 4px 0 3px; }
 }
 
@@ -363,6 +364,10 @@ a.tel:active { text-decoration: underline; }
 .tabs button.active { color: var(--primary); background: var(--primary-tint); border-top-color: var(--primary); }
 body.has-tabs main { padding-bottom: calc(var(--space-4) + 88px + var(--safe-bottom)); }
 body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
+/* Settings > Text size > Extra large. */
+html[data-text="xl"] { --text-xs:21px; --text-sm:22px; --text-base:24px; --text-md:27px; --text-lg:31px; }
+/* The Add button floats over the page; leave room under the last row for it. */
+body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bottom)); }
 
 /* iPad and laptop: the three places move to a strip down the left side, as
    big as on the phone, and the page uses the width it has. */
@@ -375,6 +380,7 @@ body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
   .tabs button.active { background: var(--accent); color: var(--text); }
   body.has-tabs main { max-width: 960px; padding-bottom: var(--space-6); }
   body.has-tabs .fab { bottom: var(--space-6); }
+  body.has-fab main { padding-bottom: calc(var(--space-6) + 88px); }
 }
 @media print { .tabs { display: none !important; } }
 

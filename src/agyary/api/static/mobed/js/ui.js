@@ -49,8 +49,24 @@ export function onTab(handler) {
 let defaultFabAction = () => {};
 export function setDefaultFabAction(fn) { defaultFabAction = fn; }
 
+const TEXT_KEY = "mobed.textsize";
+/** "large" (the default) or "xl". Kept on this device only, like a draft. */
+export function getTextSize() {
+  try { return localStorage.getItem(TEXT_KEY) === "xl" ? "xl" : "large"; } catch (e) { return "large"; }
+}
+export function setTextSize(v) {
+  try { localStorage.setItem(TEXT_KEY, v); } catch (e) { /* only this visit then */ }
+  applyTextSize();
+}
+export function applyTextSize() {
+  if (getTextSize() === "xl") document.documentElement.dataset.text = "xl";
+  else delete document.documentElement.dataset.text;
+}
+applyTextSize();
+
 export function showFab(show, title = "Add", handler = null) {
   fabEl.classList.toggle("hidden", !show);
+  document.body.classList.toggle("has-fab", show);
   fabEl.title = title;
   fabEl.onclick = handler || defaultFabAction;
 }

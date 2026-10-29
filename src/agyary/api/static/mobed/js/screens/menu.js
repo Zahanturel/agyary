@@ -15,7 +15,7 @@ import { updateMyName, getPreferences, putPreferences, putDailyReport, logout, s
 import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
 import { clearAllDrafts } from "../drafts.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading,
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, getTextSize, setTextSize,
 } from "../ui.js";
 import { esc } from "../util.js";
 import { shellVersion } from "../update.js";
@@ -55,6 +55,15 @@ export async function renderMenu() {
           <div class="fact"><div class="fl">Address</div>
             <div class="fv">${esc([agyary.address, agyary.city].filter(Boolean).join(", ") || "-")}</div></div>
         ` : ""}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Text size</h2>
+      <p class="meta">Makes the words in the app bigger on this phone.</p>
+      <div id="mTextSize">
+        <label class="choice"><input type="radio" name="mText" value="large" ${getTextSize() === "large" ? "checked" : ""}><span>Large</span></label>
+        <label class="choice"><input type="radio" name="mText" value="xl" ${getTextSize() === "xl" ? "checked" : ""}><span>Extra large</span></label>
       </div>
     </div>
 
@@ -119,6 +128,10 @@ export async function renderMenu() {
   shellVersion().then((v) => {
     const el = document.getElementById("mVersion");
     if (el && v) el.textContent = "App version " + v;
+  });
+
+  mainEl.querySelectorAll('input[name="mText"]').forEach(r => {
+    r.onchange = () => setTextSize(r.value);
   });
 
   document.getElementById("mSaveName").onclick = async () => {
