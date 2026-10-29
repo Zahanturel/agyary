@@ -86,6 +86,7 @@ export async function renderBehdinList() {
   const paint = (list) => {
     rowsEl.innerHTML = list.length
       ? list.map(c => `<div class="search-result bh-row" data-cid="${c.id}">
+          <div class="bh-av" aria-hidden="true">${esc((c.name || "?").trim().charAt(0).toUpperCase())}</div>
           <div class="bh-main"><div>${esc(c.name)}</div><div class="addr">${esc(c.phone)}</div></div>
           <button type="button" class="row-x" data-del aria-label="Delete ${esc(c.name)}" title="Delete this behdin">&times;</button>
         </div>`).join("")
