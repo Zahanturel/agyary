@@ -36,6 +36,8 @@
   --font-mono: "Geist Mono", "SFMono-Regular", Consolas, monospace;
   /* Nothing smaller than 18: the people using this are 40 to 60 and not at home with phones. */
   --text-xs:18px; --text-sm:19px; --text-base:21px; --text-md:24px; --text-lg:28px;
+  /* A month cell, the one place narrower than the 18 px rule allows. */
+  --text-grid:16px;
   --tap: 56px;
 
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px;
@@ -108,6 +110,12 @@ button:disabled { opacity: .5; cursor: default; }
 .info-banner { background: var(--accent-tint); color: var(--accent-text); padding: var(--space-3);
   border-radius: var(--radius-sm); font-size: var(--text-sm); margin-bottom: var(--space-3); }
 .empty-state { color: var(--muted); text-align: center; padding: var(--space-8) 0; font-size: var(--text-sm); }
+.load-failed { background: var(--danger-tint); border: 2px solid var(--danger-600); border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); }
+.load-failed p { margin: 0 0 var(--space-2); }
+.load-failed .meta { color: var(--text); }
+.offline-bar { background: var(--accent-text); color: #fff; text-align: center; font-size: var(--text-sm);
+  font-weight: 600; padding: var(--space-2) var(--space-3); }
 .datebar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); }
 .datebar .dlabel { text-align: center; flex: 1; }
 .datebar .dlabel .greg { font-weight: 700; font-size: var(--text-md); line-height: 1.2; }
@@ -132,34 +140,36 @@ button:disabled { opacity: .5; cursor: default; }
 .pg-cell.pg-today { border-color: var(--primary); border-width: 2px; }
 .pg-cell.pg-selected { background: var(--primary-tint); }
 .pg-greg-day { width: 100%; font-size: 22px; font-weight: 700; line-height: 1.15; }
-.pg-roj { width: 100%; font-size: 14px; color: var(--muted); line-height: 1.1;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  overflow-wrap: anywhere; }
+.pg-roj { width: 100%; font-size: var(--text-grid); color: var(--muted); line-height: 1.1; overflow-wrap: anywhere; }
 .pg-events { width: 100%; margin-top: 2px; display: flex; flex-direction: column; gap: 2px; }
-.pg-event { display: block; width: 100%; font-size: 14px; line-height: 1.25; background: var(--accent-tint);
+.pg-event { display: block; width: 100%; font-size: var(--text-grid); line-height: 1.25; background: var(--accent-tint);
   color: var(--accent-text); border-radius: 4px; padding: 1px 3px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .pg-event.machi { background: var(--primary-tint); color: var(--primary); }
 /* Machi Board: a long "Rapithwin - Patet" wraps onto a second line rather than
    clipping the purpose. Only that board turns this on. */
-.pg-events.wrap .pg-event { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; font-size: 11px;
-  padding: 1px 2px; }
-.pg-more { font-size: 14px; color: var(--muted); line-height: 1.1; }
+.pg-events.wrap .pg-event { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; padding: 1px 2px; }
+.pg-more { font-size: var(--text-grid); color: var(--muted); line-height: 1.1; }
+/* What the marks on a phone's month mean. Wide screens show the names instead. */
+.pg-key { display: none; }
 /* On a phone the cell is too narrow to read an event: a coloured bar says "something
    is booked", and the day below lists it in full. */
 @media (max-width: 699px) {
   .pg-event, .pg-events.wrap .pg-event { font-size: 0; height: 8px; padding: 0; border-radius: 4px; background: var(--accent); }
   .pg-event.machi, .pg-events.wrap .pg-event.machi { background: var(--primary); }
   .pg-more { display: none; }
+  .pg-key { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-3) 0 0;
+    font-size: var(--text-xs); color: var(--muted); }
+  .pg-key-bar { width: 22px; height: 8px; border-radius: 4px; background: var(--primary); }
+  .pg-key-diamond { width: 13px; height: 13px; border-radius: 2px; background: var(--success);
+    transform: rotate(45deg); margin-left: var(--space-3); }
 }
 /* The narrowest phones: a little more room for the Roj names, which are long. */
 @media (max-width: 480px) {
   .parsi-grid { grid-template-columns: 2.2em repeat(var(--cols, 5), minmax(0, 1fr)); gap: 3px; }
   .pg-wd { font-size: 16px; }
   .pg-greg-day { font-size: 20px; white-space: nowrap; }
-  .pg-roj { font-size: 13px; }
-  .pg-roj.long.xlong { font-size: 9px; }
-  .pg-roj.long { font-size: 10.5px; letter-spacing: -.2px; overflow-wrap: normal; }
+  .pg-greg-day.with-month { font-size: var(--text-grid); line-height: 1.2; white-space: normal; }
   .pg-cell { padding: 4px 0 3px; }
 }
 
@@ -318,6 +328,14 @@ a.button.small { padding: var(--space-2) var(--space-3); font-size: var(--text-s
   .slip { border: none; border-radius: 0; box-shadow: none; padding: 0; font-size: 15px; }
   .slip .slip-agyary { font-size: 21px; }
   .slip .slip-behdin { color: #000; }
+  /* A thermal printer: its own margins, no room left for the tabs or the Add
+     button, no banners, and black only - a 1-bit head drops pale greys (UX-12). */
+  @page { margin: 2mm; }
+  body { min-height: 0; display: block; padding: 0 !important; }
+  body.has-tabs main, body.has-fab main { padding: 0 !important; }
+  .error-banner, .info-banner, .offline-bar { display: none !important; }
+  .slip, .slip * { color: #000 !important; }
+  .slip .slip-rule { border-top-color: #000; }
 }
 
 /* --- Menu ---------------------------------------------------------------- */
@@ -366,7 +384,7 @@ a.tel:active { text-decoration: underline; }
 body.has-tabs main { padding-bottom: calc(var(--space-4) + 88px + var(--safe-bottom)); }
 body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
 /* Settings > Text size > Extra large. */
-html[data-text="xl"] { --text-xs:21px; --text-sm:22px; --text-base:24px; --text-md:27px; --text-lg:31px; }
+html[data-text="xl"] { --text-xs:21px; --text-sm:22px; --text-base:24px; --text-md:27px; --text-lg:31px; --text-grid:18px; }
 /* The Add button floats over the page; leave room under the last row for it. */
 body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bottom)); }
 
@@ -415,6 +433,13 @@ body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bot
 .event.closing .t { font-size: var(--text-base); }
 .event.closing .s { color: #fff; }
 .pg-event.closing { background: var(--accent-text); color: #fff; font-weight: 600; }
+/* On a phone a memorial day is a diamond, not a bar: a shape as well as a colour,
+   and strong enough to see. The rules above would otherwise leave it a pale bar. */
+@media (max-width: 699px) {
+  .pg-event.memorial, .pg-event.closing, .pg-events.wrap .pg-event.memorial {
+    width: 13px; height: 13px; margin: 3px auto; border-radius: 2px; transform: rotate(45deg); }
+  .pg-event.memorial, .pg-events.wrap .pg-event.memorial { background: var(--success); }
+}
 
 .choice-group { border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: var(--space-1) var(--space-3); background: var(--surface); }

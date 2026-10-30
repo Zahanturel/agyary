@@ -15,6 +15,7 @@ import { parsiMonth as fetchParsiMonth, convertDate } from "./api.js";
 import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
 import { navigate } from "./router.js";
 import { payChipHtml, flipPaidChip } from "./paid_chip.js";
+import { loadFailedHtml, wireRetry } from "./ui.js";
 import {
   esc, todayIst, shiftYmd, gregLabel, gregShort,
   parsiLabel, stepParsiMonth, monthYearLabel,
@@ -105,6 +106,18 @@ function chromeHtml(view, label, secondaryLabel, picker) {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// A month cell on a phone holds about six letters at a readable size, so the
+// longer names break at a syllable rather than shrink (UX-03).
+const SYLLABLES = {
+  Ardibehesht: ["Ardi", "be", "hesht"], Ashishvangh: ["Ashish", "vangh"], Mareshpand: ["Mar", "esh", "pand"],
+  Fravardin: ["Fra", "var", "din"], Aspandard: ["Aspan", "dard"], Shahrevar: ["Shah", "re", "var"],
+  Khorshed: ["Khor", "shed"], Khordad: ["Khor", "dad"], Amardad: ["Amar", "dad"], Hormazd: ["Hor", "mazd"],
+  Behram: ["Beh", "ram"], Zamyad: ["Zam", "yad"], Bahman: ["Bah", "man"], Ahunavad: ["Ahu", "na", "vad"],
+  Ushtavad: ["Ushta", "vad"], Spentamad: ["Spen", "ta", "mad"], Vohukhshathra: ["Vohu", "khsha", "thra"],
+  Vahishtoisht: ["Vahish", "toisht"],
+};
+const rojForCell = (name) => (SYLLABLES[name] ? SYLLABLES[name].join("\u00AD") : name);
+
 function weekdayIndex(ymd) {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();   // Sun = 0
@@ -143,7 +156,8 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
         .filter(Boolean).join(" ");
       // The day number alone, except where the Gregorian month turns over.
       const dayNo = Number(day.slice(8));
-      const numLabel = idx === 0 || dayNo === 1 ? gregShort(day) : String(dayNo);
+      const withMonth = idx === 0 || dayNo === 1;
+      const numLabel = withMonth ? gregShort(day) : String(dayNo);
       const shown = dayItems.slice(0, maxChips)
         .map(it => `<span class="pg-event${KIND_CLASS[it.kind] || ""}"
           title="${esc(it.label)}${it.sublabel ? " - " + esc(it.sublabel) : ""}">${esc(it.short || it.label)}</span>`)
@@ -151,12 +165,15 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
       const more = n > maxChips ? `<span class="pg-more">+${n - maxChips} more</span>` : "";
       html += `<div class="${cls}" data-cal-day="${day}" role="button" tabindex="0"
         aria-label="${esc(gregLabel(day))}, ${esc(roj)}${n ? `, ${n} event${n > 1 ? "s" : ""}` : ""}">
-        <span class="pg-greg-day">${esc(numLabel)}</span>
-        <span class="pg-roj${/[^\s]{11,}/.test(roj) ? " long xlong" : /[^\s]{8,}/.test(roj) ? " long" : ""}">${esc(roj)}</span>
+        <span class="pg-greg-day${withMonth ? " with-month" : ""}">${esc(numLabel)}</span>
+        <span class="pg-roj">${esc(rojForCell(roj))}</span>
         <span class="pg-events${chips.wrap ? " wrap" : ""}">${shown}${more}</span></div>`;
     }
   }
-  return html + "</div>";
+  // On a phone a cell shows marks, not names, so the marks need saying once.
+  return html + `</div>
+    <p class="pg-key no-print"><span class="pg-key-bar"></span>Event
+      <span class="pg-key-diamond"></span>Memorial prayer</p>`;
 }
 
 // Kinds with their own look. Memorial observances are a category of their own,
@@ -220,15 +237,25 @@ export async function renderCalendar(container, opts) {
   const system = primarySystem();
   view.focus = view.focus || todayIst();
 
+  const what = view.mode === "day" ? "this day" : "this month";
   container.innerHTML = `<div class="empty-state">Loading...</div>`;
-  const range = await viewRange(view, system);
+  let range;
+  try {
+    range = await viewRange(view, system);
+  } catch (e) {
+    // Not even the month's dates: nothing can be drawn, so nothing is.
+    container.innerHTML = loadFailedHtml(what);
+    return wireRetry(container, opts.rerender);
+  }
 
-  let items = [];
+  // Never an empty calendar for a failed load: a mobed would read it as a free
+  // day (UX-01). A list marked .incomplete is part of what was asked for.
+  let items = [], failed = false;
   try {
     items = await opts.loadItems(range);
+    failed = !!items.incomplete;
   } catch (e) {
-    container.innerHTML = "";
-    throw e;
+    failed = true;
   }
 
   const label = view.mode === "day" ? gregLabel(view.focus)
@@ -237,6 +264,7 @@ export async function renderCalendar(container, opts) {
     ? await parsiLabel(view.focus, system)
     : `${gregShort(range.from)} - ${gregShort(range.to)} ${range.to.slice(0, 4)}`;
 
+  const notice = failed ? loadFailedHtml(what, { whole: !items.length }) : "";
   let body;
   if (view.mode === "month") {
     // No per-day lookups: the month grid is already built FROM the
@@ -245,13 +273,16 @@ export async function renderCalendar(container, opts) {
     body = monthGridHtml(range.monthDays, items, view.selectedDay, {
       max: opts.monthChips, wrap: opts.monthChipWrap,
     });
+  } else if (failed) {
+    body = items.length ? dayHtml(items) : "";
   } else {
     body = (await dayReadingsHtml(view.focus))
       + (opts.renderDay ? await opts.renderDay(items, view) : dayHtml(items));
   }
 
-  container.innerHTML = chromeHtml(view, label, secondaryLabel, !!opts.onDayPick) + body;
-  if (opts.wireDay && view.mode === "day") opts.wireDay(container);
+  container.innerHTML = chromeHtml(view, label, secondaryLabel, !!opts.onDayPick) + notice + body;
+  wireRetry(container, opts.rerender);
+  if (opts.wireDay && view.mode === "day" && !failed) opts.wireDay(container);
   wireChrome(container, view, system, opts);
 }
 

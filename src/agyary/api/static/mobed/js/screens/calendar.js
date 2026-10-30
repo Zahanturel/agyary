@@ -92,17 +92,21 @@ function memorialItems(rows) {
 
 async function loadItems({ from, to }) {
   const agyaryId = state.currentAgyaryId;
-  const [services, machis, memorials] = await Promise.all([
-    myDay(from, to).catch(() => []),
-    agyaryId ? machiBoard(agyaryId, from, to).catch(() => []) : Promise.resolve([]),
-    agyaryId ? memorialFeed(agyaryId, from, to).catch(() => []) : Promise.resolve([]),
+  const got = await Promise.allSettled([
+    myDay(from, to),
+    agyaryId ? machiBoard(agyaryId, from, to) : [],
+    agyaryId ? memorialFeed(agyaryId, from, to) : [],
   ]);
+  const [services, machis, memorials] = got.map(r => (r.status === "fulfilled" ? r.value : []));
   const inRange = (d) => d >= from && d <= to;
-  return [
+  const items = [
     ...serviceItems(services).filter(i => inRange(i.day)),
     ...machiItems(machis).filter(i => inRange(i.day)),
     ...memorialItems(memorials).filter(i => inRange(i.day)),
   ];
+  // Show what did come, and say that some did not (renderCalendar).
+  items.incomplete = got.some(r => r.status === "rejected");
+  return items;
 }
 
 export async function renderCalendarScreen(params) {

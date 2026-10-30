@@ -18,7 +18,7 @@ import { state, saveSession, restoreSession, clearSession, homeHash } from "./st
 import { clearAllDrafts } from "./drafts.js";
 import { calendarHash, boardHash } from "./calendar.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
-import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab } from "./ui.js";
+import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline } from "./ui.js";
 import { loadSessionExtras, signedIn } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
@@ -171,6 +171,7 @@ async function boot() {
       state.offline = true;
       chrome(true);
       refreshHeader();
+      paintOffline();
     }
   } else {
     // The server refused the cookie. This is the one case that really is
@@ -189,7 +190,9 @@ async function boot() {
 // Signal came back after an offline boot. Take the session live and
 // re-render whatever is on screen, so the app heals itself instead of
 // sitting there signed-in-but-empty until the mobed thinks to reload.
+window.addEventListener("offline", paintOffline);
 window.addEventListener("online", async () => {
+  paintOffline();
   if (!state.offline) return;
   if (await tryRefresh() !== true) return;
   try {
@@ -197,6 +200,7 @@ window.addEventListener("online", async () => {
     state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
     await loadSessionExtras();
     state.offline = false;
+    paintOffline();
     saveSession();
     refreshHeader();
     navigate(location.hash || "#/calendar");

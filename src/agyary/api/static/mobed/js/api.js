@@ -3,6 +3,19 @@
 import { state } from "./state.js";
 
 const MOBED_BASE = "/api/mobed";
+// "Connected but dead" signal: without a limit a save or a launch just hangs (FE-05).
+const TIMEOUT_MS = 25000;
+
+/** fetch, given up on after TIMEOUT_MS with an AbortError. */
+async function timedFetch(url, opts) {
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(url, Object.assign({}, opts, { signal: stop.signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Thrown for any non-2xx. `.detail` is the server's message where it sent
  *  a plain string one; `.status` lets callers branch (401, 409, 429...). */
@@ -27,10 +40,11 @@ export async function api(path, opts = {}) {
 
   let res;
   try {
-    res = await fetch(base + p, Object.assign({}, opts, { headers, credentials: "include" }));
+    res = await timedFetch(base + p, Object.assign({}, opts, { headers, credentials: "include" }));
   } catch (e) {
-    if (e && e.name === "AbortError") throw e;
-    throw new ApiError(0, "Could not reach Mobed Diary. Please check your internet connection and try again.");
+    throw new ApiError(0, e && e.name === "AbortError"
+      ? "Mobed Diary is taking too long to answer. Please check your signal and try again."
+      : "Could not reach Mobed Diary. Please check your internet connection and try again.");
   }
 
   // One silent refresh attempt per call. The refresh cookie is httpOnly and
@@ -72,7 +86,9 @@ export const REFRESH_OFFLINE = "offline";
  *
  *   true            - refreshed, `state.accessToken` is live
  *   false           - the SERVER refused: cookie missing, expired, revoked.
- *                     This is the only outcome that means "signed out".
+ *                     Always a 401. This is the only outcome that means
+ *                     "signed out"; a 403 here can only be Cloudflare's own
+ *                     block page, which says nothing about the session.
  *   REFRESH_OFFLINE - no answer about the session: the request never landed,
  *                     or the server (or Cloudflare in front of it) failed -
  *                     a 5xx during a deploy, a 429. Treating that as a
@@ -92,11 +108,11 @@ export function tryRefresh() {
 async function doRefresh() {
   let res;
   try {
-    res = await fetch(MOBED_BASE + "/auth/refresh", { method: "POST", credentials: "include" });
+    res = await timedFetch(MOBED_BASE + "/auth/refresh", { method: "POST", credentials: "include" });
   } catch (e) {
     return REFRESH_OFFLINE;
   }
-  if (res.status === 401 || res.status === 403) return false;
+  if (res.status === 401) return false;
   if (!res.ok) return REFRESH_OFFLINE;
   try {
     state.accessToken = (await res.json()).access_token;

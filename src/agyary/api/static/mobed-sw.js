@@ -13,7 +13,10 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v63";
+const CACHE_NAME = "mobed-shell-v64";
+// How long the network gets before the cached shell is shown (FE-05). The
+// fetch carries on behind it, so the next launch has the new one.
+const SHELL_WAIT_MS = 4000;
 const SHELL_FILES = [
   "/mobed",
   "/mobed-manifest.json",
@@ -86,19 +89,21 @@ self.addEventListener("fetch", event => {
       cache: "no-cache",
       credentials: "same-origin",
     });
+    const network = fetch(fresh).then(response => {
+      // An error page - Cloudflare's 502 or 530 while the app restarts, a
+      // 404 - is never cached, and the shell we already have is shown in
+      // its place. Caching it overwrote a working app with the error (FE-03).
+      if (!response.ok) return caches.match(event.request).then(cached => cached || response);
+      const copy = response.clone();
+      return caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).then(() => response);
+    });
+    const tooSlow = new Promise((_, giveUp) => setTimeout(giveUp, SHELL_WAIT_MS));
+    event.waitUntil(network.catch(() => {}));
     event.respondWith(
-      fetch(fresh)
-        .then(response => {
-          // An error page - Cloudflare's 502 or 530 while the app restarts, a
-          // 404 - is never cached, and the shell we already have is shown in
-          // its place. Caching it overwrote a working app with the error (FE-03).
-          if (!response.ok) return caches.match(event.request).then(cached => cached || response);
-          const copy = response.clone();
-          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)));
-          return response;
-        })
-        // Offline: whatever we cached last is exactly what should show.
-        .catch(() => caches.match(event.request))
+      Promise.race([network, tooSlow])
+        // Offline or crawling: whatever we cached last is exactly what should
+        // show. With nothing cached, the network is all there is to wait for.
+        .catch(() => caches.match(event.request).then(cached => cached || network))
     );
   }
 });

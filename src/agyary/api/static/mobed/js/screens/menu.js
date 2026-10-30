@@ -232,7 +232,16 @@ export async function renderMenu() {
     // The server has to clear the refresh cookie - it's httpOnly, so
     // dropping the in-memory token alone would sign you back in on the
     // next load.
-    try { await logout(); } catch (e) { /* clear locally regardless */ }
+    try {
+      await logout();
+    } catch (e) {
+      // Only the server can clear that cookie, so with no answer the next
+      // launch would sign this phone straight back in. Say so (FE-04).
+      if (e.status === 0 || e.status >= 500) {
+        return showError("Could not sign out, because Mobed Diary can't be reached. "
+          + "Please try again when you have signal.");
+      }
+    }
     clearSession();
     clearAllDrafts();
     forgetLastPhone();

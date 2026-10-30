@@ -47,23 +47,17 @@ function machiItems(rows) {
 async function loadItems({ from, to }) {
   const aid = state.currentAgyaryId;
   if (!aid) return [];
-  try {
-    const machis = await machiBoard(aid, from, to, { mine: false });
-    dayMachis = machis;
-    if (from === to) {
-      try {
-        const res = await bookableGehs(aid, from);
-        dayGehs = res.bookable || res;
-      } catch (e) {
-        dayGehs = [];
-      }
-    }
-    // Geh order, so a month cell lists Havan before Rapithwin whatever order
-    // the rows arrived in.
-    return machiItems(machis).sort((a, b) => a.geh - b.geh);
-  } catch (e) {
-    return [];
+  // A failure here reaches renderCalendar, which says so: treated as "no
+  // machis", every geh of the day read as Passed (UX-01).
+  const machis = await machiBoard(aid, from, to, { mine: false });
+  dayMachis = machis;
+  if (from === to) {
+    const res = await bookableGehs(aid, from);
+    dayGehs = res.bookable || res;
   }
+  // Geh order, so a month cell lists Havan before Rapithwin whatever order
+  // the rows arrived in.
+  return machiItems(machis).sort((a, b) => a.geh - b.geh);
 }
 
 function gehSlotHtml(items) {

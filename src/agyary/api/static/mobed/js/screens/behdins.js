@@ -25,7 +25,7 @@ import { canPickContacts, pickContacts } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, flashInfo, flashError,
-  refreshHeader, loading, backBar,
+  refreshHeader, loading, backBar, loadFailedHtml, wireRetry,
 } from "../ui.js";
 import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
@@ -415,19 +415,22 @@ export async function renderBehdinDetail({ id }) {
   // The memorial and reminder cards used to depend on which of the two apps this ran in.
   const hasMemorials = true;
   let record = null, history = null, saved = [], memorials = [];
+  // Only a 404 means "not there". Anything else is a failed load, which must
+  // not read as a behdin who is not on file, or who has no memorials (UX-01).
+  const ifMissing = (fallback) => (e) => { if (e.status === 404) return fallback; throw e; };
   try {
     [record, history, saved, memorials] = await Promise.all([
-      getBehdin(aid, cid).catch(() => null),
+      getBehdin(aid, cid).catch(ifMissing(null)),
       // History is scoped to what THIS mobed entered, so it can legitimately
       // be empty for a behdin someone else booked for.
       customerHistory(cid).catch(() => null),
-      getSavedNames(aid, cid).catch(() => []),
-      listMemorials(aid, cid).catch(() => []),
+      getSavedNames(aid, cid).catch(ifMissing([])),
+      listMemorials(aid, cid).catch(ifMissing([])),
     ]);
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.message);
+    mainEl.innerHTML = loadFailedHtml("this behdin");
+    return wireRetry(mainEl, () => renderBehdinDetail({ id }));
   }
   if (!alive()) return;
   if (!record) {

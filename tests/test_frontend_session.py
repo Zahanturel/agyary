@@ -77,9 +77,10 @@ console.log(JSON.stringify({{ parallel, after: refreshes, results }}));
     assert out["after"] == 2          # a later refresh is a new one, not a stale answer
 
 
-def test_only_a_401_or_403_means_signed_out():
+def test_only_a_401_means_signed_out():
     """FE-02: a 5xx, Cloudflare's 52x or a 429 says nothing about the session.
-    Treated as a refusal, boot cleared the session and every draft."""
+    Treated as a refusal, boot cleared the session and every draft. Our own
+    refresh refuses only with a 401; a 403 could only be Cloudflare's block page."""
     out = _node(STORAGE + f"""
 const {{ tryRefresh, REFRESH_OFFLINE }} = await import({json.dumps(_module(JS / "api.js"))});
 const seen = {{}};
@@ -92,7 +93,7 @@ globalThis.fetch = async () => {{ throw new TypeError("network"); }};
 seen.network = (await tryRefresh()) === REFRESH_OFFLINE ? "offline" : "other";
 console.log(JSON.stringify(seen));
 """)
-    assert out == {"401": False, "403": False, "429": "offline", "500": "offline", "502": "offline",
+    assert out == {"401": False, "403": "offline", "429": "offline", "500": "offline", "502": "offline",
                    "503": "offline", "530": "offline", "network": "offline"}
 
 
@@ -132,6 +133,74 @@ def test_the_service_worker_never_caches_or_shows_an_error_page():
     assert bad == {"status": 200, "body": "cached shell", "puts": []}
     good = _run_worker(200)
     assert good == {"status": 200, "body": "from network", "puts": ["from network"]}
+
+
+def test_the_cached_shell_is_shown_when_the_network_is_too_slow():
+    """FE-05: on "connected but dead" signal the launch does not hang. The fetch
+    is left running, and what it brings is still cached for next time."""
+    out = _node(f"""
+import {{ readFileSync }} from "node:fs";
+const listeners = {{}}, puts = [];
+const self = {{ addEventListener: (type, fn) => {{ listeners[type] = fn; }},
+  skipWaiting: () => {{}}, clients: {{ claim: () => {{}} }} }};
+const caches = {{
+  open: async () => ({{ put: async (req, res) => {{ puts.push(await res.text()); }} }}),
+  match: async () => new Response("cached shell", {{ status: 200 }}),
+}};
+let arrive;
+const fetch = () => new Promise(resolve => {{ arrive = resolve; }});
+const quick = (fn) => globalThis.setTimeout(fn, 0);
+const source = readFileSync({json.dumps(str(STATIC / "mobed-sw.js"))}, "utf8");
+new Function("self", "caches", "fetch", "setTimeout", source)(self, caches, fetch, quick);
+let responded, waited = [];
+listeners.fetch({{ request: new Request("https://mobed.example/mobed"),
+  respondWith: p => {{ responded = p; }}, waitUntil: p => {{ waited.push(p); }} }});
+const res = await responded;
+const shown = await res.text();
+arrive(new Response("new shell", {{ status: 200 }}));
+await Promise.all(waited);
+console.log(JSON.stringify({{ shown, puts }}));
+""")
+    assert out == {"shown": "cached shell", "puts": ["new shell"]}
+
+
+def test_a_request_that_never_answers_gives_up_with_plain_words():
+    """FE-05: a save or a screen must not hang for ever."""
+    out = _node(STORAGE + f"""
+const realTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (fn, ms) => realTimeout(fn, ms > 1000 ? 5 : ms);
+const {{ api, tryRefresh, REFRESH_OFFLINE }} = await import({json.dumps(_module(JS / "api.js"))});
+globalThis.fetch = (url, opts) => new Promise((_, no) => {{
+  opts.signal.addEventListener("abort", () => no(Object.assign(new Error("stop"), {{ name: "AbortError" }})));
+}});
+let failure;
+try {{ await api("/slow"); }} catch (e) {{ failure = {{ status: e.status, detail: e.detail }}; }}
+const refresh = (await tryRefresh()) === REFRESH_OFFLINE;
+console.log(JSON.stringify({{ failure, refresh }}));
+""")
+    assert out["failure"]["status"] == 0 and "too long" in out["failure"]["detail"]
+    assert out["refresh"] is True
+
+
+def test_a_failed_load_is_never_shown_as_an_empty_day():
+    """UX-01. renderCalendar, ui.js and the screens need a page to run, so this
+    pins the shape: the browser check is in the audit's ACTION-LIST."""
+    calendar = (JS / "calendar.js").read_text(encoding="utf-8")
+    assert "loadFailedHtml(what" in calendar and "items.incomplete" in calendar
+    tab = (JS / "screens" / "calendar.js").read_text(encoding="utf-8")
+    board = (JS / "screens" / "machi_calendar.js").read_text(encoding="utf-8")
+    assert ".catch(() => [])" not in tab and "Promise.allSettled" in tab
+    assert "catch (e)" not in board[board.index("async function loadItems"):board.index("function gehSlotHtml")]
+    behdins = (JS / "screens" / "behdins.js").read_text(encoding="utf-8")
+    assert "getBehdin(aid, cid).catch(ifMissing(null))" in behdins
+
+
+def test_signing_out_with_no_signal_says_so_and_keeps_the_session():
+    """FE-04: only the server can clear the cookie, so a sign-out that never
+    reached it left the phone to sign itself back in."""
+    menu = (JS / "screens" / "menu.js").read_text(encoding="utf-8")
+    sign_out = menu[menu.index('getElementById("mSignOut")'):]
+    assert sign_out.index("e.status === 0 || e.status >= 500") < sign_out.index("clearSession()")
 
 
 def test_signing_out_forgets_the_last_phone_number():

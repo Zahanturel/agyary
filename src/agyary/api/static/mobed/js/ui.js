@@ -96,6 +96,40 @@ function banner(cls, msg) {
 export function showError(msg) { banner("error-banner", msg); }
 export function showInfo(msg) { banner("info-banner", msg); }
 
+/** In place of what would otherwise look like an empty day or a missing person
+ *  (UX-01). `whole` says the failure is the whole of `what`; otherwise part of
+ *  it did load. Wire the button with wireRetry. */
+export function loadFailedHtml(what, { whole = true } = {}) {
+  return `<div class="load-failed" role="alert">
+    <p><b>${whole ? `Couldn't load ${what}.` : `Part of ${what} couldn't load.`}</b></p>
+    <p class="meta">${whole ? "This does not mean it is empty." : "There may be more than you see here."}
+      Check your signal and try again.</p>
+    <button class="small" type="button" data-retry>Try again</button>
+  </div>`;
+}
+
+export function wireRetry(root, retry) {
+  const btn = root.querySelector("[data-retry]");
+  if (btn) btn.onclick = retry;
+}
+
+/** A strip above the page while the app cannot reach the server, so what is on
+ *  screen is not taken for the latest: nothing else said so (UX-01). */
+export function paintOffline() {
+  const bar = document.getElementById("offlineBar");
+  if (!(state.offline || navigator.onLine === false)) {
+    if (bar) bar.remove();
+    return;
+  }
+  if (bar) return;
+  const strip = document.createElement("div");
+  strip.id = "offlineBar";
+  strip.className = "offline-bar no-print";
+  strip.setAttribute("role", "status");
+  strip.textContent = "Can't reach Mobed Diary. What you see may be out of date.";
+  mainEl.parentNode.insertBefore(strip, mainEl);
+}
+
 // A message that has to outlive a navigation. Showing one the normal way
 // just before redirecting doesn't work: the destination screen replaces
 // the whole of <main>, taking the banner with it - so a guard that bounces
