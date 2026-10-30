@@ -1452,6 +1452,13 @@ async def preview_machi_slip(
     # availability core, so the answer cannot differ from what confirming would find.
     # Whose board it is judged on: the machi's own mobed when editing, else the reader's.
     editing = await db.get(Machi, editing_machi_id) if editing_machi_id is not None else None
+    # Only a machi the reader may edit counts as an edit. Anyone else's id is
+    # ignored: judged on its owner's board, it would tell the reader which gehs
+    # a colleague holds, and a mobed's machis are private (D7).
+    if editing is not None and not (
+        editing.agyary_id == agyary.id and await may_modify_machi(db, editing, reader_user_id)
+    ):
+        editing = None
     owner = editing.created_by_user_id if editing is not None else reader_user_id
     free = drop_elapsed_gehs(await available_gehs(db, agyary.id, gregorian, owner), gregorian)
     available = geh in free

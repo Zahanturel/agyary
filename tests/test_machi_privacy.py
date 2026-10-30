@@ -111,3 +111,26 @@ async def test_the_preview_does_not_leak_a_colleagues_slot(client, db, seeded):
     })
     assert r.status_code == 200, r.text
     assert r.json()["slot_available"] is True
+
+
+async def test_a_colleagues_machi_id_cannot_be_used_to_read_their_board(client, db, seeded):
+    """SEC-06: editing_machi_id is honoured only for a machi the reader may edit.
+    Otherwise the preview was judged on that machi's owner's board, which told
+    a colleague whether the owner holds any other geh that day."""
+    aid = seeded["agyary_id"]
+    owner, owners_geh1 = await _owners_machi(client, seeded)
+    assert (await _book(client, aid, owner, geh=3, name="Second", phone="+919944400796")).status_code == 200
+    colleague = await _member_headers(client, seeded, name="Colleague", phone="+919944400707")
+    r = await client.post(f"/api/mobed/agyaries/{aid}/slip-preview/machi", headers=colleague, json={
+        "behdin_phone": "+919944400795", "behdin_name": "Someone", "roj": 1, "mah": 1, "year": 1400,
+        "geh": 3, "gregorian": "2030-08-15", "purpose": "patet", "editing_machi_id": owners_geh1,
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["slot_available"] is True
+
+    # The owner editing their own machi is still judged on their own board.
+    mine = await client.post(f"/api/mobed/agyaries/{aid}/slip-preview/machi", headers=owner, json={
+        "behdin_phone": BEHDIN_PHONE, "behdin_name": "Private Family", "roj": 1, "mah": 1, "year": 1400,
+        "geh": 3, "gregorian": "2030-08-15", "purpose": "patet", "editing_machi_id": owners_geh1,
+    })
+    assert mine.status_code == 200 and mine.json()["slot_available"] is False
