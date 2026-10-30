@@ -137,8 +137,8 @@ This starts `db` (Postgres), `app` (this FastAPI app), and `cloudflared`
 Run the one-time schema + seed setup inside the running `app` container:
 
 ```bash
-docker compose exec app uv run alembic upgrade head
-docker compose exec app uv run python -m agyary.scripts.seed_fire_temples
+docker compose exec app alembic upgrade head
+docker compose exec app python -m agyary.scripts.seed_fire_temples
 ```
 
 ## 6. Verify, then share the link
@@ -167,7 +167,7 @@ automates:
 ```bash
 git pull
 docker compose up -d --build
-docker compose exec app uv run alembic upgrade head   # only if new migrations exist
+docker compose exec app alembic upgrade head   # only if new migrations exist
 ```
 
 ## Logs / troubleshooting
@@ -181,7 +181,7 @@ docker compose ps                   # confirm all three services are healthy
 ## Who is using it
 
 ```bash
-docker compose exec app uv run python -m agyary.scripts.stats
+docker compose exec app python -m agyary.scripts.stats
 ```
 
 Signups and the temple each mobed joined, which temples have members, what was
@@ -205,7 +205,7 @@ anything. Every step below was rehearsed end to end.
 
 ```bash
 # 0. See what you would be destroying.
-docker compose exec app uv run python -m agyary.scripts.stats
+docker compose exec app python -m agyary.scripts.stats
 
 # 1. Dump, with the date in the name.
 docker compose exec -T db pg_dump -U agyary -d agyary -Fc \
@@ -231,14 +231,14 @@ docker compose exec -T db psql -U agyary -d agyary -c \
 #    migration recreates it (CREATE EXTENSION IF NOT EXISTS pg_trgm), which is
 #    why the migration has to run before anything else touches the database.
 docker compose start app
-docker compose exec app uv run alembic upgrade head
+docker compose exec app alembic upgrade head
 
 # 7. Reseed the fire temples. NOT optional: without it the onboarding screen
 #    has an empty list and a new mobed cannot pick a temple.
-docker compose exec app uv run python -m agyary.scripts.seed_fire_temples
+docker compose exec app python -m agyary.scripts.seed_fire_temples
 
 # 8. Confirm: 0 mobeds, 0 of 167 temples claimed.
-docker compose exec app uv run python -m agyary.scripts.stats
+docker compose exec app python -m agyary.scripts.stats
 ```
 
 To restore a dump into an empty database instead:

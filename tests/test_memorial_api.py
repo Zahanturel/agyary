@@ -462,7 +462,7 @@ async def test_no_opening_dasmi_birthday_and_removed_dates(client, db, seeded):
     assert r.status_code == 200, r.text
     labels = [o["label"] for o in r.json()["observances"]]
     assert labels.count("Birthday") == 2 and "Dasmi" in labels and "Masiso" in labels
-    assert not any(l.startswith("Day ") for l in labels)
+    assert not any(label.startswith("Day ") for label in labels)
 
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials",
                           json={**body, "exclude_codes": ["day_10"]}, headers=headers)

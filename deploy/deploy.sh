@@ -33,7 +33,7 @@ echo "==> building"
 docker compose build app
 
 echo "==> migrating"
-docker compose run --rm --no-deps app uv run alembic upgrade head
+docker compose run --rm --no-deps app alembic upgrade head
 
 echo "==> starting"
 docker compose up -d app

@@ -6,11 +6,10 @@ list. Nothing is calculated, and it is private to the mobed's own events.
 
 from __future__ import annotations
 
-from sqlalchemy import select
 
 from agyary.models import Booking, Machi
 from tests.test_behdin_and_preferences import _add_machi
-from tests.test_behdin_delete import PHONE, _add, _book
+from tests.test_behdin_delete import _add, _book
 from tests.test_mobed_api import _member_headers
 
 OTHER = "+919911100071"

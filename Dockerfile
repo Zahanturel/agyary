@@ -26,6 +26,12 @@ COPY tests ./tests
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Not root: a hole in the app should not also be root in the container. It
+# writes nothing to disk. Migrations and scripts run from .venv directly, as
+# `uv run` would try to re-sync it.
+RUN useradd --system --no-create-home --uid 10001 agyary
+USER agyary
+
 EXPOSE 8000
 
 CMD ["uvicorn", "agyary.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

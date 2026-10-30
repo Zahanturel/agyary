@@ -61,7 +61,6 @@ def _clock(dt: datetime) -> str:
 async def tomorrows_items(db: AsyncSession, user_id: int, day: date) -> list[Item]:
     """Everything this mobed is down for on ``day``, in the order the day runs."""
     items: list[Item] = []
-    start = datetime.combine(day, time.min, IST)
 
     # Services they have accepted.
     for e in await mobed_dashboard.list_my_day(db, user_id, day, day):

@@ -17,7 +17,7 @@ from agyary.messaging.geh_times import IST
 from agyary.models import AppNotification, Notification, User
 from agyary.services import daily_report
 from tests.test_behdin_and_preferences import _add_machi
-from tests.test_behdin_delete import PHONE, _add, _book
+from tests.test_behdin_delete import _add, _book
 from tests.test_mobed_api import NEW_MOBED_PHONE, _member_headers
 
 EVENING = datetime.combine(date(2027, 7, 31), time(20, 30), IST)   # the booking is on 2027-08-01
@@ -98,7 +98,6 @@ async def test_an_empty_tomorrow_sends_nothing(client, db, seeded):
 
 
 async def test_machis_and_memorial_days_are_listed_too_and_payment_is_not(client, db, seeded):
-    from tests.test_memorial_api import PHONE as MEM_PHONE
     aid, headers = await _setup(client, db, seeded)
     r = await _add_machi(client, aid, headers, "patet",
                          [{"section": "pair", "title": "khud", "name": "A", "status": "departed", "pair_group": 1},

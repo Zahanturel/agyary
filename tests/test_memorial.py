@@ -587,7 +587,6 @@ def test_roj_fravardin_in_the_mah_of_fravardin_is_a_parab_only_once():
 
 
 def test_parabs_by_count_are_the_next_n_in_date_order():
-    from agyary.calendar.memorial import OPENING_NONE
     sched = _late(parabs="all", parab_count=6)
     assert len(sched) == 6 and all(o.label.endswith("Parab") for o in sched)
     dates = [o.gregorian_date for o in sched]

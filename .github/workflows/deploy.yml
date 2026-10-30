@@ -39,6 +39,8 @@ jobs:
         run: uv sync --frozen
       - name: Enable pg_trgm (the schema's name index needs it)
         run: PGPASSWORD=agyary psql -h localhost -U agyary -d agyary_test -c "create extension if not exists pg_trgm"
+      - name: Lint
+        run: uv run ruff check src tests
       - name: Test
         run: uv run pytest -q
 

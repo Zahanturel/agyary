@@ -20,6 +20,7 @@ from agyary.api.routes.reminders import router as reminders_router
 from agyary.api.routes.whatsapp import router as whatsapp_router
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
+from agyary.core.log_safety import MaskNumbers
 from agyary.services import bot_check, reminder_worker
 
 settings = get_settings()
@@ -36,6 +37,9 @@ if not _app_log.handlers:
     _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     _app_log.addHandler(_handler)
     _app_log.setLevel(logging.INFO)
+# Every line we or uvicorn write about an error, whichever logger it came from.
+for _log_handler in (*_app_log.handlers, *logging.getLogger("uvicorn").handlers):
+    _log_handler.addFilter(MaskNumbers())
 
 
 @asynccontextmanager

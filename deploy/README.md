@@ -53,7 +53,7 @@ On a machine that has the private key and a scratch Postgres (never production):
 
     rclone copyto R2:agyary-backups/daily/<file>.dump.age .   # or download in the dashboard
     age -d -i agyary-backup.key -o restore.dump <file>.dump.age
-    pg_restore -l restore.dump | grep -c "TABLE DATA"          # expect 25
+    pg_restore -l restore.dump | grep -c "TABLE DATA"          # expect 27 at revision e6f7a8b9c0d2
     createdb scratch && pg_restore -d scratch restore.dump
 
 A backup that has never been restored is a hope, not a backup.
