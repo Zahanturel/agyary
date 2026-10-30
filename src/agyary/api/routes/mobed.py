@@ -28,12 +28,13 @@ from agyary.models import (
     UserPreferences,
 )
 from agyary.models.enums import (
-    CALENDAR_SYSTEMS,
-    DISPLAY_CALENDAR_SYSTEMS,
+    DEFAULT_SECONDARY_CALENDAR_SYSTEM,
     DISPLAY_LANGUAGES,
     NAME_SECTIONS,
     NAME_STATUSES,
     NAME_TITLES,
+    OFFERED_CALENDARS,
+    OFFERED_DISPLAY_SYSTEMS,
 )
 from agyary.models.preferences import default_preferences
 from agyary.services import (
@@ -392,7 +393,7 @@ async def logout(
     if refresh_token:
         try:
             claims = mobed_auth.decode_token(refresh_token, "refresh")
-            await mobed_auth.end_session(db, claims.get("sid"))
+            await mobed_auth.end_token(db, claims)
             await db.commit()
         except mobed_auth.TokenError:
             pass
@@ -476,9 +477,17 @@ async def update_me(
 def _preferences_response(prefs: UserPreferences | None) -> dict:
     if prefs is None:
         return default_preferences()
+    # Fasli is no longer offered (D5). A preference saved with it reads as the
+    # default; the saved row itself is left as it was.
+    primary = prefs.default_secondary_system
+    if primary not in OFFERED_CALENDARS:
+        primary = DEFAULT_SECONDARY_CALENDAR_SYSTEM
+    visible = [s for s in prefs.visible_calendar_systems if s in OFFERED_DISPLAY_SYSTEMS]
+    if primary not in visible:
+        visible.append(primary)
     return {
-        "visible_calendar_systems": list(prefs.visible_calendar_systems),
-        "default_secondary_system": prefs.default_secondary_system,
+        "visible_calendar_systems": visible,
+        "default_secondary_system": primary,
         "display_language": prefs.display_language,
     }
 
@@ -527,19 +536,19 @@ async def put_preferences(
     the historical record, not a view setting.
     """
     systems = list(dict.fromkeys(payload.visible_calendar_systems))  # de-dup, keep order
-    unknown = [s for s in systems if s not in DISPLAY_CALENDAR_SYSTEMS]
+    unknown = [s for s in systems if s not in OFFERED_DISPLAY_SYSTEMS]
     if unknown:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown calendar system(s): {', '.join(unknown)}. "
-            f"Choose from: {', '.join(DISPLAY_CALENDAR_SYSTEMS)}",
+            f"Choose from: {', '.join(OFFERED_DISPLAY_SYSTEMS)}",
         )
     if not systems:
         raise HTTPException(status_code=400, detail="Please keep at least one calendar showing.")
-    if payload.default_secondary_system not in CALENDAR_SYSTEMS:
+    if payload.default_secondary_system not in OFFERED_CALENDARS:
         raise HTTPException(
             status_code=400,
-            detail=f"Secondary system must be one of: {', '.join(CALENDAR_SYSTEMS)}",
+            detail=f"Secondary system must be one of: {', '.join(OFFERED_CALENDARS)}",
         )
     if payload.default_secondary_system not in systems:
         raise HTTPException(
@@ -654,7 +663,9 @@ async def create_agyari(
     user: User = Depends(get_current_user),
 ) -> dict:
     """Creation fallback: the agyari isn't in the seed list at all. Same
-    activation outcome (born active), then the creating mobed joins it."""
+    activation outcome (born active), then the creating mobed joins it. Every
+    temple shows up in everyone's search, so a few a day is plenty (I-10)."""
+    rate_limit.enforce_key(f"create_agyary:{user.id}", max_requests=5, window_seconds=86400)
     if not payload.name.strip() or not payload.city.strip():
         raise HTTPException(status_code=400, detail="Please enter the fire temple's name and city.")
     _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)
@@ -850,9 +861,15 @@ async def machi_board(
     written, so an ordinary read stays a read.
     """
     await _require_membership(db, agyary_id, user)
-    if await mobed_dashboard.ensure_recurrences_generated(db, agyary_id, through=to):
-        await db.commit()
+    try:
+        mobed_dashboard.check_board_range(from_, to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     admin = await mobed_dashboard.is_admin(db, agyary_id, user.id)
+    if await mobed_dashboard.ensure_recurrences_generated(
+        db, agyary_id, through=to, owner_id=None if admin else user.id
+    ):
+        await db.commit()
     try:
         entries = await mobed_dashboard.list_machi_board(
             db, agyary_id, from_, to, created_by_user_id=user.id if (mine or not admin) else None

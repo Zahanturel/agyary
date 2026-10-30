@@ -24,7 +24,6 @@ import { navigate } from "../router.js";
 const PARSI_SYSTEMS = [
   ["shenshai", "Shenshai"],
   ["kadmi", "Kadmi"],
-  ["fasli", "Fasli"],
 ];
 
 export async function renderMenu() {

@@ -46,12 +46,43 @@ async def test_signing_out_ends_the_session_for_good(client, db, seeded):
     assert (await client.get("/api/mobed/auth/me", headers=_bearer(access))).status_code == 401
 
 
+async def _age_the_last_refresh(db, seconds=31):
+    from agyary.models import UserSession
+
+    await db.execute(update(UserSession).values(
+        last_used_at=datetime.now(timezone.utc) - timedelta(seconds=seconds)))
+    await db.commit()
+
+
+async def test_the_same_refresh_twice_in_a_moment_does_not_end_the_session(client, db, seeded):
+    """FE-01: a second tab, or an answer lost on a weak signal, repeats the token
+    just replaced. That is not theft: both get the current one."""
+    _, first = await _signed_in(client)
+    assert (await _refresh(client)).status_code == 200
+    second = client.cookies.get("refresh_token")
+    client.cookies.clear()
+    r = await _refresh(client, first)
+    assert r.status_code == 200, r.text
+    # It does not move the session on again, so the other device's token is good.
+    client.cookies.clear()
+    assert (await _refresh(client, second)).status_code == 200
+
+
+async def test_a_token_two_generations_old_is_theft_at_once(client, db, seeded):
+    _, first = await _signed_in(client)
+    assert (await _refresh(client)).status_code == 200
+    assert (await _refresh(client)).status_code == 200
+    client.cookies.clear()
+    assert (await _refresh(client, first)).status_code == 401
+
+
 async def test_a_refresh_token_used_twice_ends_the_session(client, db, seeded):
     _, first = await _signed_in(client)
     r = await _refresh(client)
     assert r.status_code == 200
     second = client.cookies.get("refresh_token")
     assert second and second != first
+    await _age_the_last_refresh(db)
     # The first one coming back means somebody kept a copy: the session ends...
     client.cookies.clear()
     assert (await _refresh(client, first)).status_code == 401
@@ -127,8 +158,18 @@ async def test_a_token_from_before_sessions_is_moved_into_one(client, db, seeded
     moved = r.cookies.get("refresh_token")
     assert moved != legacy and jwt.decode(moved, options={"verify_signature": False}).get("sid")
 
-    # "Sign out other devices" also kills any old token still out there.
-    access = r.json()["access_token"]
-    await client.post("/api/mobed/auth/sessions/sign-out-others", headers=_bearer(access))
+    # SEC-08: once moved, it is spent.
+    client.cookies.clear()
+    assert (await _refresh(client, legacy)).status_code == 401
+
+
+async def test_signing_out_with_an_old_token_spends_it(client, db, seeded):
+    """SEC-08: such a token has no session to end, so signing out did nothing."""
+    await _signed_in(client)
+    user = (await db.execute(select(User).where(User.phone == PHONE))).scalar_one()
+    legacy = _legacy_refresh(user.id)
+    client.cookies.clear()
+    client.cookies.set("refresh_token", legacy)
+    assert (await client.post("/api/mobed/auth/logout")).status_code == 200
     client.cookies.clear()
     assert (await _refresh(client, legacy)).status_code == 401

@@ -24,7 +24,7 @@ import httpx
 
 from agyary.core.config import get_settings
 from agyary.core.database import async_session_factory
-from agyary.services import account, daily_report, erasure, reminder_sender, reminders
+from agyary.services import account, daily_report, reminder_sender, reminders
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +81,6 @@ async def tick(
                 await reminders.sweep_expired_notices(db, now)
                 await account.sweep_deleted_accounts(db, settings, now)
                 await db.commit()
-                # Its own step too: a failure here must not stop the evening's sends.
-                try:
-                    await erasure.sweep_old(db, settings, now)
-                    await db.commit()
-                except Exception:
-                    await db.rollback()
-                    logger.exception("Retention pass failed")
             if report_window:
                 # Its own step: a failure here must never stop the reminders below.
                 try:

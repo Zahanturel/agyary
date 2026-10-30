@@ -40,7 +40,7 @@ const MAX = { months: 1200, years: 100, parabCount: 1200, birthYears: 100 };
 const FIRST_YEAR_BOXES = [["5_to_9", "#mmFiveToNine"], ...NAMED_DAYS.map(([n]) => [String(n), `#mmDay${n}`])];
 
 // A death on a Gatha day is given as Mah "Gatha days" (13) and the Gatha's number.
-const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht", "Sixth (Fasli leap years)"];
+const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
 
 export function blankMemorialDraft() {
   return {
@@ -222,7 +222,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
           </div>
         </div>
         <label for="mmCalendar">Calendar</label>
-        <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"], ["fasli", "Fasli"]].map(([k, v]) =>
+        <select id="mmCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"]].map(([k, v]) =>
           `<option value="${k}" ${draft.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
 
         <div id="mmStartBox" style="${draft.longAgo ? "display:none" : ""}">

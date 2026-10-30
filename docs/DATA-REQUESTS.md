@@ -55,9 +55,5 @@ private to them, and the admin screen does not show it (D2).
 
 ## 6. Old records
 
-Retention is off until the owner sets `RETENTION_MODE=on` in the server's `.env`. When it is on:
-- the record of a message is deleted after `RETENTION_SEND_LOG_MONTHS` (13);
-- a behdin taken off the list, with nothing happening for them for
-  `RETENTION_HIDDEN_BEHDIN_MONTHS` (24), is erased as in section 2, with no notice to the mobed.
-
-The periods must match the privacy policy.
+Nothing is deleted because of its age (DECISIONS.md D8). A record goes only when the mobed deletes
+it, a mobed deletes their account, or a family asks and you erase them as in section 2.

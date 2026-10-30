@@ -75,7 +75,7 @@ class MemorialIn(BaseModel):
     # Book nothing before this date; the counting still starts at the death.
     start_from: date | None = None
     # The calendar the family keeps. Left out, it is the mobed's primary.
-    calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
+    calendar: Literal["shenshai", "kadmi"] | None = None
     # Passed away more than a year ago: give only Roj and Mah, and the prayers
     # that repeat are carried on from today (no opening or named days).
     long_ago: bool = False
@@ -87,7 +87,7 @@ class DayStatusIn(BaseModel):
     death_date: date | None = None
     death_roj: int | None = None
     death_mah: int | None = None
-    calendar: Literal["shenshai", "kadmi", "fasli"] | None = None
+    calendar: Literal["shenshai", "kadmi"] | None = None
     long_ago: bool = False
 
 

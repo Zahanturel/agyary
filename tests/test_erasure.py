@@ -1,18 +1,15 @@
-"""A family can be erased from every mobed's book, and old records can be let go.
-
-LEG-04: a number reaches every mobed who keeps it, but only that number. LEG-03:
-retention deletes for good, so it does nothing until the owner switches it on.
+"""A family can be erased from every mobed's book (LEG-04): a number reaches every
+mobed who keeps it, but only that number. Nothing is ever deleted by age (D8).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import func, select
 
 from agyary.core import config
-from agyary.core.config import Settings
 from agyary.models import (
     AppNotification,
     Booking,
@@ -21,7 +18,6 @@ from agyary.models import (
     CustomerSavedName,
     Machi,
     Memorial,
-    MemorialObservance,
     Notification,
     ReminderOptOut,
 )
@@ -32,10 +28,6 @@ from tests.test_mobed_api import NEW_MOBED_PHONE, _member_headers
 COLLEAGUE = "+919944400811"
 ANOTHER_FAMILY = "+919944400812"
 NOW = datetime(2030, 3, 14, 12, 0, tzinfo=timezone.utc)
-
-
-def _settings(**over) -> Settings:
-    return Settings(**{"jwt_secret_key": "x", **over})
 
 
 async def _count(db, model, *where) -> int:
@@ -95,7 +87,7 @@ async def test_a_number_is_erased_from_every_book_and_only_that_number(client, d
     db.expire_all()
 
     assert await _count(db, Customer, Customer.phone == FAMILY) == 0
-    assert await _count(db, Memorial) == 0 and await _count(db, MemorialObservance) == 0
+    assert await _count(db, Memorial) == 0
     assert await _count(db, CustomerSavedName, CustomerSavedName.name == "Saved Name") == 0
     assert await _count(db, Notification) == 0
 
@@ -155,66 +147,6 @@ async def test_a_mobed_who_is_not_an_admin_cannot_reach_it(client, db, seeded):
     assert await _count(db, Customer, Customer.phone == FAMILY) == 2
 
 
-# --- Retention --------------------------------------------------------------
-
-async def _an_old_message(db, aid, customer, age_days) -> None:
-    db.add(Notification(
-        agyary_id=aid, recipient_phone=customer.phone, recipient_type="customer", recipient_id=customer.id,
-        notification_type="memorial_share", template_name="memorial_schedule", status="sent",
-        created_at=NOW - timedelta(days=age_days),
-    ))
-    await db.commit()
-
-
-async def test_nothing_is_swept_until_the_owner_switches_it_on(client, db, seeded):
-    aid, cid, _headers = await _setup(client, db, seeded)
-    await _an_old_message(db, aid, await db.get(Customer, cid), age_days=4000)
-    assert await erasure.sweep_old(db, _settings(), NOW) == {"messages": 0, "records": 0}
-    await db.commit()
-    assert await _count(db, Notification) == 1
-
-
-async def test_old_messages_go_and_recent_ones_stay(client, db, seeded):
-    aid, cid, _headers = await _setup(client, db, seeded)
-    customer = await db.get(Customer, cid)
-    await _an_old_message(db, aid, customer, age_days=13 * 31 + 1)
-    await _an_old_message(db, aid, customer, age_days=13 * 31 - 1)
-    report = await erasure.sweep_old(db, _settings(retention_mode="on"), NOW)
-    await db.commit()
-    assert report["messages"] == 1 and await _count(db, Notification) == 1
-
-
-async def test_a_quiet_hidden_behdin_is_erased_but_not_one_with_something_recent(client, db, seeded):
-    aid, cid, headers = await _setup(client, db, seeded)
-    await _machi(client, aid, headers, FAMILY, "The Family")
-    await _machi(client, aid, headers, ANOTHER_FAMILY, "Another Family", geh=2)
-    quiet = await db.get(Customer, cid)
-    busy = (await db.execute(select(Customer).where(Customer.phone == ANOTHER_FAMILY))).scalar_one()
-    quiet.is_active = busy.is_active = False
-    await db.commit()
-
-    # In 2040 the 2030 machi is long past. A later one keeps the other family.
-    then = datetime(2040, 1, 1, tzinfo=timezone.utc)
-    later = (await db.execute(select(Machi).where(Machi.customer_id == busy.id))).scalar_one()
-    later.gregorian_date = then.date()
-    await db.commit()
-
-    report = await erasure.sweep_old(db, _settings(retention_mode="on"), then)
-    await db.commit()
-    await db.refresh(quiet)
-    await db.refresh(busy)
-    assert report["records"] == 1
-    assert quiet.name == erasure.ERASED and busy.name == "Another Family"
-
-
-async def test_a_listed_behdin_is_never_swept_however_old(client, db, seeded):
-    aid, cid, headers = await _setup(client, db, seeded)
-    await _machi(client, aid, headers, FAMILY, "The Family")
-    report = await erasure.sweep_old(db, _settings(retention_mode="on"), datetime(2060, 1, 1, tzinfo=timezone.utc))
-    await db.commit()
-    assert report["records"] == 0 and (await db.get(Customer, cid)).name != erasure.ERASED
-
-
 async def test_a_booking_keeps_its_slip_after_the_family_is_erased(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
     r = await client.post(f"/api/mobed/agyaries/{aid}/manual-add/booking", headers=headers, json={
@@ -232,3 +164,13 @@ async def test_a_booking_keeps_its_slip_after_the_family_is_erased(client, db, s
     slip = await client.get(f"/api/mobed/agyaries/{aid}/bookings/{booking.id}/slip", headers=headers)
     assert slip.status_code == 200, slip.text
     assert erasure.ERASED in slip.text
+
+
+def test_nothing_deletes_records_by_age():
+    """D8: no record is ever lost to a clean-up. The nightly pass may sweep only
+    what is not a record: expired notices and spent sign-in traces."""
+    from pathlib import Path
+
+    worker = Path("src/agyary/services/reminder_worker.py").read_text(encoding="utf-8")
+    assert "erasure" not in worker and "retention" not in worker.lower()
+    assert not hasattr(erasure, "sweep_old")

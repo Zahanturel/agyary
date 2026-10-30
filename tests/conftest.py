@@ -19,6 +19,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 # webhook (exercised from 127.0.0.1) is debug-only. test_debug_safety checks the
 # real default with this cleared.
 os.environ.setdefault("APP_DEBUG", "true")
+os.environ.setdefault("APP_ENV", "development")
 
 import pytest
 from sqlalchemy import text

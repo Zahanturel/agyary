@@ -42,7 +42,9 @@ async def verify(settings: Settings, token: str | None, ip: str, client: httpx.A
             SITEVERIFY_URL,
             data={"secret": settings.turnstile_secret_key, "response": token, "remoteip": ip},
         )
-        return resp.status_code == 200 and resp.json().get("success") is True
+        answer = resp.json() if resp.status_code == 200 else {}
+        expected = settings.turnstile_hostname.strip()
+        return answer.get("success") is True and (not expected or answer.get("hostname") == expected)
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Bot check could not be verified: %s", exc.__class__.__name__)
         return False

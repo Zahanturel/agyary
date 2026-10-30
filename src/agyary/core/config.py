@@ -7,7 +7,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "agyary"
-    app_env: str = "development"
+    # Production unless told otherwise, so a server whose .env lost this line
+    # refuses debug rather than running it (CFG-03). A laptop sets development.
+    app_env: str = "production"
     # Off unless asked for. Debug signs anyone in as any number (the simulate
     # webhook, OTP codes in the response) and drops Secure cookies and HSTS, so
     # a server built from a forgotten .env must come up with it off - and a
@@ -57,11 +59,6 @@ class Settings(BaseSettings):
     # A number whose account was deleted cannot send schedules from our number
     # for this long after signing up again (SEC-02).
     deleted_account_cooldown_days: int = 30
-    # How long old records are kept (services/erasure.py). off keeps everything;
-    # on deletes for good, so it waits for the owner's say-so.
-    retention_mode: str = "off"
-    retention_send_log_months: int = 13
-    retention_hidden_behdin_months: int = 24
 
     # off: nothing is planned or sent. dry_run: reminders are planned and
     # logged as they would be sent, and nothing leaves the building. live:
@@ -99,6 +96,8 @@ class Settings(BaseSettings):
     # If either is missing, no code is sent, even with OTP_MODE=live (routes/otp.py).
     turnstile_site_key: str = ""
     turnstile_secret_key: str = ""
+    # The site a Turnstile token must have been earned on. Empty skips the check.
+    turnstile_hostname: str = "mobed.gotiadarian.com"
 
     # --- Spend and abuse guardrails -----------------------------------------
     # Every reminder costs money, and a bug or a bad actor must not be able to
@@ -212,9 +211,14 @@ class Settings(BaseSettings):
                 "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
                 "and set it in .env before starting the app."
             )
-        if self.app_debug and self.app_env.strip().lower() == "production":
+        if len(self.jwt_secret_key.strip()) < 32:
             raise RuntimeError(
-                "APP_DEBUG is true with APP_ENV=production. Debug mode lets anyone "
+                "JWT_SECRET_KEY is too short: it needs at least 32 characters. Generate one with "
+                "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"`."
+            )
+        if self.app_debug and self.app_env.strip().lower() != "development":
+            raise RuntimeError(
+                "APP_DEBUG is true outside APP_ENV=development. Debug mode lets anyone "
                 "sign in as any number. Set APP_DEBUG=false in .env before starting."
             )
 

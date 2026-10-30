@@ -6,10 +6,16 @@ adding a value is an in-place constraint swap, never a type migration.
 
 CALENDAR_SYSTEMS = ("shenshai", "kadmi", "fasli")
 
+# What a mobed can choose. Fasli was taken out on 31 Oct 2026 (D5): nothing new is
+# reckoned in it. It stays in CALENDAR_SYSTEMS, and in the engine, only so that
+# anything already saved in it stays valid and readable (D8).
+OFFERED_CALENDARS = ("shenshai", "kadmi")
+
 # What a calendar can be *displayed* in, which includes Gregorian - unlike
 # CALENDAR_SYSTEMS above, which is the set of Parsi systems a ceremony's
 # Roj/Mah can be reckoned in and stamped onto the record with.
 DISPLAY_CALENDAR_SYSTEMS = ("gregorian", *CALENDAR_SYSTEMS)
+OFFERED_DISPLAY_SYSTEMS = ("gregorian", *OFFERED_CALENDARS)
 DEFAULT_VISIBLE_CALENDAR_SYSTEMS = ("gregorian", "shenshai")
 DEFAULT_SECONDARY_CALENDAR_SYSTEM = "shenshai"
 

@@ -79,7 +79,7 @@ export async function parsiLabel(ymd, system) {
   try {
     const p = await convertDate(ymd, system);
     const label = p.is_gatha
-      ? `${p.gatha_name} (Gatha), Y${p.year}`
+      ? `${p.gatha_name || "Extra day"} (Gatha), Y${p.year}`
       : `Roj ${p.roj_name}, Mah ${p.mah_name}, Y${p.year}`;
     state.parsiCache[key] = label;
     return label;

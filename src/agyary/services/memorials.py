@@ -41,7 +41,7 @@ from agyary.models import (
     Service,
     User,
 )
-from agyary.models.enums import CALENDAR_SYSTEMS
+from agyary.models.enums import OFFERED_CALENDARS
 from agyary.services import guardrails, mobed_dashboard, reminder_message, reminders, template_text
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -121,8 +121,8 @@ async def calendar_for(db: AsyncSession, user_id: int, choice: Choice) -> Calend
     reckoning is for its own slots, while a family's Parabs and Gatha days
     follow the calendar they keep, and the mobed sees every date in theirs."""
     if choice.calendar:
-        if choice.calendar not in CALENDAR_SYSTEMS:
-            raise MemorialError("Choose Shenshai, Kadmi or Fasli.")
+        if choice.calendar not in OFFERED_CALENDARS:
+            raise MemorialError("Choose Shenshai or Kadmi.")
         return CalendarSystem(choice.calendar)
     return await mobed_dashboard.reading_system(db, user_id)
 

@@ -98,6 +98,11 @@ evening before, unless that mobed's account switch is off.
   day it was. This replaces any idea of working it out from a time of death. It resolves DM-4.
   Keep showing the death's Roj and Mah on the review step so the mobed confirms it.
 
+- **There is no sixth Gatha, and the app has no Fasli (31 Oct 2026).** Shenshai and Kadmi have five
+  Gatha days and fall a day behind the Gregorian calendar every leap year. Fasli was the only calendar
+  with a sixth day, so the owner removed it: nobody can choose it for anything new. Anything already
+  saved in Fasli stays exactly as it is and stays readable (D8), which is why the engine still knows it.
+
 ## D6. Warmth, and leaving cleanly (14 Oct 2026)
 
 - A family's first STOP gets one short, kind reply naming their mobed: "You will not receive any
@@ -135,6 +140,16 @@ evening before, unless that mobed's account switch is off.
   content is kept (behdin, purpose, names); Roj and Mah are always worked out from the date, and a
   booking date that has already passed is not restored (the day being viewed is used, and the
   mobed is told). Signing out or deleting the account wipes every draft on the phone.
+
+## D8. No record is ever lost (31 Oct 2026)
+
+**Nothing is deleted because of its age.** There is no retention period and no automatic clean-up of
+behdins, memorials, ceremony records or the record of messages sent. The audit proposed one (C5) and
+the owner refused it; the code was removed, not left switched off, so that no setting can turn it on.
+
+Records go only when someone asks: a mobed deleting something or their own account (D6), or a family
+asking to be erased (docs/DATA-REQUESTS.md). Sweeping what is not a record stays: expired notices,
+spent sign-in codes, and the digests of deleted accounts. Backups are copies, and still age out.
 
 ## Not decided yet
 

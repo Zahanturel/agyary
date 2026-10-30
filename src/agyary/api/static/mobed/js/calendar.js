@@ -208,7 +208,7 @@ function dayHtml(items) {
 }
 
 /** The day's reading in every calendar system the mobed keeps visible. This is
- *  where Kadmi/Fasli live: on the Day view, not in every month cell. Nothing
+ *  where Kadmi lives: on the Day view, not in every month cell. Nothing
  *  is added when the primary is the only one - the header already says it. */
 async function dayReadingsHtml(ymd) {
   const systems = visibleParsiSystems();

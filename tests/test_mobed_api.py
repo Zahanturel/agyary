@@ -416,6 +416,41 @@ async def test_edit_booking_round_trips_location_and_offsite(db, client, seeded)
 # ---------------------------------------------------------------------------
 # Audit 30 Oct 2026: an active temple, and the mobed's own name
 # ---------------------------------------------------------------------------
+async def test_a_range_the_board_refuses_writes_nothing_first(db, client, seeded, monkeypatch):
+    """SEC-09: an impossible range used to generate recurring machis out to its
+    end before being refused."""
+    from agyary.services import mobed_dashboard
+
+    called = []
+
+    async def spy(*args, **kwargs):
+        called.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(mobed_dashboard, "ensure_recurrences_generated", spy)
+    headers = await _member_headers(client, seeded)
+    aid = seeded["agyary_id"]
+    r = await client.get(f"/api/mobed/agyaries/{aid}/machi-board",
+                         params={"from": "2030-01-01", "to": "2040-01-01"}, headers=headers)
+    assert r.status_code == 400 and called == []
+
+    r = await client.get(f"/api/mobed/agyaries/{aid}/machi-board",
+                         params={"from": "2030-01-01", "to": "2030-02-01"}, headers=headers)
+    me = (await client.get("/api/mobed/auth/me", headers=headers)).json()["id"]
+    assert r.status_code == 200 and called[-1]["owner_id"] == me     # only what this mobed may see
+
+
+async def test_a_mobed_can_add_only_a_few_temples_a_day(db, client, seeded):
+    """I-10: every temple appears in everyone's search."""
+    headers = await _member_headers(client, seeded)
+    for n in range(5):
+        r = await client.post("/api/mobed/agyaries", json={"name": f"Temple {'abcde'[n]}", "city": "Surat"},
+                              headers=headers)
+        assert r.status_code == 200, r.text
+    r = await client.post("/api/mobed/agyaries", json={"name": "One Too Many", "city": "Surat"}, headers=headers)
+    assert r.status_code == 429
+
+
 async def test_an_active_temple_cannot_be_renamed_by_a_new_member(db, client, seeded):
     """SEC-05: joining is open (D1), so activate must not touch a temple that is
     already set up. Its name is {{1}} in every colleague's reminders."""

@@ -50,7 +50,9 @@ async def verify_webhook(
     """Meta's one-time subscription handshake: echo the challenge back if
     the verify token matches the one configured in the dashboard."""
     settings = get_settings()
-    if hub_mode == "subscribe" and hub_verify_token == settings.whatsapp_verify_token:
+    # Refused while the token is unset: "" must not match an empty request (I-6).
+    expected = settings.whatsapp_verify_token
+    if hub_mode == "subscribe" and expected and hmac.compare_digest(hub_verify_token.encode(), expected.encode()):
         return PlainTextResponse(hub_challenge)
     raise HTTPException(status_code=403, detail="Verification failed")
 
@@ -88,10 +90,14 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     the number, which is allowed and not our business. The only thing that
     earns a rejection is a payload we cannot prove came from Meta.
     """
-    raw_body = await request.body()
     # Meta's payloads are a few kilobytes. Refusing anything large costs a
-    # genuine delivery nothing and stops an oversized body being hashed and
-    # parsed for nothing.
+    # genuine delivery nothing and stops an oversized body being read, hashed
+    # and parsed for nothing. Its declared size is checked before it is read
+    # (I-1), and the real size after, since a sender can leave that out.
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large")
+    raw_body = await request.body()
     if len(raw_body) > MAX_WEBHOOK_BYTES:
         raise HTTPException(status_code=413, detail="Payload too large")
     settings = get_settings()

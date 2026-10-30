@@ -191,18 +191,24 @@ def decode_token(token: str, expected_type: str) -> dict:
     return payload
 
 
-async def live_session(db: AsyncSession, claims: dict) -> UserSession | None:
+async def live_session(db: AsyncSession, claims: dict, *, lock: bool = False) -> UserSession | None:
     """The session a token names, if it still stands: not revoked, not past its
     absolute end, and the token's own user's."""
     sid = claims.get("sid")
     if not isinstance(sid, int):
         return None
-    session = await db.get(UserSession, sid)
+    session = await db.get(UserSession, sid, with_for_update=True if lock else None)
     if session is None or session.revoked_at is not None or session.user_id != claims["sub"]:
         return None
     if _now() >= _session_ends(session):
         return None
     return session
+
+
+# How long the token just replaced still counts. The app sends one refresh at a
+# time, but a second tab, or an answer lost on a weak signal, can still repeat
+# one: that is not a stolen token, and must not end the session (FE-01).
+ROTATE_GRACE = timedelta(seconds=30)
 
 
 async def rotate(db: AsyncSession, claims: dict) -> UserSession:
@@ -212,9 +218,12 @@ async def rotate(db: AsyncSession, claims: dict) -> UserSession:
     until jwt_legacy_tokens_until; "sign out everywhere" refuses those too."""
     if claims.get("sid") is None:
         return await _adopt_legacy(db, claims)
-    session = await live_session(db, claims)
+    # Locked, so two refreshes at once are taken one after the other (I-7).
+    session = await live_session(db, claims, lock=True)
     if session is None:
         raise TokenError("This sign-in has ended. Please sign in again.")
+    if claims.get("gen") == session.generation - 1 and _now() - session.last_used_at < ROTATE_GRACE:
+        return session
     if claims.get("gen") != session.generation:
         session.revoked_at = _now()
         await db.flush()
@@ -239,7 +248,11 @@ async def _adopt_legacy(db: AsyncSession, claims: dict) -> UserSession:
     after = user.tokens_valid_after
     if after is not None and issued < (after if after.tzinfo else after.replace(tzinfo=UTC)):
         raise TokenError("This sign-in has ended. Please sign in again.")
-    return await start_session(db, user)
+    session = await start_session(db, user)
+    # Moved into a session, so it is not good a second time (SEC-08).
+    user.tokens_valid_after = _now()
+    await db.flush()
+    return session
 
 
 async def end_session(db: AsyncSession, session_id: int | None) -> None:
@@ -248,6 +261,18 @@ async def end_session(db: AsyncSession, session_id: int | None) -> None:
     session = await db.get(UserSession, session_id)
     if session is not None and session.revoked_at is None:
         session.revoked_at = _now()
+        await db.flush()
+
+
+async def end_token(db: AsyncSession, claims: dict) -> None:
+    """Signing out with this refresh token. One from before sessions existed
+    has no session to end, so old tokens are refused from now on (SEC-08)."""
+    if claims.get("sid") is not None:
+        await end_session(db, claims["sid"])
+        return
+    user = await db.get(User, claims["sub"])
+    if user is not None:
+        user.tokens_valid_after = _now()
         await db.flush()
 
 

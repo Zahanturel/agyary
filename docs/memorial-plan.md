@@ -46,7 +46,8 @@ bookings on the calendar, tagged with the memorial.
   from it. The monthly is then Roj Hormazd (Roj 1) of each Mah, from Mah 2 of
   the next year (so Masiso is Mah 2 Roj 1, Bamsi Mah 3 Roj 1), and the yearly
   is the SAME Gatha day each year (so Varsi is that Gatha day a year on). In
-  a Fasli year without that Gatha (the sixth exists only in leap cycles) the
+  a Fasli year without that Gatha (Fasli is no longer offered, D5; this matters
+  only for a memorial already saved in it, and the sixth exists only in leap cycles) the
   last Gatha of that year is used. The Deci is always the actual day before.
 
 **Died more than a year ago** (29 Oct 2026; most of a mobed's behdins are old people whose

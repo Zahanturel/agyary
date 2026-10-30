@@ -36,7 +36,12 @@ from agyary.models import (
     Service,
     UserPreferences,
 )
-from agyary.models.enums import ADMIN_ROLES, DEFAULT_SECONDARY_CALENDAR_SYSTEM, SLOT_RELEASING_STATUSES
+from agyary.models.enums import (
+    ADMIN_ROLES,
+    DEFAULT_SECONDARY_CALENDAR_SYSTEM,
+    OFFERED_CALENDARS,
+    SLOT_RELEASING_STATUSES,
+)
 
 MY_DAY_HORIZON = timedelta(hours=12)  # mirrors my_bookings.py's past-cutoff
 AGYARI_SEARCH_MIN_SIMILARITY = 0.2
@@ -245,10 +250,7 @@ async def list_machi_board(
     the board is keyed by, and the indexed column) rather than
     ceremony_datetime, which for Ushahin lands on the following morning.
     """
-    if end < start:
-        raise ValueError("end must not be before start")
-    if (end - start).days + 1 > MAX_BOARD_RANGE_DAYS:
-        raise ValueError(f"Range too large (max {MAX_BOARD_RANGE_DAYS} days)")
+    check_board_range(start, end)
 
     stmt = (
         select(Machi, Customer)
@@ -691,11 +693,20 @@ async def generate_recurrence_instances(
     return created
 
 
+def check_board_range(start: date, end: date) -> None:
+    """Checked before anything is written for the range (SEC-09)."""
+    if end < start:
+        raise ValueError("end must not be before start")
+    if (end - start).days + 1 > MAX_BOARD_RANGE_DAYS:
+        raise ValueError(f"Range too large (max {MAX_BOARD_RANGE_DAYS} days)")
+
+
 async def ensure_recurrences_generated(
-    db: AsyncSession, agyary_id: int, *, through: date
+    db: AsyncSession, agyary_id: int, *, through: date, owner_id: int | None = None
 ) -> int:
     """Top up every active recurrence at this agyary so the board through
-    ``through`` is complete. Returns how many instances were created.
+    ``through`` is complete. Returns how many instances were created. With
+    ``owner_id``, only that mobed's: their board shows no one else's (D7).
 
     Called on the read path because there is no scheduler here to do it -
     generation at creation time only reached three months out, so a mobed
@@ -713,6 +724,9 @@ async def ensure_recurrences_generated(
                 # service one, and picking it up would leave it looking
                 # like a rule with a missing source.
                 RecurrenceRule.source_machi_id.is_not(None),
+                *([RecurrenceRule.source_machi_id.in_(
+                    select(Machi.id).where(Machi.created_by_user_id == owner_id)
+                )] if owner_id is not None else []),
                 or_(
                     RecurrenceRule.last_generated_until.is_(None),
                     RecurrenceRule.last_generated_until < through,
@@ -1290,7 +1304,7 @@ async def reading_system(db: AsyncSession, user_id: int) -> CalendarSystem:
     """
     prefs = await db.get(UserPreferences, user_id)
     chosen = prefs.default_secondary_system if prefs else DEFAULT_SECONDARY_CALENDAR_SYSTEM
-    return CalendarSystem(chosen)
+    return CalendarSystem(chosen if chosen in OFFERED_CALENDARS else DEFAULT_SECONDARY_CALENDAR_SYSTEM)
 
 
 def _reading(gregorian: date, system: CalendarSystem) -> tuple[int, int]:

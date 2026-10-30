@@ -212,6 +212,26 @@ async def test_verify_handshake_needs_the_right_token(client):
 # ---------------------------------------------------------------------------
 # Claiming rules
 # ---------------------------------------------------------------------------
+async def test_an_empty_verify_token_never_matches(client, monkeypatch):
+    """I-6: an unset token must not let an empty request through the handshake."""
+    from agyary.core import config
+
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "")
+    config.get_settings.cache_clear()
+    try:
+        r = await client.get("/webhooks/whatsapp", params={
+            "hub.mode": "subscribe", "hub.verify_token": "", "hub.challenge": "echo-me"})
+        assert r.status_code == 403
+    finally:
+        config.get_settings.cache_clear()
+
+
+async def test_a_body_declared_too_large_is_refused_before_it_is_read(client):
+    """I-1: the size is checked from the header first."""
+    r = await client.post("/webhooks/whatsapp", content=b"{}", headers={"content-length": "99999999"})
+    assert r.status_code == 413
+
+
 async def test_a_replayed_delivery_does_not_reclaim(db, client):
     """Meta retries. The attempt itself is the idempotency key, which is why
     this needs no message-id dedupe table."""

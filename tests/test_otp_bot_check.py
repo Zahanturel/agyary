@@ -109,14 +109,17 @@ async def test_the_check_is_verified_with_cloudflare():
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        ok = b"response=good" in request.content
-        return httpx.Response(200, json={"success": ok})
+        ok = b"response=good" in request.content or b"response=other" in request.content
+        site = "elsewhere.example" if b"response=other" in request.content else "mobed.gotiadarian.com"
+        return httpx.Response(200, json={"success": ok, "hostname": site})
 
     s = _settings(turnstile_secret_key="secret-key")
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
         assert await bot_check.verify(s, "good", "203.0.113.7", client=c) is True
         assert await bot_check.verify(s, "bad", "203.0.113.7", client=c) is False
         assert await bot_check.verify(s, "", "203.0.113.7", client=c) is False      # never asked
-    assert len(seen) == 2
+        # I-2: a genuine token, but earned on another site with our key.
+        assert await bot_check.verify(s, "other", "203.0.113.7", client=c) is False
+    assert len(seen) == 3
     assert str(seen[0].url) == bot_check.SITEVERIFY_URL
     assert b"secret=secret-key" in seen[0].content and b"remoteip=203.0.113.7" in seen[0].content

@@ -76,7 +76,8 @@ def _now() -> datetime:
 
 
 def _secret(settings: Settings) -> str:
-    return settings.jwt_secret_key
+    """Derived, so the key that signs sessions signs nothing else (I-3)."""
+    return hmac.new(settings.jwt_secret_key.encode(), b"sign-in-codes", hashlib.sha256).hexdigest()
 
 
 def _digest(settings: Settings, salt: str, phone: str, code: str) -> str:

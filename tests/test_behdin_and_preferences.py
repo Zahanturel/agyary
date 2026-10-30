@@ -50,7 +50,7 @@ async def test_preferences_default_without_a_row(db, client, seeded):
 async def test_preferences_round_trip(db, client, seeded):
     headers = await _member_headers(client, seeded)
     payload = {
-        "visible_calendar_systems": ["gregorian", "shenshai", "kadmi", "fasli"],
+        "visible_calendar_systems": ["gregorian", "shenshai", "kadmi"],
         "default_secondary_system": "kadmi",
         "display_language": "gu",
     }
@@ -75,7 +75,10 @@ async def test_preferences_reject_unknown_values(db, client, seeded):
         # Gregorian is the other half of the pair, never the secondary.
         {**base, "default_secondary_system": "gregorian"},
         # A secondary that isn't even shown would be unrenderable.
-        {**base, "visible_calendar_systems": ["gregorian", "shenshai"], "default_secondary_system": "fasli"},
+        {**base, "visible_calendar_systems": ["gregorian", "shenshai"], "default_secondary_system": "kadmi"},
+        # Fasli is no longer offered (D5).
+        {**base, "visible_calendar_systems": ["gregorian", "fasli"]},
+        {**base, "visible_calendar_systems": ["gregorian", "shenshai", "fasli"], "default_secondary_system": "fasli"},
         {**base, "display_language": "fr"},
     ]
     for payload in bad:
@@ -108,8 +111,8 @@ async def test_preferences_are_per_user(db, client, seeded):
     await client.put(
         "/api/mobed/me/preferences",
         json={
-            "visible_calendar_systems": ["gregorian", "fasli"],
-            "default_secondary_system": "fasli",
+            "visible_calendar_systems": ["gregorian", "kadmi"],
+            "default_secondary_system": "kadmi",
             "display_language": "gu",
         },
         headers=mine,
@@ -839,7 +842,7 @@ async def test_slip_reads_in_the_mobeds_primary_calendar(db, client, seeded):
 
     day = date(2027, 6, 15)
     readings = {}
-    for system in ("shenshai", "kadmi", "fasli"):
+    for system in ("shenshai", "kadmi"):
         r = await client.put(
             "/api/mobed/me/preferences",
             json={
@@ -858,7 +861,7 @@ async def test_slip_reads_in_the_mobeds_primary_calendar(db, client, seeded):
 
     # And the three genuinely differ - otherwise the assertions above could
     # pass on a slip that never changed at all.
-    assert len(set(readings.values())) == 3, readings
+    assert len(set(readings.values())) == 2, readings
 
     # The stored record is untouched by any of it.
     machi = await db.get(Machi, mid)

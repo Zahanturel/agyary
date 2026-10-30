@@ -31,13 +31,33 @@ def test_the_example_config_ships_with_debug_off():
     assert not re.search(r"(?mi)^APP_DEBUG=true\s*$", text)
 
 
+KEY = "k" * 32
+
+
 def test_a_production_server_refuses_to_start_in_debug():
     with pytest.raises(RuntimeError, match="APP_DEBUG"):
-        Settings(_env_file=None, jwt_secret_key="x", app_env="production",
+        Settings(_env_file=None, jwt_secret_key=KEY, app_env="production",
                  app_debug=True).validate_runtime_secrets()
-    # Production without debug, and debug outside production, both start.
-    Settings(_env_file=None, jwt_secret_key="x", app_env="production", app_debug=False).validate_runtime_secrets()
-    Settings(_env_file=None, jwt_secret_key="x", app_env="development", app_debug=True).validate_runtime_secrets()
+    # Production without debug, and debug on a laptop, both start.
+    Settings(_env_file=None, jwt_secret_key=KEY, app_env="production", app_debug=False).validate_runtime_secrets()
+    Settings(_env_file=None, jwt_secret_key=KEY, app_env="development", app_debug=True).validate_runtime_secrets()
+
+
+def test_a_server_whose_env_lost_app_env_refuses_debug_too(monkeypatch):
+    """CFG-03: debug lets anyone sign in as anyone, so only an explicit
+    APP_ENV=development allows it, and the default is not that."""
+    monkeypatch.delenv("APP_ENV", raising=False)
+    assert Settings(_env_file=None, jwt_secret_key=KEY).app_env == "production"
+    with pytest.raises(RuntimeError, match="APP_DEBUG"):
+        Settings(_env_file=None, jwt_secret_key=KEY, app_debug=True).validate_runtime_secrets()
+    with pytest.raises(RuntimeError, match="APP_DEBUG"):
+        Settings(_env_file=None, jwt_secret_key=KEY, app_env="staging", app_debug=True).validate_runtime_secrets()
+
+
+def test_a_short_signing_key_is_refused():
+    """I-3: a key that can be guessed signs tokens for anyone."""
+    with pytest.raises(RuntimeError, match="too short"):
+        Settings(_env_file=None, jwt_secret_key="k" * 31, app_env="production").validate_runtime_secrets()
 
 
 async def test_simulate_answers_only_a_caller_on_this_machine(db, seeded):

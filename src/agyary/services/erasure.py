@@ -1,4 +1,4 @@
-"""Erasing a family, and letting old records go (LEG-03, LEG-04).
+"""Erasing a family, when they ask (LEG-04).
 
 A family can ask us to remove them. A phone number is what identifies them, and
 each mobed who serves them has a record of their own (D2), so erasing a number
@@ -10,19 +10,17 @@ print, so a record that events or payments point at stays, called "Erased", with
 a number that can be nobody's. Only what says who they were goes. The one thing
 kept is the STOP, if they sent one: it is how we go on honouring it (D2).
 
-Old records go the same way, once the owner switches it on (RETENTION_MODE=on).
-Until then nothing here runs by itself: this deletes real records for good.
+Nothing here runs by itself. No record is ever deleted because of its age (D8):
+this happens only when an admin acts on a family's own request.
 """
 
 from __future__ import annotations
 
-import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-from sqlalchemy import delete, exists, func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agyary.core.config import Settings
 from agyary.models import (
     AgyaryCustomer,
     Booking,
@@ -31,18 +29,13 @@ from agyary.models import (
     CustomerSavedName,
     Machi,
     Memorial,
-    MemorialObservance,
     Notification,
     Payment,
 )
 from agyary.services import reminders
 
-logger = logging.getLogger(__name__)
-
 ERASED = "Erased"
 KIND_ERASED = "behdin_erased"
-# The most old records one pass takes up; the next pass carries on.
-SWEEP_BATCH = 100
 
 
 def _no_ones_number(customer_id: int) -> str:
@@ -118,33 +111,3 @@ async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = N
             now=now,
         )
     return found
-
-
-async def sweep_old(db: AsyncSession, settings: Settings, now: datetime | None = None) -> dict:
-    """Let go of what has been kept long enough. Does nothing until
-    RETENTION_MODE=on. A month here is 31 days, so nothing goes early."""
-    if settings.retention_mode != "on":
-        return {"messages": 0, "records": 0}
-    now = now or datetime.now(timezone.utc)
-
-    sends_cut = now - timedelta(days=settings.retention_send_log_months * 31)
-    gone = await db.execute(delete(Notification).where(Notification.created_at < sends_cut))
-
-    # A behdin taken off the list, with nothing happening for them any more.
-    quiet_cut = now - timedelta(days=settings.retention_hidden_behdin_months * 31)
-    quiet = (await db.execute(
-        select(Customer.id).where(
-            Customer.is_active.is_(False), Customer.name != ERASED, Customer.updated_at < quiet_cut,
-            ~exists().where(Machi.customer_id == Customer.id, Machi.gregorian_date >= quiet_cut.date()),
-            ~exists().where(Booking.customer_id == Customer.id, Booking.date_time >= quiet_cut),
-            ~exists().where(
-                Memorial.customer_id == Customer.id, MemorialObservance.memorial_id == Memorial.id,
-                MemorialObservance.gregorian_date >= quiet_cut.date(),
-            ),
-        ).limit(SWEEP_BATCH)
-    )).scalars().all()
-    for customer_id in quiet:
-        await _erase_record(db, customer_id)
-    if gone.rowcount or quiet:
-        logger.info("Retention: %d old messages deleted, %d quiet records erased", gone.rowcount, len(quiet))
-    return {"messages": gone.rowcount, "records": len(quiet)}

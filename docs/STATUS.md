@@ -151,7 +151,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | "I told them myself" mark on a reminder | **Live** | the planner then sends nothing for it |
 | Delete my account (in the app) and `/delete-account` | **Live** | none. What was sent stays counted, with who and what wiped; a one-way digest of the number stays for 30 days, so deleting cannot reset a number's limits |
 | Erase a family from every mobed's book | **Admin screen** | `ADMIN_PHONES`. Procedure in [DATA-REQUESTS.md](DATA-REQUESTS.md) |
-| Deleting old records | **Built, off** | `RETENTION_MODE=on`, once the owner has chosen the periods. It deletes for good |
+| Deleting old records | **Never** | Owner's decision D8: no record is deleted because of its age |
 | Warmer reminder template with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
 | Android app (Trusted Web Activity) | **Built, shared directly** (14 Oct 2026) | signed APK given to mobeds in a WhatsApp group; `/.well-known/assetlinks.json` lists the upload key, so it opens full-screen; not on Google Play (DECISIONS.md D6) |
 | Web Push to mobeds | **Not started** | |
@@ -173,8 +173,6 @@ sending is off. Settings that matter operationally:
 | `MEMORIAL_SHARE_SEND_MODE` | `off` | a schedule PDF from our number. Needs the family's agreement and the allowlist |
 | `MEMORIAL_SHARE_DAILY_CAP` / `_GLOBAL_DAILY_CAP` | 20 / 100 | per mobed (a new account: lower) / everyone, per IST day. One schedule per number per day, whoever sends it |
 | `DELETED_ACCOUNT_COOLDOWN_DAYS` | 30 | how long a number that deleted its account cannot send schedules from our number |
-| `RETENTION_MODE` | `off` | `on` deletes old message records and erases quiet hidden behdins |
-| `RETENTION_SEND_LOG_MONTHS` / `_HIDDEN_BEHDIN_MONTHS` | 13 / 24 | the periods, which must match the privacy policy |
 | `ANDROID_PACKAGE_NAME` / `ANDROID_CERT_FINGERPRINTS` | the app / the upload key | what `/.well-known/assetlinks.json` lists; add Play's signing key after the first upload |
 | `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
