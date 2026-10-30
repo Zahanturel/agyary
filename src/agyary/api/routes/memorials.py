@@ -460,7 +460,10 @@ async def share_info(
     from datetime import datetime, timezone
 
     data, customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
-    why = await memorial_share.blocked_reason(db, get_settings(), customer, user.id, datetime.now(timezone.utc))
+    why = await memorial_share.blocked_reason(
+        db, get_settings(), customer, user.id, datetime.now(timezone.utc),
+        departed_name=data["departed_name"], mobed_name=user.name, agyary_name=agyary_name,
+    )
     return {
         "text": memorial_share.message_text(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
         "short_text": memorial_share.short_message(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
@@ -473,7 +476,9 @@ async def share_info(
 
 
 def _pdf_filename(departed: str) -> str:
-    safe = "".join(c if c.isalnum() else "-" for c in departed).strip("-") or "memorial"
+    # ASCII only: a header is sent as latin-1, so a Gujarati or Hindi name here
+    # made the download fail (SEC-10). The full name is in the PDF itself.
+    safe = "".join(c if c.isascii() and c.isalnum() else "-" for c in departed).strip("-") or "memorial"
     return f"Memorial-prayers-{safe}.pdf"
 
 
@@ -513,7 +518,10 @@ async def share_send(
 
     settings = get_settings()
     data, customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
-    why = await memorial_share.blocked_reason(db, settings, customer, user.id, datetime.now(timezone.utc))
+    why = await memorial_share.blocked_reason(
+        db, settings, customer, user.id, datetime.now(timezone.utc),
+        departed_name=data["departed_name"], mobed_name=user.name, agyary_name=agyary_name,
+    )
     if why:
         raise HTTPException(status_code=409, detail=why)
     pdf = memorial_share.render_pdf(data, agyary_name=agyary_name, mobed_name=user.name, note=payload.note)

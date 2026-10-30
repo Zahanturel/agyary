@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.calendar.engine import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 from agyary.core.config import Settings
 from agyary.models import Customer, Notification
-from agyary.services import guardrails, reminders, wa_send
+from agyary.services import guardrails, reminders, template_text, wa_send
 
 logger = logging.getLogger(__name__)
 
@@ -183,8 +183,25 @@ def send_enabled(settings: Settings) -> bool:
     return settings.memorial_share_send_mode == "live" and wa_send.can_send(settings)
 
 
+def _text_problem(departed_name: str, mobed_name: str, agyary_name: str) -> str | None:
+    """Why the words that fill the template's blanks cannot go out under our
+    name (D1), or None. Checked here, at sending, so a name saved before the
+    rules - or typed where they were not yet applied - is caught too."""
+    for label, text, max_len in (
+        ("the departed's name", departed_name, template_text.DEPARTED_MAX),
+        ("your name", mobed_name, template_text.MOBED_NAME_MAX),
+        ("the fire temple's name", agyary_name, template_text.TEMPLE_MAX),
+    ):
+        why = template_text.problem(text, max_len=max_len)
+        if why:
+            return (f"This cannot be sent from the Mobed Diary number: {label} {why}. "
+                    "You can still send it from your own WhatsApp.")
+    return None
+
+
 async def blocked_reason(
-    db: AsyncSession, settings: Settings, customer: Customer, user_id: int, now: datetime
+    db: AsyncSession, settings: Settings, customer: Customer, user_id: int, now: datetime,
+    *, departed_name: str, mobed_name: str, agyary_name: str,
 ) -> str | None:
     """Why this share cannot be sent from our number right now, in words for
     the mobed; None when it can."""
@@ -197,6 +214,13 @@ async def blocked_reason(
     if not customer.reminders_enabled:
         return (f"{customer.name} has not agreed to receive WhatsApp messages from us. "
                 "Turn that on in their page after asking them, or send it from your own WhatsApp.")
+    # A STOP is the person's and wins over the agreement (D2), as it does for reminders.
+    if customer.reminders_stopped_at is not None:
+        return (f"{customer.name} replied STOP, so nothing more goes to them from our number. "
+                "You can still send it from your own WhatsApp.")
+    why = _text_problem(departed_name, mobed_name, agyary_name)
+    if why:
+        return why
     if not reminders.may_send_to(settings, customer.phone):
         return "This number is not on the list allowed to receive messages yet."
     start, end = guardrails.day_bounds(now)

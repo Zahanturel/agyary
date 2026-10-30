@@ -87,16 +87,62 @@ async def test_another_mobed_cannot_share_this_memorial(client, db, seeded):
         assert r.status_code == 404, path
 
 
+NAMES = dict(departed_name="Dinshaw Mehta", mobed_name="Ervad Test", agyary_name="Goti Adarian")
+
+
 async def test_the_blocked_reasons_in_order(db, client, seeded):
     aid, cid, _mid, _headers = await _memorial(client, db, seeded)
     customer = await db.get(Customer, cid)
     now = datetime.now(timezone.utc)
-    assert "not switched on" in await memorial_share.blocked_reason(db, _settings(memorial_share_send_mode="off"), customer, 1, now)
-    assert "not set up" in await memorial_share.blocked_reason(db, _settings(whatsapp_access_token=""), customer, 1, now)
-    assert "agreed" in await memorial_share.blocked_reason(db, _settings(), customer, 1, now)
+    off = _settings(memorial_share_send_mode="off")
+    assert "not switched on" in await memorial_share.blocked_reason(db, off, customer, 1, now, **NAMES)
+    assert "not set up" in await memorial_share.blocked_reason(db, _settings(whatsapp_access_token=""), customer, 1, now, **NAMES)
+    assert "agreed" in await memorial_share.blocked_reason(db, _settings(), customer, 1, now, **NAMES)
     customer.reminders_enabled = True
-    assert "allowed" in await memorial_share.blocked_reason(db, _settings(reminders_allowlist=""), customer, 1, now)
-    assert await memorial_share.blocked_reason(db, _settings(), customer, 1, now) is None
+    assert "allowed" in await memorial_share.blocked_reason(db, _settings(reminders_allowlist=""), customer, 1, now, **NAMES)
+    assert await memorial_share.blocked_reason(db, _settings(), customer, 1, now, **NAMES) is None
+
+
+async def test_nothing_goes_from_our_number_to_someone_who_said_stop(db, client, seeded):
+    """SEC-04: the agreement stays recorded after a STOP, but the STOP wins."""
+    aid, cid, _mid, _headers = await _memorial(client, db, seeded)
+    customer = await db.get(Customer, cid)
+    customer.reminders_enabled = True
+    customer.reminders_stopped_at = datetime.now(timezone.utc)
+    why = await memorial_share.blocked_reason(db, _settings(), customer, 1, datetime.now(timezone.utc), **NAMES)
+    assert why and "STOP" in why
+
+
+async def test_a_link_or_number_in_any_blank_is_never_sent_under_our_name(db, client, seeded):
+    """SEC-01: the mobed's name is {{2}} of the template. A name saved before the
+    rules (or a temple or departed name) carrying a link or a phone number is
+    refused at sending, not only where it is typed."""
+    aid, cid, _mid, _headers = await _memorial(client, db, seeded)
+    customer = await db.get(Customer, cid)
+    customer.reminders_enabled = True
+    now = datetime.now(timezone.utc)
+    for blank, bad in (("mobed_name", "Call 98000 00099 for KYC"), ("mobed_name", "visit bit.ly/x"),
+                       ("departed_name", "@scammer"), ("agyary_name", "www.example.org")):
+        why = await memorial_share.blocked_reason(db, _settings(), customer, 1, now, **{**NAMES, blank: bad})
+        assert why and "your own WhatsApp" in why, (blank, bad)
+
+
+async def test_the_send_route_refuses_a_mobed_name_saved_before_the_rule(db, client, seeded, monkeypatch):
+    from agyary.core import config
+    from agyary.models import User
+    for key, value in (("MEMORIAL_SHARE_SEND_MODE", "live"), ("REMINDERS_ALLOWLIST", "*"),
+                       ("WHATSAPP_ACCESS_TOKEN", "test-token"), ("WHATSAPP_PHONE_NUMBER_ID", "555000111")):
+        monkeypatch.setenv(key, value)
+    config.get_settings.cache_clear()
+    aid, cid, mid, headers = await _memorial(client, db, seeded)
+    customer = await db.get(Customer, cid)
+    customer.reminders_enabled = True
+    me = (await client.get("/api/mobed/auth/me", headers=headers)).json()
+    user = await db.get(User, me["id"])
+    user.name = "Ervad 9800000099"
+    await db.commit()
+    r = await client.get(f"/api/mobed/agyaries/{aid}/memorials/{mid}/share", headers=headers)
+    assert r.json()["can_send"] is False and "your name" in r.json()["cannot_send_because"]
 
 
 async def test_the_pdf_goes_to_meta_as_a_document_template_and_is_recorded(db, client, seeded):
@@ -137,3 +183,13 @@ async def test_the_short_message_is_short_and_carries_the_note(client, db, seede
     short = r.json()["short_text"]
     assert "Memorial prayers for Dinshaw" in short and "Please come at 7am" in short
     assert "in the PDF" in short and len(short) < 400 and "\n- " not in short
+
+
+async def test_the_pdf_downloads_for_a_name_in_gujarati(client, db, seeded):
+    """SEC-10: the download's file name is a latin-1 header, so it is kept ASCII."""
+    aid, cid, headers = await _setup(client, db, seeded)
+    r = await _create(client, db, aid, cid, headers, departed_name="દિનશા મહેતા")
+    assert r.status_code == 200, r.text
+    r = await client.get(f"/api/mobed/agyaries/{aid}/memorials/{r.json()['id']}/schedule.pdf", headers=headers)
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    assert r.headers["content-disposition"] == 'attachment; filename="Memorial-prayers-memorial.pdf"'
