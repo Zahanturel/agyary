@@ -255,7 +255,7 @@ the clipboard held the command text instead of the token: check the length and t
 
 **Restore the database.** The deploy script keeps the last ten pre-deploy dumps in the VM user's
 home directory (`pg_dump -Fc`), readable by that user only. Nightly encrypted copies go to R2 and
-are kept for 30 days; `deploy/README.md` has the restore drill.
+are kept for 35 days and locked against deletion for 30; `deploy/README.md` has the restore drill.
 
 ## 7. Decisions worth challenging
 

@@ -28,7 +28,8 @@ To revoke access, remove that one line from the VM's `authorized_keys`.
 
 `deploy/backup.sh` dumps the database, encrypts it with the owner's age
 **public** key, uploads it to a private Cloudflare R2 bucket, checks the upload,
-and deletes copies older than 30 days. The server can write backups but cannot
+and deletes copies older than `BACKUP_KEEP_DAYS` (35 on the server, because an R2 lock
+keeps each one for 30). The server can write backups but cannot
 read them: the private key lives only with the owner.
 
 ## One-time setup

@@ -34,7 +34,7 @@ family still expects them.
 
 ## 3. What the action cannot reach
 
-- **Backups.** Nightly encrypted backups are kept for 30 days and pre-deploy copies for the last
+- **Backups.** Nightly encrypted backups are kept for 35 days and pre-deploy copies for the last
   10 deploys. Their copy of the family ages out; nothing else needs doing. If a backup is ever
   restored within that time, run the erase again.
 - **In-app notices** that mention the family expire within 7 days.
@@ -49,7 +49,7 @@ private to them, and the admin screen does not show it (D2).
 
 ## 5. Reply
 
-> We have removed your family's details from Mobed Diary. Our backups are deleted within 30 days,
+> We have removed your family's details from Mobed Diary. Our backups are deleted within 35 days,
 > and your details go with them. If you replied STOP to our messages, we have kept that one record,
 > so that you are not messaged again.
 
