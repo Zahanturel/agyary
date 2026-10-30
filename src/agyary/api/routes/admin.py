@@ -7,6 +7,7 @@ is not something to probe for.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,8 +20,10 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import LoginOtp, Notification, User
-from agyary.services import bot_check, guardrails, mobed_auth
+from agyary.services import bot_check, erasure, guardrails, mobed_auth
 from agyary.services.phone import Phone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mobed/admin", tags=["admin"])
 
@@ -111,6 +114,27 @@ async def sign_out_everywhere(
     ended = await mobed_auth.end_all_sessions(db, user)
     await db.commit()
     return {"signed_out": ended}
+
+
+class EraseIn(BaseModel):
+    phone: Phone
+    confirm: bool = False
+
+
+@router.post("/erase-number")
+async def erase_number(
+    payload: EraseIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> dict:
+    """A family asked to be removed (docs/DATA-REQUESTS.md). Without ``confirm``
+    this only says how much we hold. With it, the number is erased from every
+    mobed's book, for good. Answers and logs counts, never names or the number."""
+    rate_limit.enforce_key(f"admin_erase:{admin.id}", max_requests=10, window_seconds=60)
+    if not payload.confirm:
+        return {"found": await erasure.what_we_hold(db, payload.phone)}
+    erased = await erasure.erase_number(db, payload.phone)
+    await db.commit()
+    logger.warning("A number was erased on request by admin %s: %s", admin.id, erased)
+    return {"erased": erased}
 
 
 class PauseIn(BaseModel):

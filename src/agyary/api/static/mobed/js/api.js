@@ -139,6 +139,7 @@ export const signOutOtherDevices = () => post("/auth/sessions/sign-out-others", 
 export const deleteMyAccount = () => post("/auth/account/delete", { confirm: true });
 /** Admin only: end every signed-in device of the mobed with this number. */
 export const adminSignOutEverywhere = (phone) => post("/admin/sign-out-everywhere", { phone });
+export const adminEraseNumber = (phone, confirm) => post("/admin/erase-number", { phone, confirm });
 export const getMe = () => get("/auth/me");
 export const updateMyName = (name) => patch("/auth/me", { name });
 

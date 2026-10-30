@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # A number whose account was deleted cannot send schedules from our number
     # for this long after signing up again (SEC-02).
     deleted_account_cooldown_days: int = 30
+    # How long old records are kept (services/erasure.py). off keeps everything;
+    # on deletes for good, so it waits for the owner's say-so.
+    retention_mode: str = "off"
+    retention_send_log_months: int = 13
+    retention_hidden_behdin_months: int = 24
 
     # off: nothing is planned or sent. dry_run: reminders are planned and
     # logged as they would be sent, and nothing leaves the building. live:

@@ -8,7 +8,7 @@
  * this screen does, so hiding it is a courtesy and not the protection.
  */
 
-import { adminOverview, adminSetPaused, adminSignOutEverywhere } from "../api.js";
+import { adminOverview, adminSetPaused, adminSignOutEverywhere, adminEraseNumber } from "../api.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar,
 } from "../ui.js";
@@ -92,7 +92,50 @@ export async function renderAdmin() {
       <label for="admOut">Their WhatsApp number</label>
       ${phoneField("admOut", "")}
       <div style="margin-top:10px"><button class="secondary small" id="admOutGo">Sign them out</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Erase a family</h2>
+      <p class="meta">When a family asks to be removed. This takes their name, number, memorials and
+        prayer names out of every mobed's book. It cannot be undone.</p>
+      <label for="admErase">The family's WhatsApp number</label>
+      ${phoneField("admErase", "")}
+      <div style="margin-top:10px"><button class="secondary small" id="admEraseFind">See what we hold</button></div>
+      <div id="admEraseAsk" style="margin-top:12px"></div>
     </div>`;
+
+  const askErase = document.getElementById("admEraseAsk");
+  document.getElementById("admEraseFind").onclick = async () => {
+    askErase.innerHTML = "";
+    const phone = readPhone("admErase");
+    if (!phone) return showError("Please enter a valid phone number.");
+    let f;
+    try {
+      f = (await adminEraseNumber(phone, false)).found;
+    } catch (e) { return showError(e.message); }
+    if (!f.records && !f.messages) {
+      askErase.innerHTML = `<p class="meta">We hold nothing for that number.</p>`;
+      return;
+    }
+    askErase.innerHTML = `
+      <p class="meta">We hold ${f.records} record${f.records === 1 ? "" : "s"} with ${f.mobeds}
+        mobed${f.mobeds === 1 ? "" : "s"}: ${f.memorials} memorial${f.memorials === 1 ? "" : "s"},
+        ${f.events} event${f.events === 1 ? "" : "s"} and ${f.messages} message${f.messages === 1 ? "" : "s"}.
+        Past events stay on the calendar, marked Erased. Each mobed is told. If they replied STOP, that stays.</p>
+      <div class="row tight" style="margin-top:10px">
+        <button class="danger small" id="admEraseGo">Erase for good</button>
+        <button class="ghost small" id="admEraseNo">Cancel</button>
+      </div>`;
+    document.getElementById("admEraseNo").onclick = () => { askErase.innerHTML = ""; };
+    document.getElementById("admEraseGo").onclick = async (ev) => {
+      ev.currentTarget.disabled = true;
+      try {
+        await adminEraseNumber(phone, true);
+        askErase.innerHTML = "";
+        showInfo("That family's details have been erased.");
+      } catch (e) { showError(e.message); }
+    };
+  };
 
   const confirm = document.getElementById("admConfirm");
   const apply = async (paused, reason) => {
