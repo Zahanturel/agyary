@@ -109,6 +109,7 @@ function renderActivate(a) {
       refreshHeader();
       navigate("#/calendar", { replace: true });
     } catch (e) {
+      btn.disabled = false;
       showError(e.message);
     }
   };
@@ -129,7 +130,9 @@ function renderCreate(prefillName) {
         <button class="ghost" id="crBack">Back to search</button></div>
     </div>`;
   document.getElementById("crBack").onclick = () => renderOnboarding();
-  document.getElementById("crGo").onclick = async () => {
+  document.getElementById("crGo").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    if (btn.disabled) return;
     const phoneRes = readOptionalPhone("crPhone");
     if (!phoneRes.ok) return showError("Please enter a valid phone number, or leave it blank.");
     const body = {
@@ -139,6 +142,7 @@ function renderCreate(prefillName) {
       contact_phone: phoneRes.value,
     };
     if (!body.name || !body.city) return showError("Please enter the fire temple's name and city.");
+    btn.disabled = true;
     try {
       const res = await createAgyary(body);
       state.user = res.user;

@@ -146,6 +146,7 @@ function renderCodeStep(phone, info) {
         maxlength="7" placeholder="000000" aria-label="Six digit code">
       ${navigator.clipboard && navigator.clipboard.readText
         ? `<div style="margin-top:10px"><button class="secondary small" id="lgPaste">Paste code</button></div>` : ""}
+      <div style="margin-top:10px"><button class="small hidden" id="lgUse">Sign in with this code</button></div>
       <p class="meta" id="lgStatus" style="margin-top:12px"></p>
       <div class="row tight" style="margin-top:6px">
         <button class="ghost small" id="lgResend" disabled>Resend code</button>
@@ -185,10 +186,10 @@ function renderCodeStep(phone, info) {
 
   // Six digits is the whole code: submit the moment it is complete, however it
   // got there - typed, pasted, or read off the clipboard.
-  const fill = (raw) => {
+  const fill = (raw, { send = true } = {}) => {
     const digits = String(raw).replace(/\D+/g, "").slice(0, 6);
     codeEl.value = digits;
-    if (digits.length === 6) submit(digits);
+    if (send && digits.length === 6) submit(digits);
   };
   codeEl.oninput = () => fill(codeEl.value);
   codeEl.focus();
@@ -217,7 +218,13 @@ function renderCodeStep(phone, info) {
       const perm = await navigator.permissions.query({ name: "clipboard-read" });
       if (perm.state !== "granted") return;
       const code = extractCode(await navigator.clipboard.readText());
-      if (code) fill(code);
+      if (!code) return;
+      // Not sent by itself: a lone six digits could be a bank's code (FE-14).
+      fill(code, { send: false });
+      say("Found this on your clipboard. If it is the code from WhatsApp, tap Sign in.");
+      const use = document.getElementById("lgUse");
+      use.classList.remove("hidden");
+      use.onclick = () => submit(codeEl.value);
     } catch (e) { /* no permissions API here; the Paste button covers it */ }
   };
   document.addEventListener("visibilitychange", quietRead, { signal: abort.signal });

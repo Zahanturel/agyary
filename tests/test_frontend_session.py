@@ -77,6 +77,52 @@ console.log(JSON.stringify({{ parallel, after: refreshes, results }}));
     assert out["after"] == 2          # a later refresh is a new one, not a stale answer
 
 
+def test_a_refusal_mid_use_goes_to_sign_in():
+    """FE-09: a definitive 401 raised jargon and left the mobed on a dead screen."""
+    out = _node(STORAGE + f"""
+const {{ api }} = await import({json.dumps(_module(JS / "api.js"))});
+const {{ state }} = await import({json.dumps(_module(JS / "state.js"))});
+state.user = {{ id: 1 }};
+let told = 0;
+globalThis.dispatchEvent = () => {{ told += 1; }};
+globalThis.fetch = async () => new Response(JSON.stringify({{ detail: "ended" }}), {{ status: 401 }});
+let status = null;
+try {{ await api("/x"); }} catch (e) {{ status = e.status; }}
+console.log(JSON.stringify({{ told, status }}));
+""")
+    assert out == {"told": 1, "status": 401}
+
+
+def test_a_broken_address_and_blocked_storage_do_not_crash():
+    """FE-10, FE-11. Both modules need a page to run, so this pins the shape."""
+    drafts = (JS / "drafts.js").read_text(encoding="utf-8")
+    clear = drafts[drafts.index("export function clearAllDrafts"):]
+    assert clear.index("try {") < clear.index("globalThis[name]")
+    router = (JS / "router.js").read_text(encoding="utf-8")
+    assert "try {" in router[router.index("function match("):router.index("decodeURIComponent") + 80]
+
+
+def test_the_shell_is_precached_fresh_from_the_network():
+    """FE-06."""
+    assert '{ cache: "reload" }' in (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
+
+
+def test_a_code_found_on_the_clipboard_is_not_sent_by_itself():
+    """FE-14: a lone six digits could be a bank's code."""
+    login = (JS / "screens" / "login.js").read_text(encoding="utf-8")
+    quiet = login[login.index("const quietRead"):login.index('addEventListener("visibilitychange"')]
+    assert "fill(code, { send: false })" in quiet
+
+
+def test_tappable_rows_reach_the_keyboard():
+    """UX-04: everything the screens wire up as a row is covered by one list."""
+    ui = (JS / "ui.js").read_text(encoding="utf-8")
+    for row in (".search-result", ".section-bar", ".event", ".geh-slot.booked", ".geh-slot.open",
+                ".note.tap", ".obs-head", "[data-oid]"):
+        assert row in ui
+    assert 'e.key !== "Enter" && e.key !== " "' in ui
+
+
 def test_only_a_401_means_signed_out():
     """FE-02: a 5xx, Cloudflare's 52x or a 429 says nothing about the session.
     Treated as a refusal, boot cleared the session and every draft. Our own

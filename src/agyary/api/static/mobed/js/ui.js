@@ -93,6 +93,26 @@ function banner(cls, msg) {
   mainEl.prepend(el);
   el.scrollIntoView({ block: "nearest" });
 }
+// Rows that open something are divs with their own click handlers, so neither a
+// keyboard nor a screen reader could reach them (UX-04). This gives every such row
+// what a real button has: a place in the tab order, the role, Enter and Space.
+const TAPPABLE = ".search-result, .section-bar, .event, .geh-slot.booked, .geh-slot.open, "
+  + ".note.tap, .obs-head, [data-oid]";
+function markTappable() {
+  document.querySelectorAll(TAPPABLE).forEach(el => {
+    if (el.hasAttribute("tabindex")) return;
+    el.tabIndex = 0;
+    el.setAttribute("role", "button");
+  });
+}
+new MutationObserver(markTappable).observe(document.body, { childList: true, subtree: true });
+document.addEventListener("keydown", (e) => {
+  if ((e.key !== "Enter" && e.key !== " ") || !e.target.matches?.('[role="button"]')) return;
+  if (e.target.tagName === "BUTTON") return;
+  e.preventDefault();
+  e.target.click();
+});
+
 export function showError(msg) { banner("error-banner", msg); }
 export function showInfo(msg) { banner("info-banner", msg); }
 

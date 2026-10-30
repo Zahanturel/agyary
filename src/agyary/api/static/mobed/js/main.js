@@ -18,7 +18,7 @@ import { state, saveSession, restoreSession, clearSession, homeHash } from "./st
 import { clearAllDrafts } from "./drafts.js";
 import { calendarHash, boardHash } from "./calendar.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
-import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline } from "./ui.js";
+import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline, flashError } from "./ui.js";
 import { loadSessionExtras, signedIn } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
@@ -190,6 +190,18 @@ async function boot() {
 // Signal came back after an offline boot. Take the session live and
 // re-render whatever is on screen, so the app heals itself instead of
 // sitting there signed-in-but-empty until the mobed thinks to reload.
+// The server refused the session mid-use: to sign-in, with half-typed forms kept,
+// since it is often the same mobed signing straight back in.
+window.addEventListener("mobed:signed-out", () => {
+  if (!state.user) return;
+  clearSession();
+  state.accessToken = null;
+  state.user = null;
+  state.offline = false;
+  flashError("You have been signed out. Please sign in again.");
+  location.hash = "#/login";
+});
+
 window.addEventListener("offline", paintOffline);
 window.addEventListener("online", async () => {
   paintOffline();

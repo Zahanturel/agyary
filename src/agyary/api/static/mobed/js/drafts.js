@@ -55,10 +55,11 @@ export function clearDraft(key) {
  *  sessionStorage ones. For sign-out and account deletion. */
 export function clearAllDrafts() {
   held.clear();
-  for (const store of [localStorage, sessionStorage]) {
+  for (const name of ["localStorage", "sessionStorage"]) {
     try {
+      const store = globalThis[name];
       for (const k of Object.keys(store)) if (k.startsWith("draft:")) store.removeItem(k);
-    } catch (e) { /* nothing to clear */ }
+    } catch (e) { /* blocked, or nothing to clear */ }
   }
 }
 

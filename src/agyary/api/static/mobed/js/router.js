@@ -123,7 +123,11 @@ function match(hash) {
     const m = hash.match(r.regex);
     if (m) {
       const params = {};
-      r.names.forEach((n, i) => { params[n] = decodeURIComponent(m[i + 1]); });
+      try {
+        r.names.forEach((n, i) => { params[n] = decodeURIComponent(m[i + 1]); });
+      } catch (e) {
+        return null;   // a broken %-sequence in the address: no such page, not a crash
+      }
       return { route: r, params };
     }
   }

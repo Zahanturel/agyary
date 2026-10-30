@@ -53,7 +53,10 @@ export async function api(path, opts = {}) {
   if (res.status === 401 && !opts._retried) {
     // Strictly true: REFRESH_OFFLINE is truthy but means "ask again later",
     // and retrying the call on it would just fail the same way.
-    if (await tryRefresh() === true) return api(path, Object.assign({}, opts, { _retried: true }));
+    const refreshed = await tryRefresh();
+    if (refreshed === true) return api(path, Object.assign({}, opts, { _retried: true }));
+    // The server has ended this sign-in. main.js takes it from here (FE-09).
+    if (refreshed === false && state.user) globalThis.dispatchEvent?.(new Event("mobed:signed-out"));
   }
 
   if (!res.ok) {

@@ -13,7 +13,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v64";
+const CACHE_NAME = "mobed-shell-v65";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -61,7 +61,9 @@ const SHELL_FILES = [
 
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES))
+    // Fresh from the network, not the browser's HTTP cache, or old and new
+    // modules can end up mixed in here and run together offline (FE-06).
+    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES.map(u => new Request(u, { cache: "reload" }))))
   );
   self.skipWaiting();
 });

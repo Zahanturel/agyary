@@ -79,6 +79,7 @@ label { display: block; font-size: var(--text-sm); margin: var(--space-3) 0 var(
 input, select, textarea { width: 100%; padding: var(--space-3); border: 2px solid var(--muted); border-radius: var(--radius-sm);
   font-size: var(--text-base); background: #fff; font-family: inherit; color: var(--text); min-height: var(--tap); }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-strong); outline-offset: 1px; }
+[role="button"]:focus-visible { outline: 3px solid var(--primary-strong); outline-offset: 2px; }
 button { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-5); font-size: var(--text-base); font-weight: 700; cursor: pointer;
   font-family: inherit; min-height: var(--tap); }
