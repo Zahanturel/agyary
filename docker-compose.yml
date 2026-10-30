@@ -54,8 +54,10 @@ services:
       timeout: 6s
       retries: 3
       start_period: 20s
-    volumes:
-      - ./src:/app/src
+    # No bind mount of ./src: the app runs the code baked into its image. With
+    # the mount, `git pull` changed the static files the RUNNING app serves
+    # before the new image was built and migrated, so phones got the new
+    # front end against the old API, and a failed deploy left it there.
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -66,7 +68,11 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    # From the environment, not the command line: arguments show in `ps` to
+    # any user on the host.
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       app:
         # service_started only waits for the container, not for uvicorn to

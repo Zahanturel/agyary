@@ -11,6 +11,8 @@
 #   BACKUP_HEARTBEAT_URL   optional; its own healthchecks.io check, pinged only after a verified upload
 #   BACKUP_KEEP_DAYS       optional, default 30
 set -euo pipefail
+# Anything this writes (the plain dump before it is encrypted) is for this user only.
+umask 077
 
 cd "$(dirname "$0")/.."
 

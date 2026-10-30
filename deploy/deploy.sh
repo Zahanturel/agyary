@@ -10,6 +10,8 @@
 #   5. wait for /health, and fail loudly if it never comes
 # A failed migration stops at step 3 with the old container still running.
 set -euo pipefail
+# The pre-deploy dumps below are the whole database, unencrypted: owner-only.
+umask 077
 
 cd "$(dirname "$0")/.."
 
