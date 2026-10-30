@@ -155,3 +155,11 @@ export function restoreSession() {
 export function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* nothing to clear */ }
 }
+
+// The number typed on the sign-in screen, offered again next time. A
+// convenience for this device's own mobed - so signing out, or deleting the
+// account, forgets it (FE-07): a lent or shared phone must not keep it.
+export const LAST_PHONE_KEY = "mobed_last_phone";
+export function forgetLastPhone() {
+  try { localStorage.removeItem(LAST_PHONE_KEY); } catch (e) { /* nothing to forget */ }
+}

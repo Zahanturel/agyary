@@ -15,7 +15,7 @@
 import {
   getMe, waLoginStart, waLoginPoll, waLoginComplete, waLoginConfirm, authOptions, otpRequest, otpVerify,
 } from "../api.js";
-import { state } from "../state.js";
+import { state, LAST_PHONE_KEY } from "../state.js";
 import { chrome, mainEl, setHeader, showError } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
 import { navigate } from "../router.js";
@@ -48,7 +48,6 @@ export async function renderLogin() {
   return offered ? renderPhoneStep() : renderWaChoice();
 }
 
-const LAST_PHONE_KEY = "mobed_last_phone";
 function rememberedPhone() {
   try { return localStorage.getItem(LAST_PHONE_KEY) || ""; } catch (e) { return ""; }
 }

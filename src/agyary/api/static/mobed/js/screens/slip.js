@@ -88,13 +88,13 @@ export async function renderSlip({ kind, aid, id }) {
     // Only a machi can be part of a recurring series - a booking never
     // repeats, so there is nothing to choose between there.
     panel.innerHTML = slip.is_recurring
-      ? `<p class="meta">This is part of a recurring arrangement.</p>
+      ? `<p class="meta" id="delAsk" tabindex="-1">This is part of a recurring arrangement.</p>
          <div class="stack">
            <button class="danger" id="delOne">Just this one</button>
            <button class="danger" id="delFuture">This and every future one</button>
            <button class="secondary" id="delCancel">Cancel</button>
          </div>`
-      : `<p class="meta">Delete this? This can't be undone.</p>
+      : `<p class="meta" id="delAsk" tabindex="-1">Delete this? This can't be undone.</p>
          <div class="stack">
            <button class="danger" id="delOne">Delete</button>
            <button class="secondary" id="delCancel">Cancel</button>
@@ -103,5 +103,12 @@ export async function renderSlip({ kind, aid, id }) {
     document.getElementById("delCancel").onclick = () => { panel.innerHTML = ""; };
     const delFuture = document.getElementById("delFuture");
     if (delFuture) delFuture.onclick = () => doDelete(true);
+    // The question opens at the foot of the page, where the tab bar covered
+    // it on a phone. Bring it into view, and put focus on the question itself
+    // (not on Delete) so a screen reader reads it out first. An instant
+    // scroll, not a smooth one: it always lands, and does not animate for
+    // someone who has asked for less motion.
+    panel.scrollIntoView({ block: "center" });
+    document.getElementById("delAsk").focus({ preventScroll: true });
   };
 }

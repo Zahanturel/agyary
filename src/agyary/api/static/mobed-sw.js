@@ -13,7 +13,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v61";
+const CACHE_NAME = "mobed-shell-v62";
 const SHELL_FILES = [
   "/mobed",
   "/mobed-manifest.json",
@@ -89,8 +89,12 @@ self.addEventListener("fetch", event => {
     event.respondWith(
       fetch(fresh)
         .then(response => {
+          // An error page - Cloudflare's 502 or 530 while the app restarts, a
+          // 404 - is never cached, and the shell we already have is shown in
+          // its place. Caching it overwrote a working app with the error (FE-03).
+          if (!response.ok) return caches.match(event.request).then(cached => cached || response);
           const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)));
           return response;
         })
         // Offline: whatever we cached last is exactly what should show.

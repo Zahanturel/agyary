@@ -12,7 +12,7 @@
  */
 
 import { updateMyName, getPreferences, putPreferences, putDailyReport, logout, signOutOtherDevices, deleteMyAccount } from "../api.js";
-import { state, currentAgyary, primarySystem, clearSession } from "../state.js";
+import { state, currentAgyary, primarySystem, clearSession, forgetLastPhone } from "../state.js";
 import { clearAllDrafts } from "../drafts.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, getTextSize, setTextSize,
@@ -219,6 +219,7 @@ export async function renderMenu() {
       }
       clearSession();
       clearAllDrafts();
+      forgetLastPhone();
       state.accessToken = null;
       state.user = null;
       state.preferences = null;
@@ -234,6 +235,7 @@ export async function renderMenu() {
     try { await logout(); } catch (e) { /* clear locally regardless */ }
     clearSession();
     clearAllDrafts();
+    forgetLastPhone();
     state.accessToken = null;
     state.user = null;
     state.offline = false;

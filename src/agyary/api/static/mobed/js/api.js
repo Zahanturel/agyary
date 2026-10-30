@@ -73,18 +73,31 @@ export const REFRESH_OFFLINE = "offline";
  *   true            - refreshed, `state.accessToken` is live
  *   false           - the SERVER refused: cookie missing, expired, revoked.
  *                     This is the only outcome that means "signed out".
- *   REFRESH_OFFLINE - the request never landed. Says nothing about the
- *                     session; treating it as a refusal is what used to
- *                     make a lost connection look like a logout.
+ *   REFRESH_OFFLINE - no answer about the session: the request never landed,
+ *                     or the server (or Cloudflare in front of it) failed -
+ *                     a 5xx during a deploy, a 429. Treating that as a
+ *                     refusal is what made a blip look like a logout.
+ *
+ * One refresh at a time. Screens fire several calls at once, and each 401
+ * used to start its own refresh with the same cookie: the server rotates the
+ * cookie on the first and takes the second for a stolen copy, ending the
+ * whole session (FE-01). Callers that arrive while one is running share it.
  */
-export async function tryRefresh() {
+let refreshing = null;
+export function tryRefresh() {
+  if (!refreshing) refreshing = doRefresh().finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+async function doRefresh() {
   let res;
   try {
     res = await fetch(MOBED_BASE + "/auth/refresh", { method: "POST", credentials: "include" });
   } catch (e) {
     return REFRESH_OFFLINE;
   }
-  if (!res.ok) return false;
+  if (res.status === 401 || res.status === 403) return false;
+  if (!res.ok) return REFRESH_OFFLINE;
   try {
     state.accessToken = (await res.json()).access_token;
   } catch (e) {
