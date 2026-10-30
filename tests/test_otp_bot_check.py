@@ -1,11 +1,10 @@
 """The conditions for sending sign-in codes (docs/DECISIONS.md D1, D3).
 
 Asking for a code makes us send a paid message to a number the caller typed, so
-once the bot check (Cloudflare Turnstile) is configured it must be passed for
-every request, and the per-address limits are counted in the database, where a
-restart or a deploy cannot reset them. Until its keys are set, codes keep working
-as before - the owner put sign-in by code live and made the check follow-up work,
-not a precondition (D3) - and the admin screen says the check is missing.
+the bot check (Cloudflare Turnstile) must be passed for every request, and the
+per-address limits are counted in the database, where a restart or a deploy
+cannot reset them. A server without the check's keys sends no codes at all, and
+the admin screen says the check is missing (D3, changed 30 Oct 2026).
 """
 
 from __future__ import annotations
@@ -60,12 +59,14 @@ async def test_codes_need_the_bot_check_once_it_is_configured(client, db, seeded
     assert len(outbox.sent) == 1
 
 
-async def test_codes_keep_working_until_the_bot_check_is_set_up(client, db, seeded, monkeypatch, outbox):
+async def test_a_server_without_the_bot_check_sends_no_codes(client, db, seeded, monkeypatch, outbox):
+    """CFG-02: a rebuilt server missing its keys must not send paid messages to
+    typed numbers with no check. The other sign-in still works, so it says so."""
     _live(monkeypatch, turnstile=False)
     assert (await client.get("/api/mobed/auth/options")).json() == {"otp": True, "turnstile_site_key": None}
     r = await client.post("/api/mobed/auth/otp/request", json={"phone": PHONE})
-    assert r.status_code == 200, r.text
-    assert len(outbox.sent) == 1
+    assert r.status_code == 503 and r.json()["detail"] == otp.UNAVAILABLE
+    assert outbox.sent == []
 
 
 async def test_the_admin_screen_says_whether_the_bot_check_is_set_up(client, db, seeded, monkeypatch):

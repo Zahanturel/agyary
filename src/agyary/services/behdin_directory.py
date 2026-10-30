@@ -185,6 +185,12 @@ async def update(
                     "Open their record instead of moving the number."
                 )
             customer.phone = cleaned
+            # The agreement to be messaged was given for the old number. The new
+            # one's owner has not agreed to anything yet (SEC-04), so reminders go
+            # off until the mobed asks again and reads them the words.
+            customer.reminders_enabled = False
+            customer.reminders_enabled_at = None
+            customer.reminders_consent_version = None
             # A number that replied STOP stays stopped under any record. (A STOP
             # already on this record is never lifted by a change of number.)
             opt_out = await db.get(ReminderOptOut, cleaned)

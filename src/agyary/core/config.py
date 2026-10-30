@@ -17,12 +17,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://agyary:agyary@localhost:5432/agyary"
 
-    # WhatsApp Cloud API. Both of these are read by the webhook and nothing
-    # else: this deployment receives from Meta and never sends to it, so
-    # there is deliberately no API token here. Anything that needs one is a
-    # business-initiated message, which needs an approved template and costs
-    # money per conversation - see services/wa_login.py for why sign-in
-    # avoids all of that by having the mobed message us instead.
+    # WhatsApp Cloud API, receiving: both of these are read by the webhook and
+    # nothing else. What we send needs the token further down, an approved
+    # template and money per message - see services/wa_login.py for why the
+    # main sign-in avoids all of that by having the mobed message us instead.
     #
     # verify_token is a string you invent and paste into Meta's webhook
     # configuration; app_secret is the Meta App's own secret, and the
@@ -32,8 +30,8 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str = ""
     whatsapp_app_secret: str = ""
 
-    # --- Memorial reminders (the one thing we send) ---------------------------
-    # Business-initiated, so unlike sign-in this needs a System User access
+    # --- What we send: reminders, schedules, reports, sign-in codes -----------
+    # Business-initiated, so unlike receiving this needs a System User access
     # token, the number's phone_number_id, and a template Meta has approved.
     # None of them belong in the repo: set them in .env on the server.
     whatsapp_access_token: str = ""
@@ -89,7 +87,7 @@ class Settings(BaseSettings):
     otp_per_address_hourly: int = 10
     otp_per_address_daily: int = 30
     # Cloudflare Turnstile, the bot check every code request must pass (D1, D3).
-    # Until both are set, sign-in by code stays unavailable even with OTP_MODE=live.
+    # If either is missing, no code is sent, even with OTP_MODE=live (routes/otp.py).
     turnstile_site_key: str = ""
     turnstile_secret_key: str = ""
 

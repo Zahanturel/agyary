@@ -59,10 +59,12 @@ async def otp_request(
     rate_limit.enforce(request, "otp_request", max_requests=10, window_seconds=600)
     rate_limit.enforce_key(f"otp_request_phone:{payload.phone}", max_requests=5, window_seconds=600)
     settings = get_settings()
-    # D3: once its keys are set, every request must pass the bot check. Until
-    # then codes work as they did - the owner made the check follow-up work, not
-    # a precondition - and the admin screen says it is missing.
-    if settings.otp_mode == "live" and bot_check.configured(settings):
+    # D3: every request must pass the bot check. The keys have been set since
+    # 16 Oct 2026, so a server that comes up without them (a lost or rebuilt
+    # .env) refuses codes rather than sending them with no check (CFG-02).
+    if settings.otp_mode == "live":
+        if not bot_check.configured(settings):
+            raise HTTPException(status_code=503, detail=otp.UNAVAILABLE)
         if not await bot_check.verify(settings, payload.turnstile_token, rate_limit.client_ip(request)):
             raise HTTPException(status_code=400, detail="Please complete the check and try again.")
     try:

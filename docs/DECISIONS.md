@@ -61,6 +61,11 @@ The review advised against enabling it. The owner has decided to, and it is **li
 - state plainly that WhatsApp users who have adopted usernames may have no phone number
   Meta will send to; they need another route (the review's AU-4).
 
+**Changed 30 Oct 2026 (owner):** the bot check's keys have been set since 16 Oct, so the bot check
+is no longer follow-up work. A server without its keys refuses to send codes, and mobeds are told
+to use the other WhatsApp sign-in. Changing a behdin's number also turns their reminders off until
+the mobed asks again: an agreement belongs to the number it was given for.
+
 ## D4. Automatic reminders are available to every mobed for now
 
 Everyone gets both: sending by hand through the mobed's own WhatsApp, and automatic

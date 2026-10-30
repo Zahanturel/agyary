@@ -8,6 +8,7 @@ behdin management - never as a side effect of booking or editing an event.
 from __future__ import annotations
 
 import importlib.util
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -118,3 +119,33 @@ async def test_the_name_is_edited_from_behdin_management(db, client, seeded):
     cid = r.json()["id"]
     r = await client.patch(f"/api/mobed/agyaries/{aid}/behdins/{cid}", json={"name": "New"}, headers=headers)
     assert r.status_code == 200 and r.json()["name"] == "New"
+
+
+async def test_a_new_number_has_not_agreed_to_anything(db, client, seeded):
+    """SEC-04: the agreement was given for the old number, so changing the number
+    turns reminders off until the mobed asks again. Other edits leave it alone."""
+    aid = seeded["agyary_id"]
+    headers = await _member_headers(client, seeded)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins",
+                          json={"name": "Agreed", "phone": "+919944400305"}, headers=headers)
+    cid = r.json()["id"]
+    customer = await db.get(Customer, cid)
+    customer.reminders_enabled = True
+    customer.reminders_enabled_at = datetime.now(timezone.utc)
+    customer.reminders_consent_version = "2026-10-b"
+    await db.commit()
+
+    url = f"/api/mobed/agyaries/{aid}/behdins/{cid}"
+    assert (await client.patch(url, json={"name": "Still Agreed"}, headers=headers)).status_code == 200
+    await db.refresh(customer)
+    assert customer.reminders_enabled is True
+
+    # The same number, however it is spelled, is not a change.
+    assert (await client.patch(url, json={"phone": "+91 99444 00305"}, headers=headers)).status_code == 200
+    await db.refresh(customer)
+    assert customer.reminders_enabled is True
+
+    assert (await client.patch(url, json={"phone": "+919944400306"}, headers=headers)).status_code == 200
+    await db.refresh(customer)
+    assert customer.reminders_enabled is False
+    assert customer.reminders_enabled_at is None and customer.reminders_consent_version is None
