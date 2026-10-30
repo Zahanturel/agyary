@@ -3,8 +3,10 @@
 The rest of the suite builds its schema from the models (create_all), so a
 migration that cannot run on a real database - a constraint dropped by the
 wrong name, say - passes every other test and then fails the deploy's migrate
-step. This runs the real chain on a scratch database: up to head, down to the
-revision before Phase 1, up again, and checks the result matches the models.
+step. This runs the real chain on a scratch database: up to head, all the way
+down to an empty database, up again, and checks the result matches the models.
+(It used to stop at the revision before Phase 1, and the downgrade below that
+had been broken since the bot tables were dropped; audit 30 Oct 2026, DB-01.)
 """
 
 from __future__ import annotations
@@ -23,8 +25,6 @@ from tests.conftest import TEST_DATABASE_URL
 ROOT = Path(__file__).resolve().parent.parent
 SCRATCH = "agyary_migrations"
 SCRATCH_URL = TEST_DATABASE_URL.rsplit("/", 1)[0] + "/" + SCRATCH
-# The last revision production ran before the Phase 1 migrations.
-BEFORE_PHASE_1 = "d1e2f3a4b5c6"
 
 
 async def _recreate(drop_only: bool = False) -> None:
@@ -52,7 +52,7 @@ async def test_the_migration_chain_runs_up_down_and_up_again():
     await _recreate()
     try:
         _ok(_alembic("upgrade", "head"))
-        _ok(_alembic("downgrade", BEFORE_PHASE_1))
+        _ok(_alembic("downgrade", "base"))
         _ok(_alembic("upgrade", "head"))
         # And what the migrations built is what the models describe.
         _ok(_alembic("check"))

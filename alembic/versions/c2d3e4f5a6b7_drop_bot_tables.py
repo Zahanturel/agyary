@@ -85,3 +85,12 @@ def downgrade() -> None:
     )
     op.create_index('idx_wa_messages_agyary_phone', 'whatsapp_messages', ['agyary_id', 'wa_phone', sa.literal_column('created_at DESC')], unique=False)
     op.create_index('idx_wa_messages_wa_id', 'whatsapp_messages', ['wa_message_id'], unique=False, postgresql_where=sa.text('wa_message_id IS NOT NULL'))
+    # What b851d2238381 (the send-worker columns) had added by the time the
+    # table was dropped, so that migration's own downgrade finds what it drops
+    # and the chain runs all the way down to base.
+    op.add_column('whatsapp_messages', sa.Column('attempts', sa.Integer(), server_default='0', nullable=False))
+    op.add_column('whatsapp_messages', sa.Column('next_attempt_at', sa.DateTime(timezone=True), nullable=True))
+    op.create_index(
+        'idx_wa_messages_outbox_pending', 'whatsapp_messages', ['next_attempt_at'], unique=False,
+        postgresql_where=sa.text("direction = 'outbound' AND status = 'pending'"),
+    )
