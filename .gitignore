@@ -53,6 +53,9 @@ _to_delete/
 docs/REVIEW.md
 docs/REVIEW-*.md
 docs/OWNER-TODO.md
+# The same goes for an audit: its findings stay local until they are fixed.
+docs/AUDIT-*.md
+docs/audit-*/
 
 # Google Play listing drafts and artwork (owner material, not code)
 docs/play-listing.md

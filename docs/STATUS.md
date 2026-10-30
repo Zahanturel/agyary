@@ -6,9 +6,8 @@ check against the code and the live system, and trust the code where they differ
 
 Companion documents: [memorial-plan.md](memorial-plan.md) (the memorial schedule
 and its rules), [reminders-plan.md](reminders-plan.md) (the reminders feature,
-its cost model and decisions), [../DEPLOY.md](../DEPLOY.md) and
-[../deploy/README.md](../deploy/README.md) (first-time server setup), and
-[REVIEW-PROMPT.md](REVIEW-PROMPT.md) (the brief for an independent review).
+its cost model and decisions), and [../DEPLOY.md](../DEPLOY.md) and
+[../deploy/README.md](../deploy/README.md) (first-time server setup).
 
 **Nothing in this repository may contain** a real phone number, a Meta or
 WhatsApp account/phone/app ID, a token, a government ID, or a street address.

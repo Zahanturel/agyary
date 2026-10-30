@@ -1,10 +1,12 @@
 """Seed the worldwide fire-temple reference list as UNCLAIMED agyaries.
 
-Source: audit-flowcharts/list_fire_temples.xls (2012 vintage), converted once
-to data/fire_temples.json so runtime needs no .xls reader. 167 distinct
-temples - names that repeat across different cities (e.g. several 'Anjuman
-Daremeher', three 'Atash Kadeh') are genuinely different temples and are all
-kept; they're disambiguated by address in search.
+Source: the facts (name, address, city) in "List of Fire Temples in the world",
+a community spreadsheet from 2012, converted once to data/fire_temples.json so
+runtime needs no .xls reader. With thanks to whoever compiled it. The
+spreadsheet itself is not kept in this repository. 167 distinct temples - names
+that repeat across different cities (e.g. several 'Anjuman Daremeher', three
+'Atash Kadeh') are genuinely different temples and are all kept; they're
+disambiguated by address in search.
 
 Each row is inserted as status='unclaimed' with no wa_phone_number_id: it's
 findable in search so a mobed can claim it, but it isn't a set-up agyari until

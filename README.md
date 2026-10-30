@@ -32,7 +32,6 @@ they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
 
 - [docs/STATUS.md](docs/STATUS.md): the current state, what is live and what is switched off,
   runbooks, known gaps and what is left. Read this first.
-- [docs/REVIEW-PROMPT.md](docs/REVIEW-PROMPT.md): the brief for an independent critical review.
 - [docs/reminders-plan.md](docs/reminders-plan.md) and [docs/memorial-plan.md](docs/memorial-plan.md):
   the design decisions behind the two main features.
 
