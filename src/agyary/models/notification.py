@@ -90,4 +90,13 @@ class Notification(Base):
             "recipient_user_id",
             postgresql_where=text("recipient_user_id IS NOT NULL"),
         ),
+        # For the foreign keys: deleting a memorial, machi or booking looks up
+        # the send log by these, once per row deleted (migration c1d2e3f4a5b7).
+        Index(
+            "idx_notifications_observance",
+            "memorial_observance_id",
+            postgresql_where=text("memorial_observance_id IS NOT NULL"),
+        ),
+        Index("idx_notifications_machi", "machi_id", postgresql_where=text("machi_id IS NOT NULL")),
+        Index("idx_notifications_booking", "booking_id", postgresql_where=text("booking_id IS NOT NULL")),
     )
