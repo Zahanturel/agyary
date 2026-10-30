@@ -143,7 +143,7 @@ def _text_problem(agyary_name: str, departed: str, services: list[str]) -> str |
     return None
 
 
-async def _owner_caps(db: AsyncSession, settings: Settings, owner_ids: set[int], now: datetime) -> dict[int, int]:
+async def new_account_caps(db: AsyncSession, settings: Settings, owner_ids: set[int], now: datetime) -> dict[int, int]:
     """The daily cap for each account in its first days (D1): a handful, until
     it is older than reminders_new_account_days or the owner vouches for it
     (REMINDERS_VOUCHED) - admins are trusted. Accounts not listed have only
@@ -201,7 +201,7 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
 
     service_names: dict[int, dict[int, str]] = {}
     used = await guardrails.usage(db, now)
-    owner_caps = await _owner_caps(db, settings, {m.created_by_user_id for _, m, _, _ in rows}, now)
+    owner_caps = await new_account_caps(db, settings, {m.created_by_user_id for _, m, _, _ in rows}, now)
     # Numbers already given a reminder today (planned or sent): one per number per day.
     day_start, day_end = guardrails.day_bounds(now)
     reminded = set(

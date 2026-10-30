@@ -9,7 +9,9 @@
  *     computer has no WhatsApp. That one is only offered when the server says
  *     it can (it is switched on, the family has agreed, and so on), and says
  *     why when it cannot.
- * A short note typed here goes on the PDF and in the message.
+ * A short note typed here goes on the PDF and in the message the mobed sends
+ * themselves. What goes from the shared number never carries it: that route is
+ * our words only (D1).
  */
 
 import { memorialShareInfo, memorialSchedulePdf, memorialShareSend } from "./api.js";
@@ -64,7 +66,7 @@ export function wireShareCard(root, aid, memorial) {
     const send = $("#shSend");
     send.disabled = !info.can_send;
     $("#shSendNote").textContent = info.can_send
-      ? `Sends the PDF to ${info.behdin_name} from the shared number. They get the dates in the PDF.`
+      ? `Sends the PDF to ${info.behdin_name} from the shared number, without your note. They get the dates in the PDF.`
       : (info.cannot_send_because || "");
   };
 
@@ -112,7 +114,7 @@ export function wireShareCard(root, aid, memorial) {
     }
   };
   load();
-  noteEl.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 400); });
+  noteEl.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 1200); });
 
   $("#shWa").addEventListener("click", (e) => { if (!info) e.preventDefault(); });
 
@@ -164,7 +166,7 @@ export function wireShareCard(root, aid, memorial) {
     const label = btn.textContent;
     btn.textContent = "Sending...";
     try {
-      await memorialShareSend(aid, memorial.id, noteEl.value.trim());
+      await memorialShareSend(aid, memorial.id);
       showInfo(`Sent to ${info.behdin_name}.`);
     } catch (e) {
       showError(e.message);

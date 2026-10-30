@@ -5,8 +5,9 @@ own device, or - when it is switched on - have it sent as a PDF from the shared
 Mobed Diary number. That last route is a business-initiated message, so it
 needs an approved template with a document header (settings.whatsapp_share_template),
 the family's consent (the same flag the reminders use), and it respects the
-pause switch, the allowlist and a small daily cap per mobed. It is off until
-``MEMORIAL_SHARE_SEND_MODE=live``.
+pause switch, the allowlist and the limits in ``blocked_reason``. It carries
+none of the mobed's own words: the note goes only on what they send themselves
+(D1, SEC-01). It is off until ``MEMORIAL_SHARE_SEND_MODE=live``.
 
 Pure rendering is separate from sending so that the PDF and the text can be
 tested without a network.
@@ -29,13 +30,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar.engine import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 from agyary.core.config import Settings
-from agyary.models import Customer, Notification
-from agyary.services import guardrails, reminders, template_text, wa_send
+from agyary.models import Customer, Notification, User
+from agyary.services import account, guardrails, reminder_sender, reminders, template_text, wa_send
 
 logger = logging.getLogger(__name__)
 
 TYPE = "memorial_share"
 NOTE_MAX = 300
+GLOBAL_CAP_REACHED = ("Today's limit for sending schedules from the Mobed Diary number has been reached. "
+                      "You can still send it from your own WhatsApp.")
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
           "September", "October", "November", "December")
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -183,14 +186,16 @@ def send_enabled(settings: Settings) -> bool:
     return settings.memorial_share_send_mode == "live" and wa_send.can_send(settings)
 
 
-def _text_problem(departed_name: str, mobed_name: str, agyary_name: str) -> str | None:
-    """Why the words that fill the template's blanks cannot go out under our
-    name (D1), or None. Checked here, at sending, so a name saved before the
-    rules - or typed where they were not yet applied - is caught too."""
+def _text_problem(departed_name: str, mobed_name: str, agyary_name: str, service_names) -> str | None:
+    """Why the words that go out under our name, in the template's blanks and
+    on the PDF, cannot do so (D1), or None. Checked here, at sending, so a name
+    saved before the rules - or typed where they were not yet applied - is
+    caught too."""
     for label, text, max_len in (
         ("the departed's name", departed_name, template_text.DEPARTED_MAX),
         ("your name", mobed_name, template_text.MOBED_NAME_MAX),
         ("the fire temple's name", agyary_name, template_text.TEMPLE_MAX),
+        *(("a prayer's name", name, template_text.SERVICE_MAX) for name in service_names),
     ):
         why = template_text.problem(text, max_len=max_len)
         if why:
@@ -199,9 +204,20 @@ def _text_problem(departed_name: str, mobed_name: str, agyary_name: str) -> str 
     return None
 
 
+async def _sent_today(db: AsyncSession, now: datetime, *where) -> int:
+    """Schedules gone out today, or going: a failed one was not sent."""
+    start, end = guardrails.day_bounds(now)
+    return (await db.execute(
+        select(func.count()).select_from(Notification).where(
+            Notification.notification_type == TYPE, Notification.status != "failed",
+            Notification.created_at >= start, Notification.created_at < end, *where,
+        )
+    )).scalar_one()
+
+
 async def blocked_reason(
     db: AsyncSession, settings: Settings, customer: Customer, user_id: int, now: datetime,
-    *, departed_name: str, mobed_name: str, agyary_name: str,
+    *, departed_name: str, mobed_name: str, agyary_name: str, service_names=(),
 ) -> str | None:
     """Why this share cannot be sent from our number right now, in words for
     the mobed; None when it can."""
@@ -218,22 +234,27 @@ async def blocked_reason(
     if customer.reminders_stopped_at is not None:
         return (f"{customer.name} replied STOP, so nothing more goes to them from our number. "
                 "You can still send it from your own WhatsApp.")
-    why = _text_problem(departed_name, mobed_name, agyary_name)
+    why = _text_problem(departed_name, mobed_name, agyary_name, service_names)
     if why:
         return why
     if not reminders.may_send_to(settings, customer.phone):
         return "This number is not on the list allowed to receive messages yet."
-    start, end = guardrails.day_bounds(now)
-    sent_today = (await db.execute(
-        select(func.count()).select_from(Notification).where(
-            Notification.notification_type == TYPE, Notification.recipient_type == "customer",
-            Notification.template_params["mobed"].astext == str(user_id),
-            Notification.created_at >= start, Notification.created_at < end,
-            Notification.status != "failed",
-        )
-    )).scalar_one()
-    if sent_today >= settings.memorial_share_daily_cap:
-        return f"You have sent {settings.memorial_share_daily_cap} schedules today, which is the daily limit."
+    # Deleting an account and signing up again must not start afresh (SEC-02).
+    user = await db.get(User, user_id)
+    if (user is not None and not guardrails.is_admin(settings, user.phone)
+            and await account.deleted_recently(db, settings, user.phone, now)):
+        return ("This number deleted an account a short while ago, so sending from the Mobed Diary number "
+                "is off for now. You can still send it from your own WhatsApp.")
+    if await _sent_today(db, now, Notification.recipient_phone == customer.phone):
+        return (f"{customer.name} has already been sent a schedule today. "
+                "It can go again tomorrow, or from your own WhatsApp.")
+    # A new account has the lower of the two (D1).
+    caps = await reminder_sender.new_account_caps(db, settings, {user_id}, now)
+    cap = min(settings.memorial_share_daily_cap, caps.get(user_id, settings.memorial_share_daily_cap))
+    if await _sent_today(db, now, Notification.template_params["mobed"].astext == str(user_id)) >= cap:
+        return f"You have sent {cap} schedules today, which is the daily limit."
+    if await _sent_today(db, now) >= settings.memorial_share_global_daily_cap:
+        return GLOBAL_CAP_REACHED
     return None
 
 
@@ -271,7 +292,10 @@ async def send_pdf(
         template_params=params, status="sending",
     )
     db.add(n)
-    await db.flush()
+    # Recorded before Meta is called, as reminders are (SEC-03): if the answer
+    # is lost or the process dies, the row says "sending" and still counts
+    # against the limits, and no database connection is held while we wait.
+    await db.commit()
     own = client is None
     client = client or httpx.AsyncClient(timeout=30)
     try:

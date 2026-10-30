@@ -19,13 +19,14 @@ from agyary.models.payment import Payment
 from agyary.models.preferences import UserPreferences
 from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
-from agyary.models.user import AgyaryUser, User, UserSession
+from agyary.models.user import AgyaryUser, DeletedAccount, User, UserSession
 from agyary.models.wa_login import WaLoginAttempt
 
 __all__ = [
     "Agyary",
     "AgyaryCustomer",
     "AgyaryUser",
+    "DeletedAccount",
     "AppNotification",
     "AppSetting",
     "Booking",

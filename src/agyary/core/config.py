@@ -52,7 +52,11 @@ class Settings(BaseSettings):
     daily_report_cutoff_hour: int = 22
     whatsapp_share_template: str = "memorial_schedule"
     memorial_share_send_mode: str = "off"
-    memorial_share_daily_cap: int = 20
+    memorial_share_daily_cap: int = 20         # one mobed, per IST day (a new account: lower)
+    memorial_share_global_daily_cap: int = 100  # all mobeds, per IST day; hitting it alerts the admins
+    # A number whose account was deleted cannot send schedules from our number
+    # for this long after signing up again (SEC-02).
+    deleted_account_cooldown_days: int = 30
 
     # off: nothing is planned or sent. dry_run: reminders are planned and
     # logged as they would be sent, and nothing leaves the building. live:

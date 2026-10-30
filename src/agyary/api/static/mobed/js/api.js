@@ -187,7 +187,7 @@ export const getBehdin = (aid, cid) => get(`/agyaries/${aid}/behdins/${cid}`);
 export const deleteBehdin = (aid, cid, scope = "list") => del(`/agyaries/${aid}/behdins/${cid}?scope=${scope}`);
 export const memorialShareInfo = (aid, mid, note) =>
   get(`/agyaries/${aid}/memorials/${mid}/share?note=${encodeURIComponent(note || "")}`);
-export const memorialShareSend = (aid, mid, note) => post(`/agyaries/${aid}/memorials/${mid}/share/send`, { note });
+export const memorialShareSend = (aid, mid) => post(`/agyaries/${aid}/memorials/${mid}/share/send`, {});
 
 /** The schedule PDF as a blob. Not through api(): that always parses JSON. */
 export async function memorialSchedulePdf(aid, mid, note) {

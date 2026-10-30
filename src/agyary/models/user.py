@@ -48,6 +48,17 @@ class User(Base):
     )
 
 
+class DeletedAccount(Base):
+    """A number whose account was deleted, as a one-way digest and only for a
+    while (services/account.py). Deleting an account and signing up again must
+    not start that number's sending afresh (SEC-02)."""
+
+    __tablename__ = "deleted_accounts"
+
+    phone_hmac: Mapped[str] = mapped_column(String(64), primary_key=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class UserSession(Base):
     """One signed-in device (AU-2). The refresh token names it and carries its
     generation, which moves on at every refresh: an older generation coming

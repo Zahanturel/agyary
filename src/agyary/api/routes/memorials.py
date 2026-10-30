@@ -8,13 +8,16 @@ and the memorial reads filter on the caller's id themselves.
 
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, datetime, time, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agyary.api import rate_limit
 from agyary.api.routes.mobed import _require_behdin, _require_membership, get_current_user
 from agyary.calendar.memorial import OPENING_5_TO_9, OPENING_ALL, OPENING_NONE, OPENING_TENTH, PARAB_ALL, PARAB_FRAVARDIN_TIR
 from agyary.core.config import get_settings
@@ -446,6 +449,14 @@ async def _share_parts(db: AsyncSession, agyary_id: int, memorial_id: int, user:
     return data, customer, agyary.name
 
 
+async def _why_not_sent(db: AsyncSession, settings, data: dict, customer: Customer, user: User, agyary_name: str):
+    return await memorial_share.blocked_reason(
+        db, settings, customer, user.id, datetime.now(timezone.utc),
+        departed_name=data["departed_name"], mobed_name=user.name, agyary_name=agyary_name,
+        service_names={s["name"] for o in data["observances"] for s in o["services"] if s["name"]},
+    )
+
+
 @router.get("/agyaries/{agyary_id}/memorials/{memorial_id}/share")
 async def share_info(
     agyary_id: int,
@@ -457,13 +468,8 @@ async def share_info(
     """What the Share box shows: the message text (to copy, or to open in the
     mobed's own WhatsApp), the behdin's number, and whether - and if not, why
     not - it can be sent from the shared number."""
-    from datetime import datetime, timezone
-
     data, customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
-    why = await memorial_share.blocked_reason(
-        db, get_settings(), customer, user.id, datetime.now(timezone.utc),
-        departed_name=data["departed_name"], mobed_name=user.name, agyary_name=agyary_name,
-    )
+    why = await _why_not_sent(db, get_settings(), data, customer, user, agyary_name)
     return {
         "text": memorial_share.message_text(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
         "short_text": memorial_share.short_message(data, agyary_name=agyary_name, mobed_name=user.name, note=note),
@@ -490,8 +496,14 @@ async def schedule_pdf(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
+    # A long schedule takes seconds to draw, and drawing it on the event loop
+    # stalled every other request (SEC-07). The Share box draws it ahead of the
+    # tap, again after each pause in the note, so this leaves room for typing.
+    rate_limit.enforce_key(f"pdf:{user.id}", max_requests=20, window_seconds=60)
     data, _customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
-    pdf = memorial_share.render_pdf(data, agyary_name=agyary_name, mobed_name=user.name, note=note)
+    pdf = await run_in_threadpool(
+        memorial_share.render_pdf, data, agyary_name=agyary_name, mobed_name=user.name, note=note
+    )
     return Response(
         content=pdf, media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{_pdf_filename(data["departed_name"])}"',
@@ -500,7 +512,19 @@ async def schedule_pdf(
 
 
 class ShareSendIn(BaseModel):
+    # An older shell may still post a note. It is not used (see share_send).
     note: str = ""
+
+
+async def _refuse_share(db: AsyncSession, settings, why: str):
+    if why == memorial_share.GLOBAL_CAP_REACHED:
+        await guardrails.alert_admins(
+            db, settings, "Schedule sending hit its daily limit",
+            f"{settings.memorial_share_global_daily_cap} schedules went from our number today. "
+            "More are refused until tomorrow.",
+        )
+        await db.commit()
+    raise HTTPException(status_code=409, detail=why)
 
 
 @router.post("/agyaries/{agyary_id}/memorials/{memorial_id}/share/send")
@@ -513,18 +537,21 @@ async def share_send(
 ) -> dict:
     """Send the PDF to the behdin from the shared number (a template with a
     document). Refused with the reason when it is off, paused, the family has
-    not agreed, or the mobed is over the daily limit."""
-    from datetime import datetime, timezone
-
+    not agreed, or a limit is reached. The mobed's note is left off: what goes
+    from our number carries none of their own words (D1, SEC-01)."""
     settings = get_settings()
+    rate_limit.enforce_key(f"share_send:{user.id}", max_requests=3, window_seconds=60)
     data, customer, agyary_name = await _share_parts(db, agyary_id, memorial_id, user)
-    why = await memorial_share.blocked_reason(
-        db, settings, customer, user.id, datetime.now(timezone.utc),
-        departed_name=data["departed_name"], mobed_name=user.name, agyary_name=agyary_name,
-    )
+    why = await _why_not_sent(db, settings, data, customer, user, agyary_name)
     if why:
-        raise HTTPException(status_code=409, detail=why)
-    pdf = memorial_share.render_pdf(data, agyary_name=agyary_name, mobed_name=user.name, note=payload.note)
+        await _refuse_share(db, settings, why)
+    pdf = await run_in_threadpool(memorial_share.render_pdf, data, agyary_name=agyary_name, mobed_name=user.name)
+    # Counted again under one lock, held until send_pdf commits its "sending"
+    # row (SEC-03): parallel taps all passed the limits before any was recorded.
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('memorial_share'))"))
+    why = await _why_not_sent(db, settings, data, customer, user, agyary_name)
+    if why:
+        await _refuse_share(db, settings, why)
     try:
         await memorial_share.send_pdf(
             db, settings, agyary_id=agyary_id, customer=customer, user_id=user.id, memorial=data, pdf=pdf,

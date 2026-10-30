@@ -4,15 +4,23 @@ shared number. Meta is a mock transport - nothing here can reach a real number.
 
 from __future__ import annotations
 
+import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import httpx
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from agyary.api.main import app
 from agyary.core.config import Settings
-from agyary.models import Customer, Notification
-from agyary.services import memorial_share
+from agyary.core.database import get_db
+from agyary.models import AppNotification, Customer, DeletedAccount, Notification, User
+from agyary.services import account, memorial_share
+from tests.conftest import TEST_DATABASE_URL
 from tests.test_memorial_api import PHONE, _create, _setup
 
 
@@ -193,3 +201,180 @@ async def test_the_pdf_downloads_for_a_name_in_gujarati(client, db, seeded):
     r = await client.get(f"/api/mobed/agyaries/{aid}/memorials/{r.json()['id']}/schedule.pdf", headers=headers)
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
     assert r.headers["content-disposition"] == 'attachment; filename="Memorial-prayers-memorial.pdf"'
+
+
+# ---------------------------------------------------------------------------
+# Audit 30 Oct 2026: what stops the shared number being used for anything else
+# ---------------------------------------------------------------------------
+def _live(monkeypatch, **more) -> None:
+    from agyary.core import config
+    env = {"MEMORIAL_SHARE_SEND_MODE": "live", "REMINDERS_ALLOWLIST": "*",
+           "WHATSAPP_ACCESS_TOKEN": "test-token", "WHATSAPP_PHONE_NUMBER_ID": "555000111", **more}
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    config.get_settings.cache_clear()
+
+
+def _meta(monkeypatch, fake) -> None:
+    """send_pdf opens its own client; this hands it the fake one."""
+    monkeypatch.setattr(memorial_share, "httpx", SimpleNamespace(
+        AsyncClient=lambda timeout: fake.client(), HTTPError=httpx.HTTPError))
+
+
+async def _agreed(db, cid) -> Customer:
+    customer = await db.get(Customer, cid)
+    customer.reminders_enabled = True
+    await db.commit()
+    return customer
+
+
+async def _a_share(db, aid, phone, mobed, status="sent") -> None:
+    db.add(Notification(
+        agyary_id=aid, recipient_phone=phone, recipient_type="customer", recipient_id=1,
+        notification_type="memorial_share", template_name="memorial_schedule",
+        template_params={"mobed": str(mobed)}, status=status,
+    ))
+    await db.commit()
+
+
+async def _my_id(client, headers) -> int:
+    return (await client.get("/api/mobed/auth/me", headers=headers)).json()["id"]
+
+
+async def test_the_note_never_goes_from_our_number(client, db, seeded, monkeypatch):
+    """SEC-01, D1: a mobed's own words stay on what they send themselves."""
+    _live(monkeypatch)
+    aid, cid, mid, headers = await _memorial(client, db, seeded)
+    await _agreed(db, cid)
+    fake, drawn = FakeMeta(), []
+    _meta(monkeypatch, fake)
+    real = memorial_share.render_pdf
+    monkeypatch.setattr(memorial_share, "render_pdf", lambda m, **kw: drawn.append(kw) or real(m, **kw))
+    r = await client.post(f"/api/mobed/agyaries/{aid}/memorials/{mid}/share/send",
+                          json={"note": "Your KYC is due, call us"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert drawn and all(not kw.get("note") for kw in drawn)
+
+
+async def test_a_prayer_name_saved_before_the_rules_blocks_sending(db, client, seeded):
+    """A service's name is printed on the PDF, so it is checked like the blanks."""
+    _aid, cid, _mid, _headers = await _memorial(client, db, seeded)
+    customer = await _agreed(db, cid)
+    why = await memorial_share.blocked_reason(
+        db, _settings(), customer, 1, datetime.now(timezone.utc), service_names={"Jashan", "Call 98000 00099"}, **NAMES)
+    assert why and "a prayer's name" in why
+
+
+async def test_one_schedule_a_day_to_one_number_whoever_sends_it(db, client, seeded):
+    aid, cid, _mid, _headers = await _memorial(client, db, seeded)
+    customer = await _agreed(db, cid)
+    now = datetime.now(timezone.utc)
+    await _a_share(db, aid, customer.phone, mobed=999, status="failed")
+    assert await memorial_share.blocked_reason(db, _settings(), customer, 1, now, **NAMES) is None
+    await _a_share(db, aid, customer.phone, mobed=999)
+    why = await memorial_share.blocked_reason(db, _settings(), customer, 1, now, **NAMES)
+    assert why and "already been sent a schedule today" in why
+
+
+async def test_a_new_account_has_the_lower_limit(db, client, seeded):
+    aid, cid, _mid, headers = await _memorial(client, db, seeded)
+    customer = await _agreed(db, cid)
+    me = await _my_id(client, headers)
+    now = datetime.now(timezone.utc)
+    await _a_share(db, aid, "+919944400901", mobed=me)
+    low = _settings(reminders_new_account_daily_cap=1)
+    assert "1 schedules today" in await memorial_share.blocked_reason(db, low, customer, me, now, **NAMES)
+    # Older than a new account, only the ordinary limit applies.
+    later = now + timedelta(days=low.reminders_new_account_days + 1)
+    await db.execute(update(Notification).values(created_at=later))
+    await db.commit()
+    assert await memorial_share.blocked_reason(db, low, customer, me, later, **NAMES) is None
+
+
+async def test_the_overall_limit_refuses_and_tells_the_admins_once(client, db, seeded, monkeypatch):
+    aid, cid, mid, headers = await _memorial(client, db, seeded)
+    me = (await client.get("/api/mobed/auth/me", headers=headers)).json()
+    _live(monkeypatch, MEMORIAL_SHARE_GLOBAL_DAILY_CAP="1", ADMIN_PHONES=me["phone"])
+    await _agreed(db, cid)
+    await _a_share(db, aid, "+919944400902", mobed=999)
+    url = f"/api/mobed/agyaries/{aid}/memorials/{mid}/share/send"
+    for _ in range(2):
+        r = await client.post(url, json={}, headers=headers)
+        assert r.status_code == 409 and r.json()["detail"] == memorial_share.GLOBAL_CAP_REACHED
+    alerts = (await db.execute(select(AppNotification).where(AppNotification.kind == "alert"))).scalars().all()
+    assert [a.title for a in alerts] == ["Schedule sending hit its daily limit"]
+
+
+async def test_two_taps_at_once_send_once(client, db, seeded, monkeypatch):
+    """SEC-03: each request on its own connection, as in production. Without the
+    lock both passed the limit before either was recorded."""
+    _live(monkeypatch, MEMORIAL_SHARE_DAILY_CAP="1")
+    aid, cid, mid, headers = await _memorial(client, db, seeded)
+    await _agreed(db, cid)
+    _meta(monkeypatch, FakeMeta())
+    engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def own_session():
+        async with sessions() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = own_session
+    try:
+        url = f"/api/mobed/agyaries/{aid}/memorials/{mid}/share/send"
+        got = await asyncio.gather(*(client.post(url, json={}, headers=headers) for _ in range(2)))
+    finally:
+        await engine.dispose()
+    assert sorted(r.status_code for r in got) == [200, 409], [r.text for r in got]
+    await db.rollback()
+    rows = (await db.execute(select(Notification))).scalars().all()
+    assert [n.status for n in rows] == ["sent"]
+
+
+async def test_a_send_cut_off_midway_stays_on_the_books(db, client, seeded):
+    """SEC-03: it is recorded before Meta is called, so a crash leaves "sending",
+    which still counts. It may have gone, so it is not offered again today."""
+    aid, cid, _mid, _headers = await _memorial(client, db, seeded)
+    customer = await _agreed(db, cid)
+
+    def dies(request):
+        raise asyncio.CancelledError()
+
+    crashing = httpx.AsyncClient(transport=httpx.MockTransport(dies))
+    with pytest.raises(asyncio.CancelledError):
+        await memorial_share.send_pdf(
+            db, _settings(), agyary_id=aid, customer=customer, user_id=7, memorial={"departed_name": "D"},
+            pdf=b"%PDF", filename="x.pdf", mobed_name="M", agyary_name="A", client=crashing)
+    await db.rollback()
+    assert (await db.execute(select(Notification))).scalar_one().status == "sending"
+    why = await memorial_share.blocked_reason(db, _settings(), customer, 7, datetime.now(timezone.utc), **NAMES)
+    assert why and "already been sent" in why
+
+
+async def test_a_number_that_deleted_its_account_waits_before_sending_again(db, client, seeded):
+    """SEC-02: signing up again gave a fresh account with fresh limits."""
+    _aid, cid, _mid, headers = await _memorial(client, db, seeded)
+    customer = await _agreed(db, cid)
+    me = await db.get(User, await _my_id(client, headers))
+    settings, now = _settings(), datetime.now(timezone.utc)
+    db.add(DeletedAccount(phone_hmac=account.phone_hmac(settings, me.phone), deleted_at=now - timedelta(days=29)))
+    await db.commit()
+    why = await memorial_share.blocked_reason(db, settings, customer, me.id, now, **NAMES)
+    assert why and "deleted an account" in why
+    admin = _settings(admin_phones=me.phone)
+    assert await memorial_share.blocked_reason(db, admin, customer, me.id, now, **NAMES) is None
+    assert await memorial_share.blocked_reason(db, settings, customer, me.id, now + timedelta(days=2), **NAMES) is None
+
+    # And the digest goes once it has done its job.
+    await account.sweep_deleted_accounts(db, settings, now + timedelta(days=2))
+    await db.commit()
+    assert (await db.execute(select(DeletedAccount))).first() is None
+
+
+async def test_the_pdf_can_be_drawn_while_a_note_is_typed_but_not_without_limit(client, db, seeded):
+    """SEC-07: the Share box redraws it after each pause in the note."""
+    aid, _cid, mid, headers = await _memorial(client, db, seeded)
+    url = f"/api/mobed/agyaries/{aid}/memorials/{mid}/schedule.pdf"
+    for _ in range(20):
+        assert (await client.get(url, headers=headers)).status_code == 200
+    assert (await client.get(url, headers=headers)).status_code == 429
