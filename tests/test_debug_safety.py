@@ -64,3 +64,30 @@ async def test_simulate_answers_only_a_caller_on_this_machine(db, seeded):
         assert r.status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+async def test_outside_debug_a_failed_statement_does_not_carry_its_parameters():
+    """LOG-01: an exception's text reaches the logs (logger.exception, uvicorn's
+    error log), and SQLAlchemy appends every bound parameter to it. With
+    hide_parameters that list is left out. (Not covered: text the driver or
+    Postgres itself puts in the message, such as a unique violation's DETAIL.)"""
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from agyary.core.database import engine_options
+    from tests.conftest import TEST_DATABASE_URL
+
+    settings = Settings(_env_file=None, jwt_secret_key="x", app_debug=False)
+    assert engine_options(settings)["hide_parameters"] is True
+    engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool, **engine_options(settings))
+    try:
+        async with engine.connect() as conn:
+            with pytest.raises(DBAPIError) as caught:
+                await conn.execute(text("SELECT 1 / 0 WHERE CAST(:phone AS text) IS NOT NULL"),
+                                   {"phone": "+919944400999"})
+        assert "division by zero" in str(caught.value)
+        assert "9944400999" not in str(caught.value)
+    finally:
+        await engine.dispose()

@@ -8,7 +8,14 @@ from agyary.core.config import get_settings
 
 settings = get_settings()
 
-engine = create_async_engine(settings.database_url, echo=settings.app_debug)
+
+def engine_options(settings) -> dict:
+    """Outside debug, a failed statement's error text (which ends up in the
+    logs) leaves out its parameters - families' phone numbers and names."""
+    return {"echo": settings.app_debug, "hide_parameters": not settings.app_debug}
+
+
+engine = create_async_engine(settings.database_url, **engine_options(settings))
 
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
