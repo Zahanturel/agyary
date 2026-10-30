@@ -32,7 +32,7 @@ def test_blank_jwt_secret_refuses_to_start(blank):
 
 
 def test_real_jwt_secret_passes():
-    Settings(jwt_secret_key="a-real-key").validate_runtime_secrets()  # does not raise
+    Settings(jwt_secret_key="a-real-key-of-a-proper-length-000").validate_runtime_secrets()  # does not raise
 
 
 # ---------------------------------------------------------------------------
