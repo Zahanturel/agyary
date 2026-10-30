@@ -60,7 +60,8 @@ services:
     # front end against the old API, and a failed deploy left it there.
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned to what the server runs, so a restart cannot change it unannounced.
+    image: cloudflare/cloudflared:2026.7.3
     restart: unless-stopped
     # Bounded logs: without this Docker keeps every line for ever (OP-2).
     logging:
