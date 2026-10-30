@@ -299,6 +299,7 @@ async def wa_login_complete(
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Please enter your name.")
+    _check_template_text(name, "name", template_text.MOBED_NAME_MAX)
 
     attempt = await wa_login.peek(db, wa_login_cookie)
     phone = await wa_login.peek_claimed_phone(db, wa_login_cookie)
@@ -463,6 +464,7 @@ async def update_me(
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Please enter a name.")
+    _check_template_text(name, "name", template_text.MOBED_NAME_MAX)
     user.name = name
     await db.commit()
     return await _serialize_user(db, user)
@@ -620,6 +622,12 @@ async def activate_agyari(
     member (they join first). Confirms/corrects the stale seed details and
     flips it to active."""
     agyary = await _require_membership(db, agyary_id, user)
+    # Only an unclaimed temple is set up this way. An active one's name is
+    # read out in every colleague's reminders, and joining is open to anyone
+    # (D1), so a new member must not be able to rename it or change its number.
+    await db.refresh(agyary, with_for_update=True)
+    if agyary.status != "unclaimed":
+        raise HTTPException(status_code=409, detail="This fire temple is already set up.")
     if not payload.name.strip() or not payload.city.strip():
         raise HTTPException(status_code=400, detail="Please enter the fire temple's name and city.")
     _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)

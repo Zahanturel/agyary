@@ -11,7 +11,7 @@ from sqlalchemy import delete, func, select
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.messaging.geh_times import to_ist
 from agyary.models import Agyary, Booking, BookingMobed, Machi, RecurrenceRule, Service, User
-from tests.conftest import sign_in
+from tests.conftest import sign_in, signed_inbound
 
 NEW_MOBED_PHONE = "+919911100001"
 
@@ -411,3 +411,41 @@ async def test_edit_booking_round_trips_location_and_offsite(db, client, seeded)
     # My Day still shows the offsite tag afterwards.
     entry = [e for e in (await client.get("/api/mobed/my-day", headers=headers)).json() if e["booking_id"] == bid][0]
     assert entry["is_offsite"] is True and entry["location"] == "14 Cusrow Baug, Colaba"
+
+
+# ---------------------------------------------------------------------------
+# Audit 30 Oct 2026: an active temple, and the mobed's own name
+# ---------------------------------------------------------------------------
+async def test_an_active_temple_cannot_be_renamed_by_a_new_member(db, client, seeded):
+    """SEC-05: joining is open (D1), so activate must not touch a temple that is
+    already set up. Its name is {{1}} in every colleague's reminders."""
+    headers = await _member_headers(client, seeded)
+    r = await client.post(
+        f"/api/mobed/agyaries/{seeded['agyary_id']}/activate",
+        json={"name": "Renamed Temple", "city": "Elsewhere", "contact_phone": "+919122000009"},
+        headers=headers,
+    )
+    assert r.status_code == 409, r.text
+    temple = await db.get(Agyary, seeded["agyary_id"])
+    await db.refresh(temple)
+    assert temple.name == "Goti Adarian" and temple.contact_phone != "+919122000009"
+
+
+async def test_a_mobed_name_cannot_carry_a_link_or_a_phone_number(client, seeded):
+    """SEC-01: the mobed's name goes out under our name ({{2}} of the schedule
+    template), so it gets the same check as a temple or departed name."""
+    started = await client.post("/api/mobed/auth/wa/start")
+    raw, hook_headers = signed_inbound(started.json()["code"], NEW_MOBED_PHONE)
+    assert (await client.post("/webhooks/whatsapp", content=raw, headers=hook_headers)).status_code == 200
+    assert (await client.get("/api/mobed/auth/wa/poll")).json()["status"] == "needs_name"
+    for bad in ("Call 98000 00099", "see bit.ly/abc", "@helpdesk", "x" * 61):
+        r = await client.post("/api/mobed/auth/wa/complete", json={"name": bad})
+        assert r.status_code == 400, bad
+    r = await client.post("/api/mobed/auth/wa/complete", json={"name": "Ervad Jamshed Dastur"})
+    assert r.status_code == 200, r.text
+
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    r = await client.patch("/api/mobed/auth/me", json={"name": "Ervad, call 9800000099"}, headers=headers)
+    assert r.status_code == 400 and "phone number" in r.json()["detail"]
+    r = await client.patch("/api/mobed/auth/me", json={"name": "Ervad J. Dastur"}, headers=headers)
+    assert r.status_code == 200 and r.json()["name"] == "Ervad J. Dastur"
