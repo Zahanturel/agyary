@@ -1,6 +1,6 @@
 # System status and handoff
 
-Written 12 Oct 2026, updated 14 Oct 2026. It is a snapshot, not a
+Written 12 Oct 2026, updated 30 Oct 2026. It is a snapshot, not a
 spec: anything here can be wrong or stale. Treat each claim as something to
 check against the code and the live system, and trust the code where they differ.
 
@@ -52,7 +52,8 @@ scale.
 - **Deploy** is `git push origin master`: GitHub Actions runs the tests, then SSHes
   to the VM, which backs up the database, builds, migrates with the new image,
   swaps the container and waits for `/health`. A failed migration leaves the old
-  version serving.
+  version serving. The app runs the code in its image, as a non-root user; `git pull`
+  alone changes nothing that is live. To go back, see [INCIDENT.md](INCIDENT.md).
 - **Time** is IST throughout the reminder logic. The server clock is UTC.
 
 ### 2.1 Code layout
@@ -148,7 +149,9 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set |
 | STOP: one kind reply ("You will not receive any more reminders from ...") | **Live** | once per number; its own daily cap (`REMINDERS_STOP_ACK_DAILY_CAP`); respects the pause |
 | "I told them myself" mark on a reminder | **Live** | the planner then sends nothing for it |
-| Delete my account (in the app) and `/delete-account` | **Live** | none |
+| Delete my account (in the app) and `/delete-account` | **Live** | none. What was sent stays counted, with who and what wiped; a one-way digest of the number stays for 30 days, so deleting cannot reset a number's limits |
+| Erase a family from every mobed's book | **Admin screen** | `ADMIN_PHONES`. Procedure in [DATA-REQUESTS.md](DATA-REQUESTS.md) |
+| Deleting old records | **Built, off** | `RETENTION_MODE=on`, once the owner has chosen the periods. It deletes for good |
 | Warmer reminder template with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
 | Android app (Trusted Web Activity) | **Built, shared directly** (14 Oct 2026) | signed APK given to mobeds in a WhatsApp group; `/.well-known/assetlinks.json` lists the upload key, so it opens full-screen; not on Google Play (DECISIONS.md D6) |
 | Web Push to mobeds | **Not started** | |
@@ -167,6 +170,11 @@ sending is off. Settings that matter operationally:
 | `REMINDERS_PER_MOBED_DAILY_CAP` / `_PER_AGYARY_` | 40 / 100 | per mobed / per temple |
 | `REMINDERS_BREAKER_FAILURES` | 5 | failures in a row that pause sending |
 | `REMINDERS_STOP_ACK_DAILY_CAP` | 20 | kind replies to a first STOP, per day |
+| `MEMORIAL_SHARE_SEND_MODE` | `off` | a schedule PDF from our number. Needs the family's agreement and the allowlist |
+| `MEMORIAL_SHARE_DAILY_CAP` / `_GLOBAL_DAILY_CAP` | 20 / 100 | per mobed (a new account: lower) / everyone, per IST day. One schedule per number per day, whoever sends it |
+| `DELETED_ACCOUNT_COOLDOWN_DAYS` | 30 | how long a number that deleted its account cannot send schedules from our number |
+| `RETENTION_MODE` | `off` | `on` deletes old message records and erases quiet hidden behdins |
+| `RETENTION_SEND_LOG_MONTHS` / `_HIDDEN_BEHDIN_MONTHS` | 13 / 24 | the periods, which must match the privacy policy |
 | `ANDROID_PACKAGE_NAME` / `ANDROID_CERT_FINGERPRINTS` | the app / the upload key | what `/.well-known/assetlinks.json` lists; add Play's signing key after the first upload |
 | `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
@@ -211,6 +219,10 @@ server's token, run on the server so the token never leaves it.
 
 ## 6. Runbooks
 
+For anything going wrong (a leak, a bad deploy, a lost server, sending paused), see
+[INCIDENT.md](INCIDENT.md). For a family's request about their data, see
+[DATA-REQUESTS.md](DATA-REQUESTS.md).
+
 **Deploy.** Merge to `master`. Watch the Actions run (`gh run watch`). Then verify like a
 browser would: fetch changed static files WITHOUT a cache-buster, assert 200 first, compare
 bytes against the local tree, read `cf-cache-status`/`Age`.
@@ -244,7 +256,8 @@ succeeds, revoke the old one. A clipboard trick that pipes `Get-Clipboard` over 
 the clipboard held the command text instead of the token: check the length and the `EAA` prefix.
 
 **Restore the database.** The deploy script keeps the last ten pre-deploy dumps in the VM user's
-home directory (`pg_dump -Fc`). A scheduled, encrypted off-site copy is planned.
+home directory (`pg_dump -Fc`), readable by that user only. Nightly encrypted copies go to R2 and
+are kept for 30 days; `deploy/README.md` has the restore drill.
 
 ## 7. Decisions worth challenging
 
