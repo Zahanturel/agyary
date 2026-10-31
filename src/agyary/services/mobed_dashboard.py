@@ -528,15 +528,16 @@ def _series_dates(system: CalendarSystem, roj: int, mah: int, year: int, pattern
 
 async def series_conflicts(
     db: AsyncSession, agyary: Agyary, gregorian: date, geh: int, recurring: str,
-    owner_user_id: int | None = None,
+    owner_user_id: int | None = None, count: int | None = None,
 ) -> list[date]:
     """The dates in the next stretch of a series where this geh is already
     booked by this mobed - what they are warned about BEFORE choosing to repeat."""
     roj, mah, year = booking_service.slot_keys(agyary, gregorian)
     pattern = RECURRENCE_PATTERN_CHOICES[recurring]
-    dates = _series_dates(
-        CalendarSystem(agyary.calendar_system), roj, mah, year, pattern, SERIES_PREVIEW_PERIODS[pattern]
-    )
+    periods = SERIES_PREVIEW_PERIODS[pattern]
+    if count:
+        periods = min(periods, count - 1)
+    dates = _series_dates(CalendarSystem(agyary.calendar_system), roj, mah, year, pattern, periods)
     return [d for d in dates if geh in await booked_gehs(db, agyary.id, d, owner_user_id)]
 
 
@@ -555,6 +556,7 @@ async def manual_add_machi(
     purpose: str,
     names: list[dict] | None = None,
     recurring: str | None = None,
+    recurring_count: int | None = None,
     remember_names: bool = True,
 ) -> MachiAddResult:
     """Walk-ins/phone bookings, machi case. Routes through book_machi_slot -
@@ -587,7 +589,8 @@ async def manual_add_machi(
         await _remember(db, customer.id, names if explicit_names else None, remember_names)
         if recurring:
             skipped = await _create_recurring_machis(
-                db, agyary, result.machi, pattern=RECURRENCE_PATTERN_CHOICES[recurring]
+                db, agyary, result.machi, pattern=RECURRENCE_PATTERN_CHOICES[recurring],
+                count=recurring_count,
             )
     return MachiAddResult(machi=result.machi, alternatives=result.alternatives, skipped=tuple(skipped))
 
@@ -631,6 +634,37 @@ def _next_parsi_year(mah: int, year: int) -> tuple[int, int]:
     """Same Mah, one Parsi year later - the birthday/anniversary pattern.
     No rollover to worry about, unlike the monthly step."""
     return (mah, year + 1)
+
+
+# The most a repeat may be asked to run: 10 years of months, 60 years of years.
+MAX_REPEAT_COUNT = {"monthly": 120, "yearly": 60}
+
+
+def _last_occurrence(
+    system: CalendarSystem, pattern: str, roj: int, mah: int, year: int, count: int
+) -> date | None:
+    """The day of the ``count``-th occurrence of a repeat that starts on this
+    Parsi day and counts the first. None when it cannot be worked out."""
+    step = _step_for(pattern)
+    last = None
+    for _ in range(count - 1):
+        mah, year = step(mah, year)
+        try:
+            last = parsi_to_gregorian(year, system, mah=mah, roj=roj)
+        except ValueError:
+            continue
+    return last
+
+
+def _count_rule_fields(
+    agyary: Agyary, pattern: str, roj: int, mah: int, year: int, count: int | None
+) -> dict:
+    """RecurrenceRule fields for a repeat that stops after ``count`` occurrences
+    (counting the first), or runs on with no end when no count is given."""
+    if not count:
+        return {"end_type": "indefinite"}
+    end = _last_occurrence(CalendarSystem(agyary.calendar_system), pattern, roj, mah, year, count)
+    return {"end_type": "after_count", "end_count": count, "end_date": end}
 
 
 def _step_for(pattern: str):
@@ -801,6 +835,11 @@ async def ensure_booking_recurrences_generated(db: AsyncSession, user_id: int, *
                     RecurrenceRule.last_generated_until.is_(None),
                     RecurrenceRule.last_generated_until < through,
                 ),
+                or_(
+                    RecurrenceRule.end_date.is_(None),
+                    RecurrenceRule.last_generated_until.is_(None),
+                    RecurrenceRule.last_generated_until < RecurrenceRule.end_date,
+                ),
             ).with_for_update()
         )
     ).scalars().all()
@@ -814,15 +853,15 @@ async def ensure_booking_recurrences_generated(db: AsyncSession, user_id: int, *
 
 async def _create_recurring_bookings(
     db: AsyncSession, agyary: Agyary, source: Booking, *, pattern: str,
-    horizon_periods: int = RECURRENCE_HORIZON_PERIODS,
+    horizon_periods: int = RECURRENCE_HORIZON_PERIODS, count: int | None = None,
 ) -> None:
     """Start a repeat from ``source`` and book its first few periods; the rest
     follow on demand (ensure_booking_recurrences_generated)."""
     source_day, _clock, _shift = _booking_series_anchor(source)
     rule = RecurrenceRule(
         agyary_id=agyary.id, source_booking_id=source.id, pattern=pattern,
-        end_type="indefinite", generation_horizon_months=horizon_periods,
-        last_generated_until=source_day,
+        generation_horizon_months=horizon_periods, last_generated_until=source_day,
+        **_count_rule_fields(agyary, pattern, source.parsi_roj, source.parsi_mah, source.parsi_year, count),
     )
     db.add(rule)
     await db.flush()
@@ -875,6 +914,11 @@ async def ensure_recurrences_generated(
                     RecurrenceRule.last_generated_until.is_(None),
                     RecurrenceRule.last_generated_until < through,
                 ),
+                or_(
+                    RecurrenceRule.end_date.is_(None),
+                    RecurrenceRule.last_generated_until.is_(None),
+                    RecurrenceRule.last_generated_until < RecurrenceRule.end_date,
+                ),
             )
         )
     ).scalars().all()
@@ -898,6 +942,7 @@ async def _create_recurring_machis(
     *,
     pattern: str = "same_roj_every_mah",
     horizon_periods: int = RECURRENCE_HORIZON_PERIODS,
+    count: int | None = None,
 ) -> list[date]:
     """Start a recurrence from ``source_machi`` and generate the first few
     periods of it. Returns the dates it could not book because somebody else
@@ -917,9 +962,11 @@ async def _create_recurring_machis(
         agyary_id=agyary.id,
         source_machi_id=source_machi.id,
         pattern=pattern,
-        end_type="indefinite",
         generation_horizon_months=horizon_periods,
         last_generated_until=source_machi.gregorian_date,
+        **_count_rule_fields(
+            agyary, pattern, source_machi.parsi_roj, source_machi.parsi_mah, source_machi.parsi_year, count
+        ),
     )
     db.add(rule)
     await db.flush()
@@ -962,6 +1009,7 @@ async def manual_add_booking(
     is_offsite: bool,
     remember_names: bool = True,
     recurring: str | None = None,
+    recurring_count: int | None = None,
 ) -> ManualBookingResult | None:
     """Walk-ins/phone bookings, non-machi case. The mobed entered it
     themselves - already agreed, so BookingMobed starts "accepted", not
@@ -992,7 +1040,9 @@ async def manual_add_booking(
     await db.flush()
     await _remember(db, customer.id, names if explicit_names else None, remember_names)
     if recurring:
-        await _create_recurring_bookings(db, agyary, booking, pattern=RECURRENCE_PATTERN_CHOICES[recurring])
+        await _create_recurring_bookings(
+            db, agyary, booking, pattern=RECURRENCE_PATTERN_CHOICES[recurring], count=recurring_count
+        )
     return ManualBookingResult(booking=booking, calendar_conflict=conflict)
 
 
@@ -1637,7 +1687,7 @@ async def preview_machi_slip(
     db: AsyncSession, agyary: Agyary, reader_user_id: int, *,
     behdin_phone: str, behdin_name: str, roj: int, mah: int, year: int, gregorian: date,
     geh: int, purpose: str, names: list[dict] | None, editing_machi_id: int | None = None,
-    recurring: str | None = None,
+    recurring: str | None = None, recurring_count: int | None = None,
 ) -> dict:
     name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name, reader_user_id)
     pool_empty = await _pool_is_empty(db, customer)
@@ -1679,7 +1729,7 @@ async def preview_machi_slip(
     conflicts: list[date] = []
     if recurring and editing_machi_id is None:
         refuse_repeating_gatha(recurring, booking_service.slot_keys(agyary, gregorian)[1])
-        conflicts = await series_conflicts(db, agyary, gregorian, geh, recurring, owner)
+        conflicts = await series_conflicts(db, agyary, gregorian, geh, recurring, owner, recurring_count)
     return {
         "slip": slip, "names": names, "pool_empty": pool_empty, "slot_available": available,
         "series_conflicts": [d.isoformat() for d in conflicts],

@@ -23,6 +23,7 @@ import {
 } from "../api.js";
 import { state, GEH_NAME_BY_NUM } from "../state.js";
 import { clearDraft } from "../drafts.js";
+import { repeatFields, repeatSentence } from "../repeat.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import { slipCardHtml } from "./slip.js";
 import { chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading } from "../ui.js";
@@ -87,7 +88,7 @@ export function renderReview(kind) {
       ...bodyFor(draft, names),
       ...(isMachi && draft.edit ? { editing_machi_id: draft.edit.id } : {}),
       // So the server can say now which dates of the series are already taken.
-      ...(draft.recurring && !draft.edit ? { recurring: draft.recurring } : {}),
+      ...(!draft.edit ? repeatFields(draft) : {}),
     });
 
     let first;
@@ -158,12 +159,11 @@ export function renderReview(kind) {
     // the rest still book. Say which, before the mobed confirms.
     if (draft.recurring && !draft.edit) {
       document.getElementById("rvSeries").innerHTML = `<div class="info-banner">
-        This will repeat ${draft.recurring === "yearly" ? "every year, on the same Roj and Mah" : "every month, on the same Roj"}.
-        The next ones are added to the calendar for you.</div>`;
+        ${repeatSentence(draft)} The next ones are added to the calendar for you.</div>`;
     }
     const clashes = first.series_conflicts || [];
     if (clashes.length) {
-      document.getElementById("rvSeries").innerHTML = `<div class="info-banner">
+      document.getElementById("rvSeries").innerHTML += `<div class="info-banner">
         The geh is already booked on ${clashes.length === 1 ? "this date" : "these dates"} in the repeat,
         so ${clashes.length === 1 ? "it" : "they"} will be left out:
         ${clashes.map(d => esc(gregLabel(d))).join("; ")}.</div>`;
@@ -211,7 +211,7 @@ export function renderReview(kind) {
         body.remember_names = !keep || keep.checked;
         let res, slipHash;
         if (isMachi) {
-          if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
+          if (!draft.edit) Object.assign(body, repeatFields(draft));
           res = draft.edit ? await editMachi(aid, draft.edit.id, body) : await addMachi(aid, body);
           if (res.confirmed === false) {
             // Somebody took the slot between the preview and now.
@@ -220,7 +220,7 @@ export function renderReview(kind) {
           }
           slipHash = `#/machi/${aid}/${draft.edit ? draft.edit.id : res.machi_id}`;
         } else {
-          if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
+          if (!draft.edit) Object.assign(body, repeatFields(draft));
           res = draft.edit ? await editBooking(aid, draft.edit.id, body) : await addBooking(aid, body);
           slipHash = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
         }

@@ -16,6 +16,7 @@ import {
 import { state, primarySystem, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
+import { setRepeat, repeatCountHtml, wireRepeatCount, repeatCountProblem } from "../repeat.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
 import { esc, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
@@ -41,6 +42,7 @@ function blankDraft(prefill = {}) {
     availableGehs: [],
     // null (don't repeat), "monthly" or "yearly" - see the picker below.
     recurring: null,
+    recurringCount: null,
     // A new machi is asked one question at a time; which one is kept here.
     step: 1,
   };
@@ -62,6 +64,7 @@ function keep(draft) {
   saveDraft(DRAFT_KEY, {
     behdin: draft.behdin, names: draft.names, purpose: draft.purpose,
     gregorian: draft.gregorian, geh: draft.geh, recurring: draft.recurring,
+    recurringCount: draft.recurringCount,
   });
 }
 
@@ -102,6 +105,7 @@ export async function renderNewMachi() {
       draft.names = stored.names || null;
       draft.purpose = stored.purpose || "patet";
       draft.recurring = stored.recurring || null;
+      draft.recurringCount = stored.recurringCount || null;
       // A date that has gone by is not carried into a new booking.
       const [date, replaced] = restoredDate(stored.gregorian, prefill.gregorian);
       draft.gregorian = date;
@@ -269,7 +273,8 @@ async function render(draft) {
           ${choice("mcRecur", "", "Don't repeat", !draft.recurring)}
           ${choice("mcRecur", "monthly", "Every month, on the same Roj", draft.recurring === "monthly")}
           ${choice("mcRecur", "yearly", "Every year, on the same Roj and Mah (a birthday or anniversary)", draft.recurring === "yearly")}
-        </div>`) : ""}
+        </div>
+        ${repeatCountHtml(draft, "mcCount")}`) : ""}
 
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
@@ -347,8 +352,9 @@ async function render(draft) {
 
   // --- Recurring wiring ---
   document.querySelectorAll('input[name="mcRecur"]').forEach(r => {
-    r.onchange = () => { draft.recurring = r.value || null; keep(draft); render(draft); };
+    r.onchange = () => { setRepeat(draft, r.value); keep(draft); render(draft); };
   });
+  wireRepeatCount(draft, "mcCount", keep);
 
   // --- Cancel / Back / Next / Save ---
   const cancel = () => {
@@ -363,7 +369,11 @@ async function render(draft) {
       if (step === 1 && !draft.behdin) return showError("Please choose who the machi is for.");
       if (step === 3 && !draft.gregorian) return showError("Please choose a date.");
       if (step === 3 && !draft.geh) return showError("Please choose the time of day.");
-      if (step === total) return save(draft);
+      if (step === total) {
+        const problem = repeatCountProblem(draft);
+        if (problem) return showError(problem);
+        return save(draft);
+      }
       go(step + 1);
     };
   } else {

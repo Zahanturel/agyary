@@ -222,3 +222,71 @@ async def test_the_behdins_history_folds_a_repeat_into_one_line(db, client, seed
     assert r.status_code == 200
     lines = [e["event"] for e in r.json()["history"] if e["kind"] == "booking"]
     assert len(lines) == 1 and "yearly" in lines[0] and "4 occurrences" in lines[0]
+
+
+# ---------------------------------------------------------------------------
+# How long a repeat goes on for
+# ---------------------------------------------------------------------------
+async def test_a_counted_event_repeat_stops_after_that_many(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _headers(client, seeded)
+    source_id = await _add(client, aid, headers, recurring="monthly", recurring_count=3)
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_booking_id == source_id))).scalar_one()
+    assert (rule.end_type, rule.end_count) == ("after_count", 3)
+    rows = await _series(db, rule.id)
+    assert len(rows) == 3                          # this one and two more, not the usual four
+    assert rule.end_date == rows[-1].ceremony_datetime.astimezone(rows[0].ceremony_datetime.tzinfo).date()
+
+    # Scrolling the calendar years ahead adds nothing: it has finished.
+    far = date(2031, 1, 1)
+    await client.get("/api/mobed/my-day", params={"from": far.isoformat(), "to": (far + timedelta(days=60)).isoformat()}, headers=headers)
+    assert len(await _series(db, rule.id)) == 3
+
+
+async def test_a_long_counted_repeat_is_filled_in_as_the_calendar_reaches_it(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _headers(client, seeded)
+    source_id = await _add(client, aid, headers, recurring="monthly", recurring_count=7)
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_booking_id == source_id))).scalar_one()
+    assert len(await _series(db, rule.id)) == 4    # the first few only
+    far = date(2028, 6, 1)
+    await client.get("/api/mobed/my-day", params={"from": far.isoformat(), "to": (far + timedelta(days=30)).isoformat()}, headers=headers)
+    assert len(await _series(db, rule.id)) == 7    # and no more than 7 in all
+
+
+async def test_a_counted_yearly_event_repeat_counts_years(db, client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _headers(client, seeded)
+    source_id = await _add(client, aid, headers, recurring="yearly", recurring_count=2)
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_booking_id == source_id))).scalar_one()
+    rows = await _series(db, rule.id)
+    assert len(rows) == 2 and rows[1].parsi_year == rows[0].parsi_year + 1
+
+
+async def test_a_repeat_count_out_of_range_is_refused(client, seeded):
+    aid = seeded["agyary_id"]
+    headers = await _headers(client, seeded)
+    for kind, count in (("monthly", 1), ("monthly", 121), ("yearly", 61), ("yearly", 0)):
+        r = await client.post(
+            f"/api/mobed/agyaries/{aid}/manual-add/booking",
+            json=_payload(recurring=kind, recurring_count=count), headers=headers,
+        )
+        assert r.status_code == 422, (kind, count)
+
+
+async def test_a_counted_machi_repeat_stops_after_that_many(db, client, seeded):
+    from agyary.models import Machi
+
+    aid = seeded["agyary_id"]
+    headers = await _headers(client, seeded)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/manual-add/machi", json={
+        "behdin_phone": "+919922200401", "behdin_name": "Machi Family",
+        "roj": 6, "mah": 3, "year": 1396, "geh": 2, "gregorian": "2027-11-08",
+        "purpose": "tandarosti",
+        "names": [{"section": "farmayeshne", "title": "ervad", "name": "A", "status": "living"}],
+        "recurring": "monthly", "recurring_count": 2,
+    }, headers=headers)
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+    rule = (await db.execute(select(RecurrenceRule).where(RecurrenceRule.source_machi_id == r.json()["machi_id"]))).scalar_one()
+    assert (rule.end_type, rule.end_count) == ("after_count", 2)
+    assert len((await db.execute(select(Machi).where(Machi.recurrence_rule_id == rule.id))).scalars().all()) == 2

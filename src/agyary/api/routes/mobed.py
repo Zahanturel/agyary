@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1211,6 +1211,14 @@ MahNo = Annotated[int, Field(ge=1, le=13)]       # 13 is the Gatha days
 ParsiYear = Annotated[int, Field(ge=1, le=9999)]
 GehNo = Annotated[int, Field(ge=1, le=5)]
 MachiPurpose = Literal["patet", "tandarosti"]
+# How many times a repeat happens in all, counting the first; at most 120 monthly
+# or 60 yearly (checked per model below).
+RepeatCount = Annotated[int, Field(ge=2, le=120)] | None
+
+
+def _check_repeat_count(model) -> None:
+    if model.recurring_count is not None and model.recurring == "yearly" and model.recurring_count > 60:
+        raise ValueError("A yearly repeat can run for at most 60 years.")
 
 
 class ManualAddMachiIn(BaseModel):
@@ -1229,10 +1237,18 @@ class ManualAddMachiIn(BaseModel):
     # AND Mah every Parsi year, for a birthday or anniversary. None: a
     # one-off, the common case.
     recurring: Literal["monthly", "yearly"] | None = None
+    # In all, counting the first: 12 monthly is a year of months. Left out, a
+    # repeat has no end.
+    recurring_count: RepeatCount = None
     # Add any new names to the behdin's saved names as part of saving. On by
     # default: names typed for an event and then forgotten are names typed
     # again next time.
     remember_names: bool = True
+
+    @model_validator(mode="after")
+    def _repeat_count_in_range(self):
+        _check_repeat_count(self)
+        return self
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/machi")
@@ -1251,7 +1267,7 @@ async def manual_add_machi(
             roj=payload.roj, mah=payload.mah, year=payload.year, geh=payload.geh,
             gregorian=payload.gregorian, purpose=payload.purpose,
             names=names,
-            recurring=payload.recurring,
+            recurring=payload.recurring, recurring_count=payload.recurring_count,
             remember_names=payload.remember_names,
         )
     except mobed_dashboard.BookingInputError as exc:
@@ -1289,6 +1305,12 @@ class ManualAddBookingIn(BaseModel):
     # As for a machi: monthly is the same Roj every Mah, yearly the same Roj and
     # Mah every Parsi year (a Salgrah, an anniversary). Only a NEW event repeats.
     recurring: Literal["monthly", "yearly"] | None = None
+    recurring_count: RepeatCount = None
+
+    @model_validator(mode="after")
+    def _repeat_count_in_range(self):
+        _check_repeat_count(self)
+        return self
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/booking")
@@ -1308,6 +1330,7 @@ async def manual_add_booking(
             purpose=payload.purpose, names=names,
             location=payload.location, is_offsite=payload.is_offsite,
             remember_names=payload.remember_names, recurring=payload.recurring,
+            recurring_count=payload.recurring_count,
         )
     except mobed_dashboard.BookingInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1378,6 +1401,7 @@ async def preview_machi(
             roj=payload.roj, mah=payload.mah, year=payload.year,
             gregorian=payload.gregorian, geh=payload.geh, purpose=payload.purpose,
             names=names, editing_machi_id=payload.editing_machi_id, recurring=payload.recurring,
+            recurring_count=payload.recurring_count,
         )
     except mobed_dashboard.BookingInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

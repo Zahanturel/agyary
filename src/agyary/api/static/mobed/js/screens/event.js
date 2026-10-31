@@ -18,6 +18,7 @@ import { state, primarySystem } from "../state.js";
 import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
+import { setRepeat, repeatCountHtml, wireRepeatCount, repeatCountProblem } from "../repeat.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
 import { esc, istYmd, istHm, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
@@ -45,6 +46,7 @@ function blankDraft(prefill = {}) {
     isGatha: false,
     // null (once), "monthly" or "yearly" - the optional last question.
     recurring: null,
+    recurringCount: null,
     // A new event is asked one question at a time; which one is kept here.
     step: 1,
   };
@@ -65,7 +67,7 @@ function keep(draft) {
   saveDraft(DRAFT_KEY, {
     behdin: draft.behdin, names: draft.names, service_id: draft.service_id,
     service_name: draft.service_name, gregorian: draft.gregorian, time: draft.time,
-    recurring: draft.recurring,
+    recurring: draft.recurring, recurringCount: draft.recurringCount,
   });
 }
 
@@ -107,6 +109,7 @@ export async function renderNewEvent() {
       draft.service_name = stored.service_name || "";
       draft.time = stored.time || draft.time;
       draft.recurring = stored.recurring || null;
+      draft.recurringCount = stored.recurringCount || null;
       // A date that has gone by is not carried into a new booking.
       const [date, replaced] = restoredDate(stored.gregorian, prefill.gregorian);
       draft.gregorian = date;
@@ -287,7 +290,8 @@ async function render(draft) {
           <label class="choice${!draft.recurring ? " on" : ""}"><input type="radio" name="evRecur" value="" ${!draft.recurring ? "checked" : ""}><span>No, just this once</span></label>
           <label class="choice${draft.recurring === "monthly" ? " on" : ""}"><input type="radio" name="evRecur" value="monthly" ${draft.recurring === "monthly" ? "checked" : ""}><span>Every month, on the same Roj</span></label>
           <label class="choice${draft.recurring === "yearly" ? " on" : ""}"><input type="radio" name="evRecur" value="yearly" ${draft.recurring === "yearly" ? "checked" : ""}><span>Every year, on the same Roj and Mah (a Salgrah or an anniversary)</span></label>
-        </div>`}`) : ""}
+        </div>
+        ${repeatCountHtml(draft, "evCount")}`}`) : ""}
 
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
@@ -379,8 +383,9 @@ async function render(draft) {
     back(draft.edit ? `#/booking/${aid}/${draft.edit.id}` : "#/calendar");
   };
   document.querySelectorAll('input[name="evRecur"]').forEach(r => {
-    r.onchange = () => { draft.recurring = r.value || null; keep(draft); render(draft); };
+    r.onchange = () => { setRepeat(draft, r.value); keep(draft); render(draft); };
   });
+  wireRepeatCount(draft, "evCount", keep);
   if (stepped) {
     const go = (n) => { draft.step = n; keep(draft); render(draft); window.scrollTo(0, 0); };
     document.getElementById("evBack").onclick = () => (step === 1 ? cancel() : go(step - 1));
@@ -390,7 +395,9 @@ async function render(draft) {
       if (step === 3 && !draft.gregorian) return showError("Please choose a day.");
       if (step === 4 && !draft.time) return showError("Please choose a time.");
       if (step === total) {
-        if (draft.isGatha) draft.recurring = null;   // a Gatha day cannot repeat
+        if (draft.isGatha) setRepeat(draft, null);   // a Gatha day cannot repeat
+        const problem = repeatCountProblem(draft);
+        if (problem) return showError(problem);
         return save(draft);
       }
       go(step + 1);

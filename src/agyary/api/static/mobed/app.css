@@ -414,6 +414,8 @@ body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bot
 .choice { display: flex; align-items: center; gap: var(--space-4); min-height: 76px; padding: var(--space-3) var(--space-4);
   margin: 0 0 var(--space-3); background: #fff; border: 2px solid var(--border); border-radius: var(--radius-md);
   font-size: var(--text-md); font-weight: 700; color: var(--text); cursor: pointer; }
+.repeat-count { margin-top: var(--space-4); }
+.repeat-count input { max-width: 8em; }
 .choice input { width: 32px; height: 32px; flex: none; margin: 0; }
 .choice:has(input:checked) { background: var(--primary-tint); border: 3px solid var(--primary); color: var(--primary); }
 .stepped .geh-grid { flex-direction: column; }

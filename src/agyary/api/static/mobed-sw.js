@@ -13,7 +13,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v66";
+const CACHE_NAME = "mobed-shell-v67";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -39,6 +39,7 @@ const SHELL_FILES = [
   "/mobed-app/js/memorial_form.js",
   "/mobed-app/js/fielderrors.js",
   "/mobed-app/js/drafts.js",
+  "/mobed-app/js/repeat.js",
   "/mobed-app/js/behdin_delete.js",
   "/mobed-app/js/memorial_share.js",
   "/mobed-app/js/paid_chip.js",
