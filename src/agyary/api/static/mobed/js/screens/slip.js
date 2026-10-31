@@ -73,7 +73,7 @@ export async function renderSlip({ kind, aid, id }) {
     panel.innerHTML = "";
     try {
       if (kind === "machi") await deleteMachi(agyaryId, numId, future);
-      else await deleteBooking(agyaryId, numId);
+      else await deleteBooking(agyaryId, numId, future);
     } catch (e) {
       return showError("Couldn't delete: " + e.message);
     }
@@ -85,8 +85,8 @@ export async function renderSlip({ kind, aid, id }) {
 
   document.getElementById("slipDeleteOpen").onclick = () => {
     const panel = document.getElementById("slipDeleteConfirm");
-    // Only a machi can be part of a recurring series - a booking never
-    // repeats, so there is nothing to choose between there.
+    // A machi or an event that repeats offers the choice; one that doesn't has
+    // nothing to choose between.
     panel.innerHTML = slip.is_recurring
       ? `<p class="meta" id="delAsk" tabindex="-1">This is part of a recurring arrangement.</p>
          <div class="stack">

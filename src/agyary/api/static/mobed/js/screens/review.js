@@ -87,7 +87,7 @@ export function renderReview(kind) {
       ...bodyFor(draft, names),
       ...(isMachi && draft.edit ? { editing_machi_id: draft.edit.id } : {}),
       // So the server can say now which dates of the series are already taken.
-      ...(isMachi && draft.recurring && !draft.edit ? { recurring: draft.recurring } : {}),
+      ...(draft.recurring && !draft.edit ? { recurring: draft.recurring } : {}),
     });
 
     let first;
@@ -156,6 +156,11 @@ export function renderReview(kind) {
 
     // A repeating series runs into somebody else's booking only for those dates;
     // the rest still book. Say which, before the mobed confirms.
+    if (draft.recurring && !draft.edit) {
+      document.getElementById("rvSeries").innerHTML = `<div class="info-banner">
+        This will repeat ${draft.recurring === "yearly" ? "every year, on the same Roj and Mah" : "every month, on the same Roj"}.
+        The next ones are added to the calendar for you.</div>`;
+    }
     const clashes = first.series_conflicts || [];
     if (clashes.length) {
       document.getElementById("rvSeries").innerHTML = `<div class="info-banner">
@@ -215,6 +220,7 @@ export function renderReview(kind) {
           }
           slipHash = `#/machi/${aid}/${draft.edit ? draft.edit.id : res.machi_id}`;
         } else {
+          if (draft.recurring && !draft.edit) body.recurring = draft.recurring;
           res = draft.edit ? await editBooking(aid, draft.edit.id, body) : await addBooking(aid, body);
           slipHash = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
         }

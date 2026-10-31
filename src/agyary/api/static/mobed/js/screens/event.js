@@ -43,6 +43,8 @@ function blankDraft(prefill = {}) {
     time: "10:00",
     parsiLabel: "",
     isGatha: false,
+    // null (once), "monthly" or "yearly" - the optional last question.
+    recurring: null,
     // A new event is asked one question at a time; which one is kept here.
     step: 1,
   };
@@ -63,6 +65,7 @@ function keep(draft) {
   saveDraft(DRAFT_KEY, {
     behdin: draft.behdin, names: draft.names, service_id: draft.service_id,
     service_name: draft.service_name, gregorian: draft.gregorian, time: draft.time,
+    recurring: draft.recurring,
   });
 }
 
@@ -103,6 +106,7 @@ export async function renderNewEvent() {
       draft.service_id = stored.service_id || null;
       draft.service_name = stored.service_name || "";
       draft.time = stored.time || draft.time;
+      draft.recurring = stored.recurring || null;
       // A date that has gone by is not carried into a new booking.
       const [date, replaced] = restoredDate(stored.gregorian, prefill.gregorian);
       draft.gregorian = date;
@@ -219,7 +223,7 @@ async function render(draft) {
   // A new event is asked one question at a time. Editing one is a single page:
   // everything is already there and only a detail changes.
   const stepped = !draft.edit;
-  const total = 4;
+  const total = 5;
   const step = stepped ? Math.min(Math.max(draft.step || 1, 1), total) : 0;
   const lbl = (text, style = "") => stepped ? "" : `<label ${style ? `style="${style}"` : ""}>${text}</label>`;
   const sec = (n, question, body) => stepped
@@ -229,7 +233,7 @@ async function render(draft) {
   mainEl.innerHTML = `
     <div class="card${stepped ? " stepped" : ""}">
       ${stepped ? `<div class="step-count">Step ${step} of ${total}</div>
-        <div class="step-bar">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? "on" : ""}"></i>`).join("")}</div>`
+        <div class="step-bar">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= step ? "on" : ""}"></i>`).join("")}</div>`
         : `<h2>Edit event</h2>`}
 
       ${sec(1, "Who is the event for?", `
@@ -274,6 +278,16 @@ async function render(draft) {
       ${sec(4, "What time?", `
         ${lbl("Time", "margin-top:16px")}
         <input type="time" id="evTime" value="${esc(draft.time)}">`)}
+
+      ${stepped ? sec(5, "Does it repeat?", `
+        ${draft.isGatha
+          ? `<p class="meta">This day is one of the Gatha days, so it can't repeat. Choose Review to book it once.</p>`
+          : `<p class="meta">${draft.parsiLabel ? `This event is on ${esc(draft.parsiLabel.replace(/,?\s*Y\d+.*$/, ""))}. ` : ""}Skip this if it is only once.</p>
+        <div id="evRecur">
+          <label class="choice${!draft.recurring ? " on" : ""}"><input type="radio" name="evRecur" value="" ${!draft.recurring ? "checked" : ""}><span>No, just this once</span></label>
+          <label class="choice${draft.recurring === "monthly" ? " on" : ""}"><input type="radio" name="evRecur" value="monthly" ${draft.recurring === "monthly" ? "checked" : ""}><span>Every month, on the same Roj</span></label>
+          <label class="choice${draft.recurring === "yearly" ? " on" : ""}"><input type="radio" name="evRecur" value="yearly" ${draft.recurring === "yearly" ? "checked" : ""}><span>Every year, on the same Roj and Mah (a Salgrah or an anniversary)</span></label>
+        </div>`}`) : ""}
 
       <!-- Actions -->
       <div class="wizard-nav" style="margin-top:20px">
@@ -364,6 +378,9 @@ async function render(draft) {
     if (!draft.edit) clearDraft(DRAFT_KEY);
     back(draft.edit ? `#/booking/${aid}/${draft.edit.id}` : "#/calendar");
   };
+  document.querySelectorAll('input[name="evRecur"]').forEach(r => {
+    r.onchange = () => { draft.recurring = r.value || null; keep(draft); render(draft); };
+  });
   if (stepped) {
     const go = (n) => { draft.step = n; keep(draft); render(draft); window.scrollTo(0, 0); };
     document.getElementById("evBack").onclick = () => (step === 1 ? cancel() : go(step - 1));
@@ -372,7 +389,10 @@ async function render(draft) {
       if (step === 2 && !draft.service_id) return showError("Please choose a service.");
       if (step === 3 && !draft.gregorian) return showError("Please choose a day.");
       if (step === 4 && !draft.time) return showError("Please choose a time.");
-      if (step === total) return save(draft);
+      if (step === total) {
+        if (draft.isGatha) draft.recurring = null;   // a Gatha day cannot repeat
+        return save(draft);
+      }
       go(step + 1);
     };
   } else {

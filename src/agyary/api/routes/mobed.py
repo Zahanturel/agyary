@@ -763,6 +763,10 @@ async def my_day(
                 status_code=400,
                 detail=f"Range too wide (max {mobed_dashboard.MAX_MY_DAY_RANGE_DAYS} days)",
             )
+    if to is not None and await mobed_dashboard.ensure_booking_recurrences_generated(db, user.id, through=to):
+        # A repeating event is written ahead only a few periods at a time; a
+        # window further out tops it up here, so the calendar never stops short.
+        await db.commit()
     entries = await mobed_dashboard.list_my_day(db, user.id, from_, to)
     return [_booking_summary(e) for e in entries]
 
@@ -1282,6 +1286,9 @@ class ManualAddBookingIn(BaseModel):
     location: str | None = None
     is_offsite: bool = False
     remember_names: bool = True
+    # As for a machi: monthly is the same Roj every Mah, yearly the same Roj and
+    # Mah every Parsi year (a Salgrah, an anniversary). Only a NEW event repeats.
+    recurring: Literal["monthly", "yearly"] | None = None
 
 
 @router.post("/agyaries/{agyary_id}/manual-add/booking")
@@ -1293,14 +1300,17 @@ async def manual_add_booking(
 ) -> dict:
     agyary = await _require_membership(db, agyary_id, user)
     names = [n.model_dump() for n in payload.names] if payload.names is not None else None
-    result = await mobed_dashboard.manual_add_booking(
-        db, agyary, user.id,
-        behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
-        service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime,
-        purpose=payload.purpose, names=names,
-        location=payload.location, is_offsite=payload.is_offsite,
-        remember_names=payload.remember_names,
-    )
+    try:
+        result = await mobed_dashboard.manual_add_booking(
+            db, agyary, user.id,
+            behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
+            service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime,
+            purpose=payload.purpose, names=names,
+            location=payload.location, is_offsite=payload.is_offsite,
+            remember_names=payload.remember_names, recurring=payload.recurring,
+        )
+    except mobed_dashboard.BookingInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="That service could not be found.")
     await db.commit()
@@ -1330,11 +1340,15 @@ async def preview_booking(
     starting point."""
     agyary = await _require_membership(db, agyary_id, user)
     names = [n.model_dump() for n in payload.names] if payload.names is not None else None
-    result = await mobed_dashboard.preview_booking_slip(
-        db, agyary, user.id,
-        behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
-        service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime, names=names,
-    )
+    try:
+        result = await mobed_dashboard.preview_booking_slip(
+            db, agyary, user.id,
+            behdin_phone=payload.behdin_phone, behdin_name=payload.behdin_name,
+            service_id=payload.service_id, ceremony_dt_local=payload.ceremony_datetime, names=names,
+            recurring=payload.recurring,
+        )
+    except mobed_dashboard.BookingInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="That service could not be found.")
     return _preview_response(result)
@@ -1508,12 +1522,15 @@ async def delete_machi(
 async def delete_booking(
     agyary_id: int,
     booking_id: int,
+    future: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
+    """``future=true`` also removes every later occurrence of a repeating event
+    and stops the repeat, as for a machi."""
     agyary = await _require_membership(db, agyary_id, user)
     try:
-        deleted = await mobed_dashboard.delete_booking(db, agyary, booking_id, user.id)
+        deleted = await mobed_dashboard.delete_booking(db, agyary, booking_id, user.id, delete_future=future)
     except mobed_dashboard.DeleteBlocked as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:

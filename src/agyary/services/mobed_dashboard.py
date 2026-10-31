@@ -18,7 +18,7 @@ from agyary.messaging.availability import (
 )
 from agyary.messaging.booking_service import MachiBookingResult
 from agyary.messaging.formatting import PURPOSE_SHORT, date_label, geh_label, names_block
-from agyary.messaging.geh_times import IST, ensure_ist, to_ist
+from agyary.messaging.geh_times import GEH_START_TIMES, IST, ensure_ist, to_ist
 from agyary.messaging.mobed_calendar import has_calendar_conflict
 from agyary.models import (
     Agyary,
@@ -354,6 +354,12 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
     standalone, grouped = [], {}
     for m in machis:
         (grouped.setdefault(m.recurrence_rule_id, []) if m.recurrence_rule_id else standalone).append(m)
+    single_bookings, booking_groups = [], {}
+    for b, service in booking_rows:
+        if b.recurrence_rule_id:
+            booking_groups.setdefault(b.recurrence_rule_id, []).append((b, service))
+        else:
+            single_bookings.append((b, service))
 
     entries = []
     for m in standalone:
@@ -366,11 +372,16 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
                 "sort_key": m.ceremony_datetime,
             }
         )
-    if grouped:
+    if grouped or booking_groups:
         rules = (
-            await db.execute(select(RecurrenceRule).where(RecurrenceRule.id.in_(grouped.keys())))
+            await db.execute(
+                select(RecurrenceRule).where(RecurrenceRule.id.in_([*grouped.keys(), *booking_groups.keys()]))
+            )
         ).scalars()
         pattern_by_rule = {r.id: r.pattern for r in rules}
+    else:
+        pattern_by_rule = {}
+    if grouped:
         for rule_id, rows in grouped.items():
             rows.sort(key=lambda m: m.ceremony_datetime, reverse=True)
             latest = rows[0]
@@ -387,7 +398,7 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
                     "sort_key": latest.ceremony_datetime,
                 }
             )
-    for b, service in booking_rows:
+    for b, service in single_bookings:
         local = to_ist(b.date_time)
         entries.append(
             {
@@ -395,6 +406,20 @@ async def get_customer_history(db: AsyncSession, user_id: int, customer_id: int)
                 "id": b.id,
                 "event": service.name if service else "Service",
                 "when": f"{date_label(b.parsi_roj, b.parsi_mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}",
+                "sort_key": b.ceremony_datetime,
+            }
+        )
+    for rule_id, rows in booking_groups.items():
+        rows.sort(key=lambda r: r[0].ceremony_datetime, reverse=True)
+        b, service = rows[0]
+        local = to_ist(b.date_time)
+        cadence = RECURRENCE_PATTERN_LABELS.get(pattern_by_rule.get(rule_id), "recurring")
+        entries.append(
+            {
+                "kind": "booking",
+                "id": b.id,
+                "event": f"{service.name if service else 'Service'} · {cadence} · {len(rows)} occurrences",
+                "when": f"latest {date_label(b.parsi_roj, b.parsi_mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}",
                 "sort_key": b.ceremony_datetime,
             }
         )
@@ -476,12 +501,12 @@ class MachiAddResult:
     skipped: tuple[date, ...] = ()
 
 
-def refuse_repeating_gatha(recurring: str | None, mah: int) -> None:
-    """A machi on a Gatha day cannot repeat: there is no Roj of that name to
-    come round again. Said up front, not by quietly booking just the one."""
+def refuse_repeating_gatha(recurring: str | None, mah: int, what: str = "machi") -> None:
+    """A machi (or event) on a Gatha day cannot repeat: there is no Roj of that
+    name to come round again. Said up front, not by quietly booking just the one."""
     if recurring and mah > 12:
         raise BookingInputError(
-            "A machi on a Gatha day can't repeat. Book it once, or choose another day."
+            f"A {what} on a Gatha day can't repeat. Book it once, or choose another day."
         )
 
 
@@ -631,9 +656,7 @@ async def generate_recurrence_instances(
     deactivated.
     """
     if rule.source_machi_id is None:
-        # A booking-sourced rule, which this does not generate. Not ours to
-        # deactivate either - leave it exactly as found.
-        return 0
+        return await _generate_booking_instances(db, agyary, rule, through=through)
 
     source = await db.get(Machi, rule.source_machi_id)
     customer = await db.get(Customer, source.customer_id) if source else None
@@ -691,6 +714,127 @@ async def generate_recurrence_instances(
     rule.last_generated_until = attempted_through
     await db.flush()
     return created
+
+
+def _booking_series_anchor(booking: Booking) -> tuple[date, time, int]:
+    """Where a booking sits for its series: the day its Parsi date was worked
+    out on, its time of day, and how many days later than that day it falls.
+    A ceremony before sunrise belongs to the PREVIOUS Parsi day (see
+    booking_service._booking_parsi_anchor), so every repeat is that Parsi day
+    plus one, at the same clock time."""
+    local = to_ist(booking.ceremony_datetime)
+    shift = 1 if local.time() < GEH_START_TIMES[1] else 0
+    return local.date() - timedelta(days=shift), local.time(), shift
+
+
+async def _generate_booking_instances(
+    db: AsyncSession, agyary: Agyary, rule: RecurrenceRule, *, through: date,
+) -> int:
+    """The events of a repeating event, up to and including ``through``. Like
+    the machi generator it is idempotent and resumable: it carries on from
+    ``last_generated_until`` and reads everything off the source event, so a
+    rule cannot drift from what it repeats. Unlike a machi, an event holds no
+    exclusive slot, so nothing is ever skipped - at worst it overlaps another
+    of the mobed's events, which the calendar already shows."""
+    source = await db.get(Booking, rule.source_booking_id)
+    customer = await db.get(Customer, source.customer_id) if source else None
+    service = await db.get(Service, source.service_id) if source else None
+    if source is None or customer is None or service is None or source.created_by_user_id is None:
+        rule.is_active = False
+        await db.flush()
+        return 0
+
+    system = CalendarSystem(agyary.calendar_system)
+    if rule.end_date is not None and rule.end_date < through:
+        through = rule.end_date
+    source_day, clock, shift = _booking_series_anchor(source)
+    anchor = rule.last_generated_until or source_day
+    if anchor >= through:
+        return 0
+
+    _roj, mah, year = parsi_slot_fields(gregorian_to_parsi(anchor, system))
+    roj = source.parsi_roj
+    names = await _names_as_dicts(db, booking_id=source.id)
+    step = _step_for(rule.pattern)
+    created = 0
+    attempted_through = anchor
+    for _ in range(MAX_GENERATE_MONTHS):
+        mah, year = step(mah, year)
+        try:
+            greg = parsi_to_gregorian(year, system, mah=mah, roj=roj)
+        except ValueError:
+            continue
+        booking = await booking_service.create_booking_request(
+            db, agyary, customer, service,
+            ceremony_dt_local=datetime.combine(greg + timedelta(days=shift), clock, IST),
+            purpose=source.purpose, names=names, location=source.location,
+            is_offsite=source.is_offsite, amount=None,
+        )
+        booking.status = "approved"
+        booking.created_by_user_id = source.created_by_user_id
+        booking.recurrence_rule_id = rule.id
+        booking.is_recurring_instance = True
+        db.add(BookingMobed(booking_id=booking.id, user_id=source.created_by_user_id, status="accepted"))
+        created += 1
+        attempted_through = greg
+        if greg >= through:
+            break
+
+    rule.last_generated_until = attempted_through
+    await db.flush()
+    return created
+
+
+async def ensure_booking_recurrences_generated(db: AsyncSession, user_id: int, *, through: date) -> int:
+    """The same top-up as ensure_recurrences_generated, for the repeating events
+    of one mobed, so their calendar is complete through ``through``. A row lock
+    on each rule makes two calendars opened at once top it up once, not twice
+    (events, unlike machis, have no unique slot to refuse a duplicate)."""
+    rules = (
+        await db.execute(
+            select(RecurrenceRule).where(
+                RecurrenceRule.is_active.is_(True),
+                RecurrenceRule.source_booking_id.in_(
+                    select(Booking.id).where(Booking.created_by_user_id == user_id)
+                ),
+                or_(
+                    RecurrenceRule.last_generated_until.is_(None),
+                    RecurrenceRule.last_generated_until < through,
+                ),
+            ).with_for_update()
+        )
+    ).scalars().all()
+    total = 0
+    for rule in rules:
+        agyary = await db.get(Agyary, rule.agyary_id)
+        if agyary is not None:
+            total += await generate_recurrence_instances(db, agyary, rule, through=through)
+    return total
+
+
+async def _create_recurring_bookings(
+    db: AsyncSession, agyary: Agyary, source: Booking, *, pattern: str,
+    horizon_periods: int = RECURRENCE_HORIZON_PERIODS,
+) -> None:
+    """Start a repeat from ``source`` and book its first few periods; the rest
+    follow on demand (ensure_booking_recurrences_generated)."""
+    source_day, _clock, _shift = _booking_series_anchor(source)
+    rule = RecurrenceRule(
+        agyary_id=agyary.id, source_booking_id=source.id, pattern=pattern,
+        end_type="indefinite", generation_horizon_months=horizon_periods,
+        last_generated_until=source_day,
+    )
+    db.add(rule)
+    await db.flush()
+    source.recurrence_rule_id = rule.id
+    step = _step_for(pattern)
+    mah, year = source.parsi_mah, source.parsi_year
+    for _ in range(horizon_periods):
+        mah, year = step(mah, year)
+    through = parsi_to_gregorian(
+        year, CalendarSystem(agyary.calendar_system), mah=mah, roj=source.parsi_roj
+    )
+    await generate_recurrence_instances(db, agyary, rule, through=through)
 
 
 def check_board_range(start: date, end: date) -> None:
@@ -817,6 +961,7 @@ async def manual_add_booking(
     location: str | None,
     is_offsite: bool,
     remember_names: bool = True,
+    recurring: str | None = None,
 ) -> ManualBookingResult | None:
     """Walk-ins/phone bookings, non-machi case. The mobed entered it
     themselves - already agreed, so BookingMobed starts "accepted", not
@@ -826,6 +971,8 @@ async def manual_add_booking(
     service = await booking_service.get_service_by_id(db, agyary.id, service_id)
     if service is None:
         return None
+    if recurring:
+        refuse_repeating_gatha(recurring, booking_service._booking_parsi_anchor(agyary, ceremony_dt_local)[2], "event")
     # Conflict must be checked BEFORE creating this booking's own
     # BookingMobed row, or it would find itself and always report a
     # conflict.
@@ -844,6 +991,8 @@ async def manual_add_booking(
     db.add(BookingMobed(booking_id=booking.id, user_id=actor_user_id, status="accepted"))
     await db.flush()
     await _remember(db, customer.id, names if explicit_names else None, remember_names)
+    if recurring:
+        await _create_recurring_bookings(db, agyary, booking, pattern=RECURRENCE_PATTERN_CHOICES[recurring])
     return ManualBookingResult(booking=booking, calendar_conflict=conflict)
 
 
@@ -1047,18 +1196,59 @@ async def _clear_dependents(db: AsyncSession, *, machi_ids: list[int] = (), book
 
 
 async def delete_booking(
-    db: AsyncSession, agyary: Agyary, booking_id: int, actor_user_id: int
+    db: AsyncSession, agyary: Agyary, booking_id: int, actor_user_id: int, *, delete_future: bool = False
 ) -> bool:
-    """A booking never recurs, so this is a plain delete - CeremonyName and
-    BookingMobed rows cascade at the DB level. False means "not found, or not
-    yours": the two are deliberately indistinguishable to the caller."""
+    """Delete an event. ``delete_future`` also removes every later occurrence
+    of its repeat (if it has one) and stops it; without it only this one goes
+    and the repeat carries on around the gap. CeremonyName and BookingMobed
+    rows cascade at the DB level. False means "not found, or not yours": the
+    two are deliberately indistinguishable to the caller.
+
+    As with a machi, the rule and its events point at each other with no
+    ON DELETE, so the rule is re-pointed at a surviving event (or goes, when
+    none is left) in a flush of its own BEFORE the event it names is deleted."""
     booking = await db.get(Booking, booking_id)
     if booking is None or booking.agyary_id != agyary.id:
         return False
     if not await may_touch_booking(db, booking, actor_user_id):
         return False
-    await _clear_dependents(db, booking_ids=[booking.id])
-    await db.delete(booking)
+
+    rule_id = booking.recurrence_rule_id
+    if rule_id is None:
+        await _clear_dependents(db, booking_ids=[booking.id])
+        await db.delete(booking)
+        await db.flush()
+        return True
+
+    rule = await db.get(RecurrenceRule, rule_id)
+    siblings = (
+        await db.execute(select(Booking).where(Booking.recurrence_rule_id == rule_id))
+    ).scalars().all()
+    if delete_future:
+        victims = [x for x in siblings if x.ceremony_datetime >= booking.ceremony_datetime]
+        survivors = [x for x in siblings if x.ceremony_datetime < booking.ceremony_datetime]
+    else:
+        victims = [booking]
+        survivors = [x for x in siblings if x.id != booking.id]
+
+    await _clear_dependents(db, booking_ids=[v.id for v in victims])
+
+    rule_gone = False
+    if rule is not None and rule.source_booking_id in {v.id for v in victims}:
+        if survivors:
+            rule.source_booking_id = min(survivors, key=lambda x: x.ceremony_datetime).id
+            await db.flush()
+        else:
+            for v in victims:
+                v.recurrence_rule_id = None
+            await db.flush()
+            await db.delete(rule)
+            await db.flush()
+            rule_gone = True
+    if delete_future and rule is not None and not rule_gone:
+        rule.is_active = False
+    for v in victims:
+        await db.delete(v)
     await db.flush()
     return True
 
@@ -1134,8 +1324,10 @@ async def delete_behdin_scoped(
                 Booking.ceremony_datetime >= now)
         )).scalars().all()
         for bid in booking_ids:
+            if await db.get(Booking, bid) is None:
+                continue   # already gone with an earlier occurrence of its repeat
             try:
-                ok = await delete_booking(db, agyary, bid, user_id)
+                ok = await delete_booking(db, agyary, bid, user_id, delete_future=True)
             except DeleteBlocked:
                 ok = False
             out["events_deleted" if ok else "events_kept"] += 1
@@ -1274,8 +1466,7 @@ class SlipData:
     when: str
     names_text: str
     # Whether deleting this needs the "just this one, or this and every
-    # future occurrence" choice. Always False for a Booking - only Machi
-    # recurs.
+    # future occurrence" choice.
     is_recurring: bool = False
 
 
@@ -1333,7 +1524,7 @@ def build_machi_slip(
 
 def build_booking_slip(
     *, agyary_name: str, behdin_name: str, behdin_phone: str, service_name: str,
-    local: datetime, roj: int, mah: int, names: list[dict],
+    local: datetime, roj: int, mah: int, names: list[dict], is_recurring: bool = False,
 ) -> SlipData:
     when = f"{date_label(roj, mah, local.date())}, {local.strftime('%I:%M %p').lstrip('0')}"
     return SlipData(
@@ -1343,6 +1534,7 @@ def build_booking_slip(
         event=service_name,
         when=when,
         names_text=names_block(names),
+        is_recurring=is_recurring,
     )
 
 
@@ -1388,6 +1580,7 @@ async def get_booking_slip(
     return build_booking_slip(
         agyary_name=agyary.name, behdin_name=customer.name, behdin_phone=customer.phone,
         service_name=service.name if service else "Service", local=local, roj=roj, mah=mah, names=names,
+        is_recurring=booking.recurrence_rule_id is not None,
     )
 
 
@@ -1417,7 +1610,7 @@ async def _pool_is_empty(db: AsyncSession, customer: Customer | None) -> bool:
 async def preview_booking_slip(
     db: AsyncSession, agyary: Agyary, reader_user_id: int, *,
     behdin_phone: str, behdin_name: str, service_id: int, ceremony_dt_local: datetime,
-    names: list[dict] | None,
+    names: list[dict] | None, recurring: str | None = None,
 ) -> dict | None:
     """Nothing is written. ``names`` left out means "what saving would attach
     by default" (the behdin's saved names), and the response carries the names
@@ -1425,6 +1618,8 @@ async def preview_booking_slip(
     service = await booking_service.get_service_by_id(db, agyary.id, service_id)
     if service is None:
         return None
+    if recurring:
+        refuse_repeating_gatha(recurring, booking_service._booking_parsi_anchor(agyary, ceremony_dt_local)[2], "event")
     name, phone, customer = await _preview_customer(db, behdin_phone, behdin_name, reader_user_id)
     pool_empty = await _pool_is_empty(db, customer)
     if names is None:
