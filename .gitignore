@@ -60,3 +60,7 @@ docs/audit-*/
 # Google Play listing drafts and artwork (owner material, not code)
 docs/play-listing.md
 docs/play-assets/
+
+# Name-book sample photos, their transcriptions and what the models read: real families'
+# names (and possibly phone numbers). Local only, never committed.
+namebook-samples/
