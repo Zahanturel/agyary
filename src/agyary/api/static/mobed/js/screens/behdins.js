@@ -262,22 +262,31 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
       // the same pass. Several is a different intent - a bulk import - and
       // saved names make no sense per-person there.
       if (picked.length === 1) {
-        document.getElementById("bnName").value = picked[0].name;
-        setPhoneField("bnPhone", picked[0].phone);
+        const [c] = picked;
+        if (c.name) document.getElementById("bnName").value = c.name;
+        if (c.phone) setPhoneField("bnPhone", c.phone);
+        else showInfo("That contact has no phone number. Please type it in.");
+        keep();
         return;
       }
+      // Several at once have no form to finish them in: a contact without
+      // a name or a number is left out, and said so rather than called
+      // "already on file".
+      const usable = picked.filter(c => c.name && c.phone);
       btn.disabled = true;
       btn.textContent = "Importing...";
-      let added = 0, skipped = 0;
-      for (const c of picked) {
+      let added = 0, onFile = 0, failed = picked.length - usable.length;
+      for (const c of usable) {
         try {
           const r = await createBehdin(state.currentAgyaryId, c.name, c.phone);
-          r.created ? added++ : skipped++;
-        } catch (e) { skipped++; }
+          r.created ? added++ : onFile++;
+        } catch (e) { failed++; }
       }
-      showInfo(added
-        ? `${added} behdin${added > 1 ? "s" : ""} added` + (skipped ? `, ${skipped} already on file` : "")
-        : "All of those were already on file");
+      const said = [];
+      if (added) said.push(`${added} behdin${added > 1 ? "s" : ""} added`);
+      if (onFile) said.push(`${onFile} already on file`);
+      if (failed) said.push(`${failed} could not be added (no name or a number that is not valid)`);
+      showInfo(said.join(", "));
       // A batch has no single behdin to hand back to the event - land on
       // the same place either way, and the event flow's search will find
       // whichever of these he needs.
