@@ -153,7 +153,8 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Erase a family from every mobed's book | **Admin screen** | `ADMIN_PHONES`. Procedure in [DATA-REQUESTS.md](DATA-REQUESTS.md) |
 | Deleting old records | **Never** | Owner's decision D8: no record is deleted because of its age |
 | Warmer reminder template with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
-| Android app (Trusted Web Activity) | **Built, shared directly** (14 Oct 2026) | signed APK given to mobeds in a WhatsApp group; `/.well-known/assetlinks.json` lists the upload key, so it opens full-screen; not on Google Play (DECISIONS.md D6) |
+| Android app (Trusted Web Activity) | **Built, shared directly** (14 Oct 2026) | signed APK given to mobeds in a WhatsApp group, and (15 Nov) "Download the app" on the sign-in page of an Android phone, served from `/download/android`; `/.well-known/assetlinks.json` lists the upload key, so it opens full-screen; not on Google Play (DECISIONS.md D6) |
+| iPhone / iPad | **Home Screen app** (15 Nov 2026) | Apple allows no app from outside the App Store, so the sign-in page shows the Add to Home Screen steps; `mobed-icon-180.png` is its icon |
 | Web Push to mobeds | **Not started** | |
 
 ## 4. Configuration
@@ -300,7 +301,10 @@ free (Oracle always-free, Cloudflare free).
 by setting once approved.
 
 **B. Android.** The signed APK is shared with mobeds directly (the project and upload key live
-outside the repo). Google Play is deferred: if it is revisited, run the closed test (12 testers,
+outside the repo), and served from the sign-in page: the file is
+`src/agyary/api/static/android/mobed-diary.apk`, and `tests/test_android_app.py` checks it is
+the app signed with a key asset links names. After a rebuild, copy the new
+`app-release-signed.apk` over it; its download address changes by itself. Google Play is deferred: if it is revisited, run the closed test (12 testers,
 14 days), apply for production, and add Play's signing-key fingerprint to
 `ANDROID_CERT_FINGERPRINTS`. Listing material is kept, git-ignored.
 

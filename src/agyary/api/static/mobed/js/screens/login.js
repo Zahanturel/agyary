@@ -20,6 +20,7 @@ import { chrome, mainEl, setHeader, showError } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
 import { navigate } from "../router.js";
 import { afterSignIn } from "../session.js";
+import { addGetApp } from "../install.js";
 
 let pollTimer = null;
 let otpCleanup = null;
@@ -97,6 +98,7 @@ function renderPhoneStep(prefill) {
         <a href="/privacy" target="_blank" rel="noopener">What we store</a>
       </p>
     </div>`;
+  addGetApp(mainEl);
   document.getElementById("lgOther").onclick = (e) => { e.preventDefault(); renderWaChoice(true); };
 
   // The bot check: each token is good for one request, so a new one is needed
@@ -280,6 +282,7 @@ function renderWaChoice(fromCodes = false) {
       </p>
       ${fromCodes ? `<p class="meta"><a href="#" id="lgBack">Sign in with my number instead</a></p>` : ""}
     </div>`;
+  addGetApp(mainEl);
 
   document.getElementById("waStart").onclick = startWaLogin;
   if (fromCodes) document.getElementById("lgBack").onclick = (e) => { e.preventDefault(); renderPhoneStep(); };

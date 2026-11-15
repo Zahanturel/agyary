@@ -25,8 +25,10 @@ they serve. It is a no-build PWA for the mobed, backed by a FastAPI service.
   [docs/reminders-plan.md](docs/reminders-plan.md).
 - **Your data.** A mobed can delete their account and everything in it from the
   menu; `/privacy` and `/delete-account` say what is kept and how.
-- **Android.** The PWA is ready to be wrapped for Google Play as a Trusted Web
-  Activity (`/.well-known/assetlinks.json`, PNG and maskable icons).
+- **Get the app.** The sign-in page offers it: Android phones download the
+  signed Trusted Web Activity APK from `/download/android` (it opens full screen
+  because `/.well-known/assetlinks.json` names its key); iPhones and iPads get
+  the Add to Home Screen steps. Not shown inside the installed app.
 
 ## Where to start
 

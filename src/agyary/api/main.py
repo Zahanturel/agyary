@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -204,8 +205,11 @@ def mobed_icon() -> FileResponse:
 
 # PNG icons for installing the app and for the Android (Trusted Web Activity)
 # build, which needs bitmaps; "maskable" keeps the emblem inside the circle
-# Android may crop it to.
-_PNG_ICONS = frozenset({"mobed-icon-192.png", "mobed-icon-512.png", "mobed-icon-maskable-512.png"})
+# Android may crop it to. The 180 is the iPhone's Home Screen icon: iOS paints
+# a transparent corner black, so that one is solid to the edge.
+_PNG_ICONS = frozenset({
+    "mobed-icon-180.png", "mobed-icon-192.png", "mobed-icon-512.png", "mobed-icon-maskable-512.png",
+})
 
 
 @app.get("/{name}.png", include_in_schema=False)
@@ -230,6 +234,42 @@ def asset_links() -> JSONResponse:
         "target": {"namespace": "android_app", "package_name": s.android_package_name,
                    "sha256_cert_fingerprints": prints},
     }])
+
+
+# The Android app itself, for "Download the app" on the sign-in page (Android phones).
+# It is the signed APK built outside the repo (see the README beside the upload
+# key), so it opens full-screen: asset links above name its key. Its address
+# carries a hash of the file, because Cloudflare keeps anything ending in .apk
+# at the edge: a new build under the old name would go on reaching phones for
+# hours. The page links to /download/android, which always points at this one.
+_APK = _STATIC_DIR / "android" / "mobed-diary.apk"
+_APK_TAG = hashlib.sha256(_APK.read_bytes()).hexdigest()[:12] if _APK.is_file() else None
+_APK_PATH = f"/download/mobed-diary-{_APK_TAG}.apk"
+
+
+def _to_current_apk() -> RedirectResponse:
+    if _APK_TAG is None:
+        raise HTTPException(status_code=404, detail="The Android app is not available here.")
+    # 307 and never stored: the next build moves it.
+    return RedirectResponse(_APK_PATH, status_code=307, headers={"Cache-Control": "no-store"})
+
+
+@app.api_route("/download/android", methods=["GET", "HEAD"], include_in_schema=False)
+def download_android() -> RedirectResponse:
+    return _to_current_apk()
+
+
+@app.api_route("/download/mobed-diary-{tag}.apk", methods=["GET", "HEAD"], include_in_schema=False)
+def download_android_apk(tag: str) -> Response:
+    if tag != _APK_TAG:
+        # An address saved from an earlier build: hand over the current one.
+        return _to_current_apk()
+    return FileResponse(
+        _APK,
+        media_type="application/vnd.android.package-archive",
+        filename="Mobed-Diary.apk",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 # Self-hosted Figtree (the text) and Geist Mono variable fonts (OFL-licensed, see static/fonts/LICENSE) -

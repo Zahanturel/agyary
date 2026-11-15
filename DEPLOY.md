@@ -1,8 +1,9 @@
 # Deploying the mobed PWA for an alpha test
 
 Goal: a real, always-on `https://` URL you can share with a handful of alpha
-mobeds, who install it by opening the link and tapping "Add to Home Screen" —
-no server for them to run, no app-store review, no APK.
+mobeds, who install it from the sign-in page: on Android, "Download the app"
+gets the signed APK straight from the site; on an iPhone, the card walks them
+through "Add to Home Screen". No server for them to run, no app-store review.
 
 This app is a persistent FastAPI process + Postgres (plus, once the
 WhatsApp/behdin side is unparked, background `asyncio` workers) — that rules
@@ -153,9 +154,12 @@ onboarding (name + phone), search/claim or create an agyari, book a machi,
 and view/print its slip, to confirm the whole path works from outside your
 own network before handing the link to anyone.
 
-Then share the link. Ask each alpha mobed to open it and tap their browser's
-"Add to Home Screen" — that's the entire install step; no app store, no
-sideloading, no APK.
+Then share the link. The "Get the app" card under the sign-in card is the
+install step: on Android it downloads the APK (`/download/android`, a Trusted
+Web Activity of the site, so updates need no new APK), and the phone asks the
+mobed to allow an app from outside the Play Store; on an iPhone or iPad it
+shows how to add the app to the Home Screen, since Apple allows no app from
+outside the App Store.
 
 ## Redeploying after a code change
 
