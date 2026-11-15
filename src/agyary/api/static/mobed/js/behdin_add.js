@@ -3,19 +3,18 @@
 /**
  * Adding a behdin, and reading one from the phone's own contacts.
  *
- * renderAddBehdin is the compact form the event and machi forms open when a
- * search finds nobody. pickContacts reads the device's contact list through
- * the Contact Picker API (Chrome on Android, so the Play Store app too), and
- * chooseFromContacts is the "Import from contacts" button on their first step.
- * Where the browser has no picker (an iPhone, a computer) the button is not
- * drawn: a web page has no other way to read the contact list there, and the
- * name and number are typed as before.
+ * "Import from contacts" belongs only where a name and number are asked
+ * for: this compact form (which the event and machi search opens when it
+ * finds nobody) and the full Add behdin page. pickContacts opens the
+ * device's contact list through the Contact Picker API (Chrome on Android,
+ * so the Play Store app too). Where the browser has none (an iPhone, a
+ * computer) the button is not drawn, and the name and number are typed.
  */
 
-import { createBehdin, listBehdins } from "./api.js";
+import { createBehdin } from "./api.js";
 import { state } from "./state.js";
 import { showError, showInfo } from "./ui.js";
-import { phoneField, readPhone, splitE164, esc } from "./util.js";
+import { phoneField, readPhone, setPhoneField, splitE164, esc } from "./util.js";
 
 const E164 = /^\+[1-9]\d{7,14}$/;
 const INDIAN_MOBILE = /^\+91[6-9]\d{9}$/;
@@ -53,61 +52,56 @@ export function canPickContacts() {
   return "contacts" in navigator && "ContactsManager" in window;
 }
 
+/** Nothing back sooner than this means the list never opened: a person takes
+ *  longer than a second to see it and back out of it. */
+export const TOO_QUICK_MS = 1000;
+
+export const CONTACTS_DID_NOT_OPEN =
+  "If your contact list did not open, Chrome may not be allowed to read contacts. " +
+  "On the phone, open Settings, then Apps, Chrome, Permissions, Contacts, and choose Allow. Then try again.";
+
 /**
- * Read contacts from the device and hand them back normalised, as
- * [{name, phone}]. Either may be "" when the contact has none; a caller
- * adding several at once skips those. Returns [] if the picker is
- * unavailable or the mobed cancelled, so "nothing to do" and "said no" are
- * the same to the caller.
+ * Open the phone's contact list and hand back what was picked, normalised,
+ * as [{name, phone}]. Either may be "" when the contact has none.
+ *
+ * It never fails silently. A web page cannot ask for the contacts
+ * permission itself: Chrome asks Android when the list is opened. So:
+ *   - the phone refusing to open the list rejects (MDN: InvalidStateError
+ *     "if launching a contact picker failed"), and that is said on screen
+ *     with the browser's own words, so the reason can be read off the phone;
+ *   - an empty answer is the mobed backing out - unless it came back at once,
+ *     which is the list never opening (Chrome without the permission), and
+ *     then where to allow it is said.
+ * Returns [] in all of those cases.
  */
 export async function pickContacts({ multiple = true } = {}) {
   if (!canPickContacts()) return [];
+  const asked = Date.now();
   let picked;
   try {
     picked = await navigator.contacts.select(["name", "tel"], { multiple });
   } catch (e) {
-    return [];   // cancelled
+    console.error("Contact picker refused:", e);
+    const why = [e && e.name, e && e.message].filter(Boolean).join(": ") || String(e);
+    showError(`Your contacts could not be opened (${why}). Please type the name and number instead.`);
+    return [];
   }
-  return (picked || []).map(c => ({
+  if (!picked || !picked.length) {
+    if (Date.now() - asked < TOO_QUICK_MS) showInfo(CONTACTS_DID_NOT_OPEN);
+    return [];
+  }
+  return picked.map(c => ({
     name: ((c.name && c.name[0]) || "").trim(),
     phone: bestNumber(c.tel),
   })).filter(c => c.name || c.phone);
 }
 
-/**
- * "Import from contacts" on the first step of a new event or machi. One
- * contact: if their number is already on file, they are the behdin and the
- * form moves on in the same tap. Someone new opens the add form in `panel`
- * filled in from the contact, because the name in an address book ("Zubin
- * Plumber", "Kaka") is seldom the one wanted on a slip, so it is shown for
- * checking before anybody is saved.
- *
- * Returns "chosen", "form", or null when nothing was picked.
- */
-export async function chooseFromContacts(panel, { onChosen, onCancel } = {}) {
-  const [contact] = await pickContacts({ multiple: false });
-  if (!contact) return null;
-  if (contact.phone) {
-    let onFile = [];
-    try {
-      onFile = await listBehdins(state.currentAgyaryId, contact.phone);
-    } catch (e) {
-      // Not found is not proven - the form below still links an existing
-      // number to its record when saved.
-    }
-    const match = onFile.find(m => m.phone === contact.phone);
-    if (match) {
-      // After the form has moved on, or redrawing it wipes the note - and
-      // the note matters: the name on file may not be the contact's.
-      await onChosen(match);
-      showInfo(`${match.name} is already on file.`);
-      return "chosen";
-    }
-  }
-  renderAddBehdin(panel, { prefill: contact, onCreated: onChosen, onCancel });
+/** One contact read into a name-and-number form, saying what it lacked. */
+export function fillFromContact(contact, { nameId, phoneId }) {
+  if (contact.name) document.getElementById(nameId).value = contact.name;
+  if (contact.phone) setPhoneField(phoneId, contact.phone);
   if (!contact.phone) showInfo("That contact has no phone number. Please type it in.");
   else if (!contact.name) showInfo("That contact has no name. Please type it in.");
-  return "form";
 }
 
 /**
@@ -122,6 +116,10 @@ export function renderAddBehdin(container, { onCreated, onCancel, prefill } = {}
   container.innerHTML = `
     <div class="card" style="margin-top:12px">
       <h2>New behdin</h2>
+      ${canPickContacts() ? `
+        <button class="secondary" id="abImport" style="margin-bottom:12px">
+          Import from contacts
+        </button>` : ""}
       <div id="abNameRow">
         <label for="abName">Name</label>
         <input type="text" id="abName" placeholder="e.g. Behdin Zubin Mistry"
@@ -137,12 +135,26 @@ export function renderAddBehdin(container, { onCreated, onCancel, prefill } = {}
 
   const nameEl = document.getElementById("abName");
   if (!pf.name) nameEl.focus();
-  else if (!pf.phone) document.getElementById("abPhone").focus();
 
   document.getElementById("abCancel").onclick = () => {
     container.innerHTML = "";
     if (onCancel) onCancel();
   };
+
+  if (canPickContacts()) {
+    document.getElementById("abImport").onclick = async () => {
+      // One contact: this form is for the one behdin being booked.
+      const [contact] = await pickContacts({ multiple: false });
+      if (!contact) return;
+      // A caller may hide the name row while its search box stands in for
+      // the name. The contact's own name is shown here, to be checked
+      // before saving - an address book's "Zubin Plumber" is seldom the
+      // name wanted on a slip.
+      const row = document.getElementById("abNameRow");
+      if (row && contact.name) row.style.display = "";
+      fillFromContact(contact, { nameId: "abName", phoneId: "abPhone" });
+    };
+  }
 
   const submit = async () => {
     const name = nameEl.value.trim();

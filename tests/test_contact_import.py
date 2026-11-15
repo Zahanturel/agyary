@@ -1,11 +1,17 @@
 """Import from contacts: the behdin's name and number read from the phone.
 
 behdin_add.js is run for real under Node with the Contact Picker, the server
-and as much of a page as it touches stubbed. What matters: an address book's
-numbers come out as the one shape the server stores (or the same person is
-saved twice, or as somebody in Iran), the mobile is taken over a landline,
-someone already on file is chosen in the same tap, and someone new is shown
-in the form for checking - never saved straight from the picker.
+and as much of a page as it touches stubbed. What matters:
+  - the button is only where a name and number are asked for (the compact
+    add form and the Add behdin page), never beside "+ Add a new behdin";
+  - the phone refusing to open its contacts is said on screen, with the
+    browser's own reason - for months a refusal was taken for a cancel and
+    the button "did nothing";
+  - an answer that comes back at once (the list never opened: Chrome is not
+    allowed to read contacts) says where to allow it, and a real back-out
+    says nothing;
+  - an address book's numbers come out as the one shape the server stores,
+    and the mobile is taken over a landline.
 Skipped where Node is not installed.
 """
 
@@ -24,7 +30,8 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="Node is not installed")
 
-# Just enough page for ui.js to load, and for renderAddBehdin to draw into.
+# Just enough page for ui.js to load, and for the add form to draw into.
+# `picker` decides what navigator.contacts.select does.
 PAGE = """
 const store = new Map();
 globalThis.localStorage = {
@@ -36,7 +43,7 @@ const banners = [];
 const element = () => ({
   value: "", innerHTML: "", style: {}, dataset: {}, classList: { toggle() {}, add() {}, remove() {} },
   focus() {}, remove() {}, scrollIntoView() {}, querySelectorAll: () => [],
-  prepend(el) { banners.push(el.textContent); },
+  prepend(el) { banners.push([el.className, el.textContent]); },
 });
 const elements = new Map();
 globalThis.document = {
@@ -50,16 +57,18 @@ globalThis.document = {
 globalThis.MutationObserver = class { observe() {} };
 globalThis.window = globalThis;
 window.ContactsManager = function ContactsManager() {};
-let picked = [];
-Object.defineProperty(navigator, "contacts", {
-  value: { select: async (props, opts) => { calls.select.push(opts); if (picked === "cancel") throw new Error("AbortError"); return picked; } },
-});
 const calls = { select: [], fetch: [] };
-let onFile = [];
+let picker = async () => [];
+Object.defineProperty(navigator, "contacts", {
+  configurable: true,
+  value: { select: (props, opts) => { calls.select.push({ props, opts }); return picker(); } },
+});
+const later = (ms, value) => new Promise(r => setTimeout(() => r(value), ms));
 globalThis.fetch = async (url, opts) => {
   calls.fetch.push({ url, method: (opts && opts.method) || "GET" });
-  return new Response(JSON.stringify(onFile), { status: 200 });
+  return new Response(JSON.stringify({}), { status: 200 });
 };
+console.error = () => {};
 """
 
 
@@ -103,94 +112,120 @@ console.log(JSON.stringify(Object.fromEntries(cases.map(c => [c, add.normalizeCo
 
 def test_the_mobile_is_taken_over_a_landline_listed_first():
     out = _run("""
-picked = [
+picker = async () => later(1200, [
   { name: ["Zubin Mistry"], tel: ["022 2345 6789", "98200 12345"] },
   { name: ["Farida Kaka"], tel: ["+44 20 7946 0958"] },
   { name: ["Only A Name"], tel: [] },
   { name: [], tel: ["99300 11223"] },
   { name: [], tel: ["12"] },
-];
-console.log(JSON.stringify(await add.pickContacts()));
+]);
+console.log(JSON.stringify({ picked: await add.pickContacts(), calls: calls.select, banners }));
 """)
-    assert out == [
+    assert out["picked"] == [
         {"name": "Zubin Mistry", "phone": "+919820012345"},
         {"name": "Farida Kaka", "phone": "+442079460958"},
         {"name": "Only A Name", "phone": ""},
         {"name": "", "phone": "+919930011223"},
     ]
+    assert out["calls"] == [{"props": ["name", "tel"], "opts": {"multiple": True}}]
+    assert out["banners"] == []
 
 
-def test_someone_already_on_file_is_chosen_in_the_same_tap():
+def test_the_phone_refusing_to_open_its_contacts_is_said_on_screen():
+    """MDN: select() rejects with InvalidStateError 'if launching a contact
+    picker failed'. That is the case the old code took for a cancel."""
     out = _run("""
-picked = [{ name: ["Zubin (plumber)"], tel: ["098200 12345"] }];
-onFile = [{ id: 9, name: "Zubin Jamshed Mistry", phone: "+9198200123456" },
-          { id: 7, name: "Zubin Mistry", phone: "+919820012345" }];
-const chosen = [];
-const panel = { innerHTML: "", querySelectorAll: () => [] };
-const result = await add.chooseFromContacts(panel, { onChosen: b => chosen.push(b) });
-console.log(JSON.stringify({ result, chosen, panel: panel.innerHTML, calls, banners }));
+picker = async () => { const e = new Error("Unable to open a contacts selector"); e.name = "InvalidStateError"; throw e; };
+console.log(JSON.stringify({ picked: await add.pickContacts({ multiple: false }), banners }));
 """)
-    assert out["result"] == "chosen"
-    assert out["chosen"] == [{"id": 7, "name": "Zubin Mistry", "phone": "+919820012345"}]
-    assert out["panel"] == ""
-    assert out["calls"]["select"] == [{"multiple": False}]
-    [lookup] = out["calls"]["fetch"]
-    assert lookup["method"] == "GET"
-    assert lookup["url"].endswith("/agyaries/3/behdins?q=%2B919820012345")
-    assert out["banners"] == ["Zubin Mistry is already on file."]
+    assert out["picked"] == []
+    assert out["banners"] == [[
+        "error-banner",
+        "Your contacts could not be opened (InvalidStateError: Unable to open a contacts selector). "
+        "Please type the name and number instead.",
+    ]]
 
 
-def test_someone_new_is_shown_for_checking_not_saved_from_the_picker():
+def test_nothing_back_at_once_says_where_to_allow_contacts():
     out = _run("""
-picked = [{ name: ["Zubin <Plumber>"], tel: ["98200 12345"] }];
-onFile = [{ id: 9, name: "A longer number", phone: "+9198200123456" }];
-const chosen = [];
-const panel = { innerHTML: "", querySelectorAll: () => [] };
-const result = await add.chooseFromContacts(panel, { onChosen: b => chosen.push(b) });
-console.log(JSON.stringify({ result, chosen, panel: panel.innerHTML, posts: calls.fetch.filter(f => f.method !== "GET") }));
+picker = async () => [];
+console.log(JSON.stringify({ picked: await add.pickContacts(), banners, hint: add.CONTACTS_DID_NOT_OPEN }));
 """)
-    assert out["result"] == "form"
-    assert out["chosen"] == [] and out["posts"] == []
-    assert 'value="Zubin &lt;Plumber&gt;"' in out["panel"]
-    assert 'value="9820012345"' in out["panel"] and 'value="91"' in out["panel"]
-    assert "Import from contacts" not in out["panel"]   # the button is the form's caller's
+    assert out["picked"] == []
+    assert out["banners"] == [["info-banner", out["hint"]]]
+    assert "Settings, then Apps, Chrome, Permissions, Contacts" in out["hint"]
 
 
-def test_a_contact_without_a_number_says_so():
+def test_backing_out_of_the_list_says_nothing():
     out = _run("""
-picked = [{ name: ["Farida Kaka"], tel: [] }];
-const panel = { innerHTML: "", querySelectorAll: () => [] };
-const result = await add.chooseFromContacts(panel, { onChosen: () => {} });
-console.log(JSON.stringify({ result, banners, fetches: calls.fetch.length, panel: panel.innerHTML }));
+picker = async () => later(add.TOO_QUICK_MS + 200, []);
+console.log(JSON.stringify({ picked: await add.pickContacts(), banners }));
 """)
-    assert out["result"] == "form" and out["fetches"] == 0
-    assert 'value="Farida Kaka"' in out["panel"]
-    assert out["banners"] == ["That contact has no phone number. Please type it in."]
-
-
-def test_a_cancelled_picker_changes_nothing():
-    out = _run("""
-picked = "cancel";
-const panel = { innerHTML: "", querySelectorAll: () => [] };
-const result = await add.chooseFromContacts(panel, { onChosen: () => { throw new Error("chose"); } });
-console.log(JSON.stringify({ result, panel: panel.innerHTML, fetches: calls.fetch.length }));
-""")
-    assert out == {"result": None, "panel": "", "fetches": 0}
+    assert out == {"picked": [], "banners": []}
 
 
 def test_without_a_picker_nothing_is_offered():
     out = _run("""
 delete window.ContactsManager;
-console.log(JSON.stringify({ can: add.canPickContacts(), picked: await add.pickContacts(), calls: calls.select.length }));
+const panel = { innerHTML: "", querySelectorAll: () => [] };
+add.renderAddBehdin(panel, {});
+console.log(JSON.stringify({ can: add.canPickContacts(), picked: await add.pickContacts(), calls: calls.select.length, form: panel.innerHTML }));
 """)
-    assert out == {"can": False, "picked": [], "calls": 0}
+    assert out["can"] is False and out["picked"] == [] and out["calls"] == 0
+    assert "Import from contacts" not in out["form"] and 'id="abName"' in out["form"]
+
+
+def test_the_add_form_imports_one_contact_and_shows_its_name():
+    """The event and machi search hide this form's name row (the search box
+    stands in for it); an imported name is shown, to be checked."""
+    out = _run("""
+const panel = { innerHTML: "", querySelectorAll: () => [] };
+add.renderAddBehdin(panel, { prefill: { name: "Zub" } });
+const button = panel.innerHTML.includes('id="abImport"');
+document.getElementById("abNameRow").style.display = "none";
+picker = async () => later(1200, [{ name: ["Zubin <Plumber>"], tel: ["098200-12345"] }]);
+await document.getElementById("abImport").onclick();
+const v = id => document.getElementById(id).value;
+console.log(JSON.stringify({
+  button, opts: calls.select.map(c => c.opts), row: document.getElementById("abNameRow").style.display,
+  name: v("abName"), cc: v("abPhone_cc"), phone: v("abPhone"), banners,
+  saved: calls.fetch.filter(f => f.method !== "GET").length,
+}));
+""")
+    assert out["button"] is True
+    assert out["opts"] == [{"multiple": False}]
+    assert out["row"] == ""
+    assert (out["name"], out["cc"], out["phone"]) == ("Zubin <Plumber>", "91", "9820012345")
+    assert out["banners"] == [] and out["saved"] == 0   # filled for checking, never saved by the pick
+
+
+def test_a_contact_without_a_number_says_so_and_keeps_what_was_typed():
+    out = _run("""
+const panel = { innerHTML: "", querySelectorAll: () => [] };
+add.renderAddBehdin(panel, {});
+document.getElementById("abPhone").value = "98765";
+picker = async () => later(1200, [{ name: ["Farida Kaka"], tel: [] }]);
+await document.getElementById("abImport").onclick();
+console.log(JSON.stringify({ name: document.getElementById("abName").value, phone: document.getElementById("abPhone").value, banners }));
+""")
+    assert out["name"] == "Farida Kaka" and out["phone"] == "98765"
+    assert out["banners"] == [["info-banner", "That contact has no phone number. Please type it in."]]
 
 
 @pytest.mark.parametrize("screen", ["event.js", "machi_event.js"])
-def test_the_first_step_of_both_forms_offers_it(screen):
-    """The button sits on the first step itself, beside "+ Add a new behdin",
-    and only where the phone has a picker."""
+def test_the_first_step_of_both_forms_has_only_add_a_new_behdin(screen):
+    """Import from contacts is not beside "+ Add a new behdin": it is inside
+    what that button (or a search that finds nobody) leads to."""
     src = (JS / "screens" / screen).read_text(encoding="utf-8")
-    assert '${canPickContacts() ? `<button class="secondary small" id="bhContacts">Import from contacts</button>` : ""}' in src
-    assert src.index('id="bhNew"') < src.index('id="bhContacts"') < src.index('id="bhNewPanel"')
-    assert "chooseFromContacts(panel, {" in src
+    assert 'id="bhNew">+ Add a new behdin</button>' in src
+    assert "Import from contacts" not in src and "canPickContacts" not in src and "pickContacts" not in src
+    assert 'navigate("#/behdins/new")' in src and "renderAddBehdin(panel, {" in src
+
+
+def test_the_add_behdin_page_offers_it_one_at_a_time_when_booking():
+    src = (JS / "screens" / "behdins.js").read_text(encoding="utf-8")
+    page = src[src.index("function buildBehdinNew"):src.index("export async function renderBehdinDetail")]
+    assert "${canPickContacts() ? `" in page and 'id="bnImport"' in page
+    assert page.index('id="bnImport"') < page.index('id="bnName"')
+    assert "pickContacts({ multiple: !returnTo })" in page
+    assert 'fillFromContact(picked[0], { nameId: "bnName", phoneId: "bnPhone" })' in page

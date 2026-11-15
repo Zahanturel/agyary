@@ -14,7 +14,7 @@ import {
   machiDetail,
 } from "../api.js";
 import { state, primarySystem, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
-import { renderAddBehdin, canPickContacts, chooseFromContacts } from "../behdin_add.js";
+import { renderAddBehdin } from "../behdin_add.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
 import { setRepeat, repeatCountHtml, wireRepeatCount, repeatCountProblem } from "../repeat.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
@@ -234,9 +234,8 @@ async function render(draft) {
         </div>` : `
         <input type="text" id="bhSearch" placeholder="Search by name or phone" autocomplete="off">
         <div id="bhResults" style="margin-top:4px"></div>
-        <div class="row tight wrap" style="margin-top:8px">
+        <div style="margin-top:8px">
           <button class="secondary small" id="bhNew">+ Add a new behdin</button>
-          ${canPickContacts() ? `<button class="secondary small" id="bhContacts">Import from contacts</button>` : ""}
         </div>
         <div id="bhNewPanel"></div>`}`)}
 
@@ -428,18 +427,6 @@ function wireSearch(draft) {
 
   const closeAdd = () => { panel.innerHTML = ""; showNewBtn(true); };
 
-  // The behdin straight from the phone's contacts - as on the event form.
-  const fromContacts = document.getElementById("bhContacts");
-  if (fromContacts) fromContacts.onclick = async () => {
-    clearTimeout(timer);
-    token++;
-    const shown = await chooseFromContacts(panel, {
-      onChosen: (b) => choose(draft, b),
-      onCancel: () => { showNewBtn(true); input.focus(); },
-    });
-    if (shown === "form") { input.value = ""; results.innerHTML = ""; showNewBtn(false); }
-  };
-
   input.oninput = () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
@@ -477,7 +464,7 @@ function choose(draft, match) {
   draft.behdin = { id, name: match.name, phone: match.phone };
   draft.names = null;   // a different behdin has different saved names
   if (!draft.edit) draft.step = 2;
-  return render(draft);
+  return render(draft);   // awaited by the add form, so its note follows the redraw
 }
 
 // ---------------------------------------------------------------------------

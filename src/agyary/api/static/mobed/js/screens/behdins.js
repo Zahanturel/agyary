@@ -21,13 +21,13 @@ import {
   getSavedNames, putSavedNames, listMemorials,
 } from "../api.js";
 import { state } from "../state.js";
-import { canPickContacts, pickContacts } from "../behdin_add.js";
+import { canPickContacts, pickContacts, fillFromContact } from "../behdin_add.js";
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, flashInfo, flashError,
   refreshHeader, loading, backBar, loadFailedHtml, wireRetry,
 } from "../ui.js";
-import { esc, gregShort, phoneField, readPhone, setPhoneField } from "../util.js";
+import { esc, gregShort, phoneField, readPhone } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { openDeleteBox, deleteResultText } from "../behdin_delete.js";
@@ -255,17 +255,17 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
   if (canPickContacts()) {
     document.getElementById("bnImport").onclick = async () => {
       const btn = document.getElementById("bnImport");
-      const picked = await pickContacts();
+      // Come from an event or machi, this page is for the ONE behdin being
+      // booked, and goes back with them chosen: one contact only. From the
+      // Behdins tab, several at once is a bulk import.
+      const picked = await pickContacts({ multiple: !returnTo });
       if (!picked.length) return;
 
       // One contact fills the form so the saved names below can be added in
       // the same pass. Several is a different intent - a bulk import - and
       // saved names make no sense per-person there.
       if (picked.length === 1) {
-        const [c] = picked;
-        if (c.name) document.getElementById("bnName").value = c.name;
-        if (c.phone) setPhoneField("bnPhone", c.phone);
-        else showInfo("That contact has no phone number. Please type it in.");
+        fillFromContact(picked[0], { nameId: "bnName", phoneId: "bnPhone" });
         keep();
         return;
       }
@@ -286,7 +286,8 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
       if (added) said.push(`${added} behdin${added > 1 ? "s" : ""} added`);
       if (onFile) said.push(`${onFile} already on file`);
       if (failed) said.push(`${failed} could not be added (no name or a number that is not valid)`);
-      showInfo(said.join(", "));
+      // Shown once the list has drawn: said here, going back wiped it.
+      flashInfo(said.join(", "));
       // A batch has no single behdin to hand back to the event - land on
       // the same place either way, and the event flow's search will find
       // whichever of these he needs.
