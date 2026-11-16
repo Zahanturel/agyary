@@ -52,44 +52,39 @@ export function canPickContacts() {
   return "contacts" in navigator && "ContactsManager" in window;
 }
 
-/** Nothing back sooner than this means the list never opened: a person takes
- *  longer than a second to see it and back out of it. */
-export const TOO_QUICK_MS = 1000;
-
-export const CONTACTS_DID_NOT_OPEN =
-  "If your contact list did not open, Chrome may not be allowed to read contacts. " +
-  "On the phone, open Settings, then Apps, Chrome, Permissions, Contacts, and choose Allow. Then try again.";
+export const BROWSER_CANNOT_OPEN_CONTACTS =
+  "This browser can't open your contacts. Please use Chrome: make it your phone's default " +
+  "browser and allow it Contacts (Settings, Apps, Chrome, Permissions). Until then, type the name and number.";
 
 /**
  * Open the phone's contact list and hand back what was picked, normalised,
- * as [{name, phone}]. Either may be "" when the contact has none.
+ * as [{name, phone}]. Either may be "" when the contact has none. An empty
+ * answer is the mobed backing out, and says nothing.
  *
- * It never fails silently. A web page cannot ask for the contacts
- * permission itself: Chrome asks Android when the list is opened. So:
- *   - the phone refusing to open the list rejects (MDN: InvalidStateError
- *     "if launching a contact picker failed"), and that is said on screen
- *     with the browser's own words, so the reason can be read off the phone;
- *   - an empty answer is the mobed backing out - unless it came back at once,
- *     which is the list never opening (Chrome without the permission), and
- *     then where to allow it is said.
- * Returns [] in all of those cases.
+ * A refusal is never silent. "TypeError: Unable to open a contact selector"
+ * is the browser itself saying it could not open its picker (Chromium raises
+ * it only then): a browser that exposes the API with no picker behind it -
+ * Brave, on the owner's phone, 15 Nov 2026 - or Chrome not allowed to read
+ * contacts. The Play Store app runs inside the phone's default browser, so
+ * the fix is Chrome, and the message says how. Anything else is said in the
+ * browser's own words, so the reason can be read off the phone.
  */
 export async function pickContacts({ multiple = true } = {}) {
   if (!canPickContacts()) return [];
-  const asked = Date.now();
   let picked;
   try {
     picked = await navigator.contacts.select(["name", "tel"], { multiple });
   } catch (e) {
     console.error("Contact picker refused:", e);
-    const why = [e && e.name, e && e.message].filter(Boolean).join(": ") || String(e);
-    showError(`Your contacts could not be opened (${why}). Please type the name and number instead.`);
+    if (e && e.name === "TypeError") {
+      showError(BROWSER_CANNOT_OPEN_CONTACTS);
+    } else {
+      const why = [e && e.name, e && e.message].filter(Boolean).join(": ") || String(e);
+      showError(`Your contacts could not be opened (${why}). Please type the name and number instead.`);
+    }
     return [];
   }
-  if (!picked || !picked.length) {
-    if (Date.now() - asked < TOO_QUICK_MS) showInfo(CONTACTS_DID_NOT_OPEN);
-    return [];
-  }
+  if (!picked || !picked.length) return [];
   return picked.map(c => ({
     name: ((c.name && c.name[0]) || "").trim(),
     phone: bestNumber(c.tel),

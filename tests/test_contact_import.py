@@ -4,12 +4,10 @@ behdin_add.js is run for real under Node with the Contact Picker, the server
 and as much of a page as it touches stubbed. What matters:
   - the button is only where a name and number are asked for (the compact
     add form and the Add behdin page), never beside "+ Add a new behdin";
-  - the phone refusing to open its contacts is said on screen, with the
-    browser's own reason - for months a refusal was taken for a cancel and
-    the button "did nothing";
-  - an answer that comes back at once (the list never opened: Chrome is not
-    allowed to read contacts) says where to allow it, and a real back-out
-    says nothing;
+  - a browser that cannot open its contacts (Brave on the owner's phone)
+    is told to use Chrome; any other refusal is said in the browser's own
+    words - for months a refusal was taken for a cancel and the button "did
+    nothing"; a real back-out says nothing;
   - an address book's numbers come out as the one shape the server stores,
     and the mobile is taken over a landline.
 Skipped where Node is not installed.
@@ -131,34 +129,38 @@ console.log(JSON.stringify({ picked: await add.pickContacts(), calls: calls.sele
     assert out["banners"] == []
 
 
-def test_the_phone_refusing_to_open_its_contacts_is_said_on_screen():
-    """MDN: select() rejects with InvalidStateError 'if launching a contact
-    picker failed'. That is the case the old code took for a cancel."""
+def test_a_browser_that_cannot_open_contacts_points_to_chrome():
+    """The exact rejection Brave gave on the owner's phone (15 Nov 2026).
+    Chromium raises it only when the browser cannot open its picker - no
+    picker at all, or Chrome not allowed to read contacts."""
     out = _run("""
-picker = async () => { const e = new Error("Unable to open a contacts selector"); e.name = "InvalidStateError"; throw e; };
-console.log(JSON.stringify({ picked: await add.pickContacts({ multiple: false }), banners }));
+picker = async () => { throw new TypeError("Unable to open a contact selector"); };
+console.log(JSON.stringify({ picked: await add.pickContacts({ multiple: false }), banners, says: add.BROWSER_CANNOT_OPEN_CONTACTS }));
+""")
+    assert out["picked"] == []
+    assert out["banners"] == [["error-banner", out["says"]]]
+    assert out["says"].startswith("This browser can't open your contacts. Please use Chrome")
+    assert "default browser" in out["says"] and "Settings, Apps, Chrome, Permissions" in out["says"]
+
+
+def test_any_other_refusal_is_said_in_the_browsers_own_words():
+    """MDN: InvalidStateError for a picker already open, SecurityError without
+    a tap. Never taken for a cancel, as the first version did."""
+    out = _run("""
+picker = async () => { throw new DOMException("Contacts Picker is already in use.", "InvalidStateError"); };
+console.log(JSON.stringify({ picked: await add.pickContacts(), banners }));
 """)
     assert out["picked"] == []
     assert out["banners"] == [[
         "error-banner",
-        "Your contacts could not be opened (InvalidStateError: Unable to open a contacts selector). "
+        "Your contacts could not be opened (InvalidStateError: Contacts Picker is already in use.). "
         "Please type the name and number instead.",
     ]]
 
 
-def test_nothing_back_at_once_says_where_to_allow_contacts():
-    out = _run("""
-picker = async () => [];
-console.log(JSON.stringify({ picked: await add.pickContacts(), banners, hint: add.CONTACTS_DID_NOT_OPEN }));
-""")
-    assert out["picked"] == []
-    assert out["banners"] == [["info-banner", out["hint"]]]
-    assert "Settings, then Apps, Chrome, Permissions, Contacts" in out["hint"]
-
-
 def test_backing_out_of_the_list_says_nothing():
     out = _run("""
-picker = async () => later(add.TOO_QUICK_MS + 200, []);
+picker = async () => [];
 console.log(JSON.stringify({ picked: await add.pickContacts(), banners }));
 """)
     assert out == {"picked": [], "banners": []}
