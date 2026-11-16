@@ -311,11 +311,14 @@ async def set_observance_paid(
 
 class UpdateObservanceIn(BaseModel):
     """Change one observance. Left out means unchanged; ``time`` and
-    ``notes`` as an empty string mean clear it."""
+    ``notes`` as an empty string mean clear it. ``date`` moves it to another
+    day; ``back_to_usual_day`` puts it back where its schedule has it."""
 
     service_ids: list[int] | None = None
     time: str | None = None
     notes: str | None = None
+    move_to: date | None = None
+    back_to_usual_day: bool = False
 
 
 def _parse_time(value: str) -> time:
@@ -347,6 +350,8 @@ async def update_observance(
             clear_time=payload.time == "",
             notes=payload.notes,
             clear_notes=payload.notes == "",
+            new_date=payload.move_to,
+            back_to_usual=payload.back_to_usual_day,
         )
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc
@@ -355,6 +360,93 @@ async def update_observance(
     fresh = await memorials.get_for_user(db, user.id, memorial_id)
     done = next(o for o in fresh.observances if o.id == observance_id)
     return memorials.serialize_observance(done, names)
+
+
+@router.delete("/agyaries/{agyary_id}/memorials/{memorial_id}/observances/{observance_id}")
+async def remove_observance(
+    agyary_id: int,
+    memorial_id: int,
+    observance_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Take one date out of a memorial. It stays out when the memorial is edited
+    later, unless it is put back there. The memorial's only date cannot go: that
+    is deleting the memorial."""
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    observance = next((o for o in memorial.observances if o.id == observance_id), None)
+    if observance is None:
+        raise HTTPException(status_code=404, detail="That prayer day could not be found.")
+    try:
+        await memorials.remove_observance(db, memorial, observance)
+    except memorials.MemorialError as exc:
+        raise _bad_request(exc) from exc
+    await db.commit()
+    fresh = await memorials.get_for_user(db, user.id, memorial_id)
+    return (await memorials.summaries(db, agyary_id, [fresh], detailed=True))[0]
+
+
+class EditMemorialIn(MemorialIn):
+    # The prayers a date added by the change starts with.
+    service_ids: list[int]
+    # Dates taken out on the review screen, and dates taken out earlier that
+    # are put back (by code).
+    exclude_codes: list[str] = []
+    restore_codes: list[str] = []
+    # Prayers changed for single dates on the review screen: code -> service ids.
+    service_overrides: dict[str, list[int]] = {}
+
+
+@router.get("/agyaries/{agyary_id}/memorials/{memorial_id}/edit")
+async def memorial_edit_form(
+    agyary_id: int,
+    memorial_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """The memorial's choices as the form shows them, to be changed."""
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    return memorials.edit_form(memorial)
+
+
+@router.post("/agyaries/{agyary_id}/memorials/{memorial_id}/edit/preview")
+async def preview_memorial_edit(
+    agyary_id: int,
+    memorial_id: int,
+    payload: MemorialIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """What the changed choices would do to each date - kept, moved, new or
+    taken off - with nothing saved."""
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    try:
+        return await memorials.preview_edit(db, user.id, memorial, _choice(payload))
+    except memorials.MemorialError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.put("/agyaries/{agyary_id}/memorials/{memorial_id}")
+async def edit_memorial(
+    agyary_id: int,
+    memorial_id: int,
+    payload: EditMemorialIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Save changed choices: every date is counted again from the death, and
+    what was set on each date that is still there carries over."""
+    memorial = await _own_memorial(db, agyary_id, memorial_id, user)
+    try:
+        await memorials.edit_memorial(
+            db, user.id, memorial, _choice(payload), payload.service_ids,
+            tuple(payload.exclude_codes), tuple(payload.restore_codes), payload.service_overrides,
+        )
+    except memorials.MemorialError as exc:
+        raise _bad_request(exc) from exc
+    await db.commit()
+    fresh = await memorials.get_for_user(db, user.id, memorial_id)
+    return (await memorials.summaries(db, agyary_id, [fresh], detailed=True))[0]
 
 
 @router.delete("/agyaries/{agyary_id}/memorials/{memorial_id}")

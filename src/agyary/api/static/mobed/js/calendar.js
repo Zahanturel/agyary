@@ -15,7 +15,7 @@ import { parsiMonth as fetchParsiMonth, convertDate } from "./api.js";
 import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
 import { navigate } from "./router.js";
 import { payChipHtml, flipPaidChip } from "./paid_chip.js";
-import { loadFailedHtml, wireRetry } from "./ui.js";
+import { loadFailedHtml, wireRetry, showError, showInfo } from "./ui.js";
 import {
   esc, todayIst, shiftYmd, gregLabel, gregShort,
   parsiLabel, stepParsiMonth, monthYearLabel,
@@ -189,7 +189,40 @@ function itemCardHtml(it) {
       <div class="s">${esc(it.sublabel || "")}</div>
     </div>${it.paid === undefined ? "" : payChipHtml(it.kind, it.id, it.paid)}</div>
     ${it.tags ? `<div class="meta">${it.tags}</div>` : ""}
+    ${it.kind === "memorial" ? `<div class="ev-actions">
+      <button type="button" class="ghost small" data-ev-edit aria-label="Edit ${esc(it.label)}">Edit</button>
+      <button type="button" class="ghost small ev-remove" data-ev-remove aria-label="Remove ${esc(it.label)}">Remove</button>
+    </div><div class="ev-confirm"></div>` : ""}
   </div>`;
+}
+
+/** "Remove this date?" in place on a memorial date in the day list; a yes takes
+ *  it out of its memorial (opts.onRemove) and redraws the day. */
+function confirmRemove(card, kind, id, opts) {
+  const box = card.querySelector(".ev-confirm");
+  if (!box || box.innerHTML) return;
+  const label = card.querySelector(".t").textContent;
+  box.innerHTML = `<div class="row-confirm row-pending" style="margin-top:8px;flex-wrap:wrap">
+    <span>Remove ${esc(label)} from its memorial? It stays off if the memorial is edited later.</span>
+    <span class="row"><button type="button" class="ghost small" data-ev-keep>Keep</button>
+    <button type="button" class="danger small" data-ev-yes>Remove</button></span></div>`;
+  // Neither tap may reach the card, which would open the memorial (Keep empties
+  // the box, so by then the card can no longer tell where the tap came from).
+  box.querySelector("[data-ev-keep]").onclick = (e) => { e.stopPropagation(); box.innerHTML = ""; };
+  box.querySelector("[data-ev-yes]").onclick = async (e) => {
+    e.stopPropagation();
+    const yes = e.currentTarget;
+    yes.disabled = true;
+    try {
+      if (!opts.onRemove) throw new Error("Open the memorial to remove this date.");
+      await opts.onRemove(kind, id);
+    } catch (err) {
+      yes.disabled = false;
+      return showError("Couldn't remove it: " + err.message);
+    }
+    showInfo(`${label} was removed from its memorial.`);
+    if (opts.rerender) opts.rerender();
+  };
 }
 
 /** Day view: this mobed's own events for the day, in time order.
@@ -348,6 +381,10 @@ function wireChrome(container, view, system, opts) {
         return flipPaidChip(chip, opts.onPay && ((paid) => opts.onPay(k, Number(i), paid)));
       }
       const [kind, id] = el.dataset.calItem.split(":");
+      // A memorial date's Remove asks first, in place; its own buttons do the rest.
+      if (e.target.closest("[data-ev-remove]")) return confirmRemove(el, kind, Number(id), opts);
+      if (e.target.closest(".ev-confirm") || !el.contains(e.target)) return;
+      // The card itself, or its Edit button, opens it.
       opts.onItem && opts.onItem(kind, Number(id));
     };
   });

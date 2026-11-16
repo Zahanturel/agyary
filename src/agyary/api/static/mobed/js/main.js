@@ -29,6 +29,7 @@ import { renderMachiCalendarScreen } from "./screens/machi_calendar.js";
 import { renderBehdinList, renderBehdinNew, renderBehdinDetail } from "./screens/behdins.js";
 import { renderMemorialNew } from "./screens/memorial_new.js";
 import { renderMemorial } from "./screens/memorial.js";
+import { renderMemorialEdit } from "./screens/memorial_edit.js";
 import { renderReminders } from "./screens/reminders.js";
 import { renderAdmin } from "./screens/admin.js";
 import { renderMenu } from "./screens/menu.js";
@@ -81,6 +82,8 @@ route("#/behdins/:id/memorials/new", renderMemorialNew, { parent: (p) => `#/behd
 // The mobed's own families to remind, from the Behdins tab.
 route("#/reminders", renderReminders, { parent: "#/behdins", tab: "behdins" });
 route("#/memorial/:id", renderMemorial, { parent: "#/behdins", tab: "behdins" });
+// Before :oid, which would otherwise read "edit" as an observance.
+route("#/memorial/:id/edit", renderMemorialEdit, { parent: (p) => `#/memorial/${p.id}`, tab: "behdins" });
 // Opened from the calendar on one observance's day, landing on that observance.
 route("#/memorial/:id/:oid", renderMemorial, { parent: "#/behdins", tab: "behdins" });
 

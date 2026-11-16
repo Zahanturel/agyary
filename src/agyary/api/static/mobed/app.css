@@ -485,6 +485,18 @@ body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bot
   background: var(--accent-text); color: #fff; padding: 1px var(--space-2); border-radius: var(--radius-pill); }
 .obs.focus { background: var(--primary-tint); border-color: var(--primary); }
 .obs .obs-edit { margin-top: var(--space-3); }
+/* Each date's own Edit button (it opens the same editor as tapping the row). */
+.obs .obs-head .obs-edit-btn { flex: 0 0 auto; min-height: 36px; padding: 4px 14px; color: var(--primary);
+  border-color: var(--primary); font-weight: 700; }
+/* What an edit of the whole memorial does to a date, on its review. */
+.obs .obs-title .obs-change { display: block; margin-top: 2px; font-weight: 700; }
+.obs .obs-title .obs-change.new { color: var(--success); }
+.obs .obs-title .obs-change.moved { color: var(--accent-text); }
+.obs .obs-title .obs-change.kept { color: var(--primary); }
+/* Edit and Remove on a memorial date in the calendar's day list. */
+.event .ev-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); flex-wrap: wrap; }
+.event .ev-actions button { min-height: 36px; padding: 4px 14px; }
+.event .ev-actions .ev-remove { color: var(--danger-600); border-color: var(--danger-600); }
 .progress { height: 10px; background: var(--ink-100); border-radius: var(--radius-pill); overflow: hidden; margin-top: var(--space-2); }
 .progress > div { height: 100%; background: var(--success); }
 

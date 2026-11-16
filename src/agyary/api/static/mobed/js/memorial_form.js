@@ -53,10 +53,16 @@ export function blankMemorialDraft() {
     // Where the schedule starts: the whole of it from the death, or only what is
     // still ahead from today (a family arriving late). Counting is from the death either way.
     startFrom: "death",
+    // The day the schedule books from when it does not start at the death: today
+    // for a new memorial, the day it was kept from for one being edited.
+    startDate: "",
     deathBy: "date", deathRoj: "", deathMah: "",
     monthly: false, months: "", yearly: false, years: "",
     fravRoj: false, fravRojMonths: "",
     fiveToNine: false,   // the 5th to 9th days, before the Dasmi
+    // Days 1 to 10: no longer offered, but a memorial saved with them keeps them
+    // when it is edited (only shown then).
+    oneToTen: false,
     parab: false, parabWhich: null, parabCount: "",
     // The deceased's birthday: a date fills in its Roj and Mah, or give Roj and Mah.
     birthday: false, birthDate: "", birthRoj: "", birthMah: "", birthYears: "",
@@ -96,14 +102,14 @@ export function buildMemorialBody(draft) {
     death_year: null,
     long_ago: longAgo,
     calendar: draft.calendar,
-    opening: !longAgo && draft.fiveToNine ? "days_5_to_9" : "none",
-    start_from: !longAgo && draft.startFrom === "today" ? todayIst() : null,
+    opening: longAgo ? "none" : draft.oneToTen ? "days_1_to_10" : draft.fiveToNine ? "days_5_to_9" : "none",
+    start_from: !longAgo && draft.startFrom === "today" ? (draft.startDate || todayIst()) : null,
     day_counts: longAgo ? [] : draft.days.slice().sort((a, b) => a - b),
     monthly: null, yearly: null, fravardin_roj: null, parabs: null, birthday: null,
     service_ids: draft.services,
   };
   if (!draft.services.length) bad("#mmServices", "Choose at least one prayer.");
-  const picksDay = !longAgo && (draft.days.length || draft.fiveToNine);
+  const picksDay = !longAgo && (draft.days.length || draft.fiveToNine || draft.oneToTen);
   if (!picksDay && !draft.monthly && !draft.yearly && !draft.fravRoj && !draft.parab && !draft.birthday) {
     bad("#mmSchedule", longAgo
       ? "Choose what repeats: the monthly or yearly prayers, Roj Fravardin, the Parabs or the birthday."
@@ -173,8 +179,12 @@ function quickYears(inputId, perYear) {
 }
 
 /** The form: who and when, then one card holding every option. `heading` goes
- *  at the top of the first card; `intro` is a line under it. */
-export function memorialFormHtml(draft, services, { heading = "", intro = "" } = {}) {
+ *  at the top of the first card; `intro` is a line under it. `editing` is set
+ *  when a saved memorial is being changed: the start is the day it was kept
+ *  from, and the old "Days 1 to 10" is offered if it was saved with them
+ *  (`editing.oneToTen`). */
+export function memorialFormHtml(draft, services, { heading = "", intro = "", editing = null } = {}) {
+  const startDate = draft.startDate || todayIst();
   const has = (n) => draft.days.includes(n);
   const radio = (name, id, value, checked, text) =>
     `<div class="check-row"><input type="radio" name="${name}" id="${id}" value="${value}" ${checked ? "checked" : ""}>
@@ -229,11 +239,12 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
         <label>Schedule from</label>
         <div class="choice-group">
           ${radio("mmStart", "mmStartDeath", "death", draft.startFrom !== "today", "The day of death (the whole schedule)")}
-          ${radio("mmStart", "mmStartToday", "today", draft.startFrom === "today", "Today (only what is still ahead)")}
+          ${radio("mmStart", "mmStartToday", "today", draft.startFrom === "today", editing
+            ? `${esc(gregLabel(startDate))} (only what was still ahead then)` : "Today (only what is still ahead)")}
         </div>
         <div id="mmStartTodayBox" style="${draft.startFrom === "today" ? "" : "display:none"}">
-          <label for="mmStartDate">Today</label>
-          <input type="date" id="mmStartDate" value="${todayIst()}" disabled>
+          <label for="mmStartDate">${editing ? "From" : "Today"}</label>
+          <input type="date" id="mmStartDate" value="${esc(startDate)}" disabled>
           <p class="meta" id="mmStartParsi" style="margin:6px 0 0"></p>
           <p class="meta" style="margin:6px 0 0">Still counted from the death. Days that have already passed are left
             out, and months, years, Parabs and birthdays run from the next date that is still to come.</p>
@@ -245,18 +256,20 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
       <div class="card mstep" data-mstep="3">
         <h2>Observances</h2>
 
-        <div class="names-group-label"><b>Prayers</b><span>on every day</span></div>
+        <div class="names-group-label"><b>Prayers</b><span>${editing ? "on each date this change adds" : "on every day"}</span></div>
         <div class="chip-row" id="mmServices">${services.map(s =>
           serviceToggleHtml(s.id, s.name, draft.services.includes(s.id))).join("")}
         </div>
         <p class="meta" style="margin:6px 0 0">Tap a prayer to turn it on or off. Jashan goes on the monthly and
-          yearly days only; any day can be changed afterwards.</p>
+          yearly days only; any day can be changed afterwards.${editing ? " Dates already on file keep their own prayers." : ""}</p>
 
         <div class="names-group-label"><b>Named days</b></div>
         <div id="mmSchedule">
         <div class="check-row"><input type="checkbox" id="mmDaysAll">
           <label for="mmDaysAll"><b>Select all</b></label></div>
-        <div class="choice-group">
+        <div class="choice-group">${editing && editing.oneToTen ? `
+          <div class="check-row"><input type="checkbox" id="mmOneToTen" ${draft.oneToTen ? "checked" : ""}>
+            <label for="mmOneToTen">Days 1 to 10 <span class="meta">(as first saved)</span></label></div>` : ""}
           <div class="check-row"><input type="checkbox" id="mmFiveToNine" ${draft.fiveToNine ? "checked" : ""}>
             <label for="mmFiveToNine">5th to 9th days<span class="ptag"></span></label></div>${NAMED_DAYS.map(([n, name]) => `
           <div class="check-row"><input type="checkbox" data-day="${n}" id="mmDay${n}" ${has(n) ? "checked" : ""}>
@@ -313,8 +326,10 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "" } =
 }
 
 /** Hook the form's controls up to `draft`. `root` is the element holding the
- *  form's HTML. */
-export function wireMemorialForm(root, draft, onChange) {
+ *  form's HTML. With `editing`, a day that has passed stays tickable: changing
+ *  a saved memorial counts every date again, past ones included, and a passed
+ *  day the family kept must not be dropped by being greyed out. */
+export function wireMemorialForm(root, draft, onChange, { editing = null } = {}) {
   const $ = (sel) => root.querySelector(sel);
   // Anything the mobed touches updates `draft` first (below), then bubbles
   // here, so the caller can keep a copy of the draft that outlives this screen.
@@ -341,10 +356,10 @@ export function wireMemorialForm(root, draft, onChange) {
     for (const [key, sel] of FIRST_YEAR_BOXES) {
       const box = $(sel);
       const gone = !!passed[key];
-      box.disabled = gone;
-      box.closest(".check-row").classList.toggle("is-passed", gone);
+      box.disabled = gone && !editing;
+      box.closest(".check-row").classList.toggle("is-passed", gone && !editing);
       box.closest(".check-row").querySelector(".ptag").textContent = gone ? " - already passed" : "";
-      if (gone && box.checked) {
+      if (gone && !editing && box.checked) {
         changed = true;
         box.checked = false;
         if (key === "5_to_9") draft.fiveToNine = false;
@@ -409,7 +424,7 @@ export function wireMemorialForm(root, draft, onChange) {
   };
   const readStart = async () => {
     const note = $("#mmStartParsi");
-    const label = await parsiLabel(todayIst(), draft.calendar);
+    const label = await parsiLabel(draft.startDate || todayIst(), draft.calendar);
     if (note.isConnected) note.textContent = label;
   };
   readStart();
@@ -436,6 +451,7 @@ export function wireMemorialForm(root, draft, onChange) {
     };
   });
   $("#mmFiveToNine").onchange = (e) => { draft.fiveToNine = e.target.checked; syncAll(); };
+  if ($("#mmOneToTen")) $("#mmOneToTen").onchange = (e) => { draft.oneToTen = e.target.checked; };
   // "Select all" ticks the 5th to 9th days and every named day, or clears them.
   $("#mmDaysAll").onchange = (e) => {
     // Only the days still ahead: a day that has passed stays as it is.
@@ -525,6 +541,12 @@ function defaultPicks(body, services, o) {
   return new Set(chosen.filter(s => !isJashan(s) || o.anniversary).map(s => s.id));
 }
 
+/** The prayers a date shows first on the review: its own, for a date already on
+ *  file (when a memorial is edited), else the ones chosen on the form. */
+function startPicks(body, services, o) {
+  return o.service_ids ? new Set(o.service_ids) : defaultPicks(body, services, o);
+}
+
 function summaryText(services, ids) {
   const names = services.filter(s => ids.has(s.id)).map(s => s.name);
   return names.length ? names.join(", ") : "No prayer chosen";
@@ -536,7 +558,7 @@ export function reviewPayload(body, preview, services, review) {
   for (const o of preview.observances) {
     if (review.removed.has(o.code)) continue;
     const have = review.picks.get(o.code);
-    const start = defaultPicks(body, services, o);
+    const start = startPicks(body, services, o);
     if (have.size !== start.size || [...have].some(id => !start.has(id))) {
       service_overrides[o.code] = [...have].sort((a, b) => a - b);
     }
@@ -556,18 +578,37 @@ export function reviewHasEmptyDate(root, review) {
   return true;
 }
 
+// What happens to a date when a memorial is edited (preview_edit on the server).
+function changeTag(o) {
+  if (o.status === "new") return ["new", "New date"];
+  if (o.status === "moved") return ["moved", `Moves from ${gregLabel(o.old_date)}`];
+  if (o.status === "moved_by_hand") return ["kept", "Stays where you moved it"];
+  return null;
+}
+
+function changeSummary(counts) {
+  const parts = [];
+  if (counts.moved) parts.push(`${counts.moved} ${counts.moved === 1 ? "date moves" : "dates move"} to another day`);
+  if (counts.new) parts.push(`${counts.new} new ${counts.new === 1 ? "date" : "dates"}`);
+  return parts.length ? parts.join(", ") + "." : "No date moves and none is added.";
+}
+
 /** Every date the memorial would have, as a pair of cards - nothing is saved
  *  yet. `heading` goes at the top of the first card. Each date shows its prayers
  *  and opens (tap it) into on/off buttons, so a single day can be changed before
- *  anything exists. */
-export function schedulePreviewHtml(body, preview, services, { heading = "", review } = {}) {
+ *  anything exists. With `editing`, each date also says what the change does to
+ *  it (new, moving from another day) and there is no "all paid" box. */
+export function schedulePreviewHtml(body, preview, services, { heading = "", review, editing = false } = {}) {
   review = review || newReview();
-  if (!review.picks) {
-    review.picks = new Map(preview.observances.map(o => [o.code, defaultPicks(body, services, o)]));
+  if (!review.picks) review.picks = new Map();
+  for (const o of preview.observances) {
+    if (!review.picks.has(o.code)) review.picks.set(o.code, startPicks(body, services, o));
   }
   const today = todayIst();
   const kept = preview.observances.filter(o => !review.removed.has(o.code));
   const passed = kept.filter(o => o.date < today).length;
+  const counts = { new: 0, moved: 0 };
+  kept.forEach(o => { if (o.status in counts) counts[o.status] += 1; });
   return `
       <div class="card">
         ${heading}
@@ -577,20 +618,23 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rev
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
         <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>.
           Tap a date to change its prayers, or Remove to take it out.</p>
+        ${editing ? `<p class="meta" style="margin:4px 0 0">${esc(changeSummary(counts))} Dates that stay keep their
+          prayers, time, note and paid mark.</p>` : `
         <div class="check-row" style="margin-top:8px"><input type="checkbox" id="schedAllPaid" ${review.allPaid ? "checked" : ""}>
-          <label for="schedAllPaid">Already paid for all of these dates</label></div>
+          <label for="schedAllPaid">Already paid for all of these dates</label></div>`}
         ${preview.passed_not_booked ? `<p class="meta" style="margin:4px 0 0">Starting from today:
           ${preview.passed_not_booked} earlier date${preview.passed_not_booked === 1 ? " was" : "s were"} already past and
           ${preview.passed_not_booked === 1 ? "is" : "are"} not booked.</p>` : ""}
-        ${passed ? `<p class="meta" style="margin:4px 0 0">${passed} of these ${passed === 1 ? "has" : "have"}
+        ${passed && !editing ? `<p class="meta" style="margin:4px 0 0">${passed} of these ${passed === 1 ? "has" : "have"}
           already passed - they stay on the calendar.</p>` : ""}
       </div>
 
       <div class="card">
-        <div id="schedRows">${kept.map(o => `
+        <div id="schedRows">${kept.map(o => { const tag = editing && changeTag(o); return `
           <div class="obs ${o.date < today ? "past" : ""}" data-code="${esc(o.code)}">
             <div class="obs-head" data-open>
               <div class="obs-title"><b>${esc(o.label)}</b><span>${esc(parsiText(o))}</span>
+                ${tag ? `<span class="obs-change ${tag[0]}">${esc(tag[1])}</span>` : ""}
                 <span class="obs-prayers">${esc(summaryText(services, review.picks.get(o.code)))}</span></div>
               <div class="obs-when">${esc(gregLabel(o.date))}</div>
               <button type="button" class="row-x" data-remove aria-label="Remove ${esc(o.label)} on ${esc(gregLabel(o.date))}"
@@ -598,7 +642,7 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rev
             </div>
             <div class="svc-row chip-row">${services.map(s =>
               serviceToggleHtml(s.id, s.name, review.picks.get(o.code).has(s.id))).join("")}</div>
-          </div>`).join("")}</div>
+          </div>`; }).join("")}</div>
       </div>`;
 }
 

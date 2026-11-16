@@ -77,6 +77,15 @@ class Memorial(Base):
     birthday_roj: Mapped[int | None] = mapped_column(SmallInteger)
     birthday_mah: Mapped[int | None] = mapped_column(SmallInteger)
     birthday_years: Mapped[int | None] = mapped_column(SmallInteger)
+    # Nothing is booked before this date: a family arriving late, or a death more
+    # than a year ago (which runs from the day the memorial was made). NULL books
+    # the whole schedule from the death.
+    start_from: Mapped[date | None] = mapped_column(Date)
+    # Codes of the dates the mobed took out (on the review screen, or one at a
+    # time later), so re-working the memorial does not bring them back. NULL for a
+    # memorial saved before edits existed: worked out from its dates when needed
+    # (services/memorials.edit_basis), together with start_from.
+    removed_codes: Mapped[list | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -150,6 +159,9 @@ class MemorialObservance(Base):
     # When the mobed ticked this date as paid (NULL = not paid). Their own note, like
     # the one on a booking: nothing is collected or calculated.
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The mobed moved this date to another day. Re-working the whole memorial
+    # leaves it where they put it, until they put it back on its usual day.
+    moved_by_hand: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
     # Time of day in IST, or NULL - the norm.
     time_of_day: Mapped[dt_time | None] = mapped_column(Time)

@@ -22,12 +22,20 @@ from datetime import date, datetime, time, timedelta, timezone
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
-from agyary.calendar.memorial import NAMED_DAYS, OPENING_5_TO_9, OPENING_NONE, Observance, build_schedule
+from agyary.calendar.memorial import (
+    NAMED_DAYS,
+    OPENING_5_TO_9,
+    OPENING_NONE,
+    PARAB_FRAVARDIN_TIR,
+    PARAB_ROJ_FOR_MAH,
+    Observance,
+    build_schedule,
+)
 from agyary.core.config import get_settings
 from agyary.messaging import booking_service
 from agyary.messaging.availability import parsi_slot_fields
@@ -106,6 +114,10 @@ class Choice:
     # Mah alone (nobody needs the year), the opening and named days have gone,
     # and everything runs from today. See resolve_death and plan.
     long_ago: bool = False
+    # The death's date as already worked out, used as it is: re-working a saved
+    # memorial whose death did not change (for a death long ago this is the
+    # stand-in, which must not drift a year as time goes by). Never from the API.
+    death_known: date | None = None
 
 
 def _validate_length(value: int | None, label: str, ceiling: int) -> None:
@@ -141,6 +153,8 @@ def resolve_death(system: CalendarSystem, choice: Choice, today: date | None = N
     known, and the date returned is a stand-in: the latest such day at least
     OLD_DEATH_DAYS back. It is never shown to anyone; it only places the
     monthly and yearly days on the right Roj and Mah."""
+    if choice.death_known is not None:
+        return choice.death_known
     if choice.long_ago and (choice.death_date is not None or choice.death_year is not None):
         raise MemorialError("For a death more than a year ago, give only the Roj and Mah.")
     by_date = choice.death_date is not None
@@ -240,19 +254,28 @@ def passed_before_start(system: CalendarSystem, choice: Choice) -> int:
     return sum(1 for o in schedule if o.gregorian_date < choice.start_from)
 
 
-def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tuple[int, int, int], date]:
+def plan(
+    system: CalendarSystem, choice: Choice, today: date | None = None, *, check_name: bool = True,
+) -> tuple[list[Observance], tuple[int, int, int], date]:
     """The schedule for a choice, without saving anything. Also returns the
     death as (roj, mah, year) in ``system`` and as a Gregorian date - what the
-    preview shows the mobed, and what gets stored."""
+    preview shows the mobed, and what gets stored.
+
+    ``today`` is the day the schedule is worked out as of: normally today, but
+    for a re-work the day the memorial was first made, so a death given by Roj
+    and Mah alone lands where it did then. ``check_name`` is off only when a
+    saved memorial's own schedule is worked out again (its name was checked when
+    it was saved, possibly under older rules)."""
     name = choice.departed_name.strip()
-    if not name:
-        raise MemorialError("Please enter the departed person's name.")
-    # The name is read out in each reminder, so it follows the rules for text
-    # in a paid message (services/template_text.py).
-    try:
-        template_text.check(name, "departed person's name", max_len=template_text.DEPARTED_MAX)
-    except ValueError as exc:
-        raise MemorialError(str(exc)) from exc
+    if check_name:
+        if not name:
+            raise MemorialError("Please enter the departed person's name.")
+        # The name is read out in each reminder, so it follows the rules for text
+        # in a paid message (services/template_text.py).
+        try:
+            template_text.check(name, "departed person's name", max_len=template_text.DEPARTED_MAX)
+        except ValueError as exc:
+            raise MemorialError(str(exc)) from exc
     _validate_length(choice.monthly_months, "Monthly observances", MAX_MONTHLY_MONTHS)
     _validate_length(choice.yearly_years, "Yearly observances", MAX_YEARLY_YEARS)
     _validate_length(choice.fravardin_roj_months, "Roj Fravardin months", MAX_MONTHLY_MONTHS)
@@ -275,11 +298,11 @@ def plan(system: CalendarSystem, choice: Choice) -> tuple[list[Observance], tupl
                 "The opening days and the named days (Dasmi, Masiso, Varsi...) have passed for someone who "
                 "died more than a year ago. Choose what repeats instead.")
         # Everything runs from today: the monthly and yearly days still to come.
-        choice = replace(choice, start_from=choice.start_from or today_ist())
+        choice = replace(choice, start_from=choice.start_from or today or today_ist())
 
     # A Gatha death is stored the way machis store one: Mah 13, with the
     # Gatha number in the Roj slot.
-    death_date = resolve_death(system, choice)
+    death_date = resolve_death(system, choice, today)
     roj, mah, year = parsi_slot_fields(gregorian_to_parsi(death_date, system))
 
     try:
@@ -350,10 +373,13 @@ async def create_memorial(
     """Save a memorial. Every observance starts with the same services - the
     set chosen here - and each can be changed on its own afterwards."""
     system = await calendar_for(db, user_id, choice)
-    schedule, (roj, mah, year), death_date = plan(system, choice)
-    # Dates the mobed removed on the review screen: left out of what is saved.
-    if exclude_codes:
-        schedule = [o for o in schedule if o.code not in set(exclude_codes)]
+    today = today_ist()
+    schedule, (roj, mah, year), death_date = plan(system, choice, today)
+    # Dates the mobed removed on the review screen: left out of what is saved,
+    # and remembered, so that re-working the memorial later leaves them out too.
+    removed = sorted(set(exclude_codes) & {o.code for o in schedule})
+    if removed:
+        schedule = [o for o in schedule if o.code not in set(removed)]
         if not schedule:
             raise MemorialError("Every observance was removed - keep at least one.")
     services = await _validated_services(db, agyary.id, service_ids)
@@ -387,6 +413,10 @@ async def create_memorial(
         birthday_roj=birthday[0] if birthday else None,
         birthday_mah=birthday[1] if birthday else None,
         birthday_years=choice.birthday_years if birthday else None,
+        # A death long ago runs from today (see plan); a late family from the
+        # day they chose. Kept so a re-work books from the same day.
+        start_from=choice.start_from or (today if choice.long_ago else None),
+        removed_codes=removed,
     )
     memorial.observances = []
     for o in schedule:
@@ -399,6 +429,7 @@ async def create_memorial(
                 "for the other days.")
         memorial.observances.append(MemorialObservance(
             paid_at=datetime.now(timezone.utc) if all_paid else None,
+            moved_by_hand=False,
             code=o.code, label=o.label, day_number=o.day_number,
             gregorian_date=o.gregorian_date,
             parsi_roj=o.roj, parsi_mah=o.mah, parsi_year=o.year, gatha_index=o.gatha_index,
@@ -478,6 +509,8 @@ def serialize_observance(o: MemorialObservance, names: dict[int, str] | None = N
         "date": o.gregorian_date.isoformat(),
         "roj": o.parsi_roj, "mah": o.parsi_mah, "year": o.parsi_year,
         "gatha_index": o.gatha_index,
+        # The mobed put this date on another day themselves.
+        "moved_by_hand": bool(o.moved_by_hand),
         "time": _hhmm(o.time_of_day),
         "notes": o.notes,
         "service_ids": sorted(s.service_id for s in o.services),
@@ -558,9 +591,27 @@ async def update_observance(
     clear_time: bool,
     notes: str | None,
     clear_notes: bool,
+    new_date: date | None = None,
+    back_to_usual: bool = False,
 ) -> None:
     """Change one observance without touching the others. Services must stay
-    non-empty - an observance with nothing to do is a mistake, not a state."""
+    non-empty - an observance with nothing to do is a mistake, not a state.
+
+    ``new_date`` moves it to another day (marked as moved by hand, so a re-work
+    of the whole memorial leaves it there); ``back_to_usual`` puts it back on
+    the day its schedule gives it."""
+    if back_to_usual:
+        usual = usual_observance(memorial, observance.code)
+        if usual is None:
+            raise MemorialError(
+                "This date is no longer part of the memorial's schedule, so it has no usual day to go back to.")
+        _clash(memorial, observance, usual.gregorian_date)
+        if _place(observance, usual.gregorian_date, CalendarSystem(memorial.calendar_system), by_hand=False):
+            await _forget_reminders(db, [observance.id])
+    elif new_date is not None and new_date != observance.gregorian_date:
+        _clash(memorial, observance, new_date)
+        _place(observance, new_date, CalendarSystem(memorial.calendar_system), by_hand=True)
+        await _forget_reminders(db, [observance.id])
     if service_ids is not None:
         services = await _validated_services(db, memorial.agyary_id, service_ids)
         observance.services = [MemorialObservanceService(service_id=s.id) for s in services]
@@ -595,6 +646,394 @@ async def set_paid(
 
 async def delete_memorial(db: AsyncSession, memorial: Memorial) -> None:
     await db.delete(memorial)
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Editing: one date moved or removed, or the whole memorial re-worked
+# ---------------------------------------------------------------------------
+# A re-work counts every date again from the death (past dates too - the
+# owner's call, 17 Nov 2026) and then carries over what the mobed did to each
+# date by its code: Masiso stays Masiso, with its prayers, time, note and paid
+# tick, even when a corrected Roj puts it on another day. Dates the mobed took
+# out stay out, and a date they moved by hand stays where they put it.
+
+@dataclass(frozen=True)
+class EditBasis:
+    """What a re-work starts from besides the choices: where the schedule was
+    booked from, and the codes of the dates the mobed took out."""
+
+    start_from: date | None
+    removed: frozenset[str]
+
+
+def created_day(memorial: Memorial) -> date:
+    """The day (in India) the memorial was made. A death given by Roj and Mah
+    alone is placed relative to it, then and on every re-work."""
+    made = memorial.created_at or datetime.now(timezone.utc)
+    return made.astimezone(IST).date()
+
+
+def stored_choice(memorial: Memorial, start_from: date | None) -> Choice:
+    """The memorial's saved choices, to work its schedule out again exactly as
+    it was saved (its death included, as stored)."""
+    long_ago = memorial.died_over_a_year_ago
+    return Choice(
+        departed_name=memorial.departed_name,
+        death_date=None if long_ago else memorial.death_gregorian,
+        death_roj=memorial.death_roj if long_ago else None,
+        death_mah=memorial.death_mah if long_ago else None,
+        death_known=memorial.death_gregorian,
+        long_ago=long_ago,
+        calendar=memorial.calendar_system,
+        opening=memorial.opening,
+        day_counts=tuple(memorial.day_counts or ()),
+        monthly_months=memorial.monthly_months,
+        yearly_years=memorial.yearly_years,
+        fravardin_roj_months=memorial.fravardin_roj_months,
+        parabs=memorial.parabs,
+        parab_years=memorial.parab_years,
+        parab_count=memorial.parab_count,
+        birthday_roj=memorial.birthday_roj,
+        birthday_mah=memorial.birthday_mah,
+        birthday_years=memorial.birthday_years,
+        start_from=start_from,
+    )
+
+
+def _saved_schedule(memorial: Memorial, start_from: date | None) -> list[Observance]:
+    try:
+        schedule, _, _ = plan(
+            CalendarSystem(memorial.calendar_system), stored_choice(memorial, start_from),
+            created_day(memorial), check_name=False,
+        )
+    except MemorialError:
+        return []
+    return schedule
+
+
+def edit_basis(memorial: Memorial) -> EditBasis:
+    """Where the memorial's schedule was booked from, and which dates the mobed
+    took out. Stored since memorials became editable; for one saved before that
+    (``removed_codes`` NULL) it is worked out from its dates - nothing could
+    take a single date out then except the review screen."""
+    if memorial.removed_codes is not None:
+        return EditBasis(memorial.start_from, frozenset(memorial.removed_codes))
+    made = created_day(memorial)
+    if memorial.died_over_a_year_ago:
+        start = made   # it ran from the day it was made
+    elif any(o.gregorian_date < made for o in memorial.observances):
+        start = None   # dates before that day were booked: the whole schedule
+    else:
+        # Nothing before the day it was made is on file. Either the family came
+        # late ("from today") or there was nothing before then anyway; booking
+        # from that day gives the same schedule in the second case.
+        whole = _saved_schedule(memorial, None)
+        start = made if any(o.gregorian_date < made for o in whole) else None
+    have = {o.code for o in memorial.observances}
+    return EditBasis(start, frozenset({o.code for o in _saved_schedule(memorial, start)} - have))
+
+
+def usual_observance(memorial: Memorial, code: str) -> Observance | None:
+    """Where the memorial's own schedule puts the date with this code, or None
+    when the schedule no longer has it."""
+    basis = edit_basis(memorial)
+    return next((o for o in _saved_schedule(memorial, basis.start_from) if o.code == code), None)
+
+
+def usual_service_ids(memorial: Memorial) -> list[int]:
+    """The prayers a date added by a re-work starts with: the set most of the
+    memorial's ordinary dates have, plus whatever most of its monthly and yearly
+    days have on top (Jashan, usually)."""
+    def most_common(sets: list[frozenset[int]]) -> frozenset[int]:
+        return max(sets, key=sets.count) if sets else frozenset()
+
+    plain, anniv = [], []
+    for o in memorial.observances:
+        ids = frozenset(s.service_id for s in o.services)
+        (anniv if is_anniversary(o.code) else plain).append(ids)
+    base = most_common(plain) or most_common(anniv)
+    extra = {sid for sid in frozenset().union(*anniv) if 2 * sum(sid in s for s in anniv) > len(anniv)} if anniv else set()
+    return sorted(base | extra)
+
+
+def edit_form(memorial: Memorial) -> dict:
+    """The memorial's choices as the form shows them, to be changed."""
+    basis = edit_basis(memorial)
+    per_year = 2 if memorial.parabs == PARAB_FRAVARDIN_TIR else len(PARAB_ROJ_FOR_MAH)
+    long_ago = memorial.died_over_a_year_ago
+    return {
+        "id": memorial.id,
+        "customer_id": memorial.customer_id,
+        "departed_name": memorial.departed_name,
+        "long_ago": long_ago,
+        "death_date": None if long_ago else memorial.death_gregorian.isoformat(),
+        "death": {"roj": memorial.death_roj, "mah": memorial.death_mah},
+        "calendar": memorial.calendar_system,
+        "opening": memorial.opening,
+        "day_counts": list(memorial.day_counts or []),
+        "monthly_months": memorial.monthly_months,
+        "yearly_years": memorial.yearly_years,
+        "fravardin_roj_months": memorial.fravardin_roj_months,
+        "parabs": memorial.parabs,
+        # The form asks for a number of Parabs. N years of them is the same
+        # dates as N years' worth of Parabs, so older memorials read the same.
+        "parab_count": memorial.parab_count or (memorial.parab_years * per_year if memorial.parab_years else None),
+        "birthday": ({"roj": memorial.birthday_roj, "mah": memorial.birthday_mah,
+                      "years": memorial.birthday_years} if memorial.birthday_roj else None),
+        "start_from": basis.start_from.isoformat() if basis.start_from else None,
+        "service_ids": usual_service_ids(memorial),
+        "removed_count": len(basis.removed),
+    }
+
+
+def _parsi_fields(when: date, system: CalendarSystem) -> tuple[int | None, int | None, int, int | None]:
+    try:
+        p = gregorian_to_parsi(when, system)
+    except (ValueError, OverflowError) as exc:
+        raise MemorialError("That is not a day in this calendar.") from exc
+    return p.roj, p.mah, p.year, p.gatha_index
+
+
+def _place(row: MemorialObservance, when: date, system: CalendarSystem, *, by_hand: bool) -> bool:
+    """Put one date on ``when``, read in the memorial's calendar. True when the
+    day changed - the family has then not been reminded of the new one."""
+    row.parsi_roj, row.parsi_mah, row.parsi_year, row.gatha_index = _parsi_fields(when, system)
+    row.moved_by_hand = by_hand
+    changed = when != row.gregorian_date
+    row.gregorian_date = when
+    if changed:
+        row.reminded_by_hand_at = None
+    return changed
+
+
+def _clash(memorial: Memorial, row: MemorialObservance, when: date) -> None:
+    """One date per day: moving onto a day the memorial already has is refused."""
+    other = next((o for o in memorial.observances if o.id != row.id and o.gregorian_date == when), None)
+    if other is not None:
+        raise MemorialError(
+            f"{other.label} is already on that day. Choose another day, or remove one of the two.")
+
+
+async def _forget_reminders(db: AsyncSession, observance_ids: list[int]) -> None:
+    """These dates moved, so any reminder about them was about the old day:
+    unhook it, so the new day is reminded afresh and one still waiting for the
+    old day is not sent (reminder_sender._withdrawn)."""
+    if not observance_ids:
+        return
+    await db.execute(
+        update(Notification)
+        .where(
+            Notification.notification_type == "memorial_reminder",
+            Notification.memorial_observance_id.in_(observance_ids),
+        )
+        .values(memorial_observance_id=None)
+    )
+
+
+async def remove_observance(db: AsyncSession, memorial: Memorial, observance: MemorialObservance) -> None:
+    """Take one date out of a memorial, for good: a later re-work does not
+    bring it back (it can be put back from the Edit screen)."""
+    if len(memorial.observances) <= 1:
+        raise MemorialError("This is the memorial's only date. To take it off, delete the memorial instead.")
+    basis = edit_basis(memorial)   # before the date goes: an older memorial is read from its dates
+    memorial.start_from = basis.start_from
+    memorial.removed_codes = sorted(basis.removed | {observance.code})
+    memorial.observances.remove(observance)
+    await db.flush()
+
+
+@dataclass
+class Replan:
+    """A memorial's schedule worked out again from changed choices, set against
+    what is saved. Nothing is written."""
+
+    system: CalendarSystem
+    death: tuple[int, int, int]
+    death_date: date
+    start_from: date | None
+    # In date order; the row is None for a date the re-work adds.
+    kept: list[tuple[Observance, MemorialObservance | None]]
+    # In the schedule, but taken out by the mobed (they can be put back).
+    left_out: list[Observance]
+    # Saved dates that will go: no longer in the schedule, or taken out now.
+    dropped: list[MemorialObservance]
+
+
+async def replan(
+    db: AsyncSession, user_id: int, memorial: Memorial, choice: Choice, removed: set[str],
+) -> Replan:
+    system = await calendar_for(db, user_id, choice)
+    made = created_day(memorial)
+    basis = edit_basis(memorial)
+    # A death long ago runs from the day the memorial was made, as it did then;
+    # otherwise the form says (the whole schedule, or from the day it gives).
+    start = (basis.start_from or made) if choice.long_ago else choice.start_from
+    # A death long ago given by the same Roj and Mah keeps its stand-in date, or
+    # the monthly and yearly days would be counted from a year later.
+    same_death = (
+        choice.long_ago and memorial.died_over_a_year_ago and system.value == memorial.calendar_system
+        and (choice.death_roj, choice.death_mah) == (memorial.death_roj, memorial.death_mah)
+    )
+    choice = replace(choice, start_from=start, death_known=memorial.death_gregorian if same_death else None)
+    schedule, death, death_date = plan(system, choice, made)
+
+    rows = {o.code: o for o in memorial.observances}
+    kept: list[tuple[Observance, MemorialObservance | None]] = []
+    left_out: list[Observance] = []
+    dropped: list[MemorialObservance] = []
+    for o in schedule:
+        row = rows.get(o.code)
+        if o.code in removed:
+            left_out.append(o)
+            if row is not None:
+                dropped.append(row)
+        else:
+            kept.append((o, row))
+    planned = {o.code for o in schedule}
+    dropped += [row for code, row in rows.items() if code not in planned]
+    # A date moved by hand stays on its own day.
+    kept.sort(key=lambda pair: (pair[1].gregorian_date if pair[1] is not None and pair[1].moved_by_hand
+                                else pair[0].gregorian_date, pair[0].day_number))
+    return Replan(system, death, death_date, start, kept, left_out, dropped)
+
+
+def _parsi_dict(when: date, system: CalendarSystem) -> dict:
+    roj, mah, year, gatha = _parsi_fields(when, system)
+    return {"roj": roj, "mah": mah, "year": year, "gatha_index": gatha}
+
+
+async def preview_edit(db: AsyncSession, user_id: int, memorial: Memorial, choice: Choice) -> dict:
+    """What re-working the memorial with these choices would do, date by date:
+    which stay, which move (and from where), which are new, which go."""
+    basis = edit_basis(memorial)
+    rp = await replan(db, user_id, memorial, choice, set(basis.removed))
+    observances = []
+    for o, row in rp.kept:
+        item = {
+            "code": o.code, "label": o.label, "day_number": o.day_number,
+            "anniversary": is_anniversary(o.code),
+            "date": o.gregorian_date.isoformat(),
+            "roj": o.roj, "mah": o.mah, "year": o.year, "gatha_index": o.gatha_index,
+            "status": "new", "old_date": None, "observance_id": None, "service_ids": None,
+            "paid": False, "time": None, "notes": None, "moved_by_hand": False,
+        }
+        if row is not None:
+            item.update({
+                "observance_id": row.id,
+                "service_ids": sorted(s.service_id for s in row.services),
+                "paid": row.paid_at is not None, "time": _hhmm(row.time_of_day), "notes": row.notes,
+                "moved_by_hand": bool(row.moved_by_hand),
+            })
+            if row.moved_by_hand:
+                item.update({"status": "moved_by_hand", "date": row.gregorian_date.isoformat(),
+                             **_parsi_dict(row.gregorian_date, rp.system)})
+            elif row.gregorian_date != o.gregorian_date:
+                item.update({"status": "moved", "old_date": row.gregorian_date.isoformat()})
+            else:
+                item["status"] = "same"
+        observances.append(item)
+    roj, mah, year = rp.death
+    return {
+        "calendar": rp.system.value,
+        "long_ago": choice.long_ago,
+        "death": {"roj": roj, "mah": mah, "year": None if choice.long_ago else year},
+        "death_date": None if choice.long_ago else rp.death_date.isoformat(),
+        "start_from": rp.start_from.isoformat() if rp.start_from else None,
+        "count": len(observances),
+        "observances": observances,
+        "dropped": [
+            {"code": r.code, "label": r.label, "date": r.gregorian_date.isoformat(),
+             "roj": r.parsi_roj, "mah": r.parsi_mah, "gatha_index": r.gatha_index,
+             "paid": r.paid_at is not None, "notes": r.notes, "moved_by_hand": bool(r.moved_by_hand)}
+            for r in sorted(rp.dropped, key=lambda r: r.gregorian_date)
+        ],
+        "left_out": [
+            {"code": o.code, "label": o.label, "date": o.gregorian_date.isoformat(),
+             "roj": o.roj, "mah": o.mah, "year": o.year, "gatha_index": o.gatha_index,
+             "anniversary": is_anniversary(o.code)}
+            for o in rp.left_out
+        ],
+    }
+
+
+async def edit_memorial(
+    db: AsyncSession,
+    user_id: int,
+    memorial: Memorial,
+    choice: Choice,
+    service_ids: list[int],
+    exclude_codes: tuple[str, ...] = (),
+    restore_codes: tuple[str, ...] = (),
+    service_overrides: dict[str, list[int]] | None = None,
+) -> None:
+    """Re-work a memorial with changed choices. Every date is counted again from
+    the death; a date that is still there keeps its prayers, time, note and
+    paid tick (and its day, if the mobed moved it by hand); new dates get
+    ``service_ids`` (Jashan on the monthly and yearly days only, as when made);
+    dates no longer chosen go. ``exclude_codes`` are taken out now and
+    ``restore_codes`` - dates taken out earlier - put back."""
+    basis = edit_basis(memorial)
+    removed = (set(basis.removed) - set(restore_codes)) | set(exclude_codes)
+    rp = await replan(db, user_id, memorial, choice, removed)
+    if not rp.kept:
+        raise MemorialError("Every date was taken out - keep at least one.")
+    services = await _validated_services(db, memorial.agyary_id, service_ids)
+    kept_codes = {o.code for o, _ in rp.kept}
+    overrides: dict[str, list[Service]] = {}
+    for code, ids in (service_overrides or {}).items():
+        if code not in kept_codes:
+            continue
+        if not ids:
+            raise MemorialError("Every date needs at least one prayer.")
+        overrides[code] = await _validated_services(db, memorial.agyary_id, ids)
+    birthday = resolve_birthday(rp.system, choice)
+
+    moved: list[int] = []
+    for o, row in rp.kept:
+        if row is None:
+            chosen = overrides.get(o.code) or [s for s in services if not _is_jashan(s) or is_anniversary(o.code)]
+            if not chosen:
+                raise MemorialError(
+                    "Jashan is only put on the monthly and yearly days. Choose another prayer too, "
+                    "for the other days.")
+            memorial.observances.append(MemorialObservance(
+                code=o.code, label=o.label, day_number=o.day_number, moved_by_hand=False,
+                gregorian_date=o.gregorian_date,
+                parsi_roj=o.roj, parsi_mah=o.mah, parsi_year=o.year, gatha_index=o.gatha_index,
+                services=[MemorialObservanceService(service_id=s.id) for s in chosen],
+            ))
+            continue
+        row.label, row.day_number = o.label, o.day_number
+        if row.moved_by_hand:
+            _place(row, row.gregorian_date, rp.system, by_hand=True)   # re-read in the calendar
+        elif _place(row, o.gregorian_date, rp.system, by_hand=False):
+            moved.append(row.id)
+        if o.code in overrides:
+            row.services = [MemorialObservanceService(service_id=s.id) for s in overrides[o.code]]
+    for row in rp.dropped:
+        memorial.observances.remove(row)
+    await _forget_reminders(db, moved)
+
+    roj, mah, year = rp.death
+    memorial.departed_name = choice.departed_name.strip()
+    memorial.death_gregorian = rp.death_date
+    memorial.death_roj, memorial.death_mah, memorial.death_year = roj, mah, year
+    memorial.died_over_a_year_ago = choice.long_ago
+    memorial.calendar_system = rp.system.value
+    memorial.opening = choice.opening
+    memorial.day_counts = sorted(set(choice.day_counts))
+    memorial.monthly_months = choice.monthly_months
+    memorial.yearly_years = choice.yearly_years
+    memorial.fravardin_roj_months = choice.fravardin_roj_months
+    memorial.parabs = choice.parabs
+    memorial.parab_years = choice.parab_years
+    memorial.parab_count = choice.parab_count
+    memorial.birthday_roj = birthday[0] if birthday else None
+    memorial.birthday_mah = birthday[1] if birthday else None
+    memorial.birthday_years = choice.birthday_years if birthday else None
+    memorial.start_from = rp.start_from
+    memorial.removed_codes = sorted(removed)
     await db.flush()
 
 

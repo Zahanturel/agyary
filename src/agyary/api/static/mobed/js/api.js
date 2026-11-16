@@ -257,6 +257,13 @@ export const getMemorial = (aid, mid) => get(`/agyaries/${aid}/memorials/${mid}`
 export const updateObservance = (aid, mid, oid, body) =>
   patch(`/agyaries/${aid}/memorials/${mid}/observances/${oid}`, body);
 export const deleteMemorial = (aid, mid) => del(`/agyaries/${aid}/memorials/${mid}`);
+// Editing after it is saved: one date taken out, or the whole memorial re-worked.
+export const removeObservance = (aid, mid, oid) =>
+  del(`/agyaries/${aid}/memorials/${mid}/observances/${oid}`);
+export const memorialEditForm = (aid, mid) => get(`/agyaries/${aid}/memorials/${mid}/edit`);
+export const previewMemorialEdit = (aid, mid, body) =>
+  post(`/agyaries/${aid}/memorials/${mid}/edit/preview`, body);
+export const saveMemorialEdit = (aid, mid, body) => put(`/agyaries/${aid}/memorials/${mid}`, body);
 
 export const addMachi = (aid, body) => post(`/agyaries/${aid}/manual-add/machi`, body);
 export const addBooking = (aid, body) => post(`/agyaries/${aid}/manual-add/booking`, body);

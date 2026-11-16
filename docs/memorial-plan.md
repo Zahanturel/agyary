@@ -87,6 +87,29 @@ monthly and yearly prayers have run for years)
 - Time is optional and normally blank. Focus is the recurring schedule;
   time and slips are not a priority (mobeds keep their own name books).
 
+**Editing after it is saved** (17 Nov 2026, owner's decisions)
+- One date: Edit on each date (memorial page, and on the memorial item in the calendar's day
+  view, which opens the memorial page on that date) changes its day, prayers, time and note.
+  Remove takes it out, after an in-place confirm; this works from the memorial page and from the
+  day view. The memorial's only date cannot be removed (delete the memorial instead).
+- A moved date is marked `moved_by_hand` ("moved by you"). Re-working the memorial leaves it on
+  its day, and "Back to its usual day" puts it where the schedule has it. A date cannot be moved
+  onto a day the memorial already has.
+- A date that moves (by hand or by a re-work) is reminded afresh: the hand-told mark is cleared
+  and any reminder about its old day is unhooked (kept on record).
+- Whole memorial: "Edit memorial" opens the same four steps, filled in. Every date is counted again
+  from the death, PAST ONES INCLUDED. A date still there (same code: Masiso stays Masiso) keeps
+  its prayers, time, note and paid mark. New dates get the prayers chosen on step 3 (Jashan
+  rule as at creation). Dates no longer chosen come off. Past named days stay tickable in edit mode.
+- Nothing is saved before the review, which says per date "Moves from ...", "New date" or
+  "Stays where you moved it", lists what comes off, and lists the dates removed earlier with a
+  Put back button.
+- Stored for this: `memorials.start_from` (a late start, or the day a long-ago memorial was made)
+  and `memorials.removed_codes` (dates the mobed took out, at the review or one at a time). For
+  memorials saved before 17 Nov both are worked out from their dates the first time they are
+  edited (`edit_basis`). A death long ago keeps its stand-in date when its Roj and Mah are
+  unchanged, so editing it a year later does not shift the series.
+
 **Closing notice**
 - On the last observance's day, a pinned, differently-coloured item at the
   top of the day view and marked in the month grid: no upcoming bookings

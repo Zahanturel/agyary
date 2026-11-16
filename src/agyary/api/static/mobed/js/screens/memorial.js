@@ -8,20 +8,22 @@
  * was made) and any one of them can be changed on its own here - a family
  * adds Farokshi to the 10th, say, without touching the rest. Time is optional
  * and usually left blank; the note is for whatever the mobed wants to remember
- * about that day.
+ * about that day. A date can also be moved to another day, or removed; the
+ * whole memorial is changed on its own screen (memorial_edit.js).
  *
  * Opened from the calendar, it lands on the observance that was tapped.
  */
 
 import {
   getMemorial, getBehdin, updateObservance, deleteMemorial, listServices, setObservancePaid, setMemorialPaid,
+  removeObservance,
 } from "../api.js";
 import { state } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, flashInfo, refreshHeader, loading, backBar,
 } from "../ui.js";
-import { esc, gregLabel, todayIst } from "../util.js";
-import { back, navGuard } from "../router.js";
+import { esc, gregLabel, todayIst, parsiLabel } from "../util.js";
+import { back, navigate, navGuard } from "../router.js";
 import { shareCardHtml, wireShareCard } from "../memorial_share.js";
 import { serviceToggleHtml, wireServiceToggles, selectedServiceIds } from "../service_toggle.js";
 import { payChipHtml, flipPaidChip } from "../paid_chip.js";
@@ -119,16 +121,19 @@ export async function renderMemorial({ id, oid }) {
           ? `passed away more than a year ago (${esc(parsiText({ ...m.death, gatha_index: m.death.mah === 13 ? m.death.roj : null }))})`
           : `died ${esc(gregLabel(m.death_date))}`}</p>
       <p class="meta" style="margin:4px 0 0">${esc(choicesText(m))} · ${esc(m.calendar[0].toUpperCase() + m.calendar.slice(1))} calendar</p>
-      <p style="margin:12px 0 0;font-size:var(--text-sm)"><b>${esc(statusText(m))}</b></p>
-      <div class="progress"><div style="width:${m.total ? Math.round(100 * m.done / m.total) : 0}%"></div></div>
+      <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="memStatus"></b></p>
+      <div class="progress"><div id="memProgress"></div></div>
       <div class="row tight" style="margin-top:12px;align-items:center;justify-content:space-between">
         <span class="meta" id="paidCount"></span>
         <button class="ghost small" id="paidAll" type="button"></button>
       </div>
+      <button class="secondary small" id="memEdit" type="button" style="margin-top:12px">Edit memorial</button>
     </div>
 
     <div class="card">
       <h2>Observances</h2>
+      <p class="meta" style="margin:4px 0 12px">Tap Edit on a date to move it to another day, change its prayers,
+        time or note, or remove it.</p>
       <div id="obsList"></div>
     </div>
 
@@ -140,6 +145,7 @@ export async function renderMemorial({ id, oid }) {
     </div>`;
 
   wireShareCard(document.getElementById("shareCard"), aid, m);
+  document.getElementById("memEdit").onclick = () => navigate(`#/memorial/${mid}/edit`);
 
   const listEl = document.getElementById("obsList");
 
@@ -152,9 +158,13 @@ export async function renderMemorial({ id, oid }) {
     return `<div class="${cls}" data-obs="${o.id}">
       <div class="obs-head" data-obs-toggle="${o.id}">
         <div class="obs-title"><b>${esc(o.label)}</b>
-          <span>${esc(svc)}${o.time ? ` · ${esc(o.time)}` : ""}${o.notes ? " · note" : ""}</span></div>
+          <span>${esc(svc)}${o.time ? ` · ${esc(o.time)}` : ""}${o.notes ? " · note" : ""}${o.moved_by_hand
+            ? " · moved by you" : ""}</span></div>
         <div class="obs-when">${esc(gregLabel(o.date))}<br>${esc(parsiText(o))}</div>
         ${payChipHtml("memorial", o.id, !!o.paid)}
+        <button type="button" class="ghost small obs-edit-btn" aria-expanded="${o.id === openId}"
+          aria-label="${o.id === openId ? "Close" : "Edit"} ${esc(o.label)} on ${esc(gregLabel(o.date))}">${
+          o.id === openId ? "Close" : "Edit"}</button>
       </div>
       ${o.id === openId ? editorHtml(o) : ""}
     </div>`;
@@ -163,16 +173,24 @@ export async function renderMemorial({ id, oid }) {
   function editorHtml(o) {
     const have = new Set(o.service_ids);
     return `<div class="obs-edit">
+      <label for="obsDate">Day</label>
+      <input type="date" id="obsDate" value="${esc(o.date)}">
+      <p class="meta" id="obsDateParsi" style="margin:6px 0 0"></p>
+      ${o.moved_by_hand ? `<p class="meta" style="margin:6px 0 0">You moved this date off its usual day. Editing the
+        memorial leaves it here.</p>
+        <button type="button" class="ghost small" id="obsUsual" style="margin-top:6px">Back to its usual day</button>` : ""}
       <label>Prayers on this day <span class="meta">(tap to turn on or off)</span></label>
       <div class="chip-row">${services.map(s => serviceToggleHtml(s.id, s.name, have.has(s.id))).join("")}</div>
-      <label>Time <span class="meta">(optional)</span></label>
+      <label for="obsTime">Time <span class="meta">(optional)</span></label>
       <input type="time" id="obsTime" value="${esc(o.time || "")}">
-      <label>Note <span class="meta">(optional)</span></label>
+      <label for="obsNote">Note <span class="meta">(optional)</span></label>
       <input type="text" id="obsNote" value="${esc(o.notes || "")}" autocomplete="off">
-      <div class="row tight" style="margin-top:12px">
-        <button class="small" id="obsSave">Save</button>
-        <button class="ghost small" id="obsCancel">Close</button>
-      </div></div>`;
+      <div class="row tight" style="margin-top:12px;flex-wrap:wrap">
+        <button class="small" id="obsSave" type="button">Save</button>
+        <button class="ghost small" id="obsCancel" type="button">Close</button>
+        <button class="ghost small danger-outline" id="obsRemove" type="button" style="margin-left:auto">Remove this date</button>
+      </div>
+      <div id="obsRemoveConfirm"></div></div>`;
   }
 
   // "3 of 36 dates paid", and one button that ticks (or clears) every date.
@@ -196,8 +214,27 @@ export async function renderMemorial({ id, oid }) {
     }
   };
 
-  function paint() {
+  function paintTop() {
+    document.getElementById("memStatus").textContent = statusText(m);
+    document.getElementById("memProgress").style.width = `${m.total ? Math.round(100 * m.done / m.total) : 0}%`;
     paintPaid();
+  }
+
+  /** After a date was moved or removed: read the memorial again, since its
+   *  order, its next date and its last date may all have changed. */
+  async function reload(message) {
+    try {
+      m = await getMemorial(aid, mid);
+    } catch (e) {
+      return showError(e.message);
+    }
+    if (!alive()) return;
+    paint();
+    if (message) showInfo(message);
+  }
+
+  function paint() {
+    paintTop();
     listEl.innerHTML = m.observances.map(rowHtml).join("");
     listEl.querySelectorAll(".pay-chip").forEach(chip => {
       chip.onclick = (e) => {
@@ -211,7 +248,7 @@ export async function renderMemorial({ id, oid }) {
       };
     });
     listEl.querySelectorAll("[data-obs-toggle]").forEach(el => {
-      el.onclick = () => {
+      el.onclick = () => {   // the row, or its Edit button
         const n = Number(el.dataset.obsToggle);
         openId = openId === n ? null : n;
         paint();
@@ -220,28 +257,92 @@ export async function renderMemorial({ id, oid }) {
     const row = openId && m.observances.find(o => o.id === openId);
     if (!row) return;
     wireServiceToggles(listEl);
+
+    // The Roj and Mah of the day chosen, so a move is checked before it is saved.
+    const dateEl = document.getElementById("obsDate");
+    const showDay = async () => {
+      const note = document.getElementById("obsDateParsi");
+      if (!dateEl.value) { note.textContent = ""; return; }
+      const label = await parsiLabel(dateEl.value, m.calendar);
+      if (note.isConnected) {
+        note.textContent = dateEl.value === row.date ? label : `Moves to ${gregLabel(dateEl.value)} - ${label}`;
+      }
+    };
+    dateEl.onchange = showDay;
+    showDay();
+
     document.getElementById("obsCancel").onclick = () => { openId = null; paint(); };
     document.getElementById("obsSave").onclick = async () => {
       const ids = selectedServiceIds(listEl);
       if (!ids.length) return showError("Keep at least one prayer on this day.");
+      const to = dateEl.value;
+      if (!to) return showError("Choose the day for this date.");
       const btn = document.getElementById("obsSave");
       btn.disabled = true;
+      // An empty string clears the time or note; sending the field as it
+      // stands is what lets one save cover every edit.
+      const body = {
+        service_ids: ids,
+        time: document.getElementById("obsTime").value,
+        notes: document.getElementById("obsNote").value,
+      };
+      const moving = to !== row.date;
+      if (moving) body.move_to = to;
+      let updated;
       try {
-        // An empty string clears the time or note; sending the field as it
-        // stands is what lets one save cover all three edits.
-        const updated = await updateObservance(aid, mid, row.id, {
-          service_ids: ids,
-          time: document.getElementById("obsTime").value,
-          notes: document.getElementById("obsNote").value,
-        });
-        m.observances = m.observances.map(o => (o.id === row.id ? updated : o));
-        openId = null;
-        paint();
-        showInfo("Saved.");
+        updated = await updateObservance(aid, mid, row.id, body);
       } catch (e) {
         btn.disabled = false;
-        showError(e.message);
+        return showError(e.message);
       }
+      openId = null;
+      if (moving) return reload(`${row.label} moved to ${gregLabel(to)}.`);
+      m.observances = m.observances.map(o => (o.id === row.id ? updated : o));
+      paint();
+      showInfo("Saved.");
+    };
+
+    const usual = document.getElementById("obsUsual");
+    if (usual) {
+      usual.onclick = async () => {
+        usual.disabled = true;
+        try {
+          const moved = await updateObservance(aid, mid, row.id, { back_to_usual_day: true });
+          openId = null;
+          reload(`${row.label} is back on its usual day, ${gregLabel(moved.date)}.`);
+        } catch (e) {
+          usual.disabled = false;
+          showError(e.message);
+        }
+      };
+    }
+
+    document.getElementById("obsRemove").onclick = () => {
+      const box = document.getElementById("obsRemoveConfirm");
+      if (m.observances.length <= 1) {
+        box.innerHTML = `<p class="field-msg">This is the memorial's only date. To take it off, delete the memorial
+          at the bottom of this page.</p>`;
+        return;
+      }
+      box.innerHTML = `<div class="row-confirm row-pending" style="margin-top:8px;flex-wrap:wrap">
+          <span>Remove ${esc(row.label)} on ${esc(gregLabel(row.date))} from this memorial?</span>
+          <span class="row"><button type="button" class="ghost small" id="obsRemoveKeep">Keep</button>
+          <button type="button" class="danger small" id="obsRemoveYes">Remove</button></span></div>
+        <p class="meta" style="margin:6px 0 0">It stays off when the memorial is edited later. Edit memorial can
+          put it back.</p>`;
+      document.getElementById("obsRemoveKeep").onclick = () => { box.innerHTML = ""; };
+      document.getElementById("obsRemoveYes").onclick = async (ev) => {
+        const yes = ev.currentTarget;
+        yes.disabled = true;
+        try {
+          await removeObservance(aid, mid, row.id);
+        } catch (e) {
+          yes.disabled = false;
+          return showError("Couldn't remove it: " + e.message);
+        }
+        openId = null;
+        reload(`${row.label} on ${gregLabel(row.date)} was removed.`);
+      };
     };
   }
   paint();
@@ -271,3 +372,4 @@ export async function renderMemorial({ id, oid }) {
     };
   };
 }
+

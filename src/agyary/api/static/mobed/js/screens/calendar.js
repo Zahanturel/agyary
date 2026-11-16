@@ -8,7 +8,9 @@
  * their events, added the same way any event is.
  */
 
-import { myDay, machiBoard, memorialFeed, memorialReminders, setEventPaid, setObservancePaid } from "../api.js";
+import {
+  myDay, machiBoard, memorialFeed, memorialReminders, setEventPaid, setObservancePaid, removeObservance,
+} from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
@@ -164,6 +166,8 @@ async function draw() {
         if (kind === "memorial") return navigate(`#/memorial/${memorialOfObservance.get(id)}/${id}`);
         navigate(kind === "machi" ? `#/machi/${aid}/${id}` : `#/booking/${aid}/${id}`);
       },
+      // Remove on a memorial date in the day list: out of its memorial for good.
+      onRemove: (kind, id) => removeObservance(state.currentAgyaryId, memorialOfObservance.get(id), id),
     });
   } catch (e) {
     showError(e.message);
