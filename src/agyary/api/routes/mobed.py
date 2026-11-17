@@ -6,7 +6,9 @@ HTTP/JWT/request-response layer on top of it.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+import logging
+import math
+from datetime import date, datetime, timezone
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
@@ -31,6 +33,7 @@ from agyary.models.enums import (
     ACCESS_ON,
     DEFAULT_SECONDARY_CALENDAR_SYSTEM,
     DISPLAY_LANGUAGES,
+    LOCATION_PIN,
     NAME_SECTIONS,
     NAME_STATUSES,
     NAME_TITLES,
@@ -50,6 +53,8 @@ from agyary.services import (
     wa_login,
 )
 from agyary.services.phone import OptionalPhone, Phone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mobed", tags=["mobed"])
 
@@ -383,6 +388,7 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
         {
             "id": a.id, "name": a.name, "role": role, "calendar_system": a.calendar_system,
             "city": a.city, "address": a.address, "contact_phone": a.contact_phone, "status": a.status,
+            "location": _location(a),
         }
         for a, role in result.all()
     ]
@@ -690,11 +696,111 @@ async def activate_agyari(
     return {"user": await _serialize_user(db, user), "agyary": _agyary_summary(agyary)}
 
 
+# --- Where a fire temple is (DECISIONS D10) ---------------------------------
+class LocationIn(BaseModel):
+    # Checked by hand in _checked_position, not by type: a refusal then comes in
+    # plain words, and a NaN or Infinity in the body cannot reach FastAPI's
+    # validation reply, which echoes the input and cannot write those as JSON
+    # (a 500 instead of a refusal).
+    latitude: object = None
+    longitude: object = None
+
+
+def _location(a: Agyary) -> dict | None:
+    """The fire temple's position for its own mobeds, or None. ``source`` is
+    "town" (only the town, from the seed list) or "pin" (put on the map by a
+    person). Who moved it is kept on the record but not shown here."""
+    if a.latitude is None or a.longitude is None or not a.location_source:
+        return None
+    return {
+        "latitude": a.latitude,
+        "longitude": a.longitude,
+        "source": a.location_source,
+        "set_at": a.location_set_at.isoformat() if a.location_set_at else None,
+    }
+
+
+def _coordinate(value: object) -> float | None:
+    """A JSON number that is a real one: not a string, not true, not NaN."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        value = float(value)
+    except OverflowError:          # an integer too long to be a float
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _checked_position(payload: LocationIn) -> tuple[float, float]:
+    lat, lon = _coordinate(payload.latitude), _coordinate(payload.longitude)
+    if (lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180)
+            or (lat == 0 and lon == 0)):
+        # 0, 0 is in the sea off Africa: what a broken phone or form sends, never a fire temple.
+        raise HTTPException(status_code=400, detail="That place is not on the map. Please put the pin on the fire temple.")
+    # Six places is about ten centimetres; more is noise.
+    return round(lat, 6), round(lon, 6)
+
+
+def _put_pin(agyary: Agyary, position: tuple[float, float], user: User) -> None:
+    agyary.latitude, agyary.longitude = position
+    agyary.location_source = LOCATION_PIN
+    agyary.location_set_by_user_id = user.id
+    agyary.location_set_at = datetime.now(timezone.utc)
+
+
+async def _may_place_pin(db: AsyncSession, agyary_id: int, user: User) -> Agyary:
+    """Its mobeds and panthaky (the caller is already known to be on, D9), or
+    an admin, who may place any fire temple."""
+    agyary = await db.get(Agyary, agyary_id)
+    if agyary is None or not agyary.is_active:
+        raise HTTPException(status_code=404, detail="That fire temple could not be found.")
+    if guardrails.is_admin(get_settings(), user.phone):
+        return agyary
+    if not await mobed_dashboard.is_active_member(db, agyary_id, user.id):
+        raise HTTPException(status_code=403, detail="Only the mobeds of this fire temple can change where it is.")
+    return agyary
+
+
+def _location_response(agyary: Agyary) -> dict:
+    return {
+        "agyary_id": agyary.id, "name": agyary.name, "city": agyary.city, "address": agyary.address,
+        "location": _location(agyary),
+    }
+
+
+@router.get("/agyaries/{agyary_id}/location")
+async def get_agyari_location(
+    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict:
+    return _location_response(await _may_place_pin(db, agyary_id, user))
+
+
+@router.put("/agyaries/{agyary_id}/location")
+async def set_agyari_location(
+    agyary_id: int,
+    payload: LocationIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Put the fire temple's pin on the map, or move it. It becomes a "pin",
+    which the town-level seed never overwrites."""
+    agyary = await _may_place_pin(db, agyary_id, user)
+    rate_limit.enforce_key(f"agyary_location:{user.id}", max_requests=30, window_seconds=3600)
+    position = _checked_position(payload)
+    await db.refresh(agyary, with_for_update=True)
+    _put_pin(agyary, position, user)
+    await db.commit()
+    logger.info("Fire temple %s placed on the map by user %s", agyary.id, user.id)
+    return _location_response(agyary)
+
+
 class CreateAgyaryIn(BaseModel):
     name: str
     city: str
     address: str | None = None
     contact_phone: OptionalPhone = None
+    # Optional: where it is, if the mobed put it on the map while adding it.
+    location: LocationIn | None = None
 
 
 @router.post("/agyaries")
@@ -710,11 +816,15 @@ async def create_agyari(
     if not payload.name.strip() or not payload.city.strip():
         raise HTTPException(status_code=400, detail="Please enter the fire temple's name and city.")
     _check_template_text(payload.name, "fire temple's name", template_text.TEMPLE_MAX)
+    position = _checked_position(payload.location) if payload.location else None
     agyary = await mobed_dashboard.create_agyary(
         db,
         name=payload.name, city=payload.city,
         address=payload.address, contact_phone=payload.contact_phone,
     )
+    if position:
+        _put_pin(agyary, position, user)
+        await db.flush()
     first = not await _has_membership(db, user)
     await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
     if first:
