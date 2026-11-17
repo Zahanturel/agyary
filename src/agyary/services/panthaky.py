@@ -207,3 +207,39 @@ async def remove(
     logger.warning(
         "Admin %s removed user %s as panthaky of fire temple %s", admin.id, membership.user_id, agyary.id
     )
+
+
+# --- Who a fire temple's requests go to (D10; used from Step 4) ----------------
+async def _members(db: AsyncSession, settings: Settings, agyary_id: int, role: str) -> list[User]:
+    """Active members of ``agyary_id`` with ``role`` whose access is on (D9:
+    nothing goes to an account that is not on), oldest member first."""
+    rows = (
+        await db.execute(
+            select(User)
+            .join(AgyaryUser, AgyaryUser.user_id == User.id)
+            .where(
+                AgyaryUser.agyary_id == agyary_id,
+                AgyaryUser.role == role,
+                AgyaryUser.is_active.is_(True),
+                User.is_active.is_(True),
+            )
+            .order_by(AgyaryUser.joined_at, User.id)
+        )
+    ).scalars().all()
+    from agyary.services import mobed_access   # here: mobed_access imports this module
+
+    return [u for u in rows if mobed_access.has_access(settings, u)]
+
+
+async def panthakys_of(db: AsyncSession, settings: Settings, agyary_id: int) -> list[User]:
+    """The fire temple's confirmed panthakys: role panthaky (which only the
+    owner's confirmation, or the seed, sets - never a claim), an active
+    membership, and access on."""
+    return await _members(db, settings, agyary_id, ROLE_PANTHAKY)
+
+
+async def request_recipients(db: AsyncSession, settings: Settings, agyary_id: int) -> list[User]:
+    """Who a request to this fire temple goes to: its confirmed panthakys, or
+    if it has none whose access is on, its mobeds whose access is on. A claim
+    to be panthaky changes nothing here until it is confirmed."""
+    return await panthakys_of(db, settings, agyary_id) or await _members(db, settings, agyary_id, ROLE_MOBED)

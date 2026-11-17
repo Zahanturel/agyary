@@ -467,3 +467,84 @@ async def test_confirm_needs_a_claim_and_decisions_need_the_admin(client, db, se
         assert (await _decide(client, headers, user["id"], aid, decision)).status_code == 404
     assert (await client.get("/api/mobed/admin/mobeds", headers=headers)).status_code == 404
     assert (await _membership(db, user["id"], aid)).role == "mobed"
+
+
+# --- Who a fire temple's requests go to (for Step 4) ---------------------------
+
+async def _person(db, aid, phone, name, role="mobed", *, access="on", active=True, member_active=True,
+                  claimed_role=None) -> User:
+    from datetime import datetime, timezone
+
+    user = User(name=name, phone=phone, access=access, is_active=active)
+    db.add(user)
+    await db.flush()
+    db.add(AgyaryUser(agyary_id=aid, user_id=user.id, role=role, is_active=member_active,
+                      claimed_role=claimed_role,
+                      claimed_at=datetime.now(timezone.utc) if claimed_role else None))
+    await db.commit()
+    return user
+
+
+async def test_requests_go_to_the_confirmed_panthakys(db, seeded):
+    from agyary.services import panthaky
+
+    s = config.get_settings()
+    temple = Agyary(name="Recipients Agiary", city="Navsari", status="active")
+    db.add(temple)
+    await db.commit()
+    one = await _person(db, temple.id, "+919955500001", "Er. Panthaky One", "panthaky")
+    two = await _person(db, temple.id, "+919955500002", "Er. Panthaky Two", "panthaky")
+    await _person(db, temple.id, "+919955500003", "Er. Panthaky Off", "panthaky", access="off")
+    await _person(db, temple.id, "+919955500004", "Er. Panthaky Waiting", "panthaky", access="pending")
+    await _person(db, temple.id, "+919955500005", "Er. Panthaky Left", "panthaky", member_active=False)
+    await _person(db, temple.id, "+919955500006", "Er. Panthaky Gone", "panthaky", active=False)
+    await _person(db, temple.id, "+919955500007", "Er. Says Panthaky", claimed_role="panthaky")
+    await _person(db, temple.id, "+919955500008", "Er. Plain Mobed")
+
+    assert [u.id for u in await panthaky.panthakys_of(db, s, temple.id)] == [one.id, two.id]
+    assert [u.id for u in await panthaky.request_recipients(db, s, temple.id)] == [one.id, two.id]
+    # Another temple's panthaky is not this one's.
+    assert [u.name for u in await panthaky.panthakys_of(db, s, seeded["agyary_id"])] == ["Er. Hormuz Dadachanji"]
+
+
+async def test_with_no_panthaky_requests_go_to_its_mobeds_whose_access_is_on(db, seeded):
+    from agyary.services import panthaky
+
+    s = config.get_settings()
+    temple = Agyary(name="Mobeds Only Agiary", city="Udvada", status="active")
+    db.add(temple)
+    await db.commit()
+    await _person(db, temple.id, "+919955500011", "Er. Panthaky Off", "panthaky", access="off")
+    claimant = await _person(db, temple.id, "+919955500012", "Er. Says Panthaky", claimed_role="panthaky")
+    plain = await _person(db, temple.id, "+919955500013", "Er. Plain Mobed")
+    await _person(db, temple.id, "+919955500014", "Er. Mobed Off", access="off")
+    await _person(db, temple.id, "+919955500015", "Er. Mobed Waiting", access="pending")
+    await _person(db, temple.id, "+919955500016", "Er. Mobed Left", member_active=False)
+    await _person(db, temple.id, "+919955500017", "Er. Caretaker", "caretaker")
+
+    assert await panthaky.panthakys_of(db, s, temple.id) == []
+    # The claimant is reached as the mobed they still are, never as a panthaky.
+    assert [u.id for u in await panthaky.request_recipients(db, s, temple.id)] == [claimant.id, plain.id]
+
+    empty = Agyary(name="Nobody Agiary", city="Surat", status="active")
+    db.add(empty)
+    await db.commit()
+    assert await panthaky.request_recipients(db, s, empty.id) == []
+
+
+async def test_a_confirmed_claim_moves_requests_to_the_new_panthaky(client, db, seeded, admin_is_panthaky):
+    from agyary.services import panthaky
+
+    s = config.get_settings()
+    headers, user = await _new(client, approve=True)
+    r = await client.post("/api/mobed/agyaries", json={"name": "New Agiary", "city": "Pune",
+                                                       "claimed_role": "panthaky"}, headers=headers)
+    aid = r.json()["agyary"]["id"]
+    colleague, mate = await _new(client, phone="+919911100089", name="Er. Colleague", approve=True)
+    await client.post(f"/api/mobed/agyaries/{aid}/join", json={"claimed_role": "mobed"}, headers=colleague)
+    assert [u.id for u in await panthaky.request_recipients(db, s, aid)] == [user["id"], mate["id"]]
+
+    admin = await _admin(client, seeded)
+    assert (await _decide(client, admin, user["id"], aid, "confirm")).status_code == 200
+    db.expire_all()
+    assert [u.id for u in await panthaky.request_recipients(db, s, aid)] == [user["id"]]
