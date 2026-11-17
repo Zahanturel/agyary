@@ -10,7 +10,7 @@
 
 import { searchAgyaries, joinAgyary, activateAgyary, createAgyary } from "../api.js";
 import { state } from "../state.js";
-import { chrome, mainEl, showError, toTop } from "../ui.js";
+import { chrome, mainEl, showError, toTop, openSheet } from "../ui.js";
 import { esc, phoneField, readOptionalPhone } from "../util.js";
 import { navigate } from "../router.js";
 import { refreshHeader } from "../ui.js";
@@ -20,9 +20,10 @@ import { mountLocationPicker } from "../location_picker.js";
 /**
  * The fire temple's details as typed into the set-up or the new-temple form
  * (`p` is "ac" or "cr", the start of that form's ids) - or null after marking
- * what is missing on the fields themselves, each where it is.
+ * what is missing on the fields themselves, each where it is, together with
+ * any `more` problems the form found itself.
  */
-function readDetails(p) {
+function readDetails(p, more = []) {
   const el = (name) => document.getElementById(p + name);
   const phoneRes = readOptionalPhone(p + "Phone");
   const body = {
@@ -41,8 +42,22 @@ function readDetails(p) {
       message: "Please enter a valid phone number, or leave it blank.",
     });
   }
+  problems.push(...more);
   if (problems.length) { flagProblems(mainEl, problems); return null; }
   return body;
+}
+
+// "Are you a mobed here, or the panthaky?" (DECISIONS D10). Saying panthaky is
+// only a claim: the admin confirms it, and until then they are a mobed in the
+// app like anyone else. Neither answer is chosen for them.
+const CLAIM_NOTE = "If you are the panthaky, the admin checks this first. Until then you use the app as a mobed.";
+
+function claimChoicesHtml() {
+  return `
+    <div class="choice-group" id="crClaim">
+      <label class="choice"><input type="radio" name="crClaim" value="mobed"><span>I am a mobed here</span></label>
+      <label class="choice"><input type="radio" name="crClaim" value="panthaky"><span>I am the panthaky here</span></label>
+    </div>`;
 }
 
 export function renderOnboarding() {
@@ -78,7 +93,7 @@ export function renderOnboarding() {
       const badge = a.status === "unclaimed" ? '<span class="tag grey">not set up yet</span>' : "";
       row.innerHTML = `<div><strong>${esc(a.name)}</strong> ${badge}</div>
         <div class="addr">${esc([a.address, a.city].filter(Boolean).join(", "))}</div>`;
-      row.onclick = () => pick(a);
+      row.onclick = () => askRole(a);
       results.appendChild(row);
     }
     // One "create" prompt, worded for whichever case actually happened.
@@ -103,18 +118,41 @@ export function renderOnboarding() {
 // stops a second tap (on it, or on another row) from joining twice.
 let joining = false;
 
-async function pick(a) {
+/** The fire temple is chosen: ask what they are there, then join. Closing the
+ *  sheet leaves them on the search, with nothing joined. */
+function askRole(a) {
+  if (joining) return;
+  const sheet = openSheet({
+    title: "Are you a mobed here, or the panthaky?",
+    html: `
+      <p><b>${esc(a.name)}</b>${a.city ? `, ${esc(a.city)}` : ""}</p>
+      <div class="stack">
+        <button type="button" class="secondary" data-claim="mobed">I am a mobed here</button>
+        <button type="button" class="secondary" data-claim="panthaky">I am the panthaky here</button>
+      </div>
+      <p class="meta" style="margin:12px 0 0">${CLAIM_NOTE}</p>`,
+  });
+  const buttons = sheet.body.querySelectorAll("[data-claim]");
+  buttons.forEach(b => {
+    b.onclick = () => pick(a, b.dataset.claim, buttons, sheet);
+  });
+}
+
+async function pick(a, claimedRole, buttons, sheet) {
   if (joining) return;
   joining = true;
+  buttons.forEach(b => { b.disabled = true; });   // one join per tap
   try {
-    const res = await joinAgyary(a.id);
+    const res = await joinAgyary(a.id, claimedRole);
     state.user = res.user;
     state.currentAgyaryId = a.id;
+    sheet.close();
     // An unclaimed seed entry still has 2012-era details nobody has
     // vouched for - confirm them before it goes live.
     if (a.status === "unclaimed") renderActivate(a);
     else { refreshHeader(); navigate("#/calendar", { replace: true }); }
   } catch (e) {
+    buttons.forEach(b => { b.disabled = false; });
     showError(e.message);
   } finally {
     joining = false;
@@ -169,6 +207,11 @@ function renderCreate(prefillName) {
       <label>Contact phone (optional)</label>${phoneField("crPhone")}
     </div>
     <div class="card">
+      <h2>Are you a mobed here, or the panthaky?</h2>
+      ${claimChoicesHtml()}
+      <p class="meta" style="margin:10px 0 0">${CLAIM_NOTE}</p>
+    </div>
+    <div class="card">
       <h2>Where is it? (optional)</h2>
       <p class="meta">Put the pin on the fire temple. You can also do this later, from Settings.</p>
       <div id="crPicker"></div>
@@ -187,8 +230,12 @@ function renderCreate(prefillName) {
   document.getElementById("crGo").onclick = async (ev) => {
     const btn = ev.currentTarget;
     if (btn.disabled) return;
-    const body = readDetails("cr");
+    // One of the two must be chosen; neither is chosen for them.
+    const claim = mainEl.querySelector('input[name="crClaim"]:checked');
+    const body = readDetails("cr", claim ? []
+      : [{ target: "#crClaim", message: "Please choose: a mobed here, or the panthaky." }]);
     if (!body) return;
+    body.claimed_role = claim.value;
     // Optional: only if a pin was put down.
     const pin = picker.get();
     if (pin) body.location = pin;

@@ -50,10 +50,13 @@ def has_access(settings: Settings, user: User) -> bool:
 
 
 async def tell_admins_of_request(
-    db: AsyncSession, settings: Settings, user: User, agyary: Agyary, *, now: datetime | None = None
+    db: AsyncSession, settings: Settings, user: User, agyary: Agyary, *,
+    says_panthaky: bool = False, now: datetime | None = None,
 ) -> int:
     """Tell every admin, in the app, that this mobed has chosen a fire temple
-    and is waiting. Only for a pending account. Returns how many were told."""
+    and is waiting - and whether they say they are its panthaky, which the
+    admin confirms or not on the same page (D10). Only for a pending account.
+    Returns how many were told."""
     if user.access != ACCESS_PENDING:
         return 0
     now = now or _now()
@@ -62,11 +65,16 @@ async def tell_admins_of_request(
         logger.error("Mobed %s is waiting for approval, but no ADMIN_PHONES is set, so nobody was told", user.id)
         return 0
     admins = (await db.execute(select(User.id).where(User.phone.in_(phones)))).scalars().all()
+    body = (
+        f"{user.name} ({user.phone}) from {agyary.name} wants to use Mobed Diary, and says they are "
+        "the panthaky there. Approve them, and confirm whether they are the panthaky, on the Mobeds page."
+        if says_panthaky else
+        f"{user.name} ({user.phone}) from {agyary.name} wants to use Mobed Diary. "
+        "Approve them on the Mobeds page."
+    )
     for uid in admins:
         await reminders.notify(
-            db, uid, KIND_REQUEST, "A new mobed is waiting",
-            f"{user.name} ({user.phone}) from {agyary.name} wants to use Mobed Diary. "
-            "Approve them on the Mobeds page.",
+            db, uid, KIND_REQUEST, "A new mobed is waiting", body,
             link=MOBEDS_LINK, now=now, ttl=REQUEST_TTL,
         )
     # And on the admins' phones, if they turned that on. The number stays off

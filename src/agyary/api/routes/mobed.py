@@ -49,6 +49,7 @@ from agyary.services import (
     mobed_access,
     mobed_auth,
     mobed_dashboard,
+    panthaky,
     reminders,
     template_text,
     wa_login,
@@ -390,18 +391,23 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
     # return. Earliest-joined wins if a member ever does end up with more
     # than one active membership.
     result = await db.execute(
-        select(Agyary, AgyaryUser.role)
+        select(Agyary, AgyaryUser)
         .join(AgyaryUser, AgyaryUser.agyary_id == Agyary.id)
         .where(AgyaryUser.user_id == user.id, AgyaryUser.is_active.is_(True))
         .order_by(AgyaryUser.joined_at)
     )
     agyaries = [
         {
-            "id": a.id, "name": a.name, "role": role, "calendar_system": a.calendar_system,
+            "id": a.id, "name": a.name, "role": m.role, "calendar_system": a.calendar_system,
             "city": a.city, "address": a.address, "contact_phone": a.contact_phone, "status": a.status,
             "location": _location(a),
+            # What they said they are here, and whether it waits for the admin (D10).
+            # Only ``role`` gives anything; Settings shows these.
+            "claimed_role": m.claimed_role,
+            "panthaky_claim_waiting": panthaky.waiting(m),
+            "may_claim_panthaky": panthaky.may_claim(m),
         }
-        for a, role in result.all()
+        for a, m in result.all()
     ]
     access = mobed_access.effective(get_settings(), user)
     return {
@@ -653,18 +659,47 @@ async def search_agyaries(q: str = Query(default=""), db: AsyncSession = Depends
     return [_agyary_summary(a) for a in agyaries]
 
 
+# "Are you a mobed here, or the panthaky?", asked as a fire temple is chosen
+# (D10). Optional for the API, so an app from before the question still joins;
+# the app itself always asks, and Settings asks anyone who never answered.
+ClaimedRole = Literal["mobed", "panthaky"]
+
+
+class JoinAgyaryIn(BaseModel):
+    claimed_role: ClaimedRole | None = None
+
+
+async def _joined(
+    db: AsyncSession, user: User, agyary: Agyary, claimed_role: str | None, *, first: bool
+) -> None:
+    """Join ``user`` to ``agyary`` as a plain mobed and keep what they said they
+    are there - a claim only, ``role`` stays mobed (D10). A new mobed has then
+    finished signing up and the admins are asked to approve them (D9), told
+    too if they say they are the panthaky; a mobed already using the app who
+    says so has the admins told on its own."""
+    membership = await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
+    claimed = bool(claimed_role) and await panthaky.record_claim(db, membership, claimed_role)
+    settings = get_settings()
+    if first:
+        await mobed_access.tell_admins_of_request(
+            db, settings, user, agyary, says_panthaky=panthaky.waiting(membership)
+        )
+    elif claimed and panthaky.waiting(membership) and mobed_access.has_access(settings, user):
+        await panthaky.tell_admins_of_claim(db, settings, user, agyary)
+
+
 @router.post("/agyaries/{agyary_id}/join")
 async def join_agyari(
-    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)
+    agyary_id: int,
+    payload: JoinAgyaryIn | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_signed_in_user),
 ) -> dict:
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
         raise HTTPException(status_code=404, detail="That fire temple could not be found.")
     first = not await _has_membership(db, user)
-    await mobed_auth.ensure_agyary_membership(db, agyary_id, user)
-    # A new mobed has finished signing up: the admins are asked to approve them (D9).
-    if first:
-        await mobed_access.tell_admins_of_request(db, get_settings(), user, agyary)
+    await _joined(db, user, agyary, payload.claimed_role if payload else None, first=first)
     await db.commit()
     # Include the agyari (with status) so the client knows whether an
     # activation step is still needed for an unclaimed seed entry.
@@ -812,6 +847,8 @@ class CreateAgyaryIn(BaseModel):
     contact_phone: OptionalPhone = None
     # Optional: where it is, if the mobed put it on the map while adding it.
     location: LocationIn | None = None
+    # What they are there (D10): a claim only, see JoinAgyaryIn.
+    claimed_role: ClaimedRole | None = None
 
 
 @router.post("/agyaries")
@@ -837,9 +874,9 @@ async def create_agyari(
         _put_pin(agyary, position, user)
         await db.flush()
     first = not await _has_membership(db, user)
-    await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
-    if first:
-        await mobed_access.tell_admins_of_request(db, get_settings(), user, agyary)
+    # Adding a fire temple makes nobody its panthaky: they join as a mobed like
+    # anyone else, and saying "panthaky" is a claim for the admin to confirm.
+    await _joined(db, user, agyary, payload.claimed_role, first=first)
     await db.commit()
     return {"user": await _serialize_user(db, user), "agyary": _agyary_summary(agyary)}
 

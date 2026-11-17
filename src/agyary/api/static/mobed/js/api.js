@@ -183,7 +183,8 @@ export const getPreferences = () => get("/me/preferences");
 export const putPreferences = (prefs) => put("/me/preferences", prefs);
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
-export const joinAgyary = (id) => post(`/agyaries/${id}/join`);
+// claimedRole: "mobed" or "panthaky", what they said they are there (D10).
+export const joinAgyary = (id, claimedRole) => post(`/agyaries/${id}/join`, { claimed_role: claimedRole });
 export const activateAgyary = (id, body) => post(`/agyaries/${id}/activate`, body);
 export const createAgyary = (body) => post("/agyaries", body);
 /** Where a fire temple is (D10): its own mobeds and the admin read it and move its pin. */

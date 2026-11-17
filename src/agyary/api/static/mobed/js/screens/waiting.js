@@ -67,6 +67,8 @@ export function renderWaiting() {
       ${pending
         ? `<p>Thank you, ${esc(user.name || "")}. Your request to use Mobed Diary${temple
             ? ` at <b>${esc(temple.name)}</b>` : ""} has been sent.</p>
+           ${temple && temple.panthaky_claim_waiting
+             ? `<p class="meta">You said you are the panthaky here. The admin checks that too.</p>` : ""}
            <p class="meta">You can start as soon as it is approved. This screen moves on by
              itself when you open the app after that.</p>`
         : `<p>Your access to Mobed Diary is switched off at the moment.</p>
