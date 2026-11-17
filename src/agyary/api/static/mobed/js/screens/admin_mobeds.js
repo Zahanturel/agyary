@@ -5,6 +5,9 @@
  * (DECISIONS D9). On is the whole app; off is one screen saying so, with
  * everything they saved kept and nothing sent under their account.
  *
+ * Doongerwadi and prayer hall managers are here too (D10), with the place they
+ * say they work at, and the same one switch.
+ *
  * And who says they are a fire temple's panthaky (D10). That is only a claim
  * until "Confirm as panthaky" here, because the panthaky sees every machi at
  * their temple (D7). A confirmed panthaky can be made a mobed again.
@@ -55,8 +58,14 @@ function roleLine(m, t) {
     </div>`;
 }
 
+const isManager = (m) => m.account_kind === "funeral_manager";
+
 function row(m) {
-  const where = m.agyaries.length ? m.agyaries.map(esc).join(", ") : "No fire temple chosen yet";
+  const where = isManager(m)
+    ? (m.funeral_places.length
+      ? m.funeral_places.map(p => `Manager at <b>${esc(p.name)}</b>${p.city && !p.name.includes(p.city) ? `, ${esc(p.city)}` : ""}`).join("; ")
+      : "Doongerwadi manager, no place")
+    : m.agyaries.length ? m.agyaries.map(esc).join(", ") : "No fire temple chosen yet";
   const when = m.signed_up ? `Signed up ${esc(gregShort(m.signed_up.slice(0, 10)))}` : "";
   let actions = "";
   if (m.is_admin) {
@@ -71,7 +80,8 @@ function row(m) {
   }
   return `
     <div class="list-row" data-row="${m.id}" style="flex-wrap:wrap;gap:8px">
-      <div class="lr-main"><b>${esc(m.name)} ${TAGS[m.access] || ""}</b>
+      <div class="lr-main"><b>${esc(m.name)} ${TAGS[m.access] || ""}${isManager(m)
+          ? ` <span class="tag grey">Doongerwadi</span>` : ""}</b>
         <span style="display:block">${esc(m.phone)}</span>
         <span style="display:block">${where}${when ? ` - ${when}` : ""}</span></div>
       <div class="row tight">${actions}</div>
@@ -101,14 +111,15 @@ export async function renderAdminMobeds() {
   // Already using the app, and saying they are a panthaky: at the top, not
   // somewhere down the list by name.
   const claims = data.mobeds.filter(m => m.access !== "pending" && m.panthaky_claim_waiting);
-  const rest = data.mobeds.filter(m => m.access !== "pending" && !m.panthaky_claim_waiting);
+  const rest = data.mobeds.filter(m => m.access !== "pending" && !m.panthaky_claim_waiting && !isManager(m));
+  const managers = data.mobeds.filter(m => m.access !== "pending" && isManager(m));
 
   mainEl.innerHTML = `
     <div class="card">
       ${backBar("Mobeds")}
-      <p class="meta" style="margin:4px 0 0">A new mobed can use Mobed Diary only once you approve them.
-        Turning a mobed off keeps everything they saved, and stops all reminders and messages under their
-        account until you turn them on again.</p>
+      <p class="meta" style="margin:4px 0 0">A new mobed or Doongerwadi manager can use Mobed Diary only once
+        you approve them. Turning someone off keeps everything they saved, and stops all reminders and messages
+        under their account until you turn them on again.</p>
     </div>
 
     <div class="card">
@@ -126,6 +137,12 @@ export async function renderAdminMobeds() {
     <div class="card">
       <h2>All mobeds (${rest.length})</h2>
       ${rest.length ? rest.map(row).join("") : `<p class="meta">None yet.</p>`}
+    </div>
+
+    <div class="card">
+      <h2>Doongerwadi managers (${managers.length})</h2>
+      <p class="meta" style="margin:4px 0 0">They see only their own place's page, none of a mobed's.</p>
+      ${managers.length ? managers.map(row).join("") : `<p class="meta">None yet.</p>`}
     </div>`;
 
   const byId = new Map(data.mobeds.map(m => [String(m.id), m]));
@@ -202,6 +219,8 @@ export async function renderAdminMobeds() {
       ask.innerHTML = `
         <p class="meta" style="margin:8px 0">${m.access === "pending"
           ? `Turn ${esc(m.name)} off instead of approving them? They will see that their access is off.`
+          : isManager(m)
+          ? `Turn ${esc(m.name)} off? They will see that their access is off. Nothing is deleted.`
           : `Turn ${esc(m.name)} off? They will see that their access is off, and no reminders or daily
              report go out under their account until you turn them on again. Nothing is deleted.`}</p>
         <div class="row tight">

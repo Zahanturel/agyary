@@ -21,7 +21,13 @@ from agyary.api.routes.mobed import LocationIn, _checked_position, get_current_a
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, AgyaryUser, FuneralPlace, LoginOtp, Notification, User
-from agyary.models.enums import ACCESS_PENDING, ROLE_MOBED, ROLE_PANTHAKY
+from agyary.models.enums import (
+    ACCESS_PENDING,
+    ACCOUNT_FUNERAL_MANAGER,
+    ACCOUNT_MOBED,
+    ROLE_MOBED,
+    ROLE_PANTHAKY,
+)
 from agyary.services import (
     bot_check,
     erasure,
@@ -118,15 +124,52 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
                 )
             )
         ).scalar_one(),
-        # For the Mobeds card at the top: how many are waiting for approval (D9).
-        "mobeds_waiting": (
-            await db.execute(
-                select(func.count()).select_from(User).where(
-                    User.is_active.is_(True), User.access == ACCESS_PENDING,
-                    User.phone.notin_(guardrails.admin_phones(s) or {""}),
-                )
+        # For the Mobeds card at the top: how many are waiting for approval (D9),
+        # mobeds and Doongerwadi managers apart (D10).
+        "mobeds_waiting": await _waiting(db, s, ACCOUNT_MOBED),
+        "managers_waiting": await _waiting(db, s, ACCOUNT_FUNERAL_MANAGER),
+        # What is in the app (D10).
+        "in_the_app": await _in_the_app(db, s),
+    }
+
+
+async def _waiting(db: AsyncSession, s, kind: str) -> int:
+    return (
+        await db.execute(
+            select(func.count()).select_from(User).where(
+                User.is_active.is_(True), User.access == ACCESS_PENDING, User.account_kind == kind,
+                User.phone.notin_(guardrails.admin_phones(s) or {""}),
             )
-        ).scalar_one(),
+        )
+    ).scalar_one()
+
+
+async def _in_the_app(db: AsyncSession, s) -> dict:
+    """Mobeds and managers by their access (an admin counts as on), confirmed
+    panthakys, fire temples with at least one member, and funeral places."""
+    people = {ACCOUNT_MOBED: {"on": 0, "pending": 0, "off": 0}, ACCOUNT_FUNERAL_MANAGER: {"on": 0, "pending": 0, "off": 0}}
+    for user in (await db.execute(select(User).where(User.is_active.is_(True)))).scalars():
+        people.setdefault(user.account_kind, {"on": 0, "pending": 0, "off": 0})[mobed_access.effective(s, user)] += 1
+    member = (
+        select(AgyaryUser)
+        .join(User, User.id == AgyaryUser.user_id)
+        .join(Agyary, Agyary.id == AgyaryUser.agyary_id)
+        .where(AgyaryUser.is_active.is_(True), User.is_active.is_(True), Agyary.is_active.is_(True))
+        .subquery()
+    )
+    panthakys = (await db.execute(
+        select(func.count(func.distinct(member.c.user_id))).where(member.c.role == ROLE_PANTHAKY)
+    )).scalar_one()
+    temples = (await db.execute(select(func.count(func.distinct(member.c.agyary_id))))).scalar_one()
+    places = dict((await db.execute(
+        select(FuneralPlace.is_active, func.count()).group_by(FuneralPlace.is_active)
+    )).all())
+    return {
+        "mobeds": people[ACCOUNT_MOBED],
+        "panthakys": panthakys,
+        "fire_temples_in_use": temples,
+        "funeral_places": {"in_use": places.get(True, 0), "off": places.get(False, 0)},
+        "managers": people[ACCOUNT_FUNERAL_MANAGER],
     }
 
 
@@ -205,6 +248,10 @@ async def list_mobeds(db: AsyncSession = Depends(get_db), admin: User = Depends(
     return {
         "mobeds": mobeds,
         "waiting": sum(1 for m in mobeds if m["access"] == ACCESS_PENDING),
+        # Of those, Doongerwadi managers (D10): approved with the same switch.
+        "managers_waiting": sum(
+            1 for m in mobeds if m["access"] == ACCESS_PENDING and m["account_kind"] == ACCOUNT_FUNERAL_MANAGER
+        ),
         # Mobeds who say they are a panthaky and wait for the admin's word (D10).
         "panthaky_claims": sum(1 for m in mobeds for t in m["memberships"] if t["panthaky_claim_waiting"]),
     }

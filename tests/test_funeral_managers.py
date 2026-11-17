@@ -298,3 +298,47 @@ async def test_an_account_that_is_off_cannot_choose(client, db, seeded):
     await db.commit()
     r = await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=headers)
     assert r.status_code == 403 and r.headers["X-Mobed-Access"] == "off"
+
+
+# --- The owner's side ------------------------------------------------------------
+
+async def test_the_admin_sees_managers_with_their_place_and_counts_what_is_in_the_app(
+    client, db, seeded, admin_is_panthaky, pushes,
+):
+    from agyary.models import AppNotification
+
+    admin = await sign_in(client, seeded["panthaky_phone"])
+    ah = {"Authorization": f"Bearer {admin['access_token']}"}
+    place = await _place(db)
+    off = await _place(db, "Old aramgah (test)")
+    off.is_active = False
+    await db.commit()
+    waiting, _ = await _new_account(client)
+    await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=waiting)
+    approved, user = await _new_account(client, "+919911100098", "Second Manager")
+    await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=approved)
+    await client.post(f"/api/mobed/admin/mobeds/{user['id']}/access", json={"access": "on"}, headers=ah)
+    (note,) = (await db.execute(select(AppNotification).where(AppNotification.user_id == user["id"]))).scalars()
+    assert note.title == "You're in" and note.link == "#/manager"
+
+    data = (await client.get("/api/mobed/admin/mobeds", headers=ah)).json()
+    assert data["waiting"] == 1 and data["managers_waiting"] == 1
+    rows = {m["name"]: m for m in data["mobeds"]}
+    assert rows["Test Manager"]["access"] == "pending" and rows["Test Manager"]["phone"] == NEW
+    assert rows["Test Manager"]["account_kind"] == "funeral_manager"
+    assert [p["name"] for p in rows["Test Manager"]["funeral_places"]] == ["Doongerwadi (test)"]
+    assert rows["Test Manager"]["agyaries"] == [] and rows["Second Manager"]["access"] == "on"
+    assert rows["Er. Pervez Kias"]["account_kind"] == "mobed" and rows["Er. Pervez Kias"]["funeral_places"] == []
+
+    o = (await client.get("/api/mobed/admin/overview", headers=ah)).json()
+    assert o["mobeds_waiting"] == 0 and o["managers_waiting"] == 1
+    assert o["in_the_app"] == {
+        "mobeds": {"on": 2, "pending": 0, "off": 0},
+        "panthakys": 1,
+        "fire_temples_in_use": 1,
+        "funeral_places": {"in_use": 1, "off": 1},
+        "managers": {"on": 1, "pending": 1, "off": 0},
+    }
+    # And on the place's own line.
+    listed = (await client.get("/api/mobed/admin/funeral-places", headers=ah)).json()["places"]
+    assert listed[0]["managers"] == {"on": 1, "pending": 1, "off": 0}

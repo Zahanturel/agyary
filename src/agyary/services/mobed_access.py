@@ -17,8 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
-from agyary.models import Agyary, AgyaryUser, User
-from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING, ROLE_PANTHAKY
+from agyary.models import Agyary, AgyaryUser, FuneralPlace, FuneralPlaceManager, User
+from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING, ACCOUNT_FUNERAL_MANAGER, ROLE_PANTHAKY
 from agyary.services import guardrails, panthaky, reminders, web_push
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,8 @@ class AccessError(ValueError):
 async def set_access(
     db: AsyncSession, settings: Settings, user: User, access: str, *, now: datetime | None = None
 ) -> User:
-    """Turn a mobed on or off. Turning one on tells them in the app."""
+    """Turn a mobed or a Doongerwadi manager on or off (the same one switch,
+    D9, D10). Turning one on tells them in the app."""
     if access not in (ACCESS_ON, ACCESS_OFF):
         raise AccessError("Access can only be turned on or off.")
     if access == ACCESS_OFF and guardrails.is_admin(settings, user.phone):
@@ -111,7 +112,8 @@ async def set_access(
             "You're in" if before == ACCESS_PENDING else "Your access is back on",
             "Your Mobed Diary account has been approved. Welcome!" if before == ACCESS_PENDING
             else "You can use Mobed Diary again. Everything you saved is as you left it.",
-            link="#/calendar", now=now, ttl=APPROVED_TTL,
+            link="#/manager" if user.account_kind == ACCOUNT_FUNERAL_MANAGER else "#/calendar",
+            now=now, ttl=APPROVED_TTL,
         )
     await db.flush()
     logger.warning("Mobed %s access %s -> %s", user.id, before, access)
@@ -120,7 +122,8 @@ async def set_access(
 
 async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
     """Every account, waiting ones first and the newest of those at the top,
-    then the rest by name. Each with what they are at each fire temple."""
+    then the rest by name. Each with what they are at each fire temple, or,
+    for a Doongerwadi manager, which place they manage (D10)."""
     users = (await db.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
     names = {u.id: u.name for u in users}
     rows_by_user: dict[int, list[tuple[AgyaryUser, Agyary]]] = {}
@@ -136,6 +139,16 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
         rows_by_user.setdefault(m.user_id, []).append((m, a))
         if m.role == ROLE_PANTHAKY:
             panthakys.setdefault(a.id, []).append(m.user_id)
+    places_by_user: dict[int, list[FuneralPlace]] = {}
+    for link, place in (
+        await db.execute(
+            select(FuneralPlaceManager, FuneralPlace)
+            .join(FuneralPlace, FuneralPlace.id == FuneralPlaceManager.funeral_place_id)
+            .where(FuneralPlaceManager.is_active.is_(True))
+            .order_by(FuneralPlaceManager.joined_at)
+        )
+    ).all():
+        places_by_user.setdefault(link.user_id, []).append(place)
 
     def membership(m: AgyaryUser, a: Agyary) -> dict:
         # What they are at each fire temple, what they said, and the owner's
@@ -160,6 +173,12 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
             "phone": u.phone,
             "access": effective(settings, u),
             "is_admin": guardrails.is_admin(settings, u.phone),
+            # "mobed" or "funeral_manager"; a manager has places, not fire temples.
+            "account_kind": u.account_kind,
+            "funeral_places": [
+                {"id": p.id, "name": p.name, "city": p.city, "kind": p.kind, "is_active": p.is_active}
+                for p in places_by_user.get(u.id, [])
+            ],
             "agyaries": [a.name for _, a in mine],
             "memberships": [membership(m, a) for m, a in mine],
             "panthaky_claim_waiting": any(panthaky.waiting(m) for m, _ in mine),

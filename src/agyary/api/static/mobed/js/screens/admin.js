@@ -126,6 +126,15 @@ export async function renderAdmin() {
   if (!alive()) return;
 
   const r = o.reminders;
+  // What is in the app (D10), and who waits: mobeds and Doongerwadi managers.
+  const n = o.in_the_app;
+  const people = (c) => `${c.on} on${c.pending ? `, ${c.pending} waiting` : ""}${c.off ? `, ${c.off} off` : ""}`;
+  const waitingAll = o.mobeds_waiting + o.managers_waiting;
+  const some = (count, one) => `${count} new ${one}${count === 1 ? "" : "s"}`;
+  const waitingText = !waitingAll ? "Nobody is waiting for approval."
+    : [o.mobeds_waiting ? some(o.mobeds_waiting, "mobed") : "",
+      o.managers_waiting ? some(o.managers_waiting, "Doongerwadi manager") : ""]
+      .filter(Boolean).join(" and ") + ` ${waitingAll === 1 ? "is" : "are"} waiting for your approval.`;
   const state = r.paused
     ? `<span class="tag" style="background:var(--danger-600);color:#fff">Paused</span>`
     : r.mode === "live" ? `<span class="tag role">Sending</span>`
@@ -138,21 +147,31 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
-      <h2>Mobeds ${o.mobeds_waiting
-        ? `<span class="tag" style="background:var(--amber-100);color:var(--amber-600)">${o.mobeds_waiting} waiting</span>` : ""}</h2>
-      <p class="meta">${o.mobeds_waiting
-        ? `${o.mobeds_waiting} new mobed${o.mobeds_waiting === 1 ? " is" : "s are"} waiting for your approval.`
-        : "Nobody is waiting for approval."}${o.panthaky_claims_waiting
+      <h2>Mobeds ${waitingAll
+        ? `<span class="tag" style="background:var(--amber-100);color:var(--amber-600)">${waitingAll} waiting</span>` : ""}</h2>
+      <p class="meta">${waitingText}${o.panthaky_claims_waiting
         ? ` ${o.panthaky_claims_waiting} say${o.panthaky_claims_waiting === 1 ? "s" : ""} they are a panthaky.` : ""}
-        Approve new mobeds, confirm panthakys, and turn any mobed off or on.</p>
+        Approve new mobeds and Doongerwadi managers, confirm panthakys, and turn anyone off or on.</p>
       <div style="margin-top:10px"><button class="small" id="admMobeds">Open Mobeds</button></div>
     </div>
 
     <div class="card">
       <h2>Doongerwadis</h2>
       <p class="meta">The Doongerwadis, prayer halls and aramgahs a manager can choose when they sign up.
-        Only you can add them.</p>
+        Only you can add them. ${n.funeral_places.in_use
+          ? `${n.funeral_places.in_use} in use${n.funeral_places.off ? `, ${n.funeral_places.off} turned off` : ""}.`
+          : "None yet."}</p>
       <div style="margin-top:10px"><button class="small" id="admFuneral">Open Doongerwadis</button></div>
+    </div>
+
+    <div class="card">
+      <h2>In the app</h2>
+      ${fact("Mobeds", people(n.mobeds))}
+      ${fact("Confirmed panthakys", String(n.panthakys))}
+      ${fact("Fire temples with a mobed", String(n.fire_temples_in_use))}
+      ${fact("Doongerwadis and prayer halls", `${n.funeral_places.in_use} in use${n.funeral_places.off
+        ? `, ${n.funeral_places.off} off` : ""}`)}
+      ${fact("Doongerwadi managers", people(n.managers))}
     </div>
 
     <div class="card">
