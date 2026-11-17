@@ -155,6 +155,12 @@ export const adminSetMobedAccess = (userId, access) => post(`/admin/mobeds/${use
 // decision: "confirm" (make panthaky), "decline" (not the panthaky) or "remove" (a mobed again).
 export const adminDecidePanthaky = (userId, agyaryId, decision) =>
   post(`/admin/mobeds/${userId}/panthaky`, { agyary_id: agyaryId, decision });
+/** Admin only: the Doongerwadis, prayer halls and aramgahs (D10). Turned off, never deleted. */
+export const adminFuneralPlaces = () => get("/admin/funeral-places");
+export const adminFuneralPlace = (id) => get(`/admin/funeral-places/${id}`);
+export const adminCreateFuneralPlace = (body) => post("/admin/funeral-places", body);
+export const adminUpdateFuneralPlace = (id, body) => put(`/admin/funeral-places/${id}`, body);
+export const adminSetFuneralPlaceActive = (id, active) => post(`/admin/funeral-places/${id}/active`, { active });
 /** Admin only: phone notifications - whether the server can send, its key, this admin's devices. */
 export const adminPush = () => get("/admin/push");
 export const adminPushSubscribe = (sub) => post("/admin/push/subscribe", sub);

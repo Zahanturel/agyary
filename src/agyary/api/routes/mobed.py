@@ -817,12 +817,14 @@ def _coordinate(value: object) -> float | None:
     return value if math.isfinite(value) else None
 
 
-def _checked_position(payload: LocationIn) -> tuple[float, float]:
+def _checked_position(payload: LocationIn, what: str = "the fire temple") -> tuple[float, float]:
+    """A position on the map, rounded, or a 400 that says to put the pin on
+    ``what``. Also used for a funeral place's pin (api/routes/admin.py)."""
     lat, lon = _coordinate(payload.latitude), _coordinate(payload.longitude)
     if (lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180)
             or (lat == 0 and lon == 0)):
         # 0, 0 is in the sea off Africa: what a broken phone or form sends, never a fire temple.
-        raise HTTPException(status_code=400, detail="That place is not on the map. Please put the pin on the fire temple.")
+        raise HTTPException(status_code=400, detail=f"That place is not on the map. Please put the pin on {what}.")
     # Six places is about ten centimetres; more is noise.
     return round(lat, 6), round(lon, 6)
 

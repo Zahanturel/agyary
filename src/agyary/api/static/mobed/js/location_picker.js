@@ -94,10 +94,15 @@ let current = null;
  *  opts.initial   - { latitude, longitude, source } or null
  *  opts.suggest() - what to search for when the box is empty (name and city)
  *  opts.tall      - a taller map, for a page that is only the picker
+ *  opts.noun      - what the pin is on, in the picker's words (default "the
+ *                   fire temple"; a Doongerwadi's admin page says "the place")
+ *  opts.hereLabel - the "where my phone is" button (default "I'm at the agyari now")
  * Returns { get(), setSaved(location), destroy() }. get() is the pin as
  * { latitude, longitude }, or null when there is none.
  */
-export function mountLocationPicker(root, { initial = null, suggest = () => "", tall = false } = {}) {
+export function mountLocationPicker(root, {
+  initial = null, suggest = () => "", tall = false, noun = "the fire temple", hereLabel = "I'm at the agyari now",
+} = {}) {
   if (current) current.destroy();
   root.innerHTML = `
     <div class="loc-picker">
@@ -108,7 +113,7 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
       </div>
       <div id="lpResults" class="loc-results"></div>
       <div class="loc-tools" id="lpTools">
-        <button type="button" class="secondary small" id="lpHere">I'm at the agyari now</button>
+        <button type="button" class="secondary small" id="lpHere">${esc(hereLabel)}</button>
         <button type="button" class="secondary small hidden" id="lpGoogle">Find on Google</button>
       </div>
       <div class="loc-map${tall ? " tall" : ""}" id="lpMap" role="region" aria-label="Map"></div>
@@ -125,9 +130,9 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
 
   const say = (text) => { statusEl.textContent = text; };
   const describeSaved = () => {
-    if (!saved) say("No pin yet. Tap the map where the fire temple is, search above, or use “I'm at the agyari now”.");
-    else if (saved.source === "town") say("This pin is only the town, not the fire temple itself. Please move it onto the fire temple.");
-    else say("The pin is on the fire temple. Drag it, or tap the map, to move it.");
+    if (!saved) say(`No pin yet. Tap the map where ${noun} is, search above, or use “${hereLabel}”.`);
+    else if (saved.source === "town") say(`This pin is only the town, not ${noun} itself. Please move it onto ${noun}.`);
+    else say(`The pin is on ${noun}. Drag it, or tap the map, to move it.`);
   };
 
   /** Put the pin at `lat, lon` and say why it is there. */
@@ -136,7 +141,7 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
     const at = L.latLng(lat, lon).wrap();
     pin = { latitude: +at.lat.toFixed(6), longitude: +at.lng.toFixed(6) };
     if (!marker) {
-      marker = L.marker(at, { draggable: true, autoPan: true, keyboard: true, title: "The fire temple", alt: "Pin" }).addTo(map);
+      marker = L.marker(at, { draggable: true, autoPan: true, keyboard: true, title: noun.charAt(0).toUpperCase() + noun.slice(1), alt: "Pin" }).addTo(map);
       marker.on("dragend", () => {
         const p = marker.getLatLng().wrap();
         pin = { latitude: +p.lat.toFixed(6), longitude: +p.lng.toFixed(6) };
@@ -164,7 +169,7 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
       row.onclick = () => {
         const r = list[+row.dataset.i];
         resultsEl.innerHTML = "";
-        place(r.latitude, r.longitude, `Pin put at ${r.name}. Drag it onto the fire temple if it is not exactly there.`,
+        place(r.latitude, r.longitude, `Pin put at ${r.name}. Drag it onto ${noun} if it is not exactly there.`,
           { zoomIn: true });
         mapEl.scrollIntoView({ block: "center", behavior: "smooth" });
       };
@@ -225,7 +230,7 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
         const rough = !metres || metres > ROUGH_METRES;
         place(pos.coords.latitude, pos.coords.longitude,
           (metres ? `Pin put where your phone is, accurate to about ${metres} m.` : "Pin put where your phone is.")
-          + (rough ? " That is not very exact: please drag the pin onto the fire temple if it is off." : ""),
+          + (rough ? ` That is not very exact: please drag the pin onto ${noun} if it is off.` : ""),
           { zoomIn: true });
       }, (err) => {
         done();
@@ -270,7 +275,7 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
 
   const googleBtn = $("lpGoogle");
   googleBtn.onclick = () => runSearch(googleBtn, googlePlaces, "Google",
-    "Please type the fire temple's name to find it on Google.");
+    `Please type the name of ${noun} to find it on Google.`);
   // Only when the server has a key. Not knowing is the same as no: the button
   // stays hidden, and everything else works without it.
   googleOffered().then((yes) => { if (yes && !gone) googleBtn.classList.remove("hidden"); });

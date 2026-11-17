@@ -33,6 +33,7 @@ import { renderMemorialEdit } from "./screens/memorial_edit.js";
 import { renderReminders } from "./screens/reminders.js";
 import { renderAdmin } from "./screens/admin.js";
 import { renderAdminMobeds } from "./screens/admin_mobeds.js";
+import { renderAdminFuneralPlaces, renderAdminFuneralPlace } from "./screens/admin_funeral_places.js";
 import { renderWaiting } from "./screens/waiting.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderAgyariLocation } from "./screens/agyari_location.js";
@@ -62,6 +63,10 @@ route("#/fire-temple/location", renderAgyariLocation, { parent: "#/menu" });
 // For the numbers in ADMIN_PHONES only (the server enforces it; the menu entry just hides).
 route("#/admin", renderAdmin, { parent: "#/menu" });
 route("#/admin/mobeds", renderAdminMobeds, { parent: "#/admin" });
+// The Doongerwadis, prayer halls and aramgahs (D10). "new" before :id.
+route("#/admin/funeral-places", renderAdminFuneralPlaces, { parent: "#/admin" });
+route("#/admin/funeral-places/new", () => renderAdminFuneralPlace(), { parent: "#/admin/funeral-places" });
+route("#/admin/funeral-places/:id", renderAdminFuneralPlace, { parent: "#/admin/funeral-places" });
 
 // `parent` is where Back goes when there is nothing behind the screen (a
 // reload, a shared link) - see router.back(). Screens with a parent get the

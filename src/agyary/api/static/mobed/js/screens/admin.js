@@ -149,6 +149,13 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
+      <h2>Doongerwadis</h2>
+      <p class="meta">The Doongerwadis, prayer halls and aramgahs a manager can choose when they sign up.
+        Only you can add them.</p>
+      <div style="margin-top:10px"><button class="small" id="admFuneral">Open Doongerwadis</button></div>
+    </div>
+
+    <div class="card">
       <h2>Notifications on this phone</h2>
       <div id="admPush"><p class="meta">Checking...</p></div>
     </div>
@@ -208,6 +215,7 @@ export async function renderAdmin() {
     </div>`;
 
   document.getElementById("admMobeds").onclick = () => navigate("#/admin/mobeds");
+  document.getElementById("admFuneral").onclick = () => navigate("#/admin/funeral-places");
   paintPush(document.getElementById("admPush"), alive);
 
   const askErase = document.getElementById("admEraseAsk");

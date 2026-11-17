@@ -17,12 +17,21 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api import rate_limit
-from agyary.api.routes.mobed import get_current_user
+from agyary.api.routes.mobed import LocationIn, _checked_position, get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.models import Agyary, AgyaryUser, LoginOtp, Notification, User
+from agyary.models import Agyary, AgyaryUser, FuneralPlace, LoginOtp, Notification, User
 from agyary.models.enums import ACCESS_PENDING, ROLE_MOBED, ROLE_PANTHAKY
-from agyary.services import bot_check, erasure, guardrails, mobed_access, mobed_auth, panthaky, web_push
+from agyary.services import (
+    bot_check,
+    erasure,
+    funeral_places,
+    guardrails,
+    mobed_access,
+    mobed_auth,
+    panthaky,
+    web_push,
+)
 from agyary.services.phone import Phone
 
 logger = logging.getLogger(__name__)
@@ -321,3 +330,89 @@ async def push_test(db: AsyncSession = Depends(get_db), admin: User = Depends(re
     )
     await db.commit()
     return {"sent": sent, "devices": await web_push.devices(db, admin.id)}
+
+
+# ---------------------------------------------------------------------------
+# Doongerwadis, prayer halls and aramgahs (DECISIONS D10). Only an admin adds
+# or changes one; a place is turned off, never deleted (D8).
+# ---------------------------------------------------------------------------
+class FuneralPlaceIn(BaseModel):
+    name: str = Field(max_length=500)
+    kind: Literal["doongerwadi", "prayer_hall", "aramgah"]
+    city: str = Field(max_length=500)
+    address: str | None = Field(default=None, max_length=2000)
+    run_by: str | None = Field(default=None, max_length=500)
+    # Where it is, if the admin put it on the map; null for no pin.
+    location: LocationIn | None = None
+
+
+def _place_details(payload: FuneralPlaceIn) -> tuple[dict, tuple[float, float] | None]:
+    try:
+        details = funeral_places.checked_details(
+            name=payload.name, kind=payload.kind, city=payload.city, address=payload.address, run_by=payload.run_by,
+        )
+    except funeral_places.PlaceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    position = _checked_position(payload.location, "the place") if payload.location else None
+    return details, position
+
+
+async def _place(db: AsyncSession, place_id: int, *, lock: bool = False) -> FuneralPlace:
+    place = await db.get(FuneralPlace, place_id, with_for_update=True if lock else None)
+    if place is None:
+        raise HTTPException(status_code=404, detail="That place could not be found.")
+    return place
+
+
+@router.get("/funeral-places")
+async def list_funeral_places(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)) -> dict:
+    """Every funeral place, those in use first, with how many managers each has."""
+    return {"places": await funeral_places.admin_list(db)}
+
+
+@router.get("/funeral-places/{place_id}")
+async def get_funeral_place(
+    place_id: int, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> dict:
+    return funeral_places.summary(await _place(db, place_id))
+
+
+@router.post("/funeral-places")
+async def create_funeral_place(
+    payload: FuneralPlaceIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> dict:
+    rate_limit.enforce_key(f"admin_funeral_place:{admin.id}", max_requests=30, window_seconds=60)
+    details, position = _place_details(payload)
+    place = await funeral_places.create(db, admin, details, position)
+    await db.commit()
+    return funeral_places.summary(place)
+
+
+@router.put("/funeral-places/{place_id}")
+async def update_funeral_place(
+    place_id: int, payload: FuneralPlaceIn, db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> dict:
+    """Change a place's details or its pin. ``location`` null takes the pin off."""
+    rate_limit.enforce_key(f"admin_funeral_place:{admin.id}", max_requests=30, window_seconds=60)
+    details, position = _place_details(payload)
+    place = await funeral_places.update(db, await _place(db, place_id, lock=True), admin, details, position)
+    await db.commit()
+    return funeral_places.summary(place)
+
+
+class PlaceActiveIn(BaseModel):
+    active: bool
+
+
+@router.post("/funeral-places/{place_id}/active")
+async def set_funeral_place_active(
+    place_id: int, payload: PlaceActiveIn, db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> dict:
+    """Turn a place off (managers signing up no longer see it) or on again.
+    Nothing is deleted, and its managers keep their accounts."""
+    rate_limit.enforce_key(f"admin_funeral_place:{admin.id}", max_requests=30, window_seconds=60)
+    place = await funeral_places.set_active(db, await _place(db, place_id, lock=True), admin, payload.active)
+    await db.commit()
+    return funeral_places.summary(place)
