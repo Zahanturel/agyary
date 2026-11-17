@@ -40,6 +40,19 @@ LOCATION_TOWN, LOCATION_PIN = "town", "pin"
 LOCATION_SOURCES = (LOCATION_TOWN, LOCATION_PIN)
 
 USER_ROLES = ("panthaky", "mobed", "caretaker")
+# What an account is (DECISIONS D10): a mobed's (or panthaky's), or a Doongerwadi
+# or prayer hall manager's. One kind per person. Every account from before this
+# is a mobed's; a manager's sees none of a mobed's app (behdins, calendar,
+# machis), and a mobed's none of a manager's.
+ACCOUNT_MOBED, ACCOUNT_FUNERAL_MANAGER = "mobed", "funeral_manager"
+ACCOUNT_KINDS = (ACCOUNT_MOBED, ACCOUNT_FUNERAL_MANAGER)
+# A funeral place (D10): a Doongerwadi, a prayer hall (Worli, for cremation) or
+# an aramgah. Only an admin adds one.
+FUNERAL_DOONGERWADI, FUNERAL_PRAYER_HALL, FUNERAL_ARAMGAH = "doongerwadi", "prayer_hall", "aramgah"
+FUNERAL_PLACE_KINDS = (FUNERAL_DOONGERWADI, FUNERAL_PRAYER_HALL, FUNERAL_ARAMGAH)
+# What a person is at their funeral place. Only "manager" for now; staff later.
+FUNERAL_MANAGER = "manager"
+FUNERAL_PLACE_ROLES = (FUNERAL_MANAGER,)
 # A mobed's access to the app, the owner's one switch per account (DECISIONS D9):
 # a new sign-up waits for an admin's approval, and an admin can turn anyone off and on.
 ACCESS_PENDING, ACCESS_ON, ACCESS_OFF = "pending", "on", "off"

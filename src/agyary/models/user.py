@@ -17,6 +17,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from agyary.core.database import Base
 from agyary.models.enums import (
     ACCESS_ON,
+    ACCOUNT_KINDS,
+    ACCOUNT_MOBED,
     CLAIM_DECISIONS,
     CLAIMED_ROLES,
     USER_ACCESS,
@@ -53,6 +55,12 @@ class User(Base):
     # a sign-up is created "pending" (services/mobed_auth.login_user).
     access: Mapped[str] = mapped_column(String(10), server_default=ACCESS_ON)
     access_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "mobed" (a mobed or panthaky, the whole of the mobed app) or
+    # "funeral_manager" (a Doongerwadi or prayer hall's manager, who sees none
+    # of it), DECISIONS D10. One kind per person, chosen once at sign-up; every
+    # account from before is a mobed's. The API keeps them apart
+    # (api/routes/mobed.py, get_signed_in_user and get_current_manager).
+    account_kind: Mapped[str] = mapped_column(String(20), server_default=ACCOUNT_MOBED)
     # Refresh tokens from before sessions existed (they carry no session) that
     # were issued before this moment are refused - set by "sign out everywhere".
     tokens_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -61,7 +69,10 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (CheckConstraint(f"access IN ({sql_in(USER_ACCESS)})", name="access"),)
+    __table_args__ = (
+        CheckConstraint(f"access IN ({sql_in(USER_ACCESS)})", name="access"),
+        CheckConstraint(f"account_kind IN ({sql_in(ACCOUNT_KINDS)})", name="account_kind"),
+    )
 
 
 class DeletedAccount(Base):

@@ -175,3 +175,79 @@ async def test_the_panthaky_claim_migration_holds_its_rules_and_comes_off_cleanl
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_funeral_place_migration_holds_its_rules_and_comes_off_cleanly():
+    """f1a2b3c4d5e7: every account already there stays a mobed's; an account is
+    one of two kinds; a funeral place is one of three kinds, with both or
+    neither of latitude and longitude and on the globe; a manager's link is a
+    "manager"; the admin who added a place can go without taking it with them -
+    all enforced by the database the migration builds - and the downgrade takes
+    it off again without touching the accounts."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "e1f2a3b4c5d7"))
+        await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Er. Before', '+919000000001')")
+        _ok(_alembic("upgrade", "head"))
+        assert await _scratch_execute("SELECT account_kind FROM users") == [("mobed",)]
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES"
+                               " ('Manager', '+919000000002', 'funeral_manager')")
+        try:
+            await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('X', '+919000000003', 'behdin')")
+        except Exception as exc:  # noqa: BLE001 - the database's refusal, whatever its class
+            assert "check constraint" in str(exc).lower(), exc
+        else:
+            raise AssertionError("accepted account_kind behdin")
+        (admin,), (manager,) = await _scratch_execute("SELECT id FROM users ORDER BY id")
+
+        insert = ("INSERT INTO funeral_places (name, kind, city, latitude, longitude, created_by_user_id)"
+                  " VALUES (:n, :k, 'Mumbai', :lat, :lon, :by)")
+        base = {"k": "doongerwadi", "lat": None, "lon": None, "by": admin}
+        await _scratch_execute(insert, {**base, "n": "Doongerwadi (test)", "lat": 18.96, "lon": 72.80})
+        await _scratch_execute(insert, {**base, "n": "Prayer hall (test)", "k": "prayer_hall"})
+        await _scratch_execute(insert, {**base, "n": "Aramgah (test)", "k": "aramgah"})
+        refused = [
+            {"n": "Half", "lat": 18.96},
+            {"n": "Other half", "lon": 72.80},
+            {"n": "Off the globe", "lat": 91.0, "lon": 72.80},
+            {"n": "Round twice", "lat": 18.96, "lon": 181.0},
+            {"n": "Crematorium", "k": "crematorium"},
+        ]
+        for change in refused:
+            try:
+                await _scratch_execute(insert, {**base, **change})
+            except Exception as exc:  # noqa: BLE001 - the database's refusal, whatever its class
+                assert "check constraint" in str(exc).lower(), (change, exc)
+            else:
+                raise AssertionError(f"accepted {change}")
+        (place,), *_ = await _scratch_execute("SELECT id FROM funeral_places ORDER BY id")
+        link = "INSERT INTO funeral_place_managers (funeral_place_id, user_id, role) VALUES (:p, :u, :r)"
+        await _scratch_execute(link, {"p": place, "u": manager, "r": "manager"})
+        try:
+            await _scratch_execute(link, {"p": place, "u": admin, "r": "owner"})
+        except Exception as exc:  # noqa: BLE001
+            assert "check constraint" in str(exc).lower(), exc
+        else:
+            raise AssertionError("accepted role owner")
+        assert await _scratch_execute("SELECT is_active FROM funeral_places WHERE id = :p", {"p": place}) == [(True,)]
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid IN"
+            " ('funeral_places'::regclass, 'funeral_place_managers'::regclass, 'users'::regclass)")
+        assert {"ck_funeral_places_kind", "ck_funeral_places_location", "fk_funeral_places_created_by_user_id_users",
+                "ck_funeral_place_managers_role", "ck_users_account_kind",
+                "fk_funeral_place_managers_user_id_users"} <= {n for (n,) in names}
+
+        # The admin who added the places goes; the places stay.
+        await _scratch_execute("DELETE FROM users WHERE id = :u", {"u": admin})
+        assert len(await _scratch_execute("SELECT id FROM funeral_places WHERE created_by_user_id IS NULL")) == 3
+
+        _ok(_alembic("downgrade", "e1f2a3b4c5d7"))
+        tables = await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        assert not {"funeral_places", "funeral_place_managers"} & {t for (t,) in tables}
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+        assert "account_kind" not in {c for (c,) in cols}
+        assert await _scratch_execute("SELECT name FROM users") == [("Manager",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
