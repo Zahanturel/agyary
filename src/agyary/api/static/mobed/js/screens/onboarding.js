@@ -16,6 +16,7 @@ import { navigate } from "../router.js";
 import { refreshHeader } from "../ui.js";
 import { flagProblems } from "../fielderrors.js";
 import { mountLocationPicker } from "../location_picker.js";
+import { renderPlacePick } from "./manager.js";
 
 /**
  * The fire temple's details as typed into the set-up or the new-temple form
@@ -60,7 +61,32 @@ function claimChoicesHtml() {
     </div>`;
 }
 
+// What a brand-new account said it is, this visit: "mobed" goes on to the fire
+// temple search. Only asked of an account that has chosen nothing yet (the
+// server says so: may_choose_kind); an existing account is never asked.
+let chosen = null;
+
+/** "Mobed or Doongerwadi?" (DECISIONS D10). Neither is chosen for them. */
+function renderKindChoice() {
+  chrome(false);
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>Welcome to Mobed Diary</h2>
+      <p class="meta">Where do you work? You choose this once.</p>
+      <div class="stack" style="margin-top:12px">
+        <button type="button" id="kMobed">I am a mobed or panthaky</button>
+        <button type="button" class="secondary" id="kFuneral">I work at a Doongerwadi or prayer hall</button>
+      </div>
+    </div>`;
+  toTop();
+  const again = () => { chosen = null; renderOnboarding(); };
+  document.getElementById("kMobed").onclick = () => { chosen = "mobed"; renderOnboarding(); };
+  document.getElementById("kFuneral").onclick = () => renderPlacePick(again);
+}
+
 export function renderOnboarding() {
+  const mayChoose = !!(state.user && state.user.may_choose_kind);
+  if (mayChoose && chosen !== "mobed") return renderKindChoice();
   chrome(false);
   mainEl.innerHTML = `
     <div class="card">
@@ -68,7 +94,11 @@ export function renderOnboarding() {
       <p class="meta">Search by name or city. Tap yours when you see it.</p>
       <input type="text" id="agySearch" placeholder="Start typing..." autocomplete="off">
       <div id="agyResults" style="margin-top:8px"></div>
-    </div>`;
+    </div>
+    ${mayChoose ? `<div style="margin-bottom:14px"><button class="ghost" id="agyBack">Back</button></div>` : ""}`;
+  toTop();
+  const backBtn = document.getElementById("agyBack");
+  if (backBtn) backBtn.onclick = () => { chosen = null; renderOnboarding(); };
 
   const input = document.getElementById("agySearch");
   const results = document.getElementById("agyResults");

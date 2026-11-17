@@ -41,6 +41,17 @@ export async function signOut(btn) {
   location.reload();
 }
 
+/** Whether this is a Doongerwadi or prayer hall manager's account (D10): none
+ *  of the mobed app, only the manager's own screens. */
+export function isFuneralManager() {
+  return !!(state.user && state.user.account_kind === "funeral_manager");
+}
+
+/** Where this account's app opens. */
+export function homeFor() {
+  return isFuneralManager() ? "#/manager" : "#/calendar";
+}
+
 /** Whether an admin has let this mobed use the app (DECISIONS D9). A session
  *  saved before access existed has none, and the server is the judge anyway. */
 export function hasAccess() {
@@ -48,6 +59,8 @@ export function hasAccess() {
 }
 
 export async function loadSessionExtras() {
+  // A manager has no calendar: nothing to load, and the server would refuse it.
+  if (isFuneralManager()) return;
   // Preferences drive every calendar label, so a failure here must not take
   // the app down - fall back to the defaults the server would have sent.
   if (!state.preferences) {
@@ -81,7 +94,8 @@ export async function afterSignIn() {
   saveSession();
   // Replace, not push: the login screen must not be a step Back can return to
   // (it would bounce straight forward again and look like Back did nothing).
-  navigate(state.user.agyaries.length ? "#/calendar" : "#/onboarding", { replace: true });
+  navigate(isFuneralManager() ? homeFor() : state.user.agyaries.length ? "#/calendar" : "#/onboarding",
+    { replace: true });
 }
 
 /** Signed in, which is not the same as "holding a live access token".

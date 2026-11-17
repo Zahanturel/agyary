@@ -14,7 +14,7 @@ import re
 
 import pytest
 from fastapi.routing import APIRoute
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from agyary.api.routes import mobed as mobed_routes
 from agyary.core import config
@@ -178,3 +178,123 @@ async def test_a_manager_who_is_waiting_or_off_sees_only_the_waiting_screen(clie
     # And still none of the mobed app, whatever the access.
     r = await client.get("/api/mobed/my-day", headers=headers)
     assert r.status_code == 403 and r.json()["detail"] == mobed_routes.NOT_FOR_MANAGERS
+
+
+# --- Signing up as a manager ---------------------------------------------------
+
+NEW = "+919911100099"
+
+
+async def _new_account(client, phone=NEW, name="Test Manager") -> tuple[dict, dict]:
+    body = await sign_in(client, phone, name, approve=False)
+    return {"Authorization": f"Bearer {body['access_token']}"}, body["user"]
+
+
+@pytest.fixture
+def pushes(monkeypatch):
+    sent = []
+
+    async def capture(db, settings, user_ids, **kw):
+        sent.append({"to": list(user_ids), **kw})
+        return 0
+
+    from agyary.services import web_push
+
+    monkeypatch.setattr(web_push, "send_to_users", capture)
+    return sent
+
+
+async def test_a_new_account_chooses_its_place_and_waits_and_the_admins_are_told(
+    client, db, seeded, admin_is_panthaky, pushes,
+):
+    from agyary.models import AppNotification
+
+    admin = await sign_in(client, seeded["panthaky_phone"])
+    place = await _place(db)
+    off = await _place(db, "Old aramgah (test)")
+    off.is_active = False
+    hall = await _place(db, "Prayer hall (test)")
+    hall.city = "Worli"
+    await db.commit()
+
+    headers, user = await _new_account(client)
+    assert user["may_choose_kind"] is True and user["account_kind"] == "mobed" and user["access"] == "pending"
+
+    listed = (await client.get("/api/mobed/funeral-places", headers=headers)).json()["places"]
+    assert [p["name"] for p in listed] == ["Doongerwadi (test)", "Prayer hall (test)"]     # not the one turned off
+    by_town = (await client.get("/api/mobed/funeral-places?q=worli", headers=headers)).json()["places"]
+    assert [p["name"] for p in by_town] == ["Prayer hall (test)"]
+    assert (await client.get("/api/mobed/funeral-places?q=%25", headers=headers)).json()["places"] == []
+
+    assert (await client.post(f"/api/mobed/funeral-places/{off.id}/join", headers=headers)).status_code == 404
+    r = await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=headers)
+    assert r.status_code == 200, r.text
+    me = r.json()["user"]
+    assert me["account_kind"] == "funeral_manager" and me["access"] == "pending" and me["may_choose_kind"] is False
+    assert [p["name"] for p in me["funeral_places"]] == ["Doongerwadi (test)"]
+
+    (note,) = (await db.execute(select(AppNotification).where(AppNotification.kind == "manager_request"))).scalars()
+    assert note.user_id == admin["user"]["id"] and note.title == "A new Doongerwadi manager is waiting"
+    assert "Test Manager" in note.body and NEW in note.body and "Doongerwadi (test), Mumbai" in note.body
+    assert note.link == "#/admin/mobeds"
+    (push,) = pushes
+    assert push["title"] == "A new Doongerwadi manager is waiting" and push["to"] == [admin["user"]["id"]]
+    assert "Test Manager" in push["body"] and "Doongerwadi (test)" in push["body"]
+    assert NEW not in push["body"] and NEW.lstrip("+") not in push["body"]      # never on the lock screen
+
+    # Waiting: their own screen is refused for now, and nothing of a mobed's at any time.
+    r = await client.get("/api/mobed/manager/place", headers=headers)
+    assert r.status_code == 403 and r.headers["X-Mobed-Access"] == "pending"
+    for method, path in (("POST", f"/api/mobed/agyaries/{seeded['agyary_id']}/join"),
+                         ("POST", "/api/mobed/agyaries"),
+                         ("POST", f"/api/mobed/funeral-places/{hall.id}/join")):
+        r = await client.request(method, path, json={"name": "X", "city": "Y"}, headers=headers)
+        assert r.status_code == 403 and r.json()["detail"] == mobed_routes.NOT_FOR_MANAGERS, path
+
+    # The admin approves them with the one switch; then their screen opens.
+    uid = me["id"]
+    r = await client.post(f"/api/mobed/admin/mobeds/{uid}/access", json={"access": "on"},
+                          headers={"Authorization": f"Bearer {admin['access_token']}"})
+    assert r.status_code == 200 and r.json()["access"] == "on"
+    r = await client.get("/api/mobed/manager/place", headers=headers)
+    assert r.status_code == 200 and r.json()["places"][0]["id"] == place.id
+
+
+async def test_an_account_that_has_chosen_is_never_asked_again(client, db, seeded, admin_is_panthaky):
+    place = await _place(db)
+    await db.commit()
+    # A mobed at a fire temple, and an admin: neither may become a manager.
+    for phone in (seeded["mobed_phone"], seeded["panthaky_phone"]):
+        body = await sign_in(client, phone)
+        h = {"Authorization": f"Bearer {body['access_token']}"}
+        assert body["user"]["may_choose_kind"] is False
+        assert (await client.get("/api/mobed/funeral-places", headers=h)).status_code == 409
+        r = await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=h)
+        assert r.status_code == 409 and r.json()["detail"].startswith("Your account is already set up as a mobed's.")
+    # A new mobed who chose a fire temple first.
+    headers, _ = await _new_account(client)
+    await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/join", json={"claimed_role": "mobed"}, headers=headers)
+    assert (await client.get("/api/mobed/auth/me", headers=headers)).json()["may_choose_kind"] is False
+    assert (await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=headers)).status_code == 409
+    assert (await db.execute(select(FuneralPlaceManager))).first() is None
+
+
+async def test_an_old_account_that_was_on_still_waits_once_it_is_a_managers(client, db, seeded):
+    """An account from before approval (on) that never chose a fire temple is
+    still checked by the owner before it can be a manager's."""
+    place = await _place(db)
+    await db.commit()
+    body = await sign_in(client, NEW)          # approved, as an old account would be
+    h = {"Authorization": f"Bearer {body['access_token']}"}
+    r = await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=h)
+    assert r.status_code == 200 and r.json()["user"]["access"] == "pending"
+
+
+async def test_an_account_that_is_off_cannot_choose(client, db, seeded):
+    place = await _place(db)
+    await db.commit()
+    headers, user = await _new_account(client)
+    await db.execute(update(User).where(User.id == user["id"]).values(access="off"))
+    await db.commit()
+    r = await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=headers)
+    assert r.status_code == 403 and r.headers["X-Mobed-Access"] == "off"

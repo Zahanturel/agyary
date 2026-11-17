@@ -64,6 +64,10 @@ export async function api(path, opts = {}) {
   // asked; the error still goes to the caller, which says nothing more.
   const access = res.status === 403 ? res.headers.get("X-Mobed-Access") : null;
   if (access) globalThis.dispatchEvent?.(new CustomEvent("mobed:access", { detail: access }));
+  // A Doongerwadi manager's account asked for part of the mobed app (D10): main.js
+  // takes them to their own screen. The error still goes to the caller.
+  const kind = res.status === 403 ? res.headers.get("X-Account-Kind") : null;
+  if (kind) globalThis.dispatchEvent?.(new CustomEvent("mobed:account-kind", { detail: kind }));
 
   if (!res.ok) {
     // Our own handlers answer in plain words; anything else gets a plain
@@ -190,6 +194,13 @@ export const updateMyName = (name) => patch("/auth/me", { name });
 export const putDailyReport = (enabled) => put("/me/daily-report", { enabled });
 export const getPreferences = () => get("/me/preferences");
 export const putPreferences = (prefs) => put("/me/preferences", prefs);
+
+// A brand-new account that works at a Doongerwadi or prayer hall (D10): the places
+// the admin has added, and "I work here" (the account becomes a manager's and waits).
+export const searchFuneralPlaces = (q) => get(`/funeral-places?q=${encodeURIComponent(q || "")}`);
+export const joinFuneralPlace = (id) => post(`/funeral-places/${id}/join`, {});
+/** A manager's own place(s), for their home screen. */
+export const managerPlace = () => get("/manager/place");
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).

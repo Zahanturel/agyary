@@ -66,6 +66,7 @@ const SHELL_FILES = [
   "/mobed-app/js/screens/admin_mobeds.js",
   "/mobed-app/js/screens/admin_funeral_places.js",
   "/mobed-app/js/screens/waiting.js",
+  "/mobed-app/js/screens/manager.js",
   "/mobed-app/js/screens/menu.js",
   "/mobed-app/js/screens/agyari_location.js",
   "/mobed-app/js/screens/slip.js",

@@ -319,6 +319,9 @@ export function shortName(full) {
 export function refreshHeader() {
   if (!state.user) return setHeader("Mobed Diary");
   const agyary = currentAgyary();
+  // A Doongerwadi manager has no fire temple; their place is where they are (D10).
+  const place = (state.user.funeral_places || [])[0];
+  const where = agyary ? agyary.name : place ? place.name : "";
   const first = shortName(state.user.name);
-  setHeader(agyary ? `${first} · ${agyary.name}` : first);
+  setHeader(where ? `${first} · ${where}` : first);
 }

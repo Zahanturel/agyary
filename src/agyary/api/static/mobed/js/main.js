@@ -18,8 +18,10 @@ import { state, saveSession, restoreSession, clearSession, homeHash } from "./st
 import { clearAllDrafts } from "./drafts.js";
 import { calendarHash, boardHash } from "./calendar.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
-import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline, flashError } from "./ui.js";
-import { loadSessionExtras, signedIn, hasAccess } from "./session.js";
+import {
+  chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline, flashError, flashInfo,
+} from "./ui.js";
+import { loadSessionExtras, signedIn, hasAccess, isFuneralManager, homeFor } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
 import { renderCalendarScreen } from "./screens/calendar.js";
@@ -37,6 +39,7 @@ import { renderAdminFuneralPlaces, renderAdminFuneralPlace } from "./screens/adm
 import { renderWaiting } from "./screens/waiting.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderAgyariLocation } from "./screens/agyari_location.js";
+import { renderManagerHome, renderManagerSettings } from "./screens/manager.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
@@ -47,6 +50,11 @@ route("#/login", renderLogin, { open: true });
 route("#/onboarding", renderOnboarding);
 // A mobed an admin has not let in yet, or has switched off (DECISIONS D9).
 route("#/waiting", renderWaiting);
+
+// A Doongerwadi or prayer hall manager's own screens (D10): no bottom tabs, and
+// none of the mobed app. The guard keeps a manager here and a mobed out.
+route("#/manager", renderManagerHome);
+route("#/manager/settings", renderManagerSettings, { parent: "#/manager" });
 
 // `tab` puts the screen under a bottom tab and shows the tab bar. Every screen
 // has one except Settings (the menu and what opens from it), sign-in and
@@ -111,6 +119,19 @@ setGuard(async (matched) => {
   }
   if (!signedIn()) return "#/login";
 
+  // A Doongerwadi manager (D10): the waiting screen until approved (D9), then
+  // only their own screens. Settings is theirs too. Anything else typed or
+  // linked goes to their home, saying why unless it was only the app's default.
+  if (isFuneralManager()) {
+    if (!hasAccess()) return matched.pattern === "#/waiting" ? null : "#/waiting";
+    if (matched.pattern === "#/menu") return "#/manager/settings";
+    if (matched.pattern.startsWith("#/manager")) return null;
+    if (!["#/calendar", "#/waiting", "#/onboarding"].includes(matched.pattern)) {
+      flashInfo("That part of Mobed Diary is for mobeds. This is your Doongerwadi's page.");
+    }
+    return "#/manager";
+  }
+
   // Signed in but not yet at a fire temple: every screen is scoped to one.
   const hasAgyary = (state.user.agyaries || []).length > 0;
   if (!hasAgyary && matched.pattern !== "#/onboarding") return "#/onboarding";
@@ -119,6 +140,8 @@ setGuard(async (matched) => {
   // once a fire temple is chosen. The server refuses everything else anyway.
   if (!hasAccess()) return matched.pattern === "#/waiting" || matched.pattern === "#/onboarding" ? null : "#/waiting";
   if (matched.pattern === "#/waiting") return "#/calendar";
+  // The manager's screens are not a mobed's.
+  if (matched.pattern.startsWith("#/manager")) return "#/calendar";
   return null;
 });
 
@@ -232,6 +255,16 @@ window.addEventListener("mobed:access", (e) => {
   navigate("#/waiting", { replace: true });
 });
 
+// The server says this is a Doongerwadi manager's account (D10) while the app
+// was showing part of the mobed app: to their own screen, which is all they have.
+window.addEventListener("mobed:account-kind", (e) => {
+  if (!state.user) return;
+  if (state.user.account_kind === e.detail && location.hash.startsWith("#/manager")) return;
+  state.user.account_kind = e.detail;
+  saveSession();
+  navigate(homeFor(), { replace: true });
+});
+
 window.addEventListener("offline", paintOffline);
 window.addEventListener("online", async () => {
   paintOffline();
@@ -245,7 +278,7 @@ window.addEventListener("online", async () => {
     paintOffline();
     saveSession();
     refreshHeader();
-    navigate(location.hash || "#/calendar");
+    navigate(location.hash || homeFor());
     refreshNotifications({ popup: true });
   } catch (e) { /* still not really back; the next online event retries */ }
 });

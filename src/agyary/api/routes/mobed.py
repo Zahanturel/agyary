@@ -464,6 +464,9 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
         # "mobed" or "funeral_manager" (D10): the app shows a manager only their own screens.
         "account_kind": user.account_kind,
         "funeral_places": places,
+        # A brand-new account first chooses: a mobed (or panthaky), or a
+        # Doongerwadi manager. Never asked of an account that has chosen.
+        "may_choose_kind": await funeral_places.may_choose_kind(db, get_settings(), user),
         "automatic_reminders": user.automatic_reminders,
         # The mobed's own switch for the evening-before report, and whether it also goes
         # to WhatsApp yet (otherwise it is in the app only) - so Settings can say so.
@@ -729,6 +732,11 @@ async def _joined(
     finished signing up and the admins are asked to approve them (D9), told
     too if they say they are the panthaky; a mobed already using the app who
     says so has the admins told on its own."""
+    # Locked, so this and becoming a Doongerwadi manager cannot both happen at
+    # once (services/funeral_places.join_as_manager locks the same row).
+    await db.refresh(user, with_for_update=True)
+    if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
+        raise HTTPException(status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind})
     membership = await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
     claimed = bool(claimed_role) and await panthaky.record_claim(db, membership, claimed_role)
     settings = get_settings()

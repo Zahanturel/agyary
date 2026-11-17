@@ -10,13 +10,23 @@ there. Its managers are people whose account is a funeral manager's
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agyary.models import FuneralPlace, FuneralPlaceManager, User
-from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING, FUNERAL_PLACE_KINDS
-from agyary.services import template_text
+from agyary.core.config import Settings
+from agyary.models import AgyaryUser, FuneralPlace, FuneralPlaceManager, User
+from agyary.models.enums import (
+    ACCESS_OFF,
+    ACCESS_ON,
+    ACCESS_PENDING,
+    ACCOUNT_FUNERAL_MANAGER,
+    ACCOUNT_MOBED,
+    FUNERAL_MANAGER,
+    FUNERAL_PLACE_KINDS,
+)
+from agyary.services import guardrails, reminders, template_text, web_push
 
 logger = logging.getLogger(__name__)
 
@@ -155,3 +165,85 @@ async def places_of(db: AsyncSession, user_id: int) -> list[FuneralPlace]:
             )
         ).scalars().all()
     )
+
+
+# ---------------------------------------------------------------------------
+# A manager signing up (D10): after signing in with WhatsApp, a brand-new
+# account chooses "I work at a Doongerwadi or prayer hall", picks its place,
+# and waits for an admin's approval like a new mobed (D9).
+# ---------------------------------------------------------------------------
+KIND_MANAGER_REQUEST = "manager_request"
+MANAGER_REQUEST_TTL = timedelta(days=7)
+MOBEDS_LINK = "#/admin/mobeds"
+
+
+class JoinError(ValueError):
+    """This account may not become a manager; the message is for them."""
+
+
+ALREADY_CHOSEN = (
+    "Your account is already set up as a mobed's. One account is one kind: to work at a Doongerwadi "
+    "in the app, please get in touch with the person who runs Mobed Diary."
+)
+
+
+async def may_choose_kind(db: AsyncSession, settings: Settings, user: User) -> bool:
+    """Whether this account is new enough to choose what it is: a mobed's
+    account that has never joined a fire temple or a funeral place. An admin's
+    stays a mobed's (they keep the admin screens and every mobed's view)."""
+    if user.account_kind != ACCOUNT_MOBED or guardrails.is_admin(settings, user.phone):
+        return False
+    for link in (AgyaryUser, FuneralPlaceManager):
+        if (await db.execute(select(link.user_id).where(link.user_id == user.id).limit(1))).first() is not None:
+            return False
+    return True
+
+
+async def join_as_manager(
+    db: AsyncSession, settings: Settings, user: User, place: FuneralPlace, *, now: datetime | None = None
+) -> FuneralPlaceManager:
+    """Make ``user`` the manager of ``place``: their account becomes a funeral
+    manager's, for good, and waits for an admin's approval whatever it was
+    before (the owner approves every manager). Every admin is told."""
+    # Locked, so this and choosing a fire temple cannot both happen at once.
+    await db.refresh(user, with_for_update=True)
+    if not await may_choose_kind(db, settings, user):
+        raise JoinError(ALREADY_CHOSEN)
+    now = now or datetime.now(timezone.utc)
+    user.account_kind = ACCOUNT_FUNERAL_MANAGER
+    if user.access != ACCESS_PENDING:
+        user.access = ACCESS_PENDING
+        user.access_changed_at = now
+    link = FuneralPlaceManager(funeral_place_id=place.id, user_id=user.id, role=FUNERAL_MANAGER, joined_at=now)
+    db.add(link)
+    await db.flush()
+    await tell_admins_of_manager(db, settings, user, place, now=now)
+    logger.warning("User %s signed up as a manager at funeral place %s", user.id, place.id)
+    return link
+
+
+async def tell_admins_of_manager(
+    db: AsyncSession, settings: Settings, user: User, place: FuneralPlace, *, now: datetime | None = None
+) -> int:
+    """Every admin is told in the app, with the manager's name, number and
+    place, and on their phones without the number (D9)."""
+    now = now or datetime.now(timezone.utc)
+    phones = guardrails.admin_phones(settings)
+    if not phones:
+        logger.error("Manager %s is waiting for approval, but no ADMIN_PHONES is set, so nobody was told", user.id)
+        return 0
+    admins = (await db.execute(select(User.id).where(User.phone.in_(phones)))).scalars().all()
+    where = f"{place.name}, {place.city}" if place.city and place.city not in place.name else place.name
+    for uid in admins:
+        await reminders.notify(
+            db, uid, KIND_MANAGER_REQUEST, "A new Doongerwadi manager is waiting",
+            f"{user.name} ({user.phone}) says they work at {where} and wants to use Mobed Diary as its "
+            "manager. Approve them on the Mobeds page.",
+            link=MOBEDS_LINK, now=now, ttl=MANAGER_REQUEST_TTL,
+        )
+    await web_push.send_to_users(
+        db, settings, admins, title="A new Doongerwadi manager is waiting",
+        body=f"{user.name}, manager at {place.name}, wants to use Mobed Diary. Tap to approve.",
+        url="/mobed" + MOBEDS_LINK, tag="manager-request",
+    )
+    return len(admins)

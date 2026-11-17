@@ -12,7 +12,7 @@ import { state, saveSession, currentAgyary } from "../state.js";
 import { chrome, mainEl, showFab, showError, showInfo } from "../ui.js";
 import { esc } from "../util.js";
 import { navigate } from "../router.js";
-import { signOut, loadSessionExtras } from "../session.js";
+import { signOut, loadSessionExtras, isFuneralManager, homeFor } from "../session.js";
 import { refreshNotifications } from "../notifications.js";
 
 const onScreen = () => location.hash.startsWith("#/waiting");
@@ -39,7 +39,7 @@ async function checkAgain({ quiet = false, btn = null } = {}) {
     // the server was saying no: load them properly now.
     state.preferences = null;
     await loadSessionExtras();
-    navigate("#/calendar", { replace: true });
+    navigate(homeFor(), { replace: true });
     refreshNotifications({ popup: true });
     return;
   }
@@ -55,7 +55,10 @@ export function renderWaiting() {
   showFab(false);
   const user = state.user || {};
   const pending = user.access === "pending";
-  const temple = currentAgyary();
+  const manager = isFuneralManager();
+  // A Doongerwadi manager waits for the same approval, at their place (D10).
+  const place = manager ? (user.funeral_places || [])[0] : null;
+  const temple = manager ? null : currentAgyary();
   const digits = (user.support_phone || "").replace(/\D/g, "");
   const contact = digits
     ? `<a class="button secondary" href="https://wa.me/${esc(digits)}" target="_blank" rel="noopener">Message us on WhatsApp</a>`
@@ -64,7 +67,15 @@ export function renderWaiting() {
   mainEl.innerHTML = `
     <div class="card" role="status">
       <h2>${pending ? "Waiting for approval" : "Your access is switched off"}</h2>
-      ${pending
+      ${pending && manager
+        ? `<p>Thank you, ${esc(user.name || "")}. Your request to use Mobed Diary as a manager${place
+            ? ` at <b>${esc(place.name)}</b>` : ""} has been sent.</p>
+           <p class="meta">The admin checks with you first. You can start as soon as it is approved. This
+             screen moves on by itself when you open the app after that.</p>`
+        : !pending && manager
+        ? `<p>Your access to Mobed Diary is switched off at the moment.</p>
+           <p class="meta">Nothing is deleted. To turn it back on, please get in touch${digits ? "" : " with the person who gave you Mobed Diary"}.</p>`
+        : pending
         ? `<p>Thank you, ${esc(user.name || "")}. Your request to use Mobed Diary${temple
             ? ` at <b>${esc(temple.name)}</b>` : ""} has been sent.</p>
            ${temple && temple.panthaky_claim_waiting
