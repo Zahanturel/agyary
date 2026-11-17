@@ -1,4 +1,5 @@
-"""Deleting a mobed's account, and everything that is theirs (PV-2).
+"""Deleting an account, and everything that is theirs (PV-2): a mobed's, or a
+Doongerwadi manager's (only their link to the place goes; the place stays).
 
 Google Play requires an app that creates accounts to let people delete them,
 in the app and from the web, and India's DPDP Act gives the same right. A
@@ -86,6 +87,9 @@ _STEPS = [
     # notices and preferences go with it). login_otps stay: they are what the
     # code limits count, and they are swept after two days.
     "DELETE FROM agyary_users WHERE user_id = :u",
+    # A Doongerwadi manager's link to their place (D10). The place stays, and so
+    # do places an admin added (their created_by is cleared by the foreign key).
+    "DELETE FROM funeral_place_managers WHERE user_id = :u",
     "DELETE FROM wa_login_attempts WHERE claimed_phone = (SELECT phone FROM users WHERE id = :u)",
     "DELETE FROM users WHERE id = :u",
 ]

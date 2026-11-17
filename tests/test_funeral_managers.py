@@ -342,3 +342,29 @@ async def test_the_admin_sees_managers_with_their_place_and_counts_what_is_in_th
     # And on the place's own line.
     listed = (await client.get("/api/mobed/admin/funeral-places", headers=ah)).json()["places"]
     assert listed[0]["managers"] == {"on": 1, "pending": 1, "off": 0}
+
+
+# --- Deleting a manager's account ---------------------------------------------------
+
+async def test_deleting_a_managers_account_takes_their_link_and_keeps_the_place(client, db, seeded, admin_is_panthaky):
+    from agyary.models import DeletedAccount
+
+    headers, place_id = await _manager(client, db, seeded)
+    r = await client.post("/api/mobed/auth/account/delete", json={"confirm": True}, headers=headers)
+    assert r.status_code == 200 and r.json() == {"deleted": True}
+    assert (await db.execute(select(FuneralPlaceManager))).first() is None
+    assert (await db.execute(select(User).where(User.phone == MANAGER))).first() is None
+    assert (await db.execute(select(FuneralPlace.id))).scalars().all() == [place_id]
+    assert (await db.execute(select(DeletedAccount))).first() is not None
+
+
+async def test_an_admin_who_added_a_place_can_delete_their_account_and_the_place_stays(client, db, seeded, admin_is_panthaky):
+    admin = await sign_in(client, seeded["panthaky_phone"])
+    ah = {"Authorization": f"Bearer {admin['access_token']}"}
+    place = (await client.post("/api/mobed/admin/funeral-places", headers=ah,
+                               json={"name": "Doongerwadi (test)", "kind": "doongerwadi", "city": "Mumbai"})).json()
+    r = await client.post("/api/mobed/auth/account/delete", json={"confirm": True}, headers=ah)
+    assert r.status_code == 200, r.text
+    row = (await db.execute(select(FuneralPlace).where(FuneralPlace.id == place["id"]))).scalar_one()
+    await db.refresh(row)
+    assert row.created_by_user_id is None and row.is_active is True
