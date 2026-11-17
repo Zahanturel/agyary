@@ -8,7 +8,9 @@
  *  - tap the map (or drag the pin);
  *  - "I'm at the agyari now": the phone's own location;
  *  - "Search address or area": OpenStreetMap, asked by our server, never by
- *    the page (api/routes/places.py).
+ *    the page (api/routes/places.py);
+ *  - "Find on Google": by name, also asked by our server, with the owner's
+ *    key; shown only when the server says it has one.
  *
  * The map is Leaflet, kept in the app's own folder and loaded only when a
  * screen shows a map, with OpenStreetMap's tiles (the only outside address the
@@ -17,7 +19,7 @@
  * a search that does not answer.
  */
 
-import { searchPlaces } from "./api.js";
+import { searchPlaces, googlePlaces, placesOptions } from "./api.js";
 import { showError } from "./ui.js";
 import { esc } from "./util.js";
 import { flagProblems } from "./fielderrors.js";
@@ -35,6 +37,15 @@ const ROUGH_METRES = 100;
 const MAP_FAILED = "The map could not load. Please check your signal and try again.";
 
 let leafletLoading = null;
+let googleAsked = null;
+
+/** Whether the server offers "Find on Google". Asked once per visit. */
+function googleOffered() {
+  if (!googleAsked) {
+    googleAsked = placesOptions().then((o) => !!(o && o.google)).catch(() => { googleAsked = null; return false; });
+  }
+  return googleAsked;
+}
 
 /** Leaflet's script and stylesheet, once, the first time a map is shown. */
 export function loadLeaflet() {
@@ -83,11 +94,10 @@ let current = null;
  *  opts.initial   - { latitude, longitude, source } or null
  *  opts.suggest() - what to search for when the box is empty (name and city)
  *  opts.tall      - a taller map, for a page that is only the picker
- *  opts.extraTools(toolsEl, place) - lets a caller add a button beside the others
  * Returns { get(), setSaved(location), destroy() }. get() is the pin as
  * { latitude, longitude }, or null when there is none.
  */
-export function mountLocationPicker(root, { initial = null, suggest = () => "", tall = false, extraTools = null } = {}) {
+export function mountLocationPicker(root, { initial = null, suggest = () => "", tall = false } = {}) {
   if (current) current.destroy();
   root.innerHTML = `
     <div class="loc-picker">
@@ -99,6 +109,7 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
       <div id="lpResults" class="loc-results"></div>
       <div class="loc-tools" id="lpTools">
         <button type="button" class="secondary small" id="lpHere">I'm at the agyari now</button>
+        <button type="button" class="secondary small hidden" id="lpGoogle">Find on Google</button>
       </div>
       <div class="loc-map${tall ? " tall" : ""}" id="lpMap" role="region" aria-label="Map"></div>
       <p class="meta loc-status" id="lpStatus" role="status"></p>
@@ -257,7 +268,13 @@ export function mountLocationPicker(root, { initial = null, suggest = () => "", 
     });
   }
 
-  if (extraTools) extraTools($("lpTools"), { runSearch, query });
+  const googleBtn = $("lpGoogle");
+  googleBtn.onclick = () => runSearch(googleBtn, googlePlaces, "Google",
+    "Please type the fire temple's name to find it on Google.");
+  // Only when the server has a key. Not knowing is the same as no: the button
+  // stays hidden, and everything else works without it.
+  googleOffered().then((yes) => { if (yes && !gone) googleBtn.classList.remove("hidden"); });
+
   startMap();
 
   const api = {

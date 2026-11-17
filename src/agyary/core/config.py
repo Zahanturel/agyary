@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -155,6 +156,14 @@ class Settings(BaseSettings):
     # OpenStreetMap's Nominatim (services/place_search.py), whose usage policy
     # asks every app to name itself in its User-Agent.
     place_search_user_agent: str = "MobedDiary/1.0 (+https://mobed.gotiadarian.com)"
+    # "Find on Google": a Google Places API (New) key from the owner's own Google
+    # Cloud project, with a daily quota set there so it cannot run up a bill.
+    # Every call is made by our server; the key never reaches a phone and is
+    # never logged. Empty: the button is not shown and everything else works.
+    google_places_api_key: SecretStr = SecretStr("")
+    # Our own ceiling on Google searches a day from the whole app, under
+    # Google's quota. Searches answered from the short cache do not count.
+    google_places_daily_cap: int = 100
 
     # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
     # another login to remember, and the WhatsApp number is already the

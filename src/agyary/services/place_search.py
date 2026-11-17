@@ -68,11 +68,12 @@ _nominatim_last = -math.inf
 
 
 def reset() -> None:
-    """Forget the cache and the last call (tests)."""
+    """Forget the cache and the calls counted (tests)."""
     global _nominatim_turn, _nominatim_last
     _cache.clear()
     _nominatim_turn = None
     _nominatim_last = -math.inf
+    _google_calls.clear()
 
 
 def clean_query(raw: str) -> str | None:
@@ -176,4 +177,85 @@ async def nominatim(settings: Settings, query: str) -> list[dict]:
         if len(places) == MAX_RESULTS:
             break
     _remember(key, places)
+    return places
+
+
+# --- "Find on Google" ----------------------------------------------------------
+# Google Places API (New) Text Search, by name, with the owner's own key
+# (GOOGLE_PLACES_API_KEY). The key goes in a header from our server only: it is
+# never sent to a phone, never put in a URL, and never logged - a failure is
+# logged by its status code alone. Only the four fields the picker shows are
+# asked for, which keeps each search in the cheapest tier that has them.
+GOOGLE_URL = "https://places.googleapis.com/v1/places:searchText"
+GOOGLE_FIELDS = "places.id,places.displayName,places.formattedAddress,places.location"
+GOOGLE_DAY_SECONDS = 86400
+
+GOOGLE_UNAVAILABLE = ("Google search is not answering just now. Please search the address above, "
+                      "or move the pin on the map yourself.")
+GOOGLE_CAP_REACHED = ("Find on Google has been used a lot today. Please search the address above, "
+                      "or move the pin on the map yourself.")
+
+_google_calls: list[float] = []
+
+
+def google_key(settings: Settings) -> str:
+    return settings.google_places_api_key.get_secret_value().strip()
+
+
+def google_configured(settings: Settings) -> bool:
+    return bool(google_key(settings))
+
+
+def _google_turn(settings: Settings) -> None:
+    """Count one call to Google against the app's daily ceiling, or refuse."""
+    now = _clock()
+    _google_calls[:] = [t for t in _google_calls if t > now - GOOGLE_DAY_SECONDS]
+    if len(_google_calls) >= settings.google_places_daily_cap:
+        logger.warning("Find on Google: the daily ceiling of %s searches is reached", settings.google_places_daily_cap)
+        raise SearchUnavailable(GOOGLE_CAP_REACHED)
+    _google_calls.append(now)
+
+
+async def google(settings: Settings, query: str) -> list[dict]:
+    """Up to five places Google finds for ``query`` (already cleaned), each
+    {name, address, latitude, longitude}. Raises SearchUnavailable."""
+    key = google_key(settings)
+    if not key:
+        raise SearchUnavailable(GOOGLE_UNAVAILABLE)
+    cache_key = "google:" + query.lower()
+    hit = _cached(cache_key)
+    if hit is not None:
+        return hit
+    _google_turn(settings)
+    try:
+        async with _new_client() as client:
+            resp = await client.post(
+                GOOGLE_URL,
+                json={"textQuery": query, "pageSize": MAX_RESULTS, "languageCode": "en"},
+                headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": GOOGLE_FIELDS},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("Find on Google failed: %s", exc.__class__.__name__)
+        raise SearchUnavailable(GOOGLE_UNAVAILABLE) from exc
+    if resp.status_code != 200:
+        logger.warning("Find on Google answered %s", resp.status_code)
+        raise SearchUnavailable(GOOGLE_UNAVAILABLE)
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        logger.warning("Find on Google answered something that is not JSON")
+        raise SearchUnavailable(GOOGLE_UNAVAILABLE) from exc
+    places: list[dict] = []
+    for item in (body.get("places") if isinstance(body, dict) else None) or []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("displayName")
+        name = name.get("text") if isinstance(name, dict) else ""
+        where = item.get("location") if isinstance(item.get("location"), dict) else {}
+        p = _place(str(name or ""), str(item.get("formattedAddress") or ""), where.get("latitude"), where.get("longitude"))
+        if p and asdict(p) not in places:
+            places.append(asdict(p))
+        if len(places) == MAX_RESULTS:
+            break
+    _remember(cache_key, places)
     return places

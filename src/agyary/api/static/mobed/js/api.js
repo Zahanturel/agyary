@@ -191,6 +191,10 @@ export const getAgyaryLocation = (aid) => get(`/agyaries/${aid}/location`);
 export const putAgyaryLocation = (aid, latitude, longitude) => put(`/agyaries/${aid}/location`, { latitude, longitude });
 /** An address or area on OpenStreetMap, asked by our server. */
 export const searchPlaces = (q) => get(`/places/search?q=${encodeURIComponent(q)}`);
+/** Whether "Find on Google" is set up on the server (never the key itself). */
+export const placesOptions = () => get("/places/options");
+/** A fire temple by name on Google, asked by our server with its own key. */
+export const googlePlaces = (q) => get(`/places/google?q=${encodeURIComponent(q)}`);
 
 
 /** This mobed's services. With a window it is that window, past days

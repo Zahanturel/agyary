@@ -4,7 +4,8 @@ The location picker's searches, made by our server on the phone's behalf
 (services/place_search.py). Signed in only, and not for an account that is
 switched off; a mobed still signing up may search, because adding their fire
 temple is part of signing up. Each mobed is limited, and the whole app keeps
-to OpenStreetMap's one request a second.
+to OpenStreetMap's one request a second. "Find on Google" is there only when
+the server has GOOGLE_PLACES_API_KEY, and the key never leaves the server.
 """
 
 from __future__ import annotations
@@ -43,3 +44,34 @@ async def search_address(q: str = Query(default=""), user: User = Depends(get_us
     except place_search.SearchUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"source": "openstreetmap", "results": results}
+
+
+# --- "Find on Google" ----------------------------------------------------------
+# Each search costs the owner money past Google's free tier, so it is tighter
+# than the address search: per mobed here, and for the whole app per day in
+# the service (GOOGLE_PLACES_DAILY_CAP), under the quota set in Google Cloud.
+GOOGLE_PER_MINUTE = 5
+GOOGLE_PER_DAY = 30
+
+
+@router.get("/options")
+async def search_options(user: User = Depends(get_user_not_switched_off)) -> dict:
+    """What the picker may offer. Says only whether Google is set up, never the key."""
+    return {"google": place_search.google_configured(get_settings())}
+
+
+@router.get("/google")
+async def search_google(q: str = Query(default=""), user: User = Depends(get_user_not_switched_off)) -> dict:
+    """Up to five places Google finds by name. Not there at all without a key."""
+    settings = get_settings()
+    if not place_search.google_configured(settings):
+        raise HTTPException(status_code=404, detail="Not found")
+    query = _query(q)
+    rate_limit.enforce_key(f"google_search:{user.id}", max_requests=GOOGLE_PER_MINUTE, window_seconds=60)
+    rate_limit.enforce_key(f"google_search_day:{user.id}", max_requests=GOOGLE_PER_DAY, window_seconds=86400)
+    try:
+        results = await place_search.google(settings, query)
+    except place_search.SearchUnavailable as exc:
+        status = 429 if str(exc) == place_search.GOOGLE_CAP_REACHED else 503
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    return {"source": "google", "results": results}
