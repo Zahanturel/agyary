@@ -152,6 +152,9 @@ export const adminSetPaused = (paused, reason) => post("/admin/reminders/pause",
 export const adminMobeds = () => get("/admin/mobeds");
 /** Admin only: approve or turn on ("on"), or turn off ("off"), one mobed. */
 export const adminSetMobedAccess = (userId, access) => post(`/admin/mobeds/${userId}/access`, { access });
+// decision: "confirm" (make panthaky), "decline" (not the panthaky) or "remove" (a mobed again).
+export const adminDecidePanthaky = (userId, agyaryId, decision) =>
+  post(`/admin/mobeds/${userId}/panthaky`, { agyary_id: agyaryId, decision });
 /** Admin only: phone notifications - whether the server can send, its key, this admin's devices. */
 export const adminPush = () => get("/admin/push");
 export const adminPushSubscribe = (sub) => post("/admin/push/subscribe", sub);

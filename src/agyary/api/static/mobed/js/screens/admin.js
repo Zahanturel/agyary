@@ -142,7 +142,9 @@ export async function renderAdmin() {
         ? `<span class="tag" style="background:var(--amber-100);color:var(--amber-600)">${o.mobeds_waiting} waiting</span>` : ""}</h2>
       <p class="meta">${o.mobeds_waiting
         ? `${o.mobeds_waiting} new mobed${o.mobeds_waiting === 1 ? " is" : "s are"} waiting for your approval.`
-        : "Nobody is waiting for approval."} Approve new mobeds, and turn any mobed off or on.</p>
+        : "Nobody is waiting for approval."}${o.panthaky_claims_waiting
+        ? ` ${o.panthaky_claims_waiting} say${o.panthaky_claims_waiting === 1 ? "s" : ""} they are a panthaky.` : ""}
+        Approve new mobeds, confirm panthakys, and turn any mobed off or on.</p>
       <div style="margin-top:10px"><button class="small" id="admMobeds">Open Mobeds</button></div>
     </div>
 

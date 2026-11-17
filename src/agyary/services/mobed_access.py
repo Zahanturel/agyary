@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.models import Agyary, AgyaryUser, User
-from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING
-from agyary.services import guardrails, reminders, web_push
+from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING, ROLE_PANTHAKY
+from agyary.services import guardrails, panthaky, reminders, web_push
 
 logger = logging.getLogger(__name__)
 
@@ -120,27 +120,49 @@ async def set_access(
 
 async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
     """Every account, waiting ones first and the newest of those at the top,
-    then the rest by name."""
+    then the rest by name. Each with what they are at each fire temple."""
     users = (await db.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
-    temples: dict[int, list[str]] = {}
-    for user_id, name in (
+    names = {u.id: u.name for u in users}
+    rows_by_user: dict[int, list[tuple[AgyaryUser, Agyary]]] = {}
+    panthakys: dict[int, list[int]] = {}
+    for m, a in (
         await db.execute(
-            select(AgyaryUser.user_id, Agyary.name)
+            select(AgyaryUser, Agyary)
             .join(Agyary, Agyary.id == AgyaryUser.agyary_id)
             .where(AgyaryUser.is_active.is_(True))
             .order_by(AgyaryUser.joined_at)
         )
     ).all():
-        temples.setdefault(user_id, []).append(name)
+        rows_by_user.setdefault(m.user_id, []).append((m, a))
+        if m.role == ROLE_PANTHAKY:
+            panthakys.setdefault(a.id, []).append(m.user_id)
+
+    def membership(m: AgyaryUser, a: Agyary) -> dict:
+        # What they are at each fire temple, what they said, and the owner's
+        # last decision on it (D10) - with the temple's other panthakys, so the
+        # admin knows before confirming a second one.
+        return {
+            "agyary_id": a.id,
+            "name": a.name,
+            "role": m.role,
+            "claimed_role": m.claimed_role,
+            "panthaky_claim_waiting": panthaky.waiting(m),
+            "claim_decision": m.claim_decision,
+            "claim_decided_at": m.claim_decided_at.isoformat() if m.claim_decided_at else None,
+            "other_panthakys": [names[uid] for uid in panthakys.get(a.id, []) if uid != m.user_id and uid in names],
+        }
 
     def row(u: User) -> dict:
+        mine = rows_by_user.get(u.id, [])
         return {
             "id": u.id,
             "name": u.name,
             "phone": u.phone,
             "access": effective(settings, u),
             "is_admin": guardrails.is_admin(settings, u.phone),
-            "agyaries": temples.get(u.id, []),
+            "agyaries": [a.name for _, a in mine],
+            "memberships": [membership(m, a) for m, a in mine],
+            "panthaky_claim_waiting": any(panthaky.waiting(m) for m, _ in mine),
             "signed_up": u.created_at.isoformat() if u.created_at else None,
             "access_changed_at": u.access_changed_at.isoformat() if u.access_changed_at else None,
         }

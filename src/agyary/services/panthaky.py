@@ -21,12 +21,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.models import Agyary, AgyaryUser, User
-from agyary.models.enums import CLAIMED_ROLES, ROLE_MOBED, ROLE_PANTHAKY
+from agyary.models.enums import (
+    CLAIM_CONFIRMED,
+    CLAIM_DECLINED,
+    CLAIM_REMOVED,
+    CLAIMED_ROLES,
+    ROLE_MOBED,
+    ROLE_PANTHAKY,
+)
 from agyary.services import guardrails, reminders
 
 logger = logging.getLogger(__name__)
 
 KIND_CLAIM = "panthaky_claim"
+KIND_DECISION = "panthaky_decision"
 # Kept in front of the admin as long as a new mobed's request is.
 CLAIM_TTL = timedelta(days=7)
 MOBEDS_LINK = "#/admin/mobeds"
@@ -133,3 +141,69 @@ async def withdraw_claim(db: AsyncSession, membership: AgyaryUser) -> None:
     membership.claimed_at = None
     await db.flush()
     logger.info("User %s took back their panthaky claim at fire temple %s", membership.user_id, membership.agyary_id)
+
+
+# --- The owner's decision (Admin -> Mobeds) -----------------------------------
+async def _decided(
+    db: AsyncSession, membership: AgyaryUser, decision: str, admin: User, now: datetime | None
+) -> None:
+    membership.claim_decision = decision
+    membership.claim_decided_at = now or _now()
+    membership.claim_decided_by_user_id = admin.id
+    await db.flush()
+
+
+async def confirm(
+    db: AsyncSession, membership: AgyaryUser, agyary: Agyary, admin: User, *, now: datetime | None = None
+) -> None:
+    """Make them the panthaky here: role = panthaky, with every power that role
+    already has (D7). For someone who says they are the panthaky - waiting, or
+    turned down or removed before, so an admin can correct themselves."""
+    if membership.role != ROLE_MOBED or membership.claimed_role != ROLE_PANTHAKY:
+        raise ClaimError("Only a mobed who says they are the panthaky can be confirmed as panthaky.")
+    membership.role = ROLE_PANTHAKY
+    await _decided(db, membership, CLAIM_CONFIRMED, admin, now)
+    await reminders.notify(
+        db, membership.user_id, KIND_DECISION, f"You are the panthaky of {agyary.name}",
+        f"The admin confirmed it. You now see every machi at {agyary.name}.",
+        link="#/menu", now=now, ttl=CLAIM_TTL,
+    )
+    logger.warning(
+        "Admin %s confirmed user %s as panthaky of fire temple %s", admin.id, membership.user_id, agyary.id
+    )
+
+
+async def decline(
+    db: AsyncSession, membership: AgyaryUser, agyary: Agyary, admin: User, *, now: datetime | None = None
+) -> None:
+    """Not the panthaky: they stay a mobed, and the decision is kept."""
+    if not waiting(membership):
+        raise ClaimError("There is no panthaky claim waiting here.")
+    await _decided(db, membership, CLAIM_DECLINED, admin, now)
+    await reminders.notify(
+        db, membership.user_id, KIND_DECISION, "Not confirmed as panthaky",
+        f"The admin did not confirm you as the panthaky of {agyary.name}. You stay a mobed there, and "
+        "nothing else changes. If this is wrong, please get in touch.",
+        link="#/menu", now=now, ttl=CLAIM_TTL,
+    )
+    logger.warning(
+        "Admin %s said user %s is not the panthaky of fire temple %s", admin.id, membership.user_id, agyary.id
+    )
+
+
+async def remove(
+    db: AsyncSession, membership: AgyaryUser, agyary: Agyary, admin: User, *, now: datetime | None = None
+) -> None:
+    """A panthaky made a mobed again: back to seeing only their own machis."""
+    if membership.role != ROLE_PANTHAKY:
+        raise ClaimError("They are not the panthaky here.")
+    membership.role = ROLE_MOBED
+    await _decided(db, membership, CLAIM_REMOVED, admin, now)
+    await reminders.notify(
+        db, membership.user_id, KIND_DECISION, f"No longer the panthaky of {agyary.name}",
+        f"The admin has made you a mobed at {agyary.name} again. You see only your own machis there.",
+        link="#/menu", now=now, ttl=CLAIM_TTL,
+    )
+    logger.warning(
+        "Admin %s removed user %s as panthaky of fire temple %s", admin.id, membership.user_id, agyary.id
+    )

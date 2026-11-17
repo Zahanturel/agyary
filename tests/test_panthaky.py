@@ -298,3 +298,172 @@ async def test_settings_claim_needs_access_and_membership(client, db, seeded):
     headers, _ = await _settings_mobed(client, seeded)
     assert (await client.post(f"/api/mobed/agyaries/{other.id}/panthaky-claim", headers=headers)).status_code == 403
     assert (await client.post("/api/mobed/agyaries/99999/panthaky-claim", headers=headers)).status_code == 404
+
+
+# --- The owner's word: confirm, not the panthaky, remove ----------------------
+
+async def _colleagues_work(client, seeded) -> tuple[int, int]:
+    """A machi and a booking by the seeded mobed at the seeded temple."""
+    machi_id = await _colleagues_machi(client, seeded)
+    body = await sign_in(client, seeded["mobed_phone"])
+    owner = {"Authorization": f"Bearer {body['access_token']}"}
+    made = await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/manual-add/booking", headers=owner, json={
+        "behdin_phone": "+919944400802", "behdin_name": "Colleagues Booking Family",
+        "service_id": 2, "ceremony_datetime": "2030-08-20T10:00:00", "purpose": "khushali_nu",
+        "names": [], "location": None, "is_offsite": False,
+    })
+    assert made.status_code == 200, made.text
+    return machi_id, made.json()["booking_id"]
+
+
+async def _powers(client, db, seeded, headers, user_id, machi_id, booking_id) -> dict:
+    """What a person at the seeded temple can see of a colleague's work, and
+    whether the app counts them among the temple's admins (ADMIN_ROLES)."""
+    from agyary.messaging import booking_service
+    from agyary.services import mobed_dashboard
+
+    aid = seeded["agyary_id"]
+    board = (await client.get(f"/api/mobed/agyaries/{aid}/machi-board?{WINDOW}&mine=false", headers=headers)).json()
+
+    async def status(path: str) -> int:
+        return (await client.get(f"/api/mobed/agyaries/{aid}/{path}", headers=headers)).status_code
+
+    return {
+        "board": [m["id"] for m in board],
+        "machi_detail": await status(f"machis/{machi_id}/detail"),
+        "machi_slip": await status(f"machis/{machi_id}/slip"),
+        "booking_detail": await status(f"bookings/{booking_id}/detail"),
+        "booking_slip": await status(f"bookings/{booking_id}/slip"),
+        "is_admin": await mobed_dashboard.is_admin(db, aid, user_id),
+        "in_get_admins": user_id in [u.id for u in await booking_service.get_admins(db, aid)],
+    }
+
+
+NO_POWERS = {"board": [], "machi_detail": 404, "machi_slip": 404, "booking_detail": 404, "booking_slip": 404,
+             "is_admin": False, "in_get_admins": False}
+
+
+async def _claimant(client, seeded):
+    headers, user = await _new(client, approve=True)
+    r = await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/join", json={"claimed_role": "panthaky"},
+                          headers=headers)
+    assert r.status_code == 200, r.text
+    return headers, user
+
+
+async def _admin(client, seeded) -> dict:
+    return {"Authorization": f"Bearer {(await sign_in(client, seeded['panthaky_phone']))['access_token']}"}
+
+
+async def _decide(client, admin, user_id, aid, decision):
+    return await client.post(f"/api/mobed/admin/mobeds/{user_id}/panthaky",
+                             json={"agyary_id": aid, "decision": decision}, headers=admin)
+
+
+async def test_the_admin_sees_the_claim_and_confirms_it(client, db, seeded, admin_is_panthaky, caplog):
+    machi_id, booking_id = await _colleagues_work(client, seeded)
+    aid = seeded["agyary_id"]
+    headers, user = await _claimant(client, seeded)
+    admin = await _admin(client, seeded)
+
+    # Before: nothing of a panthaky's.
+    assert await _powers(client, db, seeded, headers, user["id"], machi_id, booking_id) == NO_POWERS
+
+    listed = (await client.get("/api/mobed/admin/mobeds", headers=admin)).json()
+    assert listed["panthaky_claims"] == 1
+    [row] = [m for m in listed["mobeds"] if m["id"] == user["id"]]
+    assert row["panthaky_claim_waiting"] is True
+    [t] = row["memberships"]
+    assert (t["agyary_id"], t["name"], t["role"], t["claimed_role"], t["panthaky_claim_waiting"]) == (
+        aid, "Goti Adarian", "mobed", "panthaky", True)
+    assert t["other_panthakys"] == ["Er. Hormuz Dadachanji"]
+    assert (await client.get("/api/mobed/admin/overview", headers=admin)).json()["panthaky_claims_waiting"] == 1
+
+    caplog.set_level("INFO")
+    r = await _decide(client, admin, user["id"], aid, "confirm")
+    assert r.status_code == 200, r.text
+    assert (r.json()["role"], r.json()["claim_decision"]) == ("panthaky", "confirmed")
+    m = await _membership(db, user["id"], aid)
+    panthaky_admin = (await db.execute(select(User).where(User.phone == seeded["panthaky_phone"]))).scalar_one()
+    assert (m.role, m.claim_decision, m.claim_decided_by_user_id) == ("panthaky", "confirmed", panthaky_admin.id)
+    assert m.claim_decided_at is not None
+    logged = " ".join(rec.getMessage() for rec in caplog.records)
+    assert "confirmed user" in logged and "+91" not in logged
+
+    # After: exactly what the temple's existing panthaky has.
+    after = await _powers(client, db, seeded, headers, user["id"], machi_id, booking_id)
+    existing = await _powers(client, db, seeded, admin, panthaky_admin.id, machi_id, booking_id)
+    assert after == existing
+    assert after["board"] == [machi_id] and after["is_admin"] and after["in_get_admins"]
+    assert after["machi_detail"] == after["booking_detail"] == 200
+
+    # They are told, and Settings says so.
+    titles = [n["title"] for n in (await client.get("/api/mobed/notifications", headers=headers)).json()]
+    assert "You are the panthaky of Goti Adarian" in titles
+    [temple] = (await client.get("/api/mobed/auth/me", headers=headers)).json()["agyaries"]
+    assert (temple["role"], temple["panthaky_claim_waiting"], temple["may_claim_panthaky"]) == (
+        "panthaky", False, False)
+    assert (await client.get("/api/mobed/admin/overview", headers=admin)).json()["panthaky_claims_waiting"] == 0
+    # Not twice.
+    assert (await _decide(client, admin, user["id"], aid, "confirm")).status_code == 409
+
+
+async def test_not_the_panthaky_keeps_them_a_mobed_with_nothing_more(client, db, seeded, admin_is_panthaky):
+    machi_id, booking_id = await _colleagues_work(client, seeded)
+    aid = seeded["agyary_id"]
+    headers, user = await _claimant(client, seeded)
+    admin = await _admin(client, seeded)
+    r = await _decide(client, admin, user["id"], aid, "decline")
+    assert r.status_code == 200, r.text
+    assert (r.json()["role"], r.json()["claim_decision"]) == ("mobed", "declined")
+    m = await _membership(db, user["id"], aid)
+    assert (m.role, m.claimed_role, m.claim_decision) == ("mobed", "panthaky", "declined")
+    assert await _powers(client, db, seeded, headers, user["id"], machi_id, booking_id) == NO_POWERS
+    titles = [n["title"] for n in (await client.get("/api/mobed/notifications", headers=headers)).json()]
+    assert "Not confirmed as panthaky" in titles
+    # Nothing waits now, and they cannot claim again from Settings.
+    assert (await _decide(client, admin, user["id"], aid, "decline")).status_code == 409
+    r = await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)
+    assert r.status_code == 409 and "already decided" in r.json()["detail"]
+    # The admin can still change their mind.
+    assert (await _decide(client, admin, user["id"], aid, "confirm")).status_code == 200
+
+
+async def test_a_confirmed_panthaky_can_be_made_a_mobed_again(client, db, seeded, admin_is_panthaky):
+    machi_id, booking_id = await _colleagues_work(client, seeded)
+    aid = seeded["agyary_id"]
+    headers, user = await _claimant(client, seeded)
+    admin = await _admin(client, seeded)
+    assert (await _decide(client, admin, user["id"], aid, "confirm")).status_code == 200
+    r = await _decide(client, admin, user["id"], aid, "remove")
+    assert r.status_code == 200, r.text
+    assert (r.json()["role"], r.json()["claim_decision"]) == ("mobed", "removed")
+    assert await _powers(client, db, seeded, headers, user["id"], machi_id, booking_id) == NO_POWERS
+    titles = [n["title"] for n in (await client.get("/api/mobed/notifications", headers=headers)).json()]
+    assert "No longer the panthaky of Goti Adarian" in titles
+    assert (await _decide(client, admin, user["id"], aid, "remove")).status_code == 409
+
+
+async def test_confirm_needs_a_claim_and_decisions_need_the_admin(client, db, seeded, admin_is_panthaky):
+    aid = seeded["agyary_id"]
+    admin = await _admin(client, seeded)
+    plain = (await db.execute(select(User).where(User.phone == seeded["mobed_phone"]))).scalar_one()
+    # Someone who never said they are the panthaky is not made one.
+    assert (await _decide(client, admin, plain.id, aid, "confirm")).status_code == 409
+    assert (await _membership(db, plain.id, aid)).role == "mobed"
+    assert (await _decide(client, admin, plain.id, aid, "decline")).status_code == 409
+    assert (await _decide(client, admin, plain.id, aid, "remove")).status_code == 409
+    # Not at that temple, or no such mobed, or no such decision.
+    other = Agyary(name="Elsewhere", city="Pune", status="active")
+    db.add(other)
+    await db.commit()
+    assert (await _decide(client, admin, plain.id, other.id, "confirm")).status_code == 404
+    assert (await _decide(client, admin, 99999, aid, "confirm")).status_code == 404
+    assert (await _decide(client, admin, plain.id, aid, "promote")).status_code == 422
+
+    # A mobed who is not an admin - the claimant themselves included - gets a 404.
+    headers, user = await _claimant(client, seeded)
+    for decision in ("confirm", "decline", "remove"):
+        assert (await _decide(client, headers, user["id"], aid, decision)).status_code == 404
+    assert (await client.get("/api/mobed/admin/mobeds", headers=headers)).status_code == 404
+    assert (await _membership(db, user["id"], aid)).role == "mobed"

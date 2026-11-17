@@ -20,9 +20,9 @@ from agyary.api import rate_limit
 from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.models import LoginOtp, Notification, User
-from agyary.models.enums import ACCESS_PENDING
-from agyary.services import bot_check, erasure, guardrails, mobed_access, mobed_auth, web_push
+from agyary.models import Agyary, AgyaryUser, LoginOtp, Notification, User
+from agyary.models.enums import ACCESS_PENDING, ROLE_MOBED, ROLE_PANTHAKY
+from agyary.services import bot_check, erasure, guardrails, mobed_access, mobed_auth, panthaky, web_push
 from agyary.services.phone import Phone
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,16 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
             {"when": when.isoformat(), "reason": reason or "", "to": _masked(phone)}
             for when, reason, phone in failures
         ],
+        # And how many say they are a panthaky, waiting for the admin's word (D10).
+        "panthaky_claims_waiting": (
+            await db.execute(
+                select(func.count()).select_from(AgyaryUser).join(User, User.id == AgyaryUser.user_id).where(
+                    User.is_active.is_(True), AgyaryUser.is_active.is_(True),
+                    AgyaryUser.role == ROLE_MOBED, AgyaryUser.claimed_role == ROLE_PANTHAKY,
+                    AgyaryUser.claim_decision.is_(None),
+                )
+            )
+        ).scalar_one(),
         # For the Mobeds card at the top: how many are waiting for approval (D9).
         "mobeds_waiting": (
             await db.execute(
@@ -181,7 +191,12 @@ async def list_mobeds(db: AsyncSession = Depends(get_db), admin: User = Depends(
     """Every mobed, those waiting for approval first. The admin sees the whole
     number: they are the ones who call a mobed about their account."""
     mobeds = await mobed_access.list_mobeds(db, get_settings())
-    return {"mobeds": mobeds, "waiting": sum(1 for m in mobeds if m["access"] == ACCESS_PENDING)}
+    return {
+        "mobeds": mobeds,
+        "waiting": sum(1 for m in mobeds if m["access"] == ACCESS_PENDING),
+        # Mobeds who say they are a panthaky and wait for the admin's word (D10).
+        "panthaky_claims": sum(1 for m in mobeds for t in m["memberships"] if t["panthaky_claim_waiting"]),
+    }
 
 
 class AccessIn(BaseModel):
@@ -206,6 +221,38 @@ async def set_mobed_access(
     await db.commit()
     logger.warning("Admin %s set mobed %s access to %s", admin.id, user.id, payload.access)
     return {"id": user.id, "access": mobed_access.effective(get_settings(), user)}
+
+
+class PanthakyDecisionIn(BaseModel):
+    agyary_id: int
+    decision: Literal["confirm", "decline", "remove"]
+
+
+@router.post("/mobeds/{user_id}/panthaky")
+async def decide_panthaky(
+    user_id: int, payload: PanthakyDecisionIn, db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> dict:
+    """The owner's word on a mobed's panthaky role at one fire temple (D10):
+    "confirm" makes them its panthaky (role = panthaky, with what that role
+    sees, D7), "decline" keeps them a mobed, "remove" makes a panthaky a mobed
+    again. Each is kept on the membership with when and by whom, and the
+    mobed is told in the app."""
+    rate_limit.enforce_key(f"admin_panthaky:{admin.id}", max_requests=60, window_seconds=60)
+    user = await db.get(User, user_id)
+    agyary = await db.get(Agyary, payload.agyary_id)
+    membership = await mobed_auth.get_membership(db, payload.agyary_id, user_id)
+    if user is None or not user.is_active or agyary is None or membership is None or not membership.is_active:
+        raise HTTPException(status_code=404, detail="That mobed is not at that fire temple.")
+    await db.refresh(membership, with_for_update=True)
+    act = {"confirm": panthaky.confirm, "decline": panthaky.decline, "remove": panthaky.remove}[payload.decision]
+    try:
+        await act(db, membership, agyary, admin)
+    except panthaky.ClaimError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await db.commit()
+    return {"id": user.id, "agyary_id": agyary.id, "role": membership.role,
+            "claim_decision": membership.claim_decision}
 
 
 # ---------------------------------------------------------------------------
