@@ -32,6 +32,7 @@ from agyary.models import (
 from agyary.models.enums import (
     ACCESS_OFF,
     ACCESS_ON,
+    ACCOUNT_FUNERAL_MANAGER,
     DEFAULT_SECONDARY_CALENDAR_SYSTEM,
     DISPLAY_LANGUAGES,
     LOCATION_PIN,
@@ -45,6 +46,7 @@ from agyary.models.preferences import default_preferences
 from agyary.services import (
     account,
     behdin_directory,
+    funeral_places,
     guardrails,
     mobed_access,
     mobed_auth,
@@ -84,13 +86,36 @@ async def _current(authorization: str, db: AsyncSession) -> tuple[User, int]:
     return user, session.id
 
 
-async def get_signed_in_user(
+async def get_signed_in_account(
     authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Signed in, whether or not an admin has let them use the app yet - only
-    for what a waiting or switched-off mobed may still do: see who they are,
-    choose a fire temple, delete their account."""
+    """Signed in, with any kind of account (a mobed's or a Doongerwadi
+    manager's), on or not. Only for what every account has whatever it is:
+    who they are, their name, signing out, deleting the account."""
     user, _ = await _current(authorization, db)
+    return user
+
+
+# A Doongerwadi or prayer hall manager's account (DECISIONS D10) is kept out of
+# the whole mobed app: behdins, memorials, calendar, machis, slips, reminders,
+# fire temples, the map search. Refused here, in the one dependency every mobed
+# route is built on (get_current_user and get_user_not_switched_off ask for
+# it), so a new mobed route is closed to managers without anyone remembering
+# to; tests/test_funeral_managers.py walks every route to prove it. The header
+# tells the app to show the manager's own screen instead.
+ACCOUNT_KIND_HEADER = "X-Account-Kind"
+NOT_FOR_MANAGERS = "This part of Mobed Diary is for mobeds. Your account is for a Doongerwadi or prayer hall."
+NOT_FOR_MOBEDS = "This part of Mobed Diary is for Doongerwadi and prayer hall managers."
+
+
+async def get_signed_in_user(user: User = Depends(get_signed_in_account)) -> User:
+    """Signed in with a mobed's account, whether or not an admin has let them
+    use the app yet - only for what a waiting or switched-off mobed may still
+    do: choose a fire temple. A manager's account is refused (see above)."""
+    if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
+        raise HTTPException(
+            status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind},
+        )
     return user
 
 
@@ -103,15 +128,34 @@ NO_ACCESS = {
 }
 
 
-async def get_current_user(user: User = Depends(get_signed_in_user)) -> User:
-    """Signed in AND switched on by an admin (D9). Everything in the app but
-    the few steps of signing up asks for this."""
+def _require_on(user: User) -> User:
     access = mobed_access.effective(get_settings(), user)
     if access != ACCESS_ON:
         raise HTTPException(
             status_code=403, detail=NO_ACCESS.get(access, NO_ACCESS["off"]), headers={ACCESS_HEADER: access},
         )
     return user
+
+
+async def get_current_user(user: User = Depends(get_signed_in_user)) -> User:
+    """A mobed's account, signed in AND switched on by an admin (D9).
+    Everything in the mobed app but the few steps of signing up asks for this."""
+    return _require_on(user)
+
+
+async def get_current_account(user: User = Depends(get_signed_in_account)) -> User:
+    """Signed in and switched on, any kind of account: only for what every
+    account has (its own notices in the app) and for the admin pages, which
+    check the number themselves."""
+    return _require_on(user)
+
+
+async def get_current_manager(user: User = Depends(get_signed_in_account)) -> User:
+    """A Doongerwadi or prayer hall manager's account, signed in and switched
+    on (D9). A mobed's account is refused: none of the manager's side is theirs."""
+    if user.account_kind != ACCOUNT_FUNERAL_MANAGER:
+        raise HTTPException(status_code=403, detail=NOT_FOR_MOBEDS)
+    return _require_on(user)
 
 
 async def get_user_not_switched_off(user: User = Depends(get_signed_in_user)) -> User:
@@ -410,8 +454,16 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
         for a, m in result.all()
     ]
     access = mobed_access.effective(get_settings(), user)
+    # A manager's places (D10); always empty for a mobed's account.
+    places = (
+        [funeral_places.summary(p) for p in await funeral_places.places_of(db, user.id)]
+        if user.account_kind == ACCOUNT_FUNERAL_MANAGER else []
+    )
     return {
         "id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries,
+        # "mobed" or "funeral_manager" (D10): the app shows a manager only their own screens.
+        "account_kind": user.account_kind,
+        "funeral_places": places,
         "automatic_reminders": user.automatic_reminders,
         # The mobed's own switch for the evening-before report, and whether it also goes
         # to WhatsApp yet (otherwise it is in the app only) - so Settings can say so.
@@ -471,7 +523,7 @@ async def delete_my_account(
     payload: DeleteAccountIn,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_signed_in_user),
+    user: User = Depends(get_signed_in_account),
 ) -> dict:
     """Delete this account and everything that is the mobed's (PV-2; Google
     Play's account-deletion rule). Signs out everywhere, since the account is
@@ -499,7 +551,7 @@ async def sign_out_other_devices(
 
 
 @router.get("/auth/me")
-async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)) -> dict:
+async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_account)) -> dict:
     return await _serialize_user(db, user)
 
 
@@ -509,7 +561,7 @@ class UpdateMeIn(BaseModel):
 
 @router.patch("/auth/me")
 async def update_me(
-    payload: UpdateMeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)
+    payload: UpdateMeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_account)
 ) -> dict:
     """Let a mobed correct their own display name from the profile screen.
     Phone stays read-only here - it is the sign-in identity, and it is the

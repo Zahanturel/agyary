@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api import rate_limit
-from agyary.api.routes.mobed import LocationIn, _checked_position, get_current_user
+from agyary.api.routes.mobed import LocationIn, _checked_position, get_current_account
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, AgyaryUser, FuneralPlace, LoginOtp, Notification, User
@@ -39,7 +39,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/mobed/admin", tags=["admin"])
 
 
-def require_admin(user: User = Depends(get_current_user)) -> User:
+def require_admin(user: User = Depends(get_current_account)) -> User:
+    # Any kind of account that is on: the number is what makes an admin, and a
+    # manager's or a mobed's account that is not an admin gets the same 404.
     if not guardrails.is_admin(get_settings(), user.phone):
         raise HTTPException(status_code=404, detail="Not found")
     return user

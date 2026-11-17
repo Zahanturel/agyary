@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agyary.api.routes.mobed import _require_behdin, get_current_user
+from agyary.api.routes.mobed import _require_behdin, get_current_account, get_current_user
 from agyary.core.database import get_db
 from agyary.models import AppNotification, User
 from agyary.services import reminders
@@ -77,9 +77,10 @@ def _serialize(note: AppNotification) -> dict:
 
 @router.get("/notifications")
 async def list_notifications(
-    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_account)
 ) -> list[dict]:
-    """This mobed's notifications that have not yet lapsed, newest first.
+    """This account's notifications that have not yet lapsed, newest first
+    (a Doongerwadi manager's too: "You're in" is one).
     ``seen`` is whether the popup has already shown it."""
     now = datetime.now(timezone.utc)
     rows = (
@@ -101,7 +102,7 @@ class SeenIn(BaseModel):
 async def mark_notifications_seen(
     payload: SeenIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_account),
 ) -> dict:
     """The popup has shown these; do not show them again on the next open."""
     stmt = (
