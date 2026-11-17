@@ -15,7 +15,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
-from agyary.models.enums import ACCESS_ON, USER_ACCESS, USER_ROLES, sql_in
+from agyary.models.enums import (
+    ACCESS_ON,
+    CLAIM_DECISIONS,
+    CLAIMED_ROLES,
+    USER_ACCESS,
+    USER_ROLES,
+    sql_in,
+)
 
 
 class User(Base):
@@ -100,8 +107,26 @@ class AgyaryUser(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     reminder_minutes_before: Mapped[int] = mapped_column(SmallInteger, server_default="30")
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # What they said they are here, "mobed" or "panthaky", when they chose this
+    # fire temple or later from Settings (DECISIONS D10). A claim only: ``role``
+    # above is what gives a panthaky's powers (D7), and only the owner's
+    # "Confirm as panthaky" changes it (services/panthaky.py). NULL for those
+    # who joined before the question was asked.
+    claimed_role: Mapped[str | None] = mapped_column(String(20))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The owner's last decision on this membership's panthaky role, when, and
+    # by which admin (cleared if that admin's account goes).
+    claim_decision: Mapped[str | None] = mapped_column(String(20))
+    claim_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_decided_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (
         CheckConstraint(f"role IN ({sql_in(USER_ROLES)})", name="role"),
+        CheckConstraint(f"claimed_role IN ({sql_in(CLAIMED_ROLES)})", name="claimed_role"),
+        CheckConstraint(f"claim_decision IN ({sql_in(CLAIM_DECISIONS)})", name="claim_decision"),
+        CheckConstraint("(claimed_role IS NULL) = (claimed_at IS NULL)", name="claimed_at"),
+        CheckConstraint("(claim_decision IS NULL) = (claim_decided_at IS NULL)", name="claim_decided_at"),
         Index("idx_agyary_users_user", "user_id"),
     )

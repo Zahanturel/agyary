@@ -45,6 +45,16 @@ USER_ROLES = ("panthaky", "mobed", "caretaker")
 ACCESS_PENDING, ACCESS_ON, ACCESS_OFF = "pending", "on", "off"
 USER_ACCESS = (ACCESS_PENDING, ACCESS_ON, ACCESS_OFF)
 ADMIN_ROLES = ("panthaky", "caretaker")
+# What a person says they are at a fire temple when they choose it (DECISIONS D10).
+# Only a claim: it never changes ``role``. The owner decides on Admin -> Mobeds;
+# confirming a panthaky claim is what sets role = panthaky.
+ROLE_MOBED, ROLE_PANTHAKY = "mobed", "panthaky"
+CLAIMED_ROLES = (ROLE_MOBED, ROLE_PANTHAKY)
+# The owner's decision on a membership's panthaky role: "confirmed" (made
+# panthaky), "declined" (not the panthaky, stays mobed), or "removed" (was
+# panthaky, made mobed again).
+CLAIM_CONFIRMED, CLAIM_DECLINED, CLAIM_REMOVED = "confirmed", "declined", "removed"
+CLAIM_DECISIONS = (CLAIM_CONFIRMED, CLAIM_DECLINED, CLAIM_REMOVED)
 
 # Shared state machine for machis and bookings (doc 2 refinement of doc 1).
 CEREMONY_STATUSES = (
