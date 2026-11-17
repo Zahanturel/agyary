@@ -13,10 +13,12 @@ and with it the enumeration surface, the approved Authentication
 template, and the per-conversation cost.
 
 Roles: every membership this app creates is a plain 'mobed'. The
-panthaky/caretaker roles still exist in the schema, but nothing in this
-app can grant them - the invite mechanism that used to do so was removed,
+panthaky/caretaker roles still exist in the schema, but nothing a mobed
+does can grant them - the invite mechanism that used to do so was removed,
 since an unreachable endpoint that hands out privilege is worse than no
-endpoint at all.
+endpoint at all. Saying "I am the panthaky" is only a claim
+(services/panthaky.py); the one way to panthaky is an admin's "Confirm as
+panthaky" on Admin -> Mobeds (DECISIONS D10).
 
 JWT pattern: a short-lived access token plus a longer-lived refresh token
 in an httpOnly cookie, both naming a server-side session that can be ended (AU-2).
