@@ -30,6 +30,7 @@ from agyary.models import (
     UserPreferences,
 )
 from agyary.models.enums import (
+    ACCESS_OFF,
     ACCESS_ON,
     DEFAULT_SECONDARY_CALENDAR_SYSTEM,
     DISPLAY_LANGUAGES,
@@ -109,6 +110,16 @@ async def get_current_user(user: User = Depends(get_signed_in_user)) -> User:
         raise HTTPException(
             status_code=403, detail=NO_ACCESS.get(access, NO_ACCESS["off"]), headers={ACCESS_HEADER: access},
         )
+    return user
+
+
+async def get_user_not_switched_off(user: User = Depends(get_signed_in_user)) -> User:
+    """Signed in and not switched off: on, or still signing up. For what adding
+    a fire temple while signing up needs (finding it on the map); anything that
+    reads or changes the mobed's own book asks for get_current_user."""
+    access = mobed_access.effective(get_settings(), user)
+    if access == ACCESS_OFF:
+        raise HTTPException(status_code=403, detail=NO_ACCESS["off"], headers={ACCESS_HEADER: access})
     return user
 
 

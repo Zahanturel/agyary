@@ -150,6 +150,12 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "https://mobed.gotiadarian.com"
 
+    # --- Where a fire temple is (DECISIONS D10) ------------------------------
+    # The location picker's address search goes through our server to
+    # OpenStreetMap's Nominatim (services/place_search.py), whose usage policy
+    # asks every app to name itself in its User-Agent.
+    place_search_user_agent: str = "MobedDiary/1.0 (+https://mobed.gotiadarian.com)"
+
     # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
     # another login to remember, and the WhatsApp number is already the
     # identity.

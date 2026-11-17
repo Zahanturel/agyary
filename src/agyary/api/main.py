@@ -17,6 +17,7 @@ from agyary.api.routes.calendar import router as calendar_router
 from agyary.api.routes.memorials import router as memorials_router
 from agyary.api.routes.mobed import router as mobed_router
 from agyary.api.routes.otp import router as otp_router
+from agyary.api.routes.places import router as places_router
 from agyary.api.routes.reminders import router as reminders_router
 from agyary.api.routes.whatsapp import router as whatsapp_router
 from agyary.core.config import get_settings
@@ -152,6 +153,7 @@ app.include_router(admin_router)
 app.include_router(mobed_router)
 app.include_router(memorials_router)
 app.include_router(otp_router)
+app.include_router(places_router)
 app.include_router(reminders_router)
 app.include_router(whatsapp_router)
 
