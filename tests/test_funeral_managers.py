@@ -33,6 +33,12 @@ MANAGER_MAY = {
     ("GET", "/api/mobed/notifications"),
     ("POST", "/api/mobed/notifications/seen"),
     ("GET", "/api/mobed/manager/place"),
+    # Recording a death (Step 4).
+    ("POST", "/api/mobed/manager/death-day"),
+    ("GET", "/api/mobed/manager/records"),
+    ("POST", "/api/mobed/manager/records"),
+    ("GET", "/api/mobed/manager/records/{record_id}"),
+    ("PUT", "/api/mobed/manager/records/{record_id}"),
 }
 # Signing in, and what anyone may ask without an account: no session is read.
 NO_SESSION = {
