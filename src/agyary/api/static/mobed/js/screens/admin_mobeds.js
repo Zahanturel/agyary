@@ -28,7 +28,7 @@ const TAGS = {
 function roleLine(m, t) {
   const temple = esc(t.name);
   const others = t.other_panthakys.length
-    ? `<span class="meta" style="display:block">${temple} already has a panthaky in the app:
+    ? `<span class="meta" style="display:block">${temple} already has ${t.other_panthakys.length === 1 ? "a panthaky" : "panthakys"} in the app:
         ${t.other_panthakys.map(esc).join(", ")}.</span>` : "";
   const btn = (act, label, cls = "small") =>
     `<button class="${cls}" data-pact="${act}" data-id="${m.id}" data-aid="${t.agyary_id}">${label}</button>`;
@@ -51,7 +51,7 @@ function roleLine(m, t) {
   if (!text) return "";
   return `<div style="flex-basis:100%">
       <span style="display:block">${text}</span>
-      ${buttons ? `<div class="row tight" style="margin-top:6px">${buttons}</div>` : ""}
+      ${buttons ? `<div class="row tight" style="margin-top:6px;flex-wrap:wrap">${buttons}</div>` : ""}
     </div>`;
 }
 
