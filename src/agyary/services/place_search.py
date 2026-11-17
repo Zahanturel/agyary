@@ -170,7 +170,8 @@ async def nominatim(settings: Settings, query: str) -> list[dict]:
         if not isinstance(item, dict):
             continue
         p = _place(str(item.get("name") or ""), str(item.get("display_name") or ""), item.get("lat"), item.get("lon"))
-        if p:
+        # OpenStreetMap can list one place twice (a building and its entrance).
+        if p and asdict(p) not in places:
             places.append(asdict(p))
         if len(places) == MAX_RESULTS:
             break

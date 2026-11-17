@@ -21,6 +21,8 @@ ANSWER = [
     {"name": "Banaji Atash Behram", "display_name": "Banaji Atash Behram, Charni Road, Mumbai, India",
      "lat": "18.9535", "lon": "72.8185"},
     {"name": "", "display_name": "Charni Road, Girgaon, Mumbai, Maharashtra, India", "lat": "18.95", "lon": "72.82"},
+    {"name": "Banaji Atash Behram", "display_name": "Banaji Atash Behram, Charni Road, Mumbai, India",
+     "lat": "18.9535", "lon": "72.8185"},     # the same place twice
     {"name": "Broken", "display_name": "Broken", "lat": "north", "lon": "72.8"},
     {"name": "Off the globe", "display_name": "x", "lat": "95", "lon": "72.8"},
 ]
@@ -82,7 +84,7 @@ async def test_it_finds_places_and_names_the_app_to_openstreetmap(client, seeded
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["source"] == "openstreetmap"
-    # The two good ones; a place with no usable position is dropped.
+    # The two good ones, once each; a place with no usable position is dropped.
     assert body["results"] == [
         {"name": "Banaji Atash Behram", "address": "Banaji Atash Behram, Charni Road, Mumbai, India",
          "latitude": 18.9535, "longitude": 72.8185},
