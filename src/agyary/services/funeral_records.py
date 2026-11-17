@@ -322,17 +322,22 @@ class LockedError(ValueError):
     """The record cannot be changed now; the message is for the manager."""
 
 
-async def update(db: AsyncSession, record: FuneralRecord, user: User, values: dict) -> FuneralRecord:
-    """Change a record that no fire temple has accepted yet."""
+async def update(db: AsyncSession, record: FuneralRecord, user: User, values: dict) -> bool:
+    """Change a record that no fire temple has accepted yet. Returns whether
+    anything changed (those asked by a waiting request are then told again)."""
+    await db.refresh(record, with_for_update=True)
     if accepted((await requests_of(db, [record.id]))[record.id]):
         raise LockedError("A fire temple has accepted this request, so the record can no longer be changed here. "
                           "Please tell them of any change yourself.")
+    changed = any(getattr(record, key) != value for key, value in values.items())
+    if not changed:
+        return False
     for key, value in values.items():
         setattr(record, key, value)
     record.updated_at = datetime.now(timezone.utc)
     await db.flush()
     logger.info("Funeral record %s changed by manager %s", record.id, user.id)
-    return record
+    return True
 
 
 # --- What the manager sees ---------------------------------------------------------

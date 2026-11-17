@@ -187,7 +187,7 @@ async def test_the_records_list_newest_first_a_page_at_a_time(client, db, seeded
 async def test_no_mobed_reaches_the_managers_side(client, db, seeded, admin_is_panthaky):
     """Every manager route refuses a mobed's account, an admin's included."""
     manager_calls = sorted(c for c in _api_calls() if c[1].startswith("/api/mobed/manager/"))
-    assert len(manager_calls) >= 6
+    assert len(manager_calls) >= 10
     for phone in (seeded["mobed_phone"], seeded["panthaky_phone"]):
         headers = auth(await sign_in(client, phone))
         for method, path in manager_calls:

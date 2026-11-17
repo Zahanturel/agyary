@@ -29,7 +29,7 @@ from agyary.api import rate_limit
 from agyary.api.routes.mobed import _serialize_user, get_current_manager, get_user_not_switched_off
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
-from agyary.models import FuneralPlace, User
+from agyary.models import Agyary, FuneralPlace, FuneralRequest, User
 from agyary.services import funeral_places, funeral_records, funeral_requests
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
@@ -202,16 +202,18 @@ async def update_record(
     record_id: int, payload: RecordIn, db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_manager),
 ) -> dict:
-    """Change a record until a fire temple has accepted it."""
+    """Change a record until a fire temple has accepted it. If it is waiting
+    at a fire temple, those asked are sent the new details (``told``)."""
     rate_limit.enforce_key(f"funeral_record_save:{user.id}", max_requests=60, window_seconds=3600)
     record = await _own_record(db, user, record_id)
     values = await _values(db, payload)
     try:
-        await funeral_records.update(db, record, user, values)
+        changed = await funeral_records.update(db, record, user, values)
     except funeral_records.LockedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    told = await funeral_requests.tell_of_change(db, get_settings(), record) if changed else 0
     await db.commit()
-    return await _record_response(db, record)
+    return {**await _record_response(db, record), "told": told}
 
 
 # ---------------------------------------------------------------------------
@@ -248,3 +250,56 @@ async def search_agyaries_for_manager(
     if place is None:
         raise HTTPException(status_code=404, detail="That place could not be found.")
     return {"agyaries": await funeral_requests.search(db, get_settings(), place, q, preferred_id)}
+
+
+# ---------------------------------------------------------------------------
+# Sending the request, and withdrawing it (D10)
+# ---------------------------------------------------------------------------
+class SendIn(BaseModel):
+    agyary_id: int
+    # "The family agreed to share their name and number with this agyari."
+    family_agreed: bool = False
+
+
+def _send_error(exc: funeral_requests.SendError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=str(exc))
+
+
+@router.post("/manager/records/{record_id}/requests")
+async def send_request(
+    record_id: int, payload: SendIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+) -> dict:
+    """Send the record to one fire temple: its confirmed panthakys, or if none,
+    its mobeds whose access is on. Refused without the family's agreement, with
+    nobody there to reach, or while another request waits."""
+    record = await _own_record(db, user, record_id)
+    if not payload.family_agreed:
+        raise HTTPException(status_code=400, detail=funeral_requests.NO_TICK, headers={FIELD_HEADER: "family_agreed"})
+    rate_limit.enforce_key(f"funeral_send:{user.id}", max_requests=20, window_seconds=3600)
+    agyary = await db.get(Agyary, payload.agyary_id)
+    if agyary is None:
+        raise HTTPException(status_code=404, detail="That fire temple could not be found. Please choose it again.")
+    try:
+        request = await funeral_requests.send(db, get_settings(), user, record, agyary, family_agreed=True)
+    except funeral_requests.SendError as exc:
+        raise _send_error(exc) from exc
+    asked = len(await funeral_requests.asked(db, request))
+    await db.commit()
+    return {**await _record_response(db, record), "asked": asked}
+
+
+@router.post("/manager/requests/{request_id}/withdraw")
+async def withdraw_request(
+    request_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+) -> dict:
+    """Take back a waiting request (to send it to another fire temple)."""
+    request = await db.get(FuneralRequest, request_id)
+    record = await funeral_records.get_for_manager(db, user.id, request.funeral_record_id) if request else None
+    if record is None:
+        raise HTTPException(status_code=404, detail="That request could not be found.")
+    try:
+        await funeral_requests.withdraw(db, get_settings(), user, request)
+    except funeral_requests.SendError as exc:
+        raise _send_error(exc) from exc
+    await db.commit()
+    return await _record_response(db, record)

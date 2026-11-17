@@ -41,6 +41,8 @@ MANAGER_MAY = {
     ("PUT", "/api/mobed/manager/records/{record_id}"),
     ("GET", "/api/mobed/manager/records/{record_id}/agyaries"),
     ("GET", "/api/mobed/manager/agyaries/search"),
+    ("POST", "/api/mobed/manager/records/{record_id}/requests"),
+    ("POST", "/api/mobed/manager/requests/{request_id}/withdraw"),
 }
 # Signing in, and what anyone may ask without an account: no session is read.
 NO_SESSION = {
