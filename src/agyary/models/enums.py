@@ -53,6 +53,20 @@ FUNERAL_PLACE_KINDS = (FUNERAL_DOONGERWADI, FUNERAL_PRAYER_HALL, FUNERAL_ARAMGAH
 # What a person is at their funeral place. Only "manager" for now; staff later.
 FUNERAL_MANAGER = "manager"
 FUNERAL_PLACE_ROLES = (FUNERAL_MANAGER,)
+# A death recorded at a funeral place (D10, Phase 2 Step 4). The title the
+# departed is prayed with: the name titles a departed person can have ("khud",
+# oneself, is for the living). Four days or one day of obsequies. How the death
+# was given (D5): by its Gregorian date, or by Roj and Mah.
+DEPARTED_TITLES = ("ervad", "osta", "osti", "behdin")
+OBSEQUIES = ("four_days", "one_day")
+DEATH_BY_DATE, DEATH_BY_ROJ_MAH = "date", "roj_mah"
+DEATH_GIVEN_BY = (DEATH_BY_DATE, DEATH_BY_ROJ_MAH)
+# A funeral record's request to one fire temple. "waiting" for an answer (one at a
+# time per record); "accepted" or "declined" by someone asked (Step 5);
+# "withdrawn" by the manager; "taken" is kept for Step 5's first-accept-wins.
+REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_DECLINED = "waiting", "accepted", "declined"
+REQUEST_WITHDRAWN, REQUEST_TAKEN = "withdrawn", "taken"
+REQUEST_STATUSES = (REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_DECLINED, REQUEST_WITHDRAWN, REQUEST_TAKEN)
 # A mobed's access to the app, the owner's one switch per account (DECISIONS D9):
 # a new sign-up waits for an admin's approval, and an admin can turn anyone off and on.
 ACCESS_PENDING, ACCESS_ON, ACCESS_OFF = "pending", "on", "off"

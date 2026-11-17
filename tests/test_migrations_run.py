@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 from sqlalchemy import text
@@ -248,6 +248,91 @@ async def test_the_funeral_place_migration_holds_its_rules_and_comes_off_cleanly
             "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
         assert "account_kind" not in {c for (c,) in cols}
         assert await _scratch_execute("SELECT name FROM users") == [("Manager",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
+
+
+async def _refused(sql: str, params: dict, what: str, needle: str = "check constraint") -> None:
+    try:
+        await _scratch_execute(sql, params)
+    except Exception as exc:  # noqa: BLE001 - the database's refusal, whatever its class
+        assert needle in str(exc).lower(), (what, exc)
+    else:
+        raise AssertionError(f"accepted {what}")
+
+
+async def test_the_funeral_record_migration_holds_its_rules_and_comes_off_cleanly():
+    """a3b4c5d6e7f9: a funeral record's title, obsequies, calendar, Roj and Mah,
+    Geh-saarnu (day and geh together) and Uthamna (no time without a day) are
+    held by the database; a request is one of five states, decided exactly when
+    it is no longer waiting, and only one waits per record at a time; the
+    manager who made them can go and the record stays (D8), while who was asked
+    goes with that person's account - and the downgrade takes it all off."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "f1a2b3c4d5e7"))
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES"
+                               " ('Manager', '+919000000001', 'funeral_manager'), ('Er. Asked', '+919000000002', 'mobed')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        _ok(_alembic("upgrade", "head"))
+        (manager,), (mobed,) = await _scratch_execute("SELECT id FROM users ORDER BY id")
+        ((agyary,),) = await _scratch_execute("SELECT id FROM agyaries")
+        ((place,),) = await _scratch_execute("SELECT id FROM funeral_places")
+
+        insert = (
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, geh_saarnu_date, geh_saarnu_geh,"
+            " uthamna_date, uthamna_time, mobeds_wanted, family_contact_name, family_contact_phone, created_by_user_id)"
+            " VALUES (:p, :t, 'Rustom', '2026-11-17', :by, :roj, :mah, 1396, :cal, :ob, :gd, :gg, :ud, :ut, :mw,"
+            " 'Family', '+919000000009', :u)"
+        )
+        base = {"p": place, "t": "behdin", "by": "date", "roj": 3, "mah": 4, "cal": "shenshai", "ob": "four_days",
+                "gd": date(2026, 11, 18), "gg": 1, "ud": date(2026, 11, 20), "ut": time(16, 0), "mw": 5, "u": manager}
+        await _scratch_execute(insert, base)
+        await _scratch_execute(insert, {**base, "t": "ervad", "by": "roj_mah", "roj": 2, "mah": 13, "ob": "one_day",
+                                        "gd": None, "gg": None, "ud": None, "ut": None, "mw": None})
+        for change in ({"t": "khud"}, {"ob": "three_days"}, {"by": "guess"}, {"cal": "gregorian"},
+                       {"mah": 14}, {"roj": 31}, {"gg": None}, {"gd": None}, {"gg": 6}, {"ud": None},
+                       {"mw": 0}, {"mw": 21}):
+            await _refused(insert, {**base, **change}, change)
+        ((record,), _) = await _scratch_execute("SELECT id FROM funeral_records ORDER BY id")
+
+        send = ("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at,"
+                " sent_by_user_id, decided_at) VALUES (:r, :a, :s, now(), :u, :d)")
+        req = {"r": record, "a": agyary, "s": "waiting", "u": manager, "d": None}
+        await _scratch_execute(send, req)
+        # One waiting at a time; a withdrawn one beside it is fine.
+        await _refused(send, req, "a second waiting request", needle="uq_funeral_requests_one_waiting")
+        await _scratch_execute(send, {**req, "s": "withdrawn", "d": AT})
+        for change in ({"s": "lost", "d": AT}, {"s": "declined", "d": None}, {"s": "waiting", "d": AT}):
+            await _refused(send, {**req, **change}, change)
+        await _refused("INSERT INTO funeral_requests (funeral_record_id, agyary_id, sent_by_user_id) VALUES (:r, :a, :u)",
+                       {"r": record, "a": agyary, "u": manager}, "no family agreement", needle="not-null")
+        ((request,), _) = await _scratch_execute("SELECT id FROM funeral_requests ORDER BY id")
+        await _scratch_execute("INSERT INTO funeral_request_recipients (funeral_request_id, user_id) VALUES (:q, :u)",
+                               {"q": request, "u": mobed})
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid IN ('funeral_records'::regclass,"
+            " 'funeral_requests'::regclass, 'funeral_request_recipients'::regclass)")
+        assert {"ck_funeral_records_departed_title", "ck_funeral_records_geh_saarnu", "ck_funeral_requests_status",
+                "ck_funeral_requests_decided", "fk_funeral_records_created_by_user_id_users",
+                "fk_funeral_request_recipients_user_id_users"} <= {n for (n,) in names}
+
+        # The manager's account goes: the records and requests stay, unsigned.
+        await _scratch_execute("DELETE FROM users WHERE id = :u", {"u": manager})
+        assert await _scratch_execute("SELECT count(*) FROM funeral_records WHERE created_by_user_id IS NULL") == [(2,)]
+        assert await _scratch_execute("SELECT count(*) FROM funeral_requests WHERE sent_by_user_id IS NULL") == [(2,)]
+        # The mobed asked goes: who was asked goes with them, the request stays.
+        await _scratch_execute("DELETE FROM users WHERE id = :u", {"u": mobed})
+        assert await _scratch_execute("SELECT count(*) FROM funeral_request_recipients") == [(0,)]
+        assert await _scratch_execute("SELECT count(*) FROM funeral_requests") == [(2,)]
+
+        _ok(_alembic("downgrade", "f1a2b3c4d5e7"))
+        tables = await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        assert not {"funeral_records", "funeral_requests", "funeral_request_recipients"} & {t for (t,) in tables}
+        assert await _scratch_execute("SELECT name FROM funeral_places") == [("Doongerwadi (test)",)]
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)

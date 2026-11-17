@@ -12,6 +12,7 @@ from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName, ReminderOptOut
 from agyary.models.funeral_place import FuneralPlace, FuneralPlaceManager
+from agyary.models.funeral_record import FuneralRecord, FuneralRequest, FuneralRequestRecipient
 from agyary.models.login_otp import LoginOtp
 from agyary.models.machi import Machi
 from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
@@ -39,6 +40,9 @@ __all__ = [
     "CustomerSavedName",
     "FuneralPlace",
     "FuneralPlaceManager",
+    "FuneralRecord",
+    "FuneralRequest",
+    "FuneralRequestRecipient",
     "LoginOtp",
     "Machi",
     "Memorial",
