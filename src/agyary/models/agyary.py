@@ -5,6 +5,8 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Double,
+    ForeignKey,
     Index,
     SmallInteger,
     String,
@@ -15,7 +17,23 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
-from agyary.models.enums import AGYARY_STATUSES, BEHDIN_LANGUAGES, CALENDAR_SYSTEMS, sql_in
+from agyary.models.enums import (
+    AGYARY_STATUSES,
+    BEHDIN_LANGUAGES,
+    CALENDAR_SYSTEMS,
+    LOCATION_SOURCES,
+    sql_in,
+)
+
+
+# All three or none, and on the globe. Spelled with IS NOT NULL on purpose: a
+# CHECK passes when it comes out NULL, so a bare BETWEEN would let a half-set
+# position through. The migration (d0e1f2a3b4c6) uses this same text.
+LOCATION_CHECK = (
+    "(latitude IS NULL AND longitude IS NULL AND location_source IS NULL)"
+    " OR (latitude IS NOT NULL AND longitude IS NOT NULL AND location_source IS NOT NULL"
+    " AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)"
+)
 
 
 class Agyary(Base):
@@ -49,6 +67,20 @@ class Agyary(Base):
     # agyari migration when that work lands.
     auto_booking_enabled: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
+    # Where the fire temple is on the map (DECISIONS D10), for the Doongerwadi
+    # side's "nearest first". location_source says how good it is: "town" is
+    # the seed list's town-level start (scripts/seed_fire_temple_locations.py),
+    # "pin" was put there by a person. Latitude, longitude and source are all
+    # set or all empty. Who last moved it and when are kept for the record;
+    # the person's id goes if their account does.
+    latitude: Mapped[float | None] = mapped_column(Double)
+    longitude: Mapped[float | None] = mapped_column(Double)
+    location_source: Mapped[str | None] = mapped_column(String(10))
+    location_set_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    location_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -59,6 +91,8 @@ class Agyary(Base):
         CheckConstraint(f"calendar_system IN ({sql_in(CALENDAR_SYSTEMS)})", name="calendar_system"),
         CheckConstraint(f"behdin_language IN ({sql_in(BEHDIN_LANGUAGES)})", name="behdin_language"),
         CheckConstraint(f"status IN ({sql_in(AGYARY_STATUSES)})", name="status"),
+        CheckConstraint(f"location_source IN ({sql_in(LOCATION_SOURCES)})", name="location_source"),
+        CheckConstraint(LOCATION_CHECK, name="location"),
         Index(
             "uq_agyaries_wa_phone_number_id",
             "wa_phone_number_id",

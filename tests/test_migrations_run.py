@@ -58,3 +58,57 @@ async def test_the_migration_chain_runs_up_down_and_up_again():
         _ok(_alembic("check"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def _scratch_execute(sql: str, params: dict | None = None):
+    engine = create_async_engine(SCRATCH_URL, poolclass=NullPool)
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(text(sql), params or {})
+            return result.all() if result.returns_rows else None
+    finally:
+        await engine.dispose()
+
+
+async def test_the_agyari_location_migration_holds_its_rules_and_comes_off_cleanly():
+    """d0e1f2a3b4c6: a position is all three of latitude, longitude and source
+    or none of them, on the globe, from "town" or "pin" - enforced by the
+    database the migration builds, not only by the models - and the downgrade
+    takes it all off again."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        insert = ("INSERT INTO agyaries (name, city, latitude, longitude, location_source)"
+                  " VALUES (:n, 'Mumbai', :lat, :lon, :src)")
+        await _scratch_execute(insert, {"n": "Pinned", "lat": 18.95, "lon": 72.83, "src": "pin"})
+        await _scratch_execute(insert, {"n": "Town", "lat": 18.95, "lon": 72.83, "src": "town"})
+        await _scratch_execute(insert, {"n": "Nowhere yet", "lat": None, "lon": None, "src": None})
+        refused = [
+            {"n": "Half", "lat": 18.95, "lon": None, "src": "pin"},
+            {"n": "No source", "lat": 18.95, "lon": 72.83, "src": None},
+            {"n": "Source only", "lat": None, "lon": None, "src": "pin"},
+            {"n": "Off the globe", "lat": 91.0, "lon": 72.83, "src": "pin"},
+            {"n": "Round twice", "lat": 18.95, "lon": -180.5, "src": "pin"},
+            {"n": "Guessed", "lat": 18.95, "lon": 72.83, "src": "gps"},
+        ]
+        for row in refused:
+            try:
+                await _scratch_execute(insert, row)
+            except Exception as exc:  # noqa: BLE001 - the database's refusal, whatever its class
+                assert "check constraint" in str(exc).lower(), (row, exc)
+            else:
+                raise AssertionError(f"accepted {row}")
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'agyaries'::regclass")
+        assert {"ck_agyaries_location", "ck_agyaries_location_source",
+                "fk_agyaries_location_set_by_user_id_users"} <= {n for (n,) in names}
+
+        _ok(_alembic("downgrade", "c9d0e1f2a3b5"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'agyaries'")
+        assert not {"latitude", "longitude", "location_source", "location_set_by_user_id",
+                    "location_set_at"} & {c for (c,) in cols}
+        # The fire temples themselves are untouched by coming down.
+        assert len(await _scratch_execute("SELECT id FROM agyaries")) == 3
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

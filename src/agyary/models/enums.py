@@ -33,6 +33,12 @@ DEFAULT_DISPLAY_LANGUAGE = "en"
 # entry" and "has been set up by a real person" stay different facts.
 AGYARY_STATUSES = ("unclaimed", "active")
 
+# Where a fire temple's position on the map came from (DECISIONS D10). "town" is
+# the town-level starting position from the seed list (only the town, not the
+# temple); "pin" was put on the map by a person - its mobed, panthaky or an admin.
+LOCATION_TOWN, LOCATION_PIN = "town", "pin"
+LOCATION_SOURCES = (LOCATION_TOWN, LOCATION_PIN)
+
 USER_ROLES = ("panthaky", "mobed", "caretaker")
 # A mobed's access to the app, the owner's one switch per account (DECISIONS D9):
 # a new sign-up waits for an admin's approval, and an admin can turn anyone off and on.
