@@ -186,6 +186,9 @@ export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponen
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).
 export const joinAgyary = (id, claimedRole) => post(`/agyaries/${id}/join`, { claimed_role: claimedRole });
 export const activateAgyary = (id, body) => post(`/agyaries/${id}/activate`, body);
+// From Settings: "I am the panthaky here" (a claim the admin confirms), and taking it back.
+export const claimPanthaky = (id) => post(`/agyaries/${id}/panthaky-claim`, {});
+export const withdrawPanthakyClaim = (id) => del(`/agyaries/${id}/panthaky-claim`);
 export const createAgyary = (body) => post("/agyaries", body);
 /** Where a fire temple is (D10): its own mobeds and the admin read it and move its pin. */
 export const getAgyaryLocation = (aid) => get(`/agyaries/${aid}/location`);

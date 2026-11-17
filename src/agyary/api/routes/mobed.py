@@ -742,6 +742,46 @@ async def activate_agyari(
     return {"user": await _serialize_user(db, user), "agyary": _agyary_summary(agyary)}
 
 
+# --- "Are you the panthaky?" from Settings (DECISIONS D10) -------------------
+async def _own_membership(db: AsyncSession, agyary_id: int, user: User) -> tuple[Agyary, AgyaryUser]:
+    agyary = await _require_membership(db, agyary_id, user)
+    membership = await mobed_auth.get_membership(db, agyary_id, user.id)
+    await db.refresh(membership, with_for_update=True)
+    return agyary, membership
+
+
+@router.post("/agyaries/{agyary_id}/panthaky-claim")
+async def claim_panthaky(
+    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict:
+    """A mobed who joined before the question was asked says they are the
+    panthaky of this fire temple. Only a claim: the admins are told, and
+    nothing changes for the mobed unless an admin confirms it."""
+    rate_limit.enforce_key(f"panthaky_claim:{user.id}", max_requests=10, window_seconds=3600)
+    agyary, membership = await _own_membership(db, agyary_id, user)
+    try:
+        await panthaky.claim_panthaky(db, membership)
+    except panthaky.ClaimError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await panthaky.tell_admins_of_claim(db, get_settings(), user, agyary)
+    await db.commit()
+    return await _serialize_user(db, user)
+
+
+@router.delete("/agyaries/{agyary_id}/panthaky-claim")
+async def withdraw_panthaky_claim(
+    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict:
+    """Take back a panthaky claim the admin has not decided on yet."""
+    _, membership = await _own_membership(db, agyary_id, user)
+    try:
+        await panthaky.withdraw_claim(db, membership)
+    except panthaky.ClaimError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await db.commit()
+    return await _serialize_user(db, user)
+
+
 # --- Where a fire temple is (DECISIONS D10) ---------------------------------
 class LocationIn(BaseModel):
     # Checked by hand in _checked_position, not by type: a refusal then comes in

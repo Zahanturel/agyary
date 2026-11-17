@@ -224,3 +224,77 @@ async def test_a_waiting_panthaky_claim_grants_no_panthaky_power(client, db, see
                           headers=headers)
     assert r.status_code == 200, r.text
     await _no_panthaky_powers(client, db, seeded, headers, user["id"], machi_id)
+
+
+# --- Settings: a mobed who never answered can say so, and take it back ---------
+
+async def _settings_mobed(client, seeded):
+    """The seeded mobed: joined before the question existed, so no claim."""
+    body = await sign_in(client, seeded["mobed_phone"])
+    return {"Authorization": f"Bearer {body['access_token']}"}, body["user"]
+
+
+async def test_a_mobed_with_no_answer_is_asked_in_settings_and_can_claim(client, db, seeded, admin_is_panthaky):
+    headers, user = await _settings_mobed(client, seeded)
+    aid = seeded["agyary_id"]
+    [temple] = (await client.get("/api/mobed/auth/me", headers=headers)).json()["agyaries"]
+    assert (temple["role"], temple["claimed_role"], temple["may_claim_panthaky"]) == ("mobed", None, True)
+
+    r = await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)
+    assert r.status_code == 200, r.text
+    [temple] = r.json()["agyaries"]
+    assert (temple["role"], temple["panthaky_claim_waiting"], temple["may_claim_panthaky"]) == ("mobed", True, False)
+    m = await _membership(db, user["id"], aid)
+    assert (m.role, m.claimed_role) == ("mobed", "panthaky")
+    [note] = await _notes(db, "panthaky_claim")
+    assert "Er. Pervez Kias" in note.body and "Goti Adarian" in note.body and note.link == "#/admin/mobeds"
+
+    # Not twice while it waits.
+    again = await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)
+    assert again.status_code == 409 and again.json()["detail"] == "You have already told us. The admin will check it."
+    assert len(await _notes(db, "panthaky_claim")) == 1
+
+
+async def test_a_waiting_claim_can_be_taken_back_and_made_again(client, db, seeded, admin_is_panthaky):
+    headers, user = await _settings_mobed(client, seeded)
+    aid = seeded["agyary_id"]
+    assert (await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)).status_code == 200
+    r = await client.delete(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)
+    assert r.status_code == 200, r.text
+    [temple] = r.json()["agyaries"]
+    assert (temple["claimed_role"], temple["panthaky_claim_waiting"], temple["may_claim_panthaky"]) == (
+        None, False, True)
+    m = await _membership(db, user["id"], aid)
+    assert (m.role, m.claimed_role, m.claimed_at) == ("mobed", None, None)
+    # Nothing to take back now.
+    again = await client.delete(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)
+    assert again.status_code == 409
+    assert (await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)).status_code == 200
+
+
+async def test_settings_cannot_claim_for_someone_who_answered_or_is_panthaky(client, db, seeded):
+    aid = seeded["agyary_id"]
+    headers, _ = await _new(client, approve=True)
+    await client.post(f"/api/mobed/agyaries/{aid}/join", json={"claimed_role": "mobed"}, headers=headers)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=headers)
+    assert r.status_code == 409 and "mobed here" in r.json()["detail"]
+
+    panthaky = {"Authorization": f"Bearer {(await sign_in(client, seeded['panthaky_phone']))['access_token']}"}
+    r = await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "You are already the panthaky here."
+    assert (await client.delete(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=panthaky)).status_code == 409
+
+
+async def test_settings_claim_needs_access_and_membership(client, db, seeded):
+    aid = seeded["agyary_id"]
+    waiting, _ = await _new(client)          # pending: not let in yet (D9)
+    await client.post(f"/api/mobed/agyaries/{aid}/join", headers=waiting)
+    r = await client.post(f"/api/mobed/agyaries/{aid}/panthaky-claim", headers=waiting)
+    assert r.status_code == 403 and r.headers["X-Mobed-Access"] == "pending"
+
+    other = Agyary(name="Not Theirs", city="Pune", status="active")
+    db.add(other)
+    await db.commit()
+    headers, _ = await _settings_mobed(client, seeded)
+    assert (await client.post(f"/api/mobed/agyaries/{other.id}/panthaky-claim", headers=headers)).status_code == 403
+    assert (await client.post("/api/mobed/agyaries/99999/panthaky-claim", headers=headers)).status_code == 404

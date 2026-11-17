@@ -11,13 +11,16 @@
  * talking to actual panthakies.
  */
 
-import { updateMyName, getPreferences, putPreferences, putDailyReport, signOutOtherDevices, deleteMyAccount } from "../api.js";
+import {
+  updateMyName, getPreferences, putPreferences, putDailyReport, signOutOtherDevices, deleteMyAccount,
+  claimPanthaky, withdrawPanthakyClaim,
+} from "../api.js";
 import { signOut } from "../session.js";
-import { state, currentAgyary, primarySystem, clearSession, forgetLastPhone } from "../state.js";
+import { state, currentAgyary, primarySystem, clearSession, forgetLastPhone, saveSession } from "../state.js";
 import { clearAllDrafts } from "../drafts.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, getTextSize, setTextSize, screenFailed,
-  keepScroll,
+  keepScroll, openSheet,
 } from "../ui.js";
 import { esc } from "../util.js";
 import { shellVersion } from "../update.js";
@@ -33,6 +36,23 @@ const PARSI_SYSTEMS = [
 function locationText(location) {
   if (!location) return "Not on the map yet";
   return location.source === "pin" ? "Pinned on the map" : "Only the town so far - please move the pin";
+}
+
+const ROLE_NAMES = { panthaky: "Panthaky", caretaker: "Caretaker", mobed: "Mobed" };
+
+/** "Are you the panthaky?" for a mobed who never answered it (D10), or the
+ *  claim they made and can take back while the admin has not decided. */
+function claimHtml(agyary) {
+  if (agyary.panthaky_claim_waiting) {
+    return `<p class="meta" style="margin:12px 0 6px">You told us you are the panthaky here. The admin will
+        check it; until then you use the app as a mobed.</p>
+      <button class="ghost small" id="mWithdrawClaim">Take it back</button>`;
+  }
+  if (agyary.may_claim_panthaky) {
+    return `<p class="meta" style="margin:12px 0 6px">Are you the panthaky of ${esc(agyary.name)}?</p>
+      <button class="ghost small" id="mClaim">Tell us</button>`;
+  }
+  return "";
 }
 
 export async function renderMenu() {
@@ -74,9 +94,12 @@ export async function renderMenu() {
             <div class="fv">${esc([agyary.address, agyary.city].filter(Boolean).join(", ") || "-")}</div></div>
           <div class="fact"><div class="fl">Location</div>
             <div class="fv">${locationText(agyary.location)}</div></div>
+          <div class="fact"><div class="fl">You are</div>
+            <div class="fv">${ROLE_NAMES[agyary.role] || "Mobed"}</div></div>
         ` : ""}
       </div>
-      ${agyary ? `<div style="margin-top:10px"><button class="secondary small" id="mEditLocation">Edit location</button></div>` : ""}
+      ${agyary ? `<div style="margin-top:10px"><button class="secondary small" id="mEditLocation">Edit location</button></div>
+        <div id="mClaimBox">${claimHtml(agyary)}</div>` : ""}
     </div>
 
     <div class="card">
@@ -217,6 +240,53 @@ export async function renderMenu() {
       btn.disabled = false;
       showError(e.message);
     }
+  };
+
+  // The same screen drawn again with what the server now says.
+  const redrawWith = (user) => {
+    state.user = user;
+    saveSession();
+    return keepScroll(() => renderMenu());
+  };
+  const claimBtn = document.getElementById("mClaim");
+  if (claimBtn) claimBtn.onclick = () => {
+    const sheet = openSheet({
+      title: `Are you the panthaky of ${agyary.name}?`,
+      html: `
+        <p>We will tell the admin. Nothing changes for you until the admin confirms it.</p>
+        <div class="stack">
+          <button type="button" id="clYes">Yes, I am the panthaky</button>
+          <button type="button" class="ghost" id="clNo">Cancel</button>
+        </div>`,
+    });
+    sheet.body.querySelector("#clNo").onclick = sheet.close;
+    sheet.body.querySelector("#clYes").onclick = async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;   // one claim per tap
+      let user;
+      try {
+        user = await claimPanthaky(agyary.id);
+      } catch (e) {
+        btn.disabled = false;
+        return showError(e.message);
+      }
+      sheet.close();
+      showInfo("Thank you. The admin will check it.");
+      if (alive()) redrawWith(user);
+    };
+  };
+  const withdrawBtn = document.getElementById("mWithdrawClaim");
+  if (withdrawBtn) withdrawBtn.onclick = async () => {
+    withdrawBtn.disabled = true;
+    let user;
+    try {
+      user = await withdrawPanthakyClaim(agyary.id);
+    } catch (e) {
+      withdrawBtn.disabled = false;
+      return showError(e.message);
+    }
+    showInfo("Taken back. You are a mobed here, as before.");
+    if (alive()) redrawWith(user);
   };
 
   const editLocation = document.getElementById("mEditLocation");

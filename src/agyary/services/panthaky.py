@@ -99,3 +99,37 @@ async def tell_admins_of_claim(
             link=MOBEDS_LINK, now=now, ttl=CLAIM_TTL,
         )
     return len(admins)
+
+
+def why_no_claim(membership: AgyaryUser) -> str:
+    """Why this membership cannot say "panthaky" now, in words for the mobed."""
+    if waiting(membership):
+        return "You have already told us. The admin will check it."
+    if membership.role == ROLE_PANTHAKY:
+        return "You are already the panthaky here."
+    if membership.role != ROLE_MOBED:
+        return "Your role here is set by the admin."
+    if membership.claim_decision is not None:
+        return "The admin has already decided this. Please get in touch if it is wrong."
+    return "You told us you are a mobed here. Please get in touch with the admin if that has changed."
+
+
+async def claim_panthaky(
+    db: AsyncSession, membership: AgyaryUser, *, now: datetime | None = None
+) -> None:
+    """From Settings: a mobed who has said nothing yet says they are the
+    panthaky here. Still only a claim; ClaimError if they cannot say it now."""
+    if not may_claim(membership):
+        raise ClaimError(why_no_claim(membership))
+    await record_claim(db, membership, ROLE_PANTHAKY, now=now)
+
+
+async def withdraw_claim(db: AsyncSession, membership: AgyaryUser) -> None:
+    """Take back a panthaky claim no admin has decided on yet. They are then as
+    if they had never answered, and Settings asks them again."""
+    if not waiting(membership):
+        raise ClaimError("There is no panthaky claim waiting to take back.")
+    membership.claimed_role = None
+    membership.claimed_at = None
+    await db.flush()
+    logger.info("User %s took back their panthaky claim at fire temple %s", membership.user_id, membership.agyary_id)
