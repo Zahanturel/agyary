@@ -178,6 +178,7 @@ sending is off. Settings that matter operationally:
 | `ANDROID_PACKAGE_NAME` / `ANDROID_CERT_FINGERPRINTS` | the app / the upload key | what `/.well-known/assetlinks.json` lists; add Play's signing key after the first upload |
 | `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
 | `SUPPORT_PHONE` | empty | the WhatsApp number shown to a mobed waiting for approval or switched off (D9) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | empty | phone notifications for admins (web push). Made once on the server with `python -m agyary.scripts.vapid_keys >> .env`; never changed |
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
 | `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
 | `APP_DEBUG` | false | `true` only on a laptop: it enables a sign-in bypass and `/docs`. Refused at startup when `APP_ENV=production` |

@@ -140,6 +140,15 @@ class Settings(BaseSettings):
     # shown to get in touch (E.164). Empty: the screen asks them to contact the
     # person who gave them Mobed Diary, with no number.
     support_phone: str = ""
+    # Web push: notifications on an admin's phone even when the app is closed
+    # (services/web_push.py), for now only "a new mobed is waiting". The two
+    # keys are made once with `python -m agyary.scripts.vapid_keys` and never
+    # changed (a new pair silently ends every phone's subscription). Empty: no
+    # push, only the in-app notice. The subject is who the push services can
+    # contact about us: a https URL or a mailto: address.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "https://mobed.gotiadarian.com"
 
     # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
     # another login to remember, and the WhatsApp number is already the

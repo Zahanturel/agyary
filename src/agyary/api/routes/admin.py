@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +22,7 @@ from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import LoginOtp, Notification, User
 from agyary.models.enums import ACCESS_PENDING
-from agyary.services import bot_check, erasure, guardrails, mobed_access, mobed_auth
+from agyary.services import bot_check, erasure, guardrails, mobed_access, mobed_auth, web_push
 from agyary.services.phone import Phone
 
 logger = logging.getLogger(__name__)
@@ -206,3 +206,71 @@ async def set_mobed_access(
     await db.commit()
     logger.warning("Admin %s set mobed %s access to %s", admin.id, user.id, payload.access)
     return {"id": user.id, "access": mobed_access.effective(get_settings(), user)}
+
+
+# ---------------------------------------------------------------------------
+# Notifications on the admin's phone (web push, services/web_push.py)
+# ---------------------------------------------------------------------------
+@router.get("/push")
+async def push_status(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)) -> dict:
+    """Whether the server can send to phones, the public key a phone needs to
+    subscribe, and how many of this admin's devices are signed up."""
+    s = get_settings()
+    return {
+        "configured": web_push.configured(s),
+        "public_key": s.vapid_public_key.strip() or None,
+        "devices": await web_push.devices(db, admin.id),
+    }
+
+
+class PushKeysIn(BaseModel):
+    p256dh: str = Field(min_length=20, max_length=200)
+    auth: str = Field(min_length=8, max_length=100)
+
+
+class PushSubscribeIn(BaseModel):
+    endpoint: str = Field(max_length=2000)
+    keys: PushKeysIn
+
+
+@router.post("/push/subscribe")
+async def push_subscribe(
+    payload: PushSubscribeIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin),
+) -> dict:
+    rate_limit.enforce_key(f"admin_push:{admin.id}", max_requests=20, window_seconds=60)
+    if not web_push.configured(get_settings()):
+        raise HTTPException(status_code=409, detail="Phone notifications are not set up on the server yet.")
+    if not web_push.allowed_endpoint(payload.endpoint):
+        raise HTTPException(status_code=400, detail="This browser's notification service is not one we know.")
+    await web_push.save(db, admin.id, payload.endpoint, payload.keys.p256dh, payload.keys.auth)
+    await db.commit()
+    return {"devices": await web_push.devices(db, admin.id)}
+
+
+class PushUnsubscribeIn(BaseModel):
+    endpoint: str = Field(max_length=2000)
+
+
+@router.post("/push/unsubscribe")
+async def push_unsubscribe(
+    payload: PushUnsubscribeIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin),
+) -> dict:
+    await web_push.remove(db, admin.id, payload.endpoint)
+    await db.commit()
+    return {"devices": await web_push.devices(db, admin.id)}
+
+
+@router.post("/push/test")
+async def push_test(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)) -> dict:
+    """Send a test notification to every phone this admin turned it on for."""
+    rate_limit.enforce_key(f"admin_push_test:{admin.id}", max_requests=5, window_seconds=60)
+    s = get_settings()
+    if not web_push.configured(s):
+        raise HTTPException(status_code=409, detail="Phone notifications are not set up on the server yet.")
+    sent = await web_push.send_to_users(
+        db, s, [admin.id], title="Mobed Diary",
+        body="Notifications are working on this phone. New mobeds waiting for approval will show here.",
+        url="/mobed#/admin/mobeds", tag="push-test",
+    )
+    await db.commit()
+    return {"sent": sent, "devices": await web_push.devices(db, admin.id)}

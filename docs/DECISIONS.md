@@ -170,8 +170,10 @@ per-feature switches or limits per mobed: off is no app at all, on is all of it.
   before it was turned off), no daily report, no schedule from our number.
 - Accounts that existed before this are on. An admin (`ADMIN_PHONES`) is always on and cannot be
   turned off, so the owner can never lock themselves out.
-- In-app only for now. A notification on the admin's phone (web push) is the next step; it needs
-  keys the owner sets on the server.
+- Admins are also told on their phone, even when the app is closed (web push, 17 Nov 2026), once
+  the server has its keys (`VAPID_*`, made once with `agyary.scripts.vapid_keys`) and the admin has
+  turned it on for that phone on the admin screen. The lock screen shows the name and temple, not
+  the number. It never holds up a sign-up: a failed push is logged and the in-app notice stays.
 
 The owner chose this over keeping families' reminders going while their mobed is off.
 

@@ -17,6 +17,7 @@ from agyary.models.memorial import Memorial, MemorialObservance, MemorialObserva
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
 from agyary.models.preferences import UserPreferences
+from agyary.models.push_subscription import PushSubscription
 from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
 from agyary.models.user import AgyaryUser, DeletedAccount, User, UserSession
@@ -42,6 +43,7 @@ __all__ = [
     "MemorialObservanceService",
     "Notification",
     "Payment",
+    "PushSubscription",
     "RecurrenceRule",
     "ReminderOptOut",
     "Service",

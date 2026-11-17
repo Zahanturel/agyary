@@ -152,6 +152,11 @@ export const adminSetPaused = (paused, reason) => post("/admin/reminders/pause",
 export const adminMobeds = () => get("/admin/mobeds");
 /** Admin only: approve or turn on ("on"), or turn off ("off"), one mobed. */
 export const adminSetMobedAccess = (userId, access) => post(`/admin/mobeds/${userId}/access`, { access });
+/** Admin only: phone notifications - whether the server can send, its key, this admin's devices. */
+export const adminPush = () => get("/admin/push");
+export const adminPushSubscribe = (sub) => post("/admin/push/subscribe", sub);
+export const adminPushUnsubscribe = (endpoint) => post("/admin/push/unsubscribe", { endpoint });
+export const adminPushTest = () => post("/admin/push/test", {});
 export const authOptions = () => get("/auth/options");
 export const otpRequest = (phone, turnstileToken = null) =>
   post("/auth/otp/request", { phone, turnstile_token: turnstileToken });

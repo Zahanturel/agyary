@@ -13,7 +13,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v74";
+const CACHE_NAME = "mobed-shell-v75";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -45,6 +45,7 @@ const SHELL_FILES = [
   "/mobed-app/js/paid_chip.js",
   "/mobed-app/js/service_toggle.js",
   "/mobed-app/js/install.js",
+  "/mobed-app/js/push.js",
   "/mobed-app/js/screens/login.js",
   "/mobed-app/js/screens/onboarding.js",
   "/mobed-app/js/screens/calendar.js",
@@ -113,4 +114,37 @@ self.addEventListener("fetch", event => {
         .catch(() => caches.match(event.request).then(cached => cached || network))
     );
   }
+});
+
+// --- Phone notifications (web push, services/web_push.py) ---------------------
+// For admins only for now: "a new mobed is waiting". The server sends a title,
+// a body, the page to open and a tag; one of each tag shows at a time.
+self.addEventListener("push", event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data ? event.data.text() : "" }; }
+  event.waitUntil(self.registration.showNotification(data.title || "Mobed Diary", {
+    body: data.body || "",
+    icon: "/mobed-icon-192.png",
+    badge: "/mobed-icon-192.png",
+    tag: data.tag || "mobed-diary",
+    renotify: true,
+    data: { url: data.url || "/mobed" },
+  }));
+});
+
+// A tap opens that page: in the app if it is already open, else in a new window.
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || "/mobed", self.location.origin);
+  // Only our own pages.
+  if (target.origin !== self.location.origin) return;
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const app = open.find(c => new URL(c.url).pathname === "/mobed");
+    if (app) {
+      await app.focus();
+      return app.navigate(target.href).catch(() => {});
+    }
+    return self.clients.openWindow(target.href);
+  })());
 });

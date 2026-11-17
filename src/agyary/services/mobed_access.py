@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.core.config import Settings
 from agyary.models import Agyary, AgyaryUser, User
 from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING
-from agyary.services import guardrails, reminders
+from agyary.services import guardrails, reminders, web_push
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,13 @@ async def tell_admins_of_request(
             "Approve them on the Mobeds page.",
             link=MOBEDS_LINK, now=now, ttl=REQUEST_TTL,
         )
+    # And on the admins' phones, if they turned that on. The number stays off
+    # the lock screen; it is in the app.
+    await web_push.send_to_users(
+        db, settings, admins, title="A new mobed is waiting",
+        body=f"{user.name} from {agyary.name} wants to use Mobed Diary. Tap to approve.",
+        url="/mobed" + MOBEDS_LINK, tag="mobed-request",
+    )
     return len(admins)
 
 
