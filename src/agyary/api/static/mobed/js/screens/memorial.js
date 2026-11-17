@@ -208,6 +208,8 @@ export async function renderMemorial({ id, oid }) {
         <span class="meta" id="paidCount"></span>
         <button class="ghost small" id="paidAll" type="button"></button>
       </div>
+      <!-- The share card is below every date; this is the way to it from the top. -->
+      <button class="small" id="memShareJump" type="button" style="width:100%;margin-top:12px">Share the dates with the family</button>
       <div class="action-bar">
         <button class="secondary small" id="memEdit" type="button">Edit memorial</button>
         <button class="ghost small danger-outline" id="memDeleteOpen" type="button">Delete memorial</button>
@@ -226,6 +228,10 @@ export async function renderMemorial({ id, oid }) {
 
   const share = wireShareCard(document.getElementById("shareCard"), aid, m);
   document.getElementById("memEdit").onclick = () => navigate(`#/memorial/${mid}/edit`);
+  // No focus on the note: on a phone that opens the keyboard over the very
+  // buttons the mobed came down for, and the note is optional.
+  document.getElementById("memShareJump").onclick = () =>
+    document.getElementById("shareCard").scrollIntoView({ block: "start", behavior: "smooth" });
 
   const listEl = document.getElementById("obsList");
 

@@ -32,8 +32,17 @@ def _serialize(parsi_date: ParsiDate) -> dict:
         "roj_name": parsi_date.roj_name,
         "gatha_index": parsi_date.gatha_index,
         "gatha_name": parsi_date.gatha_name,
-        "display": str(parsi_date),
+        "display": _display(parsi_date),
     }
+
+
+def _display(p: ParsiDate) -> str:
+    """The date as a mobed reads it: "Roj 19 Fravardin, Mah 4 Tir, Y1396 (Shenshai)".
+    str(ParsiDate) ends with the raw "[shenshai]", which is for logs, not people."""
+    system = p.calendar.value.capitalize()
+    if p.is_gatha:
+        return f"{p.gatha_name} (Gatha {p.gatha_index}), Y{p.year} ({system})"
+    return f"Roj {p.roj} {p.roj_name}, Mah {p.mah} {p.mah_name}, Y{p.year} ({system})"
 
 
 @router.get("/today")

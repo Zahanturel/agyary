@@ -56,7 +56,7 @@ export async function renderLogin() {
   stopPolling();
   if (otpCleanup) otpCleanup();
   chrome(false);
-  setHeader("Agyary");
+  setHeader("Mobed Diary");
   let offered = false;
   try {
     const options = await authOptions();

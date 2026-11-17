@@ -74,6 +74,27 @@ async def test_the_message_lists_every_date_and_carries_the_note(client, db, see
     assert body["phone"] == PHONE
     # Not switched on (the default) and the family has not agreed: both are said.
     assert body["can_send"] is False and body["cannot_send_because"]
+    # And while it is off the app is told not to offer it at all.
+    assert body["send_offered"] is False
+
+
+async def test_once_switched_on_the_send_is_offered_with_the_reason_it_cannot_go(client, db, seeded, monkeypatch):
+    aid, _cid, mid, headers = await _memorial(client, db, seeded)
+    _live(monkeypatch)
+    try:
+        body = (await client.get(f"/api/mobed/agyaries/{aid}/memorials/{mid}/share", headers=headers)).json()
+    finally:
+        from agyary.core import config
+        config.get_settings.cache_clear()
+    assert body["send_offered"] is True
+    assert body["can_send"] is False and "has not agreed" in body["cannot_send_because"]
+
+
+def test_the_share_card_hides_the_send_while_it_is_not_offered():
+    from pathlib import Path
+    js = (Path(__file__).parent.parent / "src/agyary/api/static/mobed/js/memorial_share.js").read_text(encoding="utf-8")
+    assert 'id="shSendBox" class="hidden"' in js
+    assert '$("#shSendBox").classList.toggle("hidden", !(info.send_offered || info.can_send))' in js
 
 
 async def test_sending_from_our_number_is_refused_while_it_is_off(client, db, seeded):

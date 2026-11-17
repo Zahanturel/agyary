@@ -569,6 +569,10 @@ async def share_info(
         "behdin_name": customer.name,
         "can_send": why is None,
         "cannot_send_because": why,
+        # Whether sending from our number is switched on at all. While it is off
+        # the app does not offer it - a button that can never work only confuses.
+        # When it is on but not for this family, the reason is shown instead.
+        "send_offered": get_settings().memorial_share_send_mode == "live",
         "note_max": memorial_share.NOTE_MAX,
     }
 

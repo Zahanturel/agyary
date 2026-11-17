@@ -38,7 +38,7 @@ export function shareCardHtml() {
         <button class="ghost small" id="shCopy" type="button">Copy all dates</button>
       </div>
       <p class="meta" id="shWaNote" style="margin:8px 0 0"></p>
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div id="shSendBox" class="hidden" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <button class="small" id="shSend" type="button" disabled>Send from the Mobed Diary number</button>
         <p class="meta" id="shSendNote" style="margin:8px 0 0"></p>
       </div>
@@ -75,6 +75,9 @@ export function wireShareCard(root, aid, memorial) {
     $("#shWaNote").textContent =
       `Open chat: ${info.behdin_name}'s chat with the short message typed. WhatsApp links cannot attach a file, ` +
       "so add the PDF with the paperclip (Download PDF first).";
+    // Not offered at all while the server has it switched off; when it is on,
+    // a family it cannot go to is told why.
+    $("#shSendBox").classList.toggle("hidden", !(info.send_offered || info.can_send));
     const send = $("#shSend");
     send.disabled = !info.can_send;
     $("#shSendNote").textContent = info.can_send
