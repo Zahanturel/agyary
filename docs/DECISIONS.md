@@ -177,6 +177,45 @@ per-feature switches or limits per mobed: off is no app at all, on is all of it.
 
 The owner chose this over keeping families' reminders going while their mobed is off.
 
+## D10. Phase 2: the Doongerwadi side (18 Nov 2026)
+
+Decided, not built. The research, the sources and the full design are in
+`docs/phase2-doongerwadi-research.md` (section 8 is the design as decided).
+
+- **Pilot: the Mumbai Doongerwadi and the Worli Prayer Hall** (for families who choose cremation),
+  both from the start. **Funeral places are free**; agyaries are the paying customers; behdins are
+  always free. The admin creates funeral places; nobody can add one themselves.
+- **A Doongerwadi manager signs up like a mobed** (WhatsApp), chooses their funeral place, and waits:
+  the owner sees them on the admin side with name and number and approves them. The D9 switch
+  applies to them. Only managers use the Doongerwadi end for now; staff accounts and a family
+  version come later.
+- **Every agyari gets a location**, a pin picked on a map when its address is added or edited. The
+  agyaries already in the app start from town-level positions (the research's section 5).
+- **No fixed list of "near" agyaries.** The manager sees a "Suggested" list sorted nearest first
+  (within 500 km) and can search every agyari in the app. The family's preferred agyari goes first.
+- **Before a request goes, the manager ticks that the family agreed** to share their name and number
+  with that agyari. No tick, no request.
+- **The request goes to the chosen agyari's panthaky.** If it has no panthaky in the app, it goes to
+  all its approved mobeds. It shows in a Requests place with a red dot and a count, and as a phone
+  notification. The family's number is shown only once a request is accepted.
+- **Accepting sets everything up in the accepter's own book**: the behdin (or their own existing
+  record of that number), the memorial with the name, date, Roj and Mah, and the four days on their
+  calendar. D2 holds: nobody's book is looked into, and the Doongerwadi never learns which mobed has
+  which family.
+- **Reminders keep their rule** (D4): a behdin from the Doongerwadi arrives with reminders off, and
+  the mobed turns them on only after asking the family in person.
+- **Sign-up asks "mobed or panthaky".** Safeguard, not optional: the answer is a claim until the owner
+  confirms it at approval, because the panthaky role already lets a person see every machi at their
+  temple (D7) and the app never lets anyone grant themselves that role. Roles' rights and limits,
+  temples with several panthakys, and access by each agyari's payment are for Version 3, to be
+  discussed in depth; until then the per-person switch (D9) stays.
+- **Funeral records follow D8**: kept until someone asks for them to go.
+- **What is not recorded:** cause of death, age, address, the death certificate or a photo of it, ID
+  numbers, and how the body goes. The app takes no side on cremation.
+- **Spellings in the app:** Doongerwadi, Dokhma, Bungli, Geh-saarnu, Uthamna, Chahrum, Sachkar,
+  Paydast, Aramgah.
+- **No WhatsApp messages from our number** for any of this in Phase 2.
+
 ## Not decided yet
 
 Separate WhatsApp numbers for sign-in and reminders; price and payer; Gujarati reminders; the

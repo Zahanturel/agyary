@@ -1,0 +1,399 @@
+{
+ "Udvada, Gujarat, India": {
+  "lat": 20.4621395,
+  "lon": 72.9190049,
+  "name": "Udvada, NH848B, Udvada village, Pardi Taluka, Valsad, Gujarat, 396185, India"
+ },
+ "Navsari, Gujarat, India": {
+  "lat": 20.952407,
+  "lon": 72.9323831,
+  "name": "Navsari, Navsari Taluka, Navsari, Gujarat, 396400, India"
+ },
+ "Surat, Gujarat, India": {
+  "lat": 21.2094892,
+  "lon": 72.8317058,
+  "name": "Surat, Katargam Taluka, Surat, Gujarat, 395008, India"
+ },
+ "Mumbai, Maharashtra, India": {
+  "lat": 19.054999,
+  "lon": 72.8692035,
+  "name": "Mumbai, Mumbai Suburban District, Maharashtra, 400051, India"
+ },
+ "Hyderabad, Telangana, India": {
+  "lat": 17.360589,
+  "lon": 78.4740613,
+  "name": "Hyderabad, Bahadurpura mandal, Hyderabad, Telangana, India"
+ },
+ "Secunderabad, Telangana, India": {
+  "lat": 17.4337246,
+  "lon": 78.5006827,
+  "name": "Secunderabad, Hyderabad, Telangana, 500003, India"
+ },
+ "Jamshedpur, Jharkhand, India": {
+  "lat": 22.8015194,
+  "lon": 86.2029579,
+  "name": "Jamshedpur, Golmuri-Cum-Jugsalai, East Singhbhum, Jharkhand, 831001, India"
+ },
+ "Ahmedabad, Gujarat, India": {
+  "lat": 23.0215374,
+  "lon": 72.5800568,
+  "name": "Ahmedabad, Gujarat, 380001, India"
+ },
+ "Vadodara, Gujarat, India": {
+  "lat": 22.2973142,
+  "lon": 73.1942567,
+  "name": "Vadodara, Vadodara Rural Taluka, Vadodara, Gujarat, 390001, India"
+ },
+ "Bharuch, Gujarat, India": {
+  "lat": 21.7080427,
+  "lon": 72.9956936,
+  "name": "Bharuch, Bharuch Taluka, Bharuch, Gujarat, India"
+ },
+ "Bilimora, Gujarat, India": {
+  "lat": 20.7671693,
+  "lon": 72.9693451,
+  "name": "Bilimora, Gandevi Taluka, Navsari, Gujarat, 396321, India"
+ },
+ "Gandevi, Gujarat, India": {
+  "lat": 20.8029715,
+  "lon": 72.9966726,
+  "name": "Gandevi, NH360, Bilimora, Gandevi Taluka, Navsari, Gujarat, 396380, India"
+ },
+ "Rander, Gujarat, India": {
+  "lat": 21.2160703,
+  "lon": 72.799745,
+  "name": "Sultaniya Gymkhana, Rander, Causeway Bridge/Vir Narmad Sarovar, Surat, Katargam Taluka, Surat, Gujarat, 395005, India"
+ },
+ "Nargol, Gujarat, India": {
+  "lat": 20.2278636,
+  "lon": 72.7511725,
+  "name": "Nargol, Umbergaon Taluka, Valsad, Gujarat, 396135, India"
+ },
+ "Sanjan, Gujarat, India": {
+  "lat": 20.1922347,
+  "lon": 72.8210847,
+  "name": "Sanjan, Amgoan Fatek, Umbergaon Taluka, Valsad, Gujarat, 396150, India"
+ },
+ "Valsad, Gujarat, India": {
+  "lat": 20.4321957,
+  "lon": 73.1409893,
+  "name": "Valsad, Gujarat, India"
+ },
+ "Amroli, Gujarat, India": {
+  "lat": 21.2384215,
+  "lon": 72.8526205,
+  "name": "Amroli Utran Bridge, Chhaprabhatha, Adajan Taluka, Surat, Gujarat, 394107, India"
+ },
+ "Bhatha, Gujarat, India": {
+  "lat": 20.78064,
+  "lon": 72.953761,
+  "name": "PHC, Bhatha, SH6;704, Bilimora, Gandevi Taluka, Navsari, Gujarat, 396310, India"
+ },
+ "Vesu, Gujarat, India": {
+  "lat": 21.1371079,
+  "lon": 72.788677,
+  "name": "ISKCON Vesu road, Majura Taluka, Surat, Gujarat, 394518, India"
+ },
+ "Belgaum, Karnataka, India": {
+  "lat": 15.8572666,
+  "lon": 74.5069343,
+  "name": "Belagavi, Belagavi taluku, Belagavi, Karnataka, 590001, India"
+ },
+ "Ahmednagar, Maharashtra, India": {
+  "lat": 19.092952,
+  "lon": 74.7493451,
+  "name": "Ahilyanagar, Nagar Subdistrict, Ahilyanagar District, Maharashtra, 414001, India"
+ },
+ "Deolali, Maharashtra, India": {
+  "lat": 19.9183943,
+  "lon": 73.8319469,
+  "name": "Deolali, Nashik, Nashik Subdistrict, Nashik, Maharashtra, 422400, India"
+ },
+ "Bordi, Maharashtra, India": {
+  "lat": 21.1810404,
+  "lon": 77.4948072,
+  "name": "Bordi, Achalpur, Amravati, Maharashtra, India"
+ },
+ "Kalyan, Maharashtra, India": {
+  "lat": 19.2396742,
+  "lon": 73.1366482,
+  "name": "Kalyan, Ambivali, Kalyan-Dombivli, Kalyan Subdistrict, Thane, Maharashtra, India"
+ },
+ "Lonavla, Maharashtra, India": {
+  "lat": 18.7534635,
+  "lon": 73.4059575,
+  "name": "Equitas Small Finance Bank Lonavla Branch, Railway Station Road 2, Summer Hill, Lonavala, Mawal Subdistrict, Pune, Maharashtra, 410400, India"
+ },
+ "Nagpur, Maharashtra, India": {
+  "lat": 21.1498134,
+  "lon": 79.0820556,
+  "name": "Nagpur City, Nagpur Urban Taluka, Nagpur, Maharashtra, India"
+ },
+ "Pune, Maharashtra, India": {
+  "lat": 18.5213738,
+  "lon": 73.8545071,
+  "name": "Pune, Pune City Subdistrict, Pune, Maharashtra, 411001, India"
+ },
+ "Thane, Maharashtra, India": {
+  "lat": 19.3653598,
+  "lon": 73.3685437,
+  "name": "Thane, Maharashtra, India"
+ },
+ "Mhow, Madhya Pradesh, India": {
+  "lat": 22.5586725,
+  "lon": 75.7686558,
+  "name": "Dr. Ambedkar Nagar, Mhow Tahsil, Indore, Madhya Pradesh, 453441, India"
+ },
+ "Chennai, Tamil Nadu, India": {
+  "lat": 13.0800915,
+  "lon": 80.2807978,
+  "name": "Chennai, Chennai Metropolitan Area, Chennai District, Tamil Nadu, India"
+ },
+ "Kanpur, Uttar Pradesh, India": {
+  "lat": 26.4609135,
+  "lon": 80.3217588,
+  "name": "Kanpur, Kanpur Nagar, Uttar Pradesh, 208012, India"
+ },
+ "Kolkata, West Bengal, India": {
+  "lat": 22.5726459,
+  "lon": 88.3638953,
+  "name": "Kolkata, Greater Kolkata, Kolkata, West Bengal, India"
+ },
+ "Ankleshwar, Gujarat, India": {
+  "lat": 21.6293206,
+  "lon": 72.9945103,
+  "name": "Ankleshwar, Ankleshwar Taluka, Bharuch, Gujarat, 393001, India"
+ },
+ "Bardoli, Gujarat, India": {
+  "lat": 21.1338291,
+  "lon": 73.1053896,
+  "name": "Bardoli, SH165, Bardoli, Bardoli Taluka, Surat, Gujarat, 394600, India"
+ },
+ "Bhavnagar, Gujarat, India": {
+  "lat": 21.7718836,
+  "lon": 72.1416449,
+  "name": "Bhavnagar, Bhavnagar Taluka, Bhavnagar, Gujarat, 364001, India"
+ },
+ "Bodhan, Gujarat, India": {
+  "lat": 21.2856259,
+  "lon": 73.0892181,
+  "name": "Bodhan, Mandvi Taluka, Surat, Gujarat, 394140, India"
+ },
+ "Ichchhapor, Gujarat, India": {
+  "lat": 21.194623,
+  "lon": 72.7326583,
+  "name": "PHC, Ichchhapor, SH168, Ruchi, Chorasi Taluka, Surat, Gujarat, 394510, India"
+ },
+ "Khergam, Gujarat, India": {
+  "lat": 20.6313585,
+  "lon": 73.0951202,
+  "name": "Khergam, Khergam Taluka, Navsari, Gujarat, 396040, India"
+ },
+ "Pardi, Gujarat, India": {
+  "lat": 20.5137936,
+  "lon": 72.9242196,
+  "name": "Pardi, SH186, Pardi, Pardi Taluka, Valsad, Gujarat, 396020, India"
+ },
+ "Rajkot, Gujarat, India": {
+  "lat": 22.3053263,
+  "lon": 70.8028377,
+  "name": "Rajkot, Rajkot East Taluka, Rajkot, Gujarat, 360001, India"
+ },
+ "Chikhli, Gujarat, India": {
+  "lat": 20.7581399,
+  "lon": 73.0598983,
+  "name": "Chikhli, Chikhli Taluka, Navsari, Gujarat, 396521, India"
+ },
+ "Dumas, Gujarat, India": {
+  "lat": 21.0878845,
+  "lon": 72.712561,
+  "name": "Dumas, Majura Taluka, Surat, Gujarat, 394320, India"
+ },
+ "Vyara, Gujarat, India": {
+  "lat": 21.1176744,
+  "lon": 73.3857702,
+  "name": "Vyara, Vyara Bypass Road, Vyara, Vyara Taluka, Tapi, Gujarat, 394650, India"
+ },
+ "Bangalore, Karnataka, India": {
+  "lat": 12.9767936,
+  "lon": 77.590082,
+  "name": "Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India"
+ },
+ "Hubli, Karnataka, India": {
+  "lat": 15.3518378,
+  "lon": 75.1379848,
+  "name": "Hubballi, Hubballi Urban Taluku, Dharwad, Karnataka, 580020, India"
+ },
+ "Akola, Maharashtra, India": {
+  "lat": 20.7618122,
+  "lon": 77.1921157,
+  "name": "Akola, Maharashtra, India"
+ },
+ "Boisar, Maharashtra, India": {
+  "lat": 19.7984865,
+  "lon": 72.761452,
+  "name": "Boisar, Boisar-Palghar Road, Yashwant Srushti, TAPS Colony, Boisar, Palghar Subdistrict, Palghar, Maharashtra, 401504, India"
+ },
+ "Dahanu Road, Maharashtra, India": {
+  "lat": 19.9915236,
+  "lon": 72.7434083,
+  "name": "Dahanu Road, State Highway 30, Dahanu, Dahanu Taluka, Palghar, Maharashtra, 401600, India"
+ },
+ "Igatpuri, Maharashtra, India": {
+  "lat": 19.6944394,
+  "lon": 73.5638878,
+  "name": "Igatpuri, Old Agra Road, Igatpuri, Igatpuri Subdistrict, Nashik, Maharashtra, 422403, India"
+ },
+ "Panchgani, Maharashtra, India": {
+  "lat": 17.9239543,
+  "lon": 73.7992681,
+  "name": "Panchgani, Mahabaleshwar, Satara, Maharashtra, 412805, India"
+ },
+ "Satara, Maharashtra, India": {
+  "lat": 17.6361289,
+  "lon": 74.2982781,
+  "name": "Satara, Maharashtra, India"
+ },
+ "Solapur, Maharashtra, India": {
+  "lat": 17.8499067,
+  "lon": 75.2763203,
+  "name": "Solapur, Maharashtra, India"
+ },
+ "Uran, Maharashtra, India": {
+  "lat": 18.8808,
+  "lon": 72.9386,
+  "name": "Uran, Uran Subdistrict, Raigad, Maharashtra, 400702, India"
+ },
+ "Indore, Madhya Pradesh, India": {
+  "lat": 22.7203616,
+  "lon": 75.8681996,
+  "name": "Indore, Juni Indore Tahsil, Indore, Madhya Pradesh, 452001, India"
+ },
+ "Neemuch, Madhya Pradesh, India": {
+  "lat": 24.6305517,
+  "lon": 75.1829,
+  "name": "Neemuch, Madhya Pradesh, India"
+ },
+ "New Delhi, Delhi, India": {
+  "lat": 28.6138954,
+  "lon": 77.2090057,
+  "name": "New Delhi, Delhi, India"
+ },
+ "Abu Road, Rajasthan, India": {
+  "lat": 24.4812736,
+  "lon": 72.7852867,
+  "name": "Abu Road, SH11, Gandhi Nagar, Abu Road, Abu Road Tehsil, Sirohi, Rajasthan, 307026, India"
+ },
+ "Ajmer, Rajasthan, India": {
+  "lat": 26.4691,
+  "lon": 74.639,
+  "name": "Ajmer, Ajmer Tehsil, Ajmer, Rajasthan, India"
+ },
+ "Allahabad, Uttar Pradesh, India": {
+  "lat": 25.4381302,
+  "lon": 81.8338005,
+  "name": "Prayagraj, Allahabad, Prayagraj, Uttar Pradesh, 211001, India"
+ },
+ "Bhuj, Gujarat, India": {
+  "lat": 23.2472446,
+  "lon": 69.668339,
+  "name": "Bhuj, Bhuj Taluka, Kutch, Gujarat, 370001, India"
+ },
+ "Jamnagar, Gujarat, India": {
+  "lat": 22.4732415,
+  "lon": 70.0552102,
+  "name": "Jamnagar, Jamnagar City Taluka, Jamnagar, Gujarat, 361001, India"
+ },
+ "Kozhikode, Kerala, India": {
+  "lat": 11.2450558,
+  "lon": 75.7754716,
+  "name": "Kozhikode, Kerala, 673001, India"
+ },
+ "Sydney, Australia": {
+  "lat": -33.8698439,
+  "lon": 151.2082848,
+  "name": "Sydney, New South Wales, Australia"
+ },
+ "Toronto, Canada": {
+  "lat": 43.6534817,
+  "lon": -79.3839347,
+  "name": "Toronto, Ontario, Canada"
+ },
+ "Burnaby, Canada": {
+  "lat": 49.2433804,
+  "lon": -122.972545,
+  "name": "Burnaby, Metro Vancouver Regional District, British Columbia, Canada"
+ },
+ "Hong Kong": {
+  "lat": 22.3492361,
+  "lon": 114.1857778,
+  "name": "香港 Hong Kong, 中国"
+ },
+ "Tehran, Iran": {
+  "lat": 35.6892523,
+  "lon": 51.3896004,
+  "name": "شهر تهران, بخش مرکزی شهرستان تهران, شهرستان تهران, استان تهران, ایران"
+ },
+ "Kerman, Iran": {
+  "lat": 29.571858,
+  "lon": 57.301047,
+  "name": "استان کرمان, ایران"
+ },
+ "Shiraz, Iran": {
+  "lat": 29.6060218,
+  "lon": 52.5378041,
+  "name": "شیراز, بخش مرکزی شیراز, شهرستان شیراز, استان فارس, ایران"
+ },
+ "Yazd, Iran": {
+  "lat": 32.0406164,
+  "lon": 54.6657189,
+  "name": "استان یزد, ایران"
+ },
+ "Karachi, Pakistan": {
+  "lat": 24.8546842,
+  "lon": 67.0207055,
+  "name": "کراچی ڈویژن, سندھ, پاکستان"
+ },
+ "Lahore, Pakistan": {
+  "lat": 31.5656822,
+  "lon": 74.3141829,
+  "name": "لاہور, تحصیل لاہور شہر, ضلع لاہور, لاہور ڈویژن, پنجاب, 54100, پاکستان"
+ },
+ "Quetta, Pakistan": {
+  "lat": 30.1916268,
+  "lon": 67.0007561,
+  "name": "کوئٹہ, Station road Quetta, Brahimzai, تحصیل کوئٹہ شہر, ضلع کوئٹہ, کوئٹہ ڈویژن, بلوچستان, 97300, پاکستان"
+ },
+ "Colombo, Sri Lanka": {
+  "lat": 6.9388614,
+  "lon": 79.8542005,
+  "name": "Colombo, Colombo District, Western Province, Sri Lanka"
+ },
+ "Hampstead, London, United Kingdom": {
+  "lat": 51.55653,
+  "lon": -0.1783011,
+  "name": "Hampstead, Greater London, England, NW3 1QG, United Kingdom"
+ },
+ "Nani Daman, Daman, India": {
+  "lat": 20.4172444,
+  "lon": 72.8374145,
+  "name": "Nani Daman Post Office, Daman Road, Fort, Daman, Dadra and Nagar Haveli and Daman and Diu, 396210, India"
+ },
+ "Elav, Hansot, Bharuch, Gujarat, India": null,
+ "Kudiyana, Olpad, Surat, Gujarat, India": null,
+ "Mahuva, Surat, Gujarat, India": {
+  "lat": 21.0180294,
+  "lon": 73.1388718,
+  "name": "Mahuva, Mahuva Taluka, Surat, Gujarat, 394250, India"
+ },
+ "Olpad, Surat, Gujarat, India": {
+  "lat": 21.3360054,
+  "lon": 72.7516479,
+  "name": "Olpad, Olpad Taluka, Surat, Gujarat, 394540, India"
+ },
+ "Suvali, Surat, Gujarat, India": {
+  "lat": 21.1644912,
+  "lon": 72.6199695,
+  "name": "Suvali Beach, Chorasi Taluka, Surat, Gujarat, India"
+ }
+}
