@@ -93,9 +93,13 @@ Points to settle when it is discussed:
   `flashError` / `flashInfo`, `openSheet`, one `.action-bar`, `toTop()` for a new step.
 - **Migrations:** check constraints with `op.f()`; prove them with `tests/test_migrations_run.py`
   (the suite itself uses `create_all`).
-- **Tests:** one pytest run at a time (they share `agyary_test`). The full suite takes about 18
-  minutes: run it in the background.
-- **Browser check:** a scratch database and port 8001 (or 8011), never the owner's :8000 server.
+- **Tests (owner, 18 Nov 2026: time and tokens):** each step runs only the test files it adds or
+  touches and the nearest related ones. **No full-suite run on this computer** (18-19 minutes
+  here): GitHub runs the whole suite on every push (about 7 minutes) and the deploy waits for it
+  (`deploy` needs `test`), so a failure blocks the release and is fixed then. One pytest at a time
+  (they share `agyary_test`).
+- **Browser check: once per release**, covering all of that release's steps, not after each step.
+  A scratch database and port 8001 (or 8011), never the owner's :8000 server.
   Clear the service worker and caches before checking JS. Signing in uses the debug-only simulate
   route.
 - **Commits:** a local commit at the end of each step, in the owner's name, with no co-author
