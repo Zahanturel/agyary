@@ -45,10 +45,22 @@ export function shareCardHtml() {
     </div>`;
 }
 
+/** Wires the card and returns a handle on the same share, so the question asked
+ *  the moment a memorial is made (memorial.js) sends exactly what the card
+ *  would, from the PDF the card has already prepared:
+ *    info       what the server said about sharing, once it has (else null)
+ *    pdfState   "preparing" | "ready" | "unavailable" (this device cannot hand
+ *               a PDF to another app) | "failed"
+ *    onChange   call back whenever either of those changes
+ *    share()    open the phone's share sheet; true when it was shared
+ *    send()     send from the shared number; true when it went */
 export function wireShareCard(root, aid, memorial) {
   const $ = (sel) => root.querySelector(sel);
   const noteEl = $("#shNote");
   let info = null, token = 0, timer = null;
+  let pdfState = "preparing";
+  const watchers = [];
+  const setPdfState = (to) => { pdfState = to; watchers.forEach(fn => fn()); };
 
   const digits = (phone) => String(phone || "").replace(/\D/g, "");
 
@@ -68,6 +80,7 @@ export function wireShareCard(root, aid, memorial) {
     $("#shSendNote").textContent = info.can_send
       ? `Sends the PDF to ${info.behdin_name} from the shared number, without your note. They get the dates in the PDF.`
       : (info.cannot_send_because || "");
+    watchers.forEach(fn => fn());
   };
 
   // The PDF is made ahead of the tap: the share sheet must open straight from the
@@ -81,23 +94,27 @@ export function wireShareCard(root, aid, memorial) {
     if (!canShareFiles()) {
       note.textContent = "This browser cannot attach the PDF to WhatsApp by itself. Use Open chat, "
         + "then add the PDF with the paperclip (Download PDF first).";
-      return;
+      return setPdfState("unavailable");
     }
     note.textContent = "Preparing the PDF...";
+    setPdfState("preparing");
     try {
       const { blob, filename } = await memorialSchedulePdf(aid, memorial.id, noteEl.value.trim());
       if (mine !== token || !root.isConnected) return;
       const file = new File([blob], filename, { type: "application/pdf" });
       if (!navigator.canShare({ files: [file] })) {
         note.textContent = "This device cannot share a PDF from here. Use Open chat and add the PDF with the paperclip.";
-        return;
+        return setPdfState("unavailable");
       }
       pdfFile = file;
       btn.disabled = false;
       note.textContent = "Opens your phone's share sheet with the PDF attached and the note typed: choose WhatsApp, then "
         + `${info ? info.behdin_name : "the family"}'s chat.`;
+      setPdfState("ready");
     } catch (e) {
-      if (mine === token && root.isConnected) note.textContent = "Couldn't prepare the PDF: " + e.message;
+      if (mine !== token || !root.isConnected) return;
+      note.textContent = "Couldn't prepare the PDF: " + e.message;
+      setPdfState("failed");
     }
   };
 
@@ -110,7 +127,10 @@ export function wireShareCard(root, aid, memorial) {
       paint();
       prepareFile(mine);
     } catch (e) {
-      if (mine === token && root.isConnected) $("#shWaNote").textContent = "Couldn't prepare the message: " + e.message;
+      if (mine !== token || !root.isConnected) return;
+      $("#shWaNote").textContent = "Couldn't prepare the message: " + e.message;
+      $("#shShareNote").textContent = "";
+      setPdfState("failed");
     }
   };
   load();
@@ -118,16 +138,21 @@ export function wireShareCard(root, aid, memorial) {
 
   $("#shWa").addEventListener("click", (e) => { if (!info) e.preventDefault(); });
 
-  $("#shShare").onclick = async () => {
-    if (!pdfFile || !info) return;
+  // True once the share sheet has handed the PDF on. Backing out of the sheet is
+  // not an error and says nothing.
+  const share = async () => {
+    if (!pdfFile || !info) return false;
     try {
       // The text rides along as the caption; some apps ignore it, which is why
       // the note is also on the PDF itself.
       await navigator.share({ files: [pdfFile], text: info.short_text, title: pdfFile.name });
+      return true;
     } catch (e) {
       if (e && e.name !== "AbortError") showError("Couldn't open the share sheet: " + e.message);
+      return false;
     }
   };
+  $("#shShare").onclick = share;
 
   $("#shPdf").onclick = async (ev) => {
     const btn = ev.currentTarget;
@@ -159,20 +184,33 @@ export function wireShareCard(root, aid, memorial) {
 
   // One tap sends: no second "are you sure". The button is disabled while it goes,
   // so a double tap cannot send twice.
-  $("#shSend").onclick = async (ev) => {
-    const btn = ev.currentTarget;
-    if (!info || !info.can_send || btn.disabled) return;
+  const send = async () => {
+    const btn = $("#shSend");
+    if (!info || !info.can_send || btn.disabled) return false;
     btn.disabled = true;
     const label = btn.textContent;
     btn.textContent = "Sending...";
     try {
       await memorialShareSend(aid, memorial.id);
-      showInfo(`Sent to ${info.behdin_name}.`);
+      return true;
     } catch (e) {
       showError(e.message);
+      return false;
     } finally {
       btn.textContent = label;
       load();   // re-reads whether it can still send (the daily limit may now be reached)
     }
+  };
+  $("#shSend").onclick = async () => {
+    const to = info && info.behdin_name;
+    if (await send()) showInfo(`Sent to ${to}.`);
+  };
+
+  return {
+    get info() { return info; },
+    get pdfState() { return pdfState; },
+    onChange(fn) { watchers.push(fn); },
+    share,
+    send,
   };
 }

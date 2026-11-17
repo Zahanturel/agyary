@@ -37,18 +37,22 @@ globalThis.localStorage = {
   setItem: (k, v) => store.set(k, String(v)),
   removeItem: k => store.delete(k),
 };
+// A message is a "toast" put into its holder with replaceChildren (ui.js): the
+// holder's kind and its words are what a mobed is shown.
 const banners = [];
 const element = () => ({
-  value: "", innerHTML: "", style: {}, dataset: {}, classList: { toggle() {}, add() {}, remove() {} },
-  focus() {}, remove() {}, scrollIntoView() {}, querySelectorAll: () => [],
-  prepend(el) { banners.push([el.className, el.textContent]); },
+  value: "", innerHTML: "", style: { setProperty() {} }, dataset: {}, kids: [],
+  classList: { toggle() {}, add() {}, remove() {} },
+  focus() {}, remove() {}, scrollIntoView() {}, setAttribute() {}, querySelectorAll: () => [],
+  append(...kids) { this.kids.push(...kids); },
+  replaceChildren(el) { if (el) banners.push([el.className, el.kids[0].textContent]); },
 });
 const elements = new Map();
 globalThis.document = {
   getElementById: id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
   createElement: element,
   documentElement: { dataset: {} },
-  body: { classList: { toggle() {} } },
+  body: { classList: { toggle() {} }, appendChild() {} },
   addEventListener() {},
   querySelectorAll: () => [],
 };
@@ -138,7 +142,7 @@ picker = async () => { throw new TypeError("Unable to open a contact selector");
 console.log(JSON.stringify({ picked: await add.pickContacts({ multiple: false }), banners, says: add.BROWSER_CANNOT_OPEN_CONTACTS }));
 """)
     assert out["picked"] == []
-    assert out["banners"] == [["error-banner", out["says"]]]
+    assert out["banners"] == [["toast error", out["says"]]]
     assert out["says"].startswith("This browser can't open your contacts. Please use Chrome")
     assert "default browser" in out["says"] and "Settings, Apps, Chrome, Permissions" in out["says"]
 
@@ -152,7 +156,7 @@ console.log(JSON.stringify({ picked: await add.pickContacts(), banners }));
 """)
     assert out["picked"] == []
     assert out["banners"] == [[
-        "error-banner",
+        "toast error",
         "Your contacts could not be opened (InvalidStateError: Contacts Picker is already in use.). "
         "Please type the name and number instead.",
     ]]
@@ -211,7 +215,7 @@ await document.getElementById("abImport").onclick();
 console.log(JSON.stringify({ name: document.getElementById("abName").value, phone: document.getElementById("abPhone").value, banners }));
 """)
     assert out["name"] == "Farida Kaka" and out["phone"] == "98765"
-    assert out["banners"] == [["info-banner", "That contact has no phone number. Please type it in."]]
+    assert out["banners"] == [["toast info", "That contact has no phone number. Please type it in."]]
 
 
 @pytest.mark.parametrize("screen", ["event.js", "machi_event.js"])

@@ -24,9 +24,10 @@ import {
 import { state, GEH_NAME_BY_NUM } from "../state.js";
 import { clearDraft } from "../drafts.js";
 import { repeatFields, repeatSentence } from "../repeat.js";
-import { renderNamesEditor, collectNames, validateNames } from "../names.js";
+import { renderNamesEditor, collectNames, validateNames, halfFilledPair } from "../names.js";
 import { slipCardHtml } from "./slip.js";
-import { chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading } from "../ui.js";
+import { chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading, screenFailed } from "../ui.js";
+import { flagProblems, clearProblems } from "../fielderrors.js";
 import { esc, gregLabel } from "../util.js";
 import { navigate, returnTo, navGuard } from "../router.js";
 
@@ -69,7 +70,7 @@ function editorShape(draft) {
 }
 
 export function renderReview(kind) {
-  return async function () {
+  return async function show() {
     chrome(true);
     refreshHeader();
     showFab(false);
@@ -91,19 +92,23 @@ export function renderReview(kind) {
       ...(!draft.edit ? repeatFields(draft) : {}),
     });
 
+    // Whichever way the mobed leaves this step for the form (Edit details, or
+    // the header Back), the form keeps this draft instead of reloading it. Set
+    // before the slip is asked for, so Back from a slip that could not be
+    // prepared keeps an edit's changes too.
+    draft.returning = true;
+
     let first;
     try {
       first = await preview(draft.names || null);
     } catch (e) {
       if (!alive()) return;
-      mainEl.innerHTML = "";
-      return showError("Couldn't prepare the slip: " + e.message);
+      // In the page, with a way to try again - it used to be a blank page
+      // under a passing message.
+      return screenFailed("Couldn't prepare the slip: " + e.message, e.status === 404 ? null : show);
     }
     if (!alive()) return;
     draft.names = first.names;
-    // Whichever way the mobed leaves this step for the form (Edit details, or
-    // the header Back), the form keeps this draft instead of reloading it.
-    draft.returning = true;
 
     mainEl.innerHTML = `
       <div class="step-head no-print">
@@ -185,13 +190,24 @@ export function renderReview(kind) {
           const res = await preview(rows);
           if (mine !== token || !alive()) return;
           slipBox.innerHTML = slipCardHtml(res.slip);
-        } catch (e) { /* keep the last good slip on screen */ }
+        } catch (e) {
+          if (mine !== token || !alive()) return;
+          // The last good slip stays on screen, but it no longer shows the
+          // names as they now are - so say so, here under the names, rather
+          // than leave "this is what will print" standing over an old slip.
+          hint.textContent = "Couldn't redraw the slip above - please check your signal. Your names are kept.";
+        }
       }, 350);
     };
     region.addEventListener("input", refresh);
     region.addEventListener("names-changed", refresh);
+    // A marked pair that is then moved or removed would leave its message
+    // behind where the pair used to be, so the mark comes off. If the pair is
+    // still half filled the hint under the names goes on saying so (refresh).
+    region.addEventListener("names-changed", () => clearProblems(region.parentElement));
 
-    document.getElementById("rvEdit").onclick = () => {
+    const editBtn = document.getElementById("rvEdit");
+    editBtn.onclick = () => {
       draft.names = editorNames();
       draft.returning = true;   // tells the edit form to keep this draft, not reload it
       navigate(formFor(kind), { replace: true });
@@ -200,22 +216,39 @@ export function renderReview(kind) {
     confirmBtn.onclick = async () => {
       const rows = editorNames();
       const problem = validateNames(rows);
-      if (problem) return showError(problem);
+      if (problem) {
+        // Marked on the pair itself, with the cursor put in its empty box.
+        // The grey hint under the names says the same words, so it steps aside.
+        const half = halfFilledPair(region);
+        clearTimeout(timer);   // a redraw still waiting would only write the hint back
+        hint.textContent = "";
+        flagProblems(mainEl, [{ target: half ? half.card : region, message: problem }]);
+        if (half) half.empty.focus({ preventScroll: true });
+        return;
+      }
       draft.names = rows;
 
       confirmBtn.disabled = true;
+      // Leaving for the form while the save is on its way would end with the
+      // event saved behind a form that still looks unsaved.
+      editBtn.disabled = true;
+      let res, slipHash;
       try {
         const body = bodyFor(draft, rows);
         // Part of the save, not a request afterwards: see _remember on the server.
         const keep = document.getElementById("rvKeep");
         body.remember_names = !keep || keep.checked;
-        let res, slipHash;
         if (isMachi) {
           if (!draft.edit) Object.assign(body, repeatFields(draft));
           res = draft.edit ? await editMachi(aid, draft.edit.id, body) : await addMachi(aid, body);
           if (res.confirmed === false) {
-            // Somebody took the slot between the preview and now.
+            // Somebody took the slot between the preview and now. The notice
+            // is at the head of the page and Save is at its foot, so bring it
+            // to where the mobed is looking - otherwise the tap seems to do
+            // nothing. Save stays off (showSlot); the way back is open again.
             showSlot(false, res.alternatives);
+            editBtn.disabled = false;
+            warn.scrollIntoView({ block: "center" });
             return;
           }
           slipHash = `#/machi/${aid}/${draft.edit ? draft.edit.id : res.machi_id}`;
@@ -224,29 +257,33 @@ export function renderReview(kind) {
           res = draft.edit ? await editBooking(aid, draft.edit.id, body) : await addBooking(aid, body);
           slipHash = `#/booking/${aid}/${draft.edit ? draft.edit.id : res.booking_id}`;
         }
-
-        state.calendar.focus = draft.gregorian;
-        state.draft = null;
-        if (!draft.edit) clearDraft(isMachi ? "machi" : "event");   // saved: nothing left to continue
-        // Neither the form nor this review may stay behind the slip in
-        // history. An edit pops back to the slip it was opened from.
-        if (draft.edit) return returnTo(slipHash);
-        // A new event: put the calendar on the day it was booked for, THEN open
-        // the slip on top. Back from the slip must show the event just made -
-        // it used to return to whichever calendar day the mobed happened to be
-        // on (or had left in the address from a previous visit), so a saved
-        // event looked as though it had not been.
-        await navigate(`#/${isMachi ? "board" : "calendar"}/day/${draft.gregorian}`, { replace: true });
-        // Said on the slip, where the mobed lands - not on the calendar they pass through.
-        const skipped = (res.skipped || []).map(x => gregLabel(x.gregorian));
-        if (skipped.length) {
-          flashInfo(`Booked. The geh was already taken on ${skipped.join("; ")}, so ${skipped.length === 1 ? "that date was" : "those dates were"} left out of the repeat.`);
-        }
-        navigate(slipHash);
       } catch (e) {
         confirmBtn.disabled = false;
-        showError(e.message);
+        editBtn.disabled = false;
+        return showError(e.message);
       }
+
+      // Saved. What follows is only the way to the slip, and is kept out of
+      // the try above on purpose: a hitch here must never hand Save back, or
+      // a second tap would book the same event twice.
+      state.calendar.focus = draft.gregorian;
+      state.draft = null;
+      if (!draft.edit) clearDraft(isMachi ? "machi" : "event");   // saved: nothing left to continue
+      // Neither the form nor this review may stay behind the slip in
+      // history. An edit pops back to the slip it was opened from.
+      if (draft.edit) return returnTo(slipHash);
+      // A new event: put the calendar on the day it was booked for, THEN open
+      // the slip on top. Back from the slip must show the event just made -
+      // it used to return to whichever calendar day the mobed happened to be
+      // on (or had left in the address from a previous visit), so a saved
+      // event looked as though it had not been.
+      await navigate(`#/${isMachi ? "board" : "calendar"}/day/${draft.gregorian}`, { replace: true });
+      // Said on the slip, where the mobed lands - not on the calendar they pass through.
+      const skipped = (res.skipped || []).map(x => gregLabel(x.gregorian));
+      if (skipped.length) {
+        flashInfo(`Booked. The geh was already taken on ${skipped.join("; ")}, so ${skipped.length === 1 ? "that date was" : "those dates were"} left out of the repeat.`);
+      }
+      navigate(slipHash);
     };
   };
 }

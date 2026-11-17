@@ -17,7 +17,10 @@ import { state, primarySystem, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } fr
 import { renderAddBehdin } from "../behdin_add.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
 import { setRepeat, repeatCountHtml, wireRepeatCount, repeatCountProblem } from "../repeat.js";
-import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
+import {
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop,
+} from "../ui.js";
+import { flagProblems } from "../fielderrors.js";
 import { esc, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
@@ -69,9 +72,18 @@ function keep(draft) {
 }
 
 async function open(draft) {
+  const alive = navGuard();
   state.draft = draft;
-  await syncFromGregorian(draft);
+  // The screen being left comes off at once. Until the form was ready it used
+  // to stay on the page, still tappable, under this form's address.
+  loading();
+  const failed = await syncFromGregorian(draft);
+  if (!alive()) return;
+  // A machi is saved with its Roj and Mah, so a form with none to fall back
+  // on cannot be filled in rightly.
+  if (failed && draft.roj == null) return screenFailed(failed, () => open(draft));
   await loadAvailableGehs(draft);
+  if (!alive()) return;
   await render(draft);
 }
 
@@ -98,7 +110,7 @@ export async function renderNewMachi() {
       MACHI_PURPOSE_DISPLAY[stored.purpose] || stored.purpose,
       `${gregLabel(stored.gregorian)}${stored.geh ? " · " + (GEH_NAME_BY_NUM[stored.geh] || "") + " Geh" : ""}`,
     ],
-    onStartNew: () => { clearDraft(DRAFT_KEY); open(blankDraft(prefill)); },
+    onStartNew: () => { clearDraft(DRAFT_KEY); return open(blankDraft(prefill)); },
     onContinue: async () => {
       const draft = blankDraft(prefill);
       draft.behdin = stored.behdin;
@@ -136,7 +148,9 @@ export async function renderEditMachi({ id }) {
     detail = await machiDetail(aid, Number(id));
   } catch (e) {
     if (!alive()) return;
-    return showError(e.message);
+    // In the page, not a passing message over "Loading...". A machi that is
+    // not on file will not be there on a second try either.
+    return screenFailed(e.message, e.status === 404 ? null : () => renderEditMachi({ id }));
   }
   if (!alive()) return;
 
@@ -150,8 +164,11 @@ export async function renderEditMachi({ id }) {
   draft.roj = detail.roj;
   draft.mah = detail.mah;
   draft.year = detail.year;
+  // If this cannot be reached the machi's own saved Roj and Mah stand, and
+  // they are right for its date - so that is quiet.
   await syncFromGregorian(draft);
   await loadAvailableGehs(draft);
+  if (!alive()) return;
   state.draft = draft;
   render(draft);
 }
@@ -159,6 +176,10 @@ export async function renderEditMachi({ id }) {
 // ---------------------------------------------------------------------------
 // Date <-> Roj/Mah sync
 // ---------------------------------------------------------------------------
+// Both answer "" when the day was worked out, and otherwise say why not, with
+// the draft's Roj, Mah and label left as they were. The caller decides what
+// that means: it used to be swallowed here, which left a new date on the form
+// beside the old date's Roj - and a machi is saved with both.
 async function syncFromGregorian(draft) {
   try {
     const p = await convertDate(draft.gregorian, system());
@@ -167,7 +188,10 @@ async function syncFromGregorian(draft) {
     draft.mah = p.is_gatha ? 13 : p.mah;
     draft.year = p.year;
     draft.parsiLabel = p.display;
-  } catch (e) { /* keep whatever was there */ }
+    return "";
+  } catch (e) {
+    return e.message || "Please try again.";
+  }
 }
 
 async function syncFromParsiFields(draft) {
@@ -177,7 +201,10 @@ async function syncFromParsiFields(draft) {
     draft.year = p.year;
     draft.isGatha = p.is_gatha;
     draft.parsiLabel = p.display;
-  } catch (e) { /* keep whatever was there */ }
+    return "";
+  } catch (e) {
+    return e.message || "Please try again.";
+  }
 }
 
 async function loadAvailableGehs(draft) {
@@ -186,6 +213,9 @@ async function loadAvailableGehs(draft) {
     const res = await bookableGehs(state.currentAgyaryId, draft.gregorian);
     draft.availableGehs = res.bookable || res;
   } catch (e) {
+    // Quiet on purpose: every geh is offered rather than none. One that is
+    // already taken is refused by the review step, which asks the server
+    // again before anything is saved.
     draft.availableGehs = [1, 2, 3, 4, 5];
   }
 }
@@ -194,6 +224,8 @@ async function loadAvailableGehs(draft) {
 // The single screen
 // ---------------------------------------------------------------------------
 async function render(draft) {
+  // For what is wired below that waits on the server before redrawing.
+  const alive = navGuard();
   keep(draft);
   const calOpts = state.calendarOptions;
   const rojOptions = calOpts.roj.map(o => {
@@ -290,7 +322,7 @@ async function render(draft) {
   if (chosen) {
     document.getElementById("bhChange").onclick = () => { draft.behdin = null; draft.names = null; render(draft); };
   } else {
-    wireSearch(draft);
+    wireSearch(draft, alive);
     // A deliberate tap, not the mid-typing "nobody matched" fallback below -
     // send them to the full behdin page (saved names and all), the same one
     // Settings and New Event use, rather than the compact inline form.
@@ -317,36 +349,52 @@ async function render(draft) {
   const note = document.getElementById("syncNote");
   const busy = (on) => box.classList.toggle("syncing", on);
 
+  // If the Roj and Mah of a new date cannot be worked out, the date goes back
+  // to what it was - never a new date beside the old date's Roj, since a machi
+  // is saved with both - and the mobed is told. The free gehs are asked for
+  // only when the day really changed.
   document.getElementById("mcDate").onchange = async (e) => {
+    const was = draft.gregorian;
     draft.gregorian = e.target.value;
     if (!draft.gregorian) return;
     busy(true);
-    await syncFromGregorian(draft);
-    await loadAvailableGehs(draft);
-    busy(false);
-    render(draft);
+    const failed = await syncFromGregorian(draft);
+    if (failed) draft.gregorian = was;
+    else await loadAvailableGehs(draft);
+    if (!alive()) return;   // gone to another screen meanwhile: nothing here to redraw
+    await render(draft);
+    if (failed) showError("The date was not changed. " + failed);
   };
 
   const onParsiChange = async () => {
+    const was = { roj: draft.roj, mah: draft.mah };
     draft.roj = Number(document.getElementById("mcRoj").value);
     draft.mah = Number(document.getElementById("mcMah").value);
     busy(true);
     note.textContent = "Finding that day...";
-    await syncFromParsiFields(draft);
-    await loadAvailableGehs(draft);
-    busy(false);
-    render(draft);
+    const failed = await syncFromParsiFields(draft);
+    // No such day could be found: back to the Roj and Mah of the date shown.
+    if (failed) Object.assign(draft, was);
+    else await loadAvailableGehs(draft);
+    if (!alive()) return;
+    await render(draft);
+    if (failed) showError("The Roj and Mah were not changed. " + failed);
   };
   document.getElementById("mcRoj").onchange = onParsiChange;
   document.getElementById("mcMah").onchange = onParsiChange;
 
   // --- Geh wiring ---
-  document.getElementById("gehGrid").querySelectorAll(".geh-btn:not([disabled])").forEach(btn => {
+  const gehGrid = document.getElementById("gehGrid");
+  gehGrid.querySelectorAll(".geh-btn:not([disabled])").forEach(btn => {
     btn.onclick = () => {
       draft.geh = Number(btn.dataset.geh);
       document.querySelectorAll(".geh-btn").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
       keep(draft);
+      // A tap on a button is not a "change" as a typed-in field has one, so
+      // say it for the grid: that is what takes a "choose the time of day"
+      // mark off it (fielderrors.js clears a mark when its target changes).
+      gehGrid.dispatchEvent(new Event("change"));
     };
   });
 
@@ -363,15 +411,19 @@ async function render(draft) {
     back(draft.edit ? `#/machi/${state.currentAgyaryId}/${draft.edit.id}` : "#/board");
   };
   if (stepped) {
-    const go = (n) => { draft.step = n; keep(draft); render(draft); window.scrollTo(0, 0); };
+    // Another step is another page to the person filling it in: it opens at
+    // its top, once it has been drawn.
+    const go = async (n) => { draft.step = n; keep(draft); await render(draft); if (alive()) toTop(); };
+    // What this step still needs is said on the control itself, which is on screen.
+    const missing = (target, message) => void flagProblems(mainEl, [{ target, message }]);
     document.getElementById("mcBack").onclick = () => (step === 1 ? cancel() : go(step - 1));
     document.getElementById("mcNext").onclick = () => {
-      if (step === 1 && !draft.behdin) return showError("Please choose who the machi is for.");
-      if (step === 3 && !draft.gregorian) return showError("Please choose a date.");
-      if (step === 3 && !draft.geh) return showError("Please choose the time of day.");
+      if (step === 1 && !draft.behdin) return missing("#bhSearch", "Please choose who the machi is for.");
+      if (step === 3 && !draft.gregorian) return missing("#mcDate", "Please choose a date.");
+      if (step === 3 && !draft.geh) return missing("#gehGrid", "Please choose the time of day.");
       if (step === total) {
         const problem = repeatCountProblem(draft);
-        if (problem) return showError(problem);
+        if (problem) return missing("#mcCount", problem);
         return save(draft);
       }
       go(step + 1);
@@ -385,7 +437,7 @@ async function render(draft) {
 // ---------------------------------------------------------------------------
 // Behdin search
 // ---------------------------------------------------------------------------
-function wireSearch(draft) {
+function wireSearch(draft, alive) {
   const input = document.getElementById("bhSearch");
   const results = document.getElementById("bhResults");
   const panel = document.getElementById("bhNewPanel");
@@ -408,7 +460,7 @@ function wireSearch(draft) {
     }
     renderAddBehdin(panel, {
       prefill: { name },
-      onCreated: (created) => choose(draft, created),
+      onCreated: (created) => choose(draft, created, alive),
       onCancel: () => { showNewBtn(true); input.focus(); },
     });
     // The name is already on screen in the search box directly above, so the
@@ -434,7 +486,17 @@ function wireSearch(draft) {
       const q = input.value.trim();
       let matches = [];
       try { matches = await listBehdins(state.currentAgyaryId, q); }
-      catch (e) { return; }
+      catch (e) {
+        if (mine !== token) return;
+        // Said under the box being typed in. A search that could not run
+        // used to look exactly like one that found nobody.
+        results.innerHTML = `<div class="field-msg" role="alert">Couldn't search: ${esc(e.message)}</div>`;
+        // An add form already open takes its name from this box (its own name
+        // row is hidden), so it must not be left holding an earlier spelling.
+        const open = document.getElementById("abName");
+        if (open && q.length >= 2) open.value = q;
+        return;
+      }
       if (mine !== token) return;
 
       if (matches.length) {
@@ -446,7 +508,7 @@ function wireSearch(draft) {
               <div>${esc(m.name)}</div><div class="addr">${esc(m.phone)}</div>
             </div>`).join("");
         results.querySelectorAll(".search-result").forEach(el => {
-          el.onclick = () => choose(draft, matches[Number(el.dataset.i)]);
+          el.onclick = () => choose(draft, matches[Number(el.dataset.i)], alive);
         });
         return;
       }
@@ -456,24 +518,44 @@ function wireSearch(draft) {
       if (q.length >= 2) openAdd(q); else closeAdd();
     }, 220);
   };
-  input.focus();
+  // Ready to type in, without the page being moved to it: the step has just
+  // opened at its top and the box is there.
+  input.focus({ preventScroll: true });
 }
 
-function choose(draft, match) {
+/** Awaited by the add form, so its note follows the redraw. */
+async function choose(draft, match, alive) {
   const id = match.id != null ? match.id : match.customer_id;
   draft.behdin = { id, name: match.name, phone: match.phone };
   draft.names = null;   // a different behdin has different saved names
   if (!draft.edit) draft.step = 2;
-  return render(draft);   // awaited by the add form, so its note follows the redraw
+  // The add form asks the server first. If the mobed has gone to another
+  // screen by the time it answers, the choice is kept on the draft for when
+  // they come back, and nothing is drawn over the screen they are on.
+  if (!alive()) return;
+  await render(draft);
+  // In a new machi that was the answer to the first question, and the next
+  // one opens at its top - not wherever the list of matches had been scrolled
+  // to. Editing redraws the one page it already is, so that stays put.
+  if (!draft.edit && alive()) toTop();
 }
 
 // ---------------------------------------------------------------------------
 // Next: review. Saving happens there, after the mobed has seen the slip.
 // ---------------------------------------------------------------------------
 function save(draft) {
-  if (!draft.behdin) return showError("Please select a behdin.");
-  if (!draft.purpose) return showError("Please select a purpose.");
-  if (!draft.gregorian) return showError("Please select a date.");
-  if (!draft.geh) return showError("Please select a geh.");
+  const problems = [];
+  if (!draft.behdin) problems.push({ target: "#bhSearch", message: "Please select a behdin." });
+  if (!draft.purpose) problems.push({ target: "#mcPurpose", message: "Please select a purpose." });
+  if (!draft.gregorian) problems.push({ target: "#mcDate", message: "Please select a date." });
+  if (!draft.geh) problems.push({ target: "#gehGrid", message: "Please select a geh." });
+  if (problems.length) {
+    // The edit form is one page, so each is marked on its own control. A new
+    // machi has already checked every step as it was passed; should one still
+    // be missing its control is on a hidden step, so it is said in words.
+    if (draft.edit) flagProblems(mainEl, problems);
+    else showError(problems[0].message);
+    return;
+  }
   navigate("#/machi/review", { replace: true });
 }

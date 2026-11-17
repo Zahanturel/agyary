@@ -118,11 +118,20 @@ button:disabled { opacity: .5; cursor: default; }
 .offline-bar { background: var(--accent-text); color: #fff; text-align: center; font-size: var(--text-sm);
   font-weight: 600; padding: var(--space-2) var(--space-3); }
 .datebar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); }
-.datebar .dlabel { text-align: center; flex: 1; }
-.datebar .dlabel .greg { font-weight: 700; font-size: var(--text-md); line-height: 1.2; }
+/* The title is a button: it opens the "Go to" sheet (calendar.js openGoTo). */
+.datebar .dlabel { text-align: center; flex: 1; min-width: 0; min-height: 60px; padding: var(--space-1) var(--space-2);
+  background: #fff; color: var(--text); border: 2px solid var(--border); border-radius: var(--radius-sm);
+  font-weight: 400; }
+.datebar .dlabel:active { background: var(--primary-tint); border-color: var(--primary); }
+.datebar .dlabel .greg { display: block; font-weight: 700; font-size: var(--text-md); line-height: 1.2; }
+.datebar .dlabel .caret { display: inline-block; margin-left: 8px; vertical-align: 3px; border: 7px solid transparent;
+  border-top: 9px solid var(--primary); border-bottom: 0; }
 .datebar > button.ghost { min-width: 60px; min-height: 60px; font-size: 32px; line-height: 1; padding: 0;
   background: #fff; color: var(--primary); border: 2px solid var(--primary); }
-.datebar .dlabel .parsi { color: var(--muted); font-size: var(--text-xs); }
+.datebar .dlabel .parsi { display: block; color: var(--muted); font-size: var(--text-xs); }
+.cal-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  margin-bottom: var(--space-2); }
+.cal-top > [data-cal-today] { min-height: 52px; background: #fff; color: var(--primary); border: 2px solid var(--primary); }
 .toggle { display: inline-flex; border: 2px solid var(--primary); border-radius: var(--radius-sm); overflow: hidden; }
 .toggle button { background: #fff; color: var(--primary); border: none; border-radius: 0;
   padding: var(--space-2) var(--space-4); min-height: 52px; font-size: var(--text-base); }
@@ -151,20 +160,49 @@ button:disabled { opacity: .5; cursor: default; }
    clipping the purpose. Only that board turns this on. */
 .pg-events.wrap .pg-event { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; padding: 1px 2px; }
 .pg-more { font-size: var(--text-grid); color: var(--muted); line-height: 1.1; }
-/* What the marks on a phone's month mean. Wide screens show the names instead. */
-.pg-key { display: none; }
-/* On a phone the cell is too narrow to read an event: a coloured bar says "something
-   is booked", and the day below lists it in full. */
+/* What the shading on a phone's month means. Wide screens show the names instead. */
+.pg-key, .pg-count { display: none; }
+/* On a phone the cell is too narrow to read an event, so every kind of event is
+   marked the one way: the date is shaded and carries how many are on it. The
+   day, one tap away, lists them in full. (There used to be bars for some kinds
+   and diamonds for others, which read as two different things.) */
 @media (max-width: 699px) {
-  .pg-event, .pg-events.wrap .pg-event { font-size: 0; height: 8px; padding: 0; border-radius: 4px; background: var(--accent); }
-  .pg-event.machi, .pg-events.wrap .pg-event.machi { background: var(--primary); }
-  .pg-more { display: none; }
-  .pg-key { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-3) 0 0;
-    font-size: var(--text-xs); color: var(--muted); }
-  .pg-key-bar { width: 22px; height: 8px; border-radius: 4px; background: var(--primary); }
-  .pg-key-diamond { width: 13px; height: 13px; border-radius: 2px; background: var(--success);
-    transform: rotate(45deg); margin-left: var(--space-3); }
+  .pg-events { display: none; }
+  .pg-cell.pg-busy { background: var(--accent-tint); border-color: var(--accent); border-width: 2px; }
+  .pg-cell.pg-busy.pg-today { border-color: var(--primary); }
+  .pg-cell.pg-busy.pg-selected { background: var(--primary-tint); }
+  .pg-count { display: inline-flex; align-items: center; justify-content: center; margin-top: auto;
+    min-width: 28px; height: 24px; padding: 0 6px; border-radius: var(--radius-pill);
+    background: var(--primary); color: #fff; font-size: var(--text-grid); font-weight: 700; line-height: 1; }
+  .pg-key { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0 0;
+    font-size: var(--text-xs); color: var(--muted); line-height: 1.3; }
+  .pg-key-cell { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 42px;
+    border-radius: var(--radius-sm); background: var(--accent-tint); border: 2px solid var(--accent); }
+  .pg-key-cell .pg-count { margin: 0; }
 }
+
+/* The "Go to" sheet: a year of months at once. */
+.goto-year { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  margin-bottom: var(--space-3); }
+.goto-year > button { min-width: 56px; min-height: 56px; font-size: 30px; line-height: 1; padding: 0;
+  background: #fff; color: var(--primary); border: 2px solid var(--primary); }
+.goto-year .gy-label { text-align: center; }
+.goto-year .gy-label b { display: block; font-size: var(--text-md); line-height: 1.2; }
+.goto-year .gy-label span { font-size: var(--text-xs); color: var(--muted); }
+.goto-months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.goto-month { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 72px; padding: var(--space-2) 2px; background: #fff; color: var(--text);
+  border: 2px solid var(--border); border-radius: var(--radius-sm); font-weight: 400; }
+.goto-month b { font-size: var(--text-xs); font-weight: 700; line-height: 1.15; hyphens: manual; }
+/* The one line of small print: a month's dates must stay on one line to be read as a span. */
+.goto-month span { font-size: 14px; color: var(--muted); line-height: 1.2; white-space: nowrap; }
+.goto-month.wide { grid-column: 1 / -1; min-height: 60px; }
+.goto-month.now { border-color: var(--primary); }
+.goto-month.current { background: var(--primary); border-color: var(--primary); color: #fff; }
+.goto-month.current span { color: #fff; }
+.goto-row { display: flex; gap: var(--space-2); align-items: center; }
+.goto-row > input, .goto-row > select { flex: 1 1 0; min-width: 0; }
+.goto-row > button { flex: 0 0 auto; min-height: var(--tap); }
 /* The narrowest phones: a little more room for the Roj names, which are long. */
 @media (max-width: 480px) {
   .parsi-grid { grid-template-columns: 2.2em repeat(var(--cols, 5), minmax(0, 1fr)); gap: 3px; }
@@ -450,13 +488,6 @@ body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bot
 .event.closing .t { font-size: var(--text-base); }
 .event.closing .s { color: #fff; }
 .pg-event.closing { background: var(--accent-text); color: #fff; font-weight: 600; }
-/* On a phone a memorial day is a diamond, not a bar: a shape as well as a colour,
-   and strong enough to see. The rules above would otherwise leave it a pale bar. */
-@media (max-width: 699px) {
-  .pg-event.memorial, .pg-event.closing, .pg-events.wrap .pg-event.memorial {
-    width: 13px; height: 13px; margin: 3px auto; border-radius: 2px; transform: rotate(45deg); }
-  .pg-event.memorial, .pg-events.wrap .pg-event.memorial { background: var(--success); }
-}
 
 .choice-group { border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: var(--space-1) var(--space-3); background: var(--surface); }
@@ -589,3 +620,53 @@ a.button[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 .obs .obs-head:has(.pay-chip) { flex-wrap: wrap; row-gap: var(--space-2); }
 .obs .obs-head .pay-chip { margin-left: auto; }
 .obs .obs-head:has(.pay-chip) .obs-title { flex: 1 1 40%; min-width: 0; }
+
+/* --- Messages (ui.js showError / showInfo) --------------------------------- */
+/* Over the bottom of the screen wherever the page is scrolled to, above the
+   tabs and above an open keyboard (--kb, set by ui.js). */
+.toasts { position: fixed; z-index: 70; left: var(--space-3); right: var(--space-3);
+  bottom: calc(var(--space-4) + var(--safe-bottom) + var(--kb, 0px));
+  display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+body.has-tabs .toasts { bottom: calc(92px + var(--safe-bottom) + var(--kb, 0px)); }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: var(--space-3); width: 100%; max-width: 560px;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md); font-size: var(--text-sm); font-weight: 600; line-height: 1.35; color: #fff;
+  cursor: pointer; animation: toast-in .18s ease-out; }
+.toast.error { background: var(--danger-600); }
+.toast.info { background: var(--primary); }
+.toast .toast-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; padding: 6px 0; }
+.toast .toast-x { flex: 0 0 auto; background: rgba(255,255,255,.18); color: #fff; border: 0; min-height: 40px; min-width: 40px;
+  padding: 0; font-size: 26px; line-height: 1; border-radius: var(--radius-sm); }
+@keyframes toast-in { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (min-width: 768px) {
+  body.has-tabs .toasts { left: calc(150px + var(--space-3)); bottom: calc(var(--space-6) + var(--kb, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .toast, .sheet { animation: none !important; } }
+
+/* --- Sheet (ui.js openSheet) ------------------------------------------------ */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(15, 18, 38, .55);
+  display: flex; align-items: flex-end; justify-content: center; overscroll-behavior: contain; }
+.sheet { background: var(--surface); width: 100%; max-width: 560px; max-height: 92vh; max-height: 92dvh;
+  display: flex; flex-direction: column; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-md); padding-bottom: var(--safe-bottom); animation: sheet-in .2s ease-out; outline: none; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-4) var(--space-3) var(--space-2); }
+.sheet-head h2 { margin: 0; font-size: var(--text-md); font-weight: 700; line-height: 1.2; }
+.sheet-x { flex: 0 0 auto; background: var(--ink-100); color: var(--text); border: 0; min-height: 48px; min-width: 48px;
+  padding: 0; font-size: 28px; line-height: 1; border-radius: var(--radius-pill); }
+.sheet-body { overflow-y: auto; padding: var(--space-2) var(--space-3) var(--space-5); overscroll-behavior: contain; }
+.sheet-body > p { margin: 0 0 var(--space-3); }
+body.sheet-open { overflow: hidden; }
+@keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (min-width: 700px) {
+  .sheet-backdrop { align-items: center; padding: var(--space-6); }
+  .sheet { border-radius: var(--radius-lg); max-height: 88vh; }
+}
+
+/* --- Actions that belong together share one bar ------------------------------ */
+/* Edit and Delete of the same thing sit side by side, not a card apart. */
+/* Never onto a second row - that is the scatter this replaces. A label too long
+   for its half breaks inside its own button instead. */
+.action-bar { display: flex; align-items: stretch; gap: var(--space-2); margin-top: var(--space-3); }
+.action-bar > button, .action-bar > a.button { flex: 1 1 0; min-width: 0; padding-left: var(--space-2);
+  padding-right: var(--space-2); line-height: 1.2; }

@@ -16,7 +16,7 @@
 import { memorialEditForm, previewMemorialEdit, saveMemorialEdit } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading, backBar,
+  chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading, backBar, screenFailed,
 } from "../ui.js";
 import { esc, gregLabel, todayIst } from "../util.js";
 import { returnTo, navGuard } from "../router.js";
@@ -73,8 +73,8 @@ export async function renderMemorialEdit({ id }) {
     [form, services] = await Promise.all([memorialEditForm(aid, mid), prayerServices(aid)]);
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.status === 404 ? "That memorial isn't on file." : e.message);
+    if (e.status === 404) return screenFailed("That memorial isn't on file.");
+    return screenFailed("Couldn't open this memorial: " + e.message, () => renderMemorialEdit({ id }));
   }
   if (!alive()) return;
 

@@ -1,6 +1,6 @@
 "use strict";
 
-import { drainFlash, showBack, showTabs } from "./ui.js";
+import { drainFlash, showBack, showTabs, clearToasts, closeSheet } from "./ui.js";
 import { state } from "./state.js";
 
 // A hash router, kept deliberately small: pattern -> handler, with :params.
@@ -23,6 +23,15 @@ let token = 0;
 // tell whether the entry behind us is the one it wants. Lost on reload, which
 // only costs it that optimisation.
 const trail = [];
+
+// Where a screen opens. One rule, everywhere: a screen you go TO opens at its
+// top; a screen you come BACK to is where you left it. The browser's own
+// restoring is switched off because it runs before the screen has been drawn
+// (every screen fetches first), which is what used to leave a new page open
+// halfway down.
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+const scrollAt = [];   // how far down each history depth was when it was left
+let shownDepth = 0;
 
 /**
  * `pattern` looks like "#/behdins/:id".
@@ -81,9 +90,11 @@ function depth() {
 export function navigate(hash, { replace = false } = {}) {
   if (location.hash === hash) return resolve();
   const d = replace ? depth() : depth() + 1;
+  if (!replace) scrollAt[depth()] = window.scrollY;
   history[replace ? "replaceState" : "pushState"]({ depth: d }, "", hash);
   trail.length = d;
   trail[d] = hash;
+  scrollAt.length = d;
   return resolve();
 }
 
@@ -134,10 +145,14 @@ function match(hash) {
   return null;
 }
 
-export async function resolve() {
+export async function resolve({ restore = 0 } = {}) {
   const mine = ++token;
   const hash = location.hash || "#/calendar";
   const found = match(hash);
+  // Nothing of the screen being left stays over the new one.
+  closeSheet();
+  clearToasts();
+  shownDepth = depth();
 
   if (!found) {
     if (notFound) await notFound(hash);
@@ -163,6 +178,8 @@ export async function resolve() {
   // Any message queued by a guard (or by the screen we just left) is shown
   // here, after the destination has rendered - see ui.flashError.
   if (mine === token) {
+    // Back (or Forward) to a screen: put it where it was left, now that it is drawn.
+    if (restore > 0) window.scrollTo(0, restore);
     drainFlash();
     if (afterNav) afterNav();
   }
@@ -170,8 +187,9 @@ export async function resolve() {
 
 export function start() {
   window.addEventListener("popstate", () => {
+    scrollAt[shownDepth] = window.scrollY;
     trail[depth()] = location.hash;
-    resolve();
+    resolve({ restore: scrollAt[depth()] || 0 });
   });
   if (!location.hash) history.replaceState({ depth: 0 }, "", "#/calendar");
   else if (!history.state) history.replaceState({ depth: 0 }, "");

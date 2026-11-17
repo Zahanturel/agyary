@@ -18,7 +18,8 @@
  */
 
 import { state } from "./state.js";
-import { mainEl } from "./ui.js";
+import { mainEl, toTop } from "./ui.js";
+import { navGuard } from "./router.js";
 import { esc, todayIst } from "./util.js";
 
 const PREFIX = "draft:v2:";
@@ -89,6 +90,16 @@ export function offerDraft({ title, summary, onContinue, onStartNew }) {
         <button id="dfContinue">Continue from last time</button>
       </div>
     </div>`;
-  document.getElementById("dfContinue").onclick = onContinue;
-  document.getElementById("dfNew").onclick = onStartNew;
+  // Either answer swaps this card for the form, which is a new page to the
+  // person looking at it: it opens at its top, once it has been drawn, not
+  // wherever this card had been scrolled to reach its buttons. Unless they
+  // have gone to another screen while the form was loading - that one is
+  // left where it is.
+  const atTop = (fn) => async () => {
+    const alive = navGuard();
+    await fn();
+    if (alive()) toTop();
+  };
+  document.getElementById("dfContinue").onclick = atTop(onContinue);
+  document.getElementById("dfNew").onclick = atTop(onStartNew);
 }

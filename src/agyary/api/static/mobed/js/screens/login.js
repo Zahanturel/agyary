@@ -16,11 +16,28 @@ import {
   getMe, waLoginStart, waLoginPoll, waLoginComplete, waLoginConfirm, authOptions, otpRequest, otpVerify,
 } from "../api.js";
 import { state, LAST_PHONE_KEY } from "../state.js";
-import { chrome, mainEl, setHeader, showError } from "../ui.js";
+import { chrome, mainEl, setHeader, showError, toTop } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
 import { navigate } from "../router.js";
 import { afterSignIn } from "../session.js";
 import { addGetApp } from "../install.js";
+import { flagProblems, clearProblems } from "../fielderrors.js";
+
+// Signing in is several screens under one address, so the router never sees
+// one give way to the next. Each of them is a new page to the person signing
+// in: every stage below calls toTop() once it is drawn.
+
+/** A code or number that was refused (wrong, expired, tried too often) is
+ *  said on the box it was typed in. Anything else - no signal, a fault on our
+ *  side - is not about what was typed, so it floats like any other failure. */
+function sayOnField(input, e) {
+  if (e && e.status >= 400 && e.status < 500) {
+    flagProblems(mainEl, [{ target: input, message: e.message }]);
+  } else {
+    showError(e.message);
+    input.focus({ preventScroll: true });
+  }
+}
 
 let pollTimer = null;
 let otpCleanup = null;
@@ -99,6 +116,7 @@ function renderPhoneStep(prefill) {
       </p>
     </div>`;
   addGetApp(mainEl);
+  toTop();
   document.getElementById("lgOther").onclick = (e) => { e.preventDefault(); renderWaChoice(true); };
 
   // The bot check: each token is good for one request, so a new one is needed
@@ -110,7 +128,13 @@ function renderPhoneStep(prefill) {
       if (!box) return;
       ts.render(box, {
         sitekey: turnstileSiteKey,
-        callback: (token) => { checkToken = token; },
+        callback: (token) => {
+          checkToken = token;
+          // If Send was tapped too soon, the box is marked "please wait". A
+          // mark goes when its control changes, and the check finishing is
+          // this one's change - it sends no event of its own, so send one.
+          box.dispatchEvent(new Event("change"));
+        },
         "expired-callback": () => { checkToken = null; },
         "error-callback": () => { checkToken = null; },
       });
@@ -118,10 +142,18 @@ function renderPhoneStep(prefill) {
   }
 
   const send = async () => {
-    const phone = readPhone("lgPhone");
-    if (!phone) return showError("Please enter a valid phone number.");
-    if (turnstileSiteKey && !checkToken) return showError("Please wait for the check to finish, then tap Send code.");
     const btn = document.getElementById("lgSend");
+    // Enter in the number box comes here too, and a disabled button does not
+    // stop that: one code per tap.
+    if (btn.disabled) return;
+    const phone = readPhone("lgPhone");
+    // Each is said on the thing it is about: the number, or the check.
+    if (!phone) {
+      return flagProblems(mainEl, [{ target: ".phone-field", message: "Please enter a valid phone number." }]);
+    }
+    if (turnstileSiteKey && !checkToken) {
+      return flagProblems(mainEl, [{ target: "#lgCheck", message: "Please wait for the check to finish, then tap Send code." }]);
+    }
     btn.disabled = true;
     btn.textContent = "Sending...";
     try {
@@ -138,7 +170,9 @@ function renderPhoneStep(prefill) {
   document.getElementById("lgPhone").onkeydown = (e) => { if (e.key === "Enter") send(); };
 }
 
-function renderCodeStep(phone, info) {
+/** `redraw` is the same stage drawn again (a code sent once more): the page
+ *  stays where it is instead of opening at the top. */
+function renderCodeStep(phone, info, { redraw = false } = {}) {
   mainEl.innerHTML = `
     <div class="card">
       <h2>Enter the code</h2>
@@ -158,6 +192,7 @@ function renderCodeStep(phone, info) {
         username, WhatsApp may not deliver codes to you.
         <a href="#" id="lgUseWa">Sign in by sending us a message instead</a>.</p>
     </div>`;
+  if (!redraw) toTop();
   document.getElementById("lgUseWa").onclick = (e) => { e.preventDefault(); otpCleanup(); renderWaChoice(true); };
 
   const codeEl = document.getElementById("lgCode");
@@ -172,6 +207,7 @@ function renderCodeStep(phone, info) {
   const submit = async (code) => {
     if (busy) return;
     busy = true;
+    clearProblems(mainEl);   // the last code's refusal is not about this one
     say("Checking...");
     try {
       const res = await otpVerify(phone, code);
@@ -181,8 +217,10 @@ function renderCodeStep(phone, info) {
     } catch (e) {
       busy = false;
       codeEl.value = "";
-      say(e.message);
-      codeEl.focus();
+      say("");
+      // A refused code is marked on the code box, in red, where it used to be
+      // one more grey line among the hints.
+      sayOnField(codeEl, e);
     }
   };
 
@@ -249,9 +287,11 @@ function renderCodeStep(phone, info) {
     try {
       const again = await otpRequest(phone);
       otpCleanup();
-      renderCodeStep(phone, again);
+      renderCodeStep(phone, again, { redraw: true });
     } catch (e) {
-      say(e.message);
+      // A refusal to send is not about the code box: it floats, in red, like
+      // every other failed request, instead of joining the grey hints.
+      showError(e.message);
       wait = 0; tick();
     }
   };
@@ -283,6 +323,7 @@ function renderWaChoice(fromCodes = false) {
       ${fromCodes ? `<p class="meta"><a href="#" id="lgBack">Sign in with my number instead</a></p>` : ""}
     </div>`;
   addGetApp(mainEl);
+  toTop();
 
   document.getElementById("waStart").onclick = startWaLogin;
   if (fromCodes) document.getElementById("lgBack").onclick = (e) => { e.preventDefault(); renderPhoneStep(); };
@@ -326,6 +367,7 @@ function renderWaWaiting(started) {
         <button class="ghost small" id="waCancel">Start again</button>
       </div>
     </div>`;
+  toTop();
 
   // Opening it for them saves a tap; the visible link is the fallback for
   // browsers that block a programmatic navigation to a new tab.
@@ -375,12 +417,16 @@ function renderWaConfirmStep() {
       <div style="margin-top:14px"><button id="waConfirmGo">Continue</button></div>
       <div style="margin-top:12px"><button class="ghost small" id="waConfirmRestart">Start again</button></div>
     </div>`;
+  toTop();
   const input = document.getElementById("waConfirm");
   input.focus();
   const go = async () => {
-    const number = input.value.replace(/\D/g, "");
-    if (number.length !== 4) return showError("Please type the 4-digit number from WhatsApp.");
     const btn = document.getElementById("waConfirmGo");
+    if (btn.disabled) return;   // Enter comes here too: one try at a time
+    const number = input.value.replace(/\D/g, "");
+    if (number.length !== 4) {
+      return flagProblems(mainEl, [{ target: input, message: "Please type the 4-digit number from WhatsApp." }]);
+    }
     btn.disabled = true;
     try {
       const res = await waLoginConfirm(number);
@@ -389,7 +435,7 @@ function renderWaConfirmStep() {
     } catch (e) {
       btn.disabled = false;
       input.value = "";
-      showError(e.message);
+      sayOnField(input, e);
     }
   };
   document.getElementById("waConfirmGo").onclick = go;
@@ -408,13 +454,15 @@ function renderWaNameStep() {
       <input type="text" id="waName" placeholder="e.g. Er. Pervez Kias" autocomplete="name">
       <div style="margin-top:14px"><button id="waNameSave">Continue</button></div>
     </div>`;
+  toTop();
 
   const nameEl = document.getElementById("waName");
   nameEl.focus();
   const save = async () => {
-    const name = nameEl.value.trim();
-    if (!name) return showError("Please enter your name.");
     const btn = document.getElementById("waNameSave");
+    if (btn.disabled) return;   // Enter comes here too: one try at a time
+    const name = nameEl.value.trim();
+    if (!name) return flagProblems(mainEl, [{ target: nameEl, message: "Please enter your name." }]);
     btn.disabled = true;
     btn.textContent = "Signing in...";
     try {

@@ -14,11 +14,11 @@
 import { getBehdin, previewMemorial, createMemorial } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, refreshHeader, loading, backBar,
+  chrome, mainEl, showFab, showError, refreshHeader, loading, backBar, screenFailed, toTop,
 } from "../ui.js";
 import { esc } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
-import { prayerServices } from "./memorial.js";
+import { prayerServices, memorialJustCreated } from "./memorial.js";
 import {
   blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialForm, schedulePreviewHtml,
   wireSchedulePreview, showMemorialProblems, newReview, reviewPayload, reviewHasEmptyDate,
@@ -39,8 +39,8 @@ export async function renderMemorialNew({ id }) {
     [behdin, services] = await Promise.all([getBehdin(aid, cid), prayerServices(aid)]);
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.status === 404 ? "That behdin isn't on file at this fire temple." : e.message);
+    if (e.status === 404) return screenFailed("That behdin isn't on file at this fire temple.");
+    return screenFailed("Couldn't open the form: " + e.message, () => renderMemorialNew({ id }));
   }
   if (!alive()) return;
 
@@ -116,6 +116,7 @@ export async function renderMemorialNew({ id }) {
         <button id="mmCreate">Create memorial</button>
       </div>`;
     wireSchedulePreview(mainEl, preview, review, services);
+    toTop();   // the check of the dates is a new page, read from its top
     document.getElementById("mmEdit").onclick = () => { step = 3; showForm(); };
     document.getElementById("mmCreate").onclick = async () => {
       if (reviewHasEmptyDate(mainEl, review)) return;
@@ -124,7 +125,9 @@ export async function renderMemorialNew({ id }) {
       try {
         const made = await createMemorial(aid, cid, { ...body, ...reviewPayload(body, preview, services, review) });
         clearDraft(draftKey);
-        // The form is finished; the memorial takes its place in history.
+        // The form is finished; the memorial takes its place in history, and
+        // opens by asking whether to send the dates to the family.
+        memorialJustCreated(made.id);
         navigate(`#/memorial/${made.id}`, { replace: true });
       } catch (e) {
         btn.disabled = false;

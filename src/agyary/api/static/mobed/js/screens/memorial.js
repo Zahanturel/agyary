@@ -20,13 +20,15 @@ import {
 } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, flashInfo, refreshHeader, loading, backBar,
+  chrome, mainEl, showFab, showError, showInfo, flashInfo, refreshHeader, loading, backBar, screenFailed, openSheet,
 } from "../ui.js";
 import { esc, gregLabel, todayIst, parsiLabel } from "../util.js";
 import { back, navigate, navGuard } from "../router.js";
+import { calendarHash } from "../calendar.js";
 import { shareCardHtml, wireShareCard } from "../memorial_share.js";
 import { serviceToggleHtml, wireServiceToggles, selectedServiceIds } from "../service_toggle.js";
 import { payChipHtml, flipPaidChip } from "../paid_chip.js";
+import { flagProblems, clearProblems } from "../fielderrors.js";
 
 // The services a memorial is made of. If a fire temple has renamed or removed
 // all of them, fall back to everything it offers rather than showing nothing.
@@ -87,6 +89,84 @@ function statusText(m) {
   return `${m.done} of ${m.total} done. ${next}`;
 }
 
+// The memorial that was made a moment ago, if any: its page opens with the
+// offer to send the dates to the family (offerToShare), once.
+let justCreated = null;
+export function memorialJustCreated(id) { justCreated = Number(id); }
+
+/**
+ * Asked the moment a memorial is made, while the family is still on the
+ * mobed's mind: the dates are on the calendar - send them now? A yes sends
+ * them (the same share as the card lower down, from the PDF it has prepared)
+ * and goes to the calendar, where the dates now are; "Not now" leaves the
+ * mobed on the memorial's page, where the card stays.
+ */
+function offerToShare(m, behdin, share) {
+  const who = behdin ? behdin.name : "the family";
+  const sheet = openSheet({
+    title: "Memorial created",
+    html: `
+      <p><b>${esc(m.departed_name)}</b> - ${m.total} date${m.total === 1 ? " is" : "s are"} now on your calendar.</p>
+      <p>Send the dates to ${esc(who)} now? They get all of them as a PDF.</p>
+      <div class="stack">
+        <button type="button" id="mcShare" disabled>Preparing the PDF...</button>
+        <button type="button" id="mcSend" class="hidden">Send from the Mobed Diary number</button>
+        <button type="button" id="mcWays" class="hidden">See the ways to send it</button>
+        <button type="button" id="mcLater" class="ghost">Not now</button>
+      </div>
+      <p class="meta" id="mcNote" style="margin:12px 0 0"></p>`,
+  });
+  const $ = (sel) => sheet.body.querySelector(sel);
+  const shareBtn = $("#mcShare"), sendBtn = $("#mcSend"), waysBtn = $("#mcWays");
+  let busy = false;
+
+  const paint = () => {
+    if (!sheet.body.isConnected) return;
+    const st = share.pdfState;
+    const canShare = st === "preparing" || st === "ready";
+    const canSend = !!(share.info && share.info.can_send);
+    shareBtn.classList.toggle("hidden", !canShare);
+    shareBtn.disabled = st !== "ready" || busy;
+    shareBtn.textContent = st === "ready" ? "Share the PDF on WhatsApp" : "Preparing the PDF...";
+    sendBtn.classList.toggle("hidden", !canSend);
+    sendBtn.classList.toggle("secondary", canShare);   // the second choice when there are two
+    sendBtn.disabled = busy;
+    // Neither way works from here (a laptop with no share sheet, and the shared
+    // number not allowed for this family): the card on the page has the rest.
+    waysBtn.classList.toggle("hidden", canShare || canSend);
+    $("#mcNote").textContent = st === "ready"
+      ? `Share opens your phone's share sheet with the PDF attached: choose WhatsApp, then ${who}'s chat.`
+      : !canShare && canSend ? `Sends the PDF to ${who} from the shared Mobed Diary number.`
+      : !canShare ? "This device cannot attach the PDF by itself. The memorial's page has other ways to send it." : "";
+  };
+  share.onChange(paint);
+  paint();
+
+  // Sent: to the calendar, on the month of the next date, which is where the
+  // mobed will look for it.
+  const toCalendar = (message) => {
+    flashInfo(message);
+    const first = m.next || m.observances[0];
+    navigate(calendarHash({ mode: "month", focus: first ? first.date : todayIst() }));
+  };
+  const run = async (fn, message) => {
+    busy = true;
+    paint();
+    const went = await fn();
+    busy = false;
+    if (went) return toCalendar(message);
+    paint();   // backed out, or it failed and said why: the question stays
+  };
+  shareBtn.onclick = () => run(share.share, `${m.departed_name}'s dates are on your calendar.`);
+  sendBtn.onclick = () => run(share.send, `Sent to ${who}. ${m.departed_name}'s dates are on your calendar.`);
+  waysBtn.onclick = () => {
+    sheet.close();
+    const card = document.getElementById("shareCard");
+    if (card) card.scrollIntoView({ block: "start" });
+  };
+  $("#mcLater").onclick = sheet.close;
+}
+
 export async function renderMemorial({ id, oid }) {
   chrome(true);
   refreshHeader();
@@ -105,8 +185,9 @@ export async function renderMemorial({ id, oid }) {
     ]);
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.status === 404 ? "That memorial isn't on file." : e.message);
+    // Not on file is final; anything else may be a passing lack of signal.
+    if (e.status === 404) return screenFailed("That memorial isn't on file.");
+    return screenFailed("Couldn't open this memorial: " + e.message, () => renderMemorial({ id, oid }));
   }
   if (!alive()) return;
 
@@ -127,7 +208,11 @@ export async function renderMemorial({ id, oid }) {
         <span class="meta" id="paidCount"></span>
         <button class="ghost small" id="paidAll" type="button"></button>
       </div>
-      <button class="secondary small" id="memEdit" type="button" style="margin-top:12px">Edit memorial</button>
+      <div class="action-bar">
+        <button class="secondary small" id="memEdit" type="button">Edit memorial</button>
+        <button class="ghost small danger-outline" id="memDeleteOpen" type="button">Delete memorial</button>
+      </div>
+      <div id="memDeleteConfirm"></div>
     </div>
 
     <div class="card">
@@ -137,14 +222,9 @@ export async function renderMemorial({ id, oid }) {
       <div id="obsList"></div>
     </div>
 
-    ${shareCardHtml()}
+    ${shareCardHtml()}`;
 
-    <div class="card">
-      <button class="ghost small" id="memDeleteOpen">Delete memorial</button>
-      <div id="memDeleteConfirm" style="margin-top:12px"></div>
-    </div>`;
-
-  wireShareCard(document.getElementById("shareCard"), aid, m);
+  const share = wireShareCard(document.getElementById("shareCard"), aid, m);
   document.getElementById("memEdit").onclick = () => navigate(`#/memorial/${mid}/edit`);
 
   const listEl = document.getElementById("obsList");
@@ -273,10 +353,19 @@ export async function renderMemorial({ id, oid }) {
 
     document.getElementById("obsCancel").onclick = () => { openId = null; paint(); };
     document.getElementById("obsSave").onclick = async () => {
+      // What is wrong is said on the control itself, and brought into view.
       const ids = selectedServiceIds(listEl);
-      if (!ids.length) return showError("Keep at least one prayer on this day.");
       const to = dateEl.value;
-      if (!to) return showError("Choose the day for this date.");
+      const problems = [];
+      if (!to) problems.push({ target: dateEl, message: "Choose the day for this date." });
+      const chips = listEl.querySelector(".obs-edit .chip-row");
+      if (!ids.length) problems.push({ target: chips, message: "Keep at least one prayer on this day." });
+      if (problems.length) {
+        flagProblems(listEl, problems);
+        // A prayer button is not a field, so its flag is lifted by the next tap on one.
+        chips.addEventListener("click", () => clearProblems(listEl), { once: true });
+        return;
+      }
       const btn = document.getElementById("obsSave");
       btn.disabled = true;
       // An empty string clears the time or note; sending the field as it
@@ -350,21 +439,31 @@ export async function renderMemorial({ id, oid }) {
     const el = listEl.querySelector(`[data-obs="${openId}"]`);
     if (el) el.scrollIntoView({ block: "center" });
   }
+  if (justCreated === mid) {
+    justCreated = null;
+    offerToShare(m, behdin, share);
+  }
 
   document.getElementById("memDeleteOpen").onclick = () => {
     const panel = document.getElementById("memDeleteConfirm");
+    // The question opens right under the two buttons, where the tap was.
     panel.innerHTML = `
-      <p class="meta">Delete the memorial for ${esc(m.departed_name)}? All ${m.total} of its
-        observances are removed from your calendar. This can't be undone.</p>
-      <div class="row tight">
-        <button class="danger small" id="memDelOne">Delete</button>
-        <button class="ghost small" id="memDelCancel">Cancel</button>
+      <div class="row-pending" style="margin-top:12px;padding:12px">
+        <p style="margin:0 0 12px;color:var(--danger-600)">Delete the memorial for ${esc(m.departed_name)}? All
+          ${m.total} of its observances are removed from your calendar. This can't be undone.</p>
+        <div class="action-bar" style="margin-top:0">
+          <button class="ghost small" id="memDelCancel" type="button">Keep it</button>
+          <button class="danger small" id="memDelOne" type="button">Delete</button>
+        </div>
       </div>`;
     document.getElementById("memDelCancel").onclick = () => { panel.innerHTML = ""; };
-    document.getElementById("memDelOne").onclick = async () => {
+    document.getElementById("memDelOne").onclick = async (ev) => {
+      const yes = ev.currentTarget;
+      yes.disabled = true;
       try {
         await deleteMemorial(aid, mid);
       } catch (e) {
+        yes.disabled = false;
         return showError("Couldn't delete: " + e.message);
       }
       flashInfo(`Memorial for ${m.departed_name} deleted.`);

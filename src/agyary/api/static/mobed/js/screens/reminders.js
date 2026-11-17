@@ -18,7 +18,7 @@
 import { memorialReminders, markReminded } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, refreshHeader, loading, backBar,
+  chrome, mainEl, showFab, showError, refreshHeader, loading, backBar, screenFailed,
 } from "../ui.js";
 import { esc, gregLabel } from "../util.js";
 import { navigate, navGuard } from "../router.js";
@@ -90,8 +90,9 @@ export async function renderReminders() {
     data = await memorialReminders(state.currentAgyaryId, HORIZON_DAYS);
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.message);
+    // The whole list did not load: say so in the page, with a way to try
+    // again, rather than a blank page under a message that goes away.
+    return screenFailed(e.message, () => renderReminders());
   }
   if (!alive()) return;
 
@@ -136,11 +137,19 @@ export async function renderReminders() {
       b.disabled = true;
       try {
         await markReminded(state.currentAgyaryId, b.dataset.obs, b.dataset.mark === "1");
-        renderReminders();
       } catch (err) {
         b.disabled = false;
-        showError(err.message);
+        return showError(err.message);
       }
+      // Gone to another screen meanwhile: it is saved, and this list must not
+      // be drawn over the screen that is there now.
+      if (!alive()) return;
+      // The same list with this one row changed: it stays where it was.
+      // Drawing it again passes through "Loading...", which would otherwise
+      // leave a row far down the list at the top of the page.
+      const y = window.scrollY;
+      await renderReminders();
+      if (alive()) window.scrollTo(0, y);
     };
   });
 }

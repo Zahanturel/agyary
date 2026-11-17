@@ -25,11 +25,11 @@ import { canPickContacts, pickContacts, fillFromContact } from "../behdin_add.js
 import { renderNamesEditor, collectNames, validateNames } from "../names.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, flashInfo, flashError,
-  refreshHeader, loading, backBar, loadFailedHtml, wireRetry,
+  refreshHeader, loading, backBar, loadFailedHtml, wireRetry, screenFailed, toTop,
 } from "../ui.js";
 import { esc, gregShort, phoneField, readPhone } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
-import { flagProblems } from "../fielderrors.js";
+import { flagProblems, clearProblems } from "../fielderrors.js";
 import { openDeleteBox, deleteResultText } from "../behdin_delete.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft } from "../drafts.js";
 
@@ -47,8 +47,9 @@ export async function renderBehdinList() {
     rows = await listBehdins(state.currentAgyaryId, "");
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.message);
+    // The whole list did not load: say so in the page, with a way to try
+    // again, rather than a blank page under a message that goes away.
+    return screenFailed(e.message, () => renderBehdinList());
   }
   if (!alive()) return;
 
@@ -133,7 +134,11 @@ export async function renderBehdinList() {
       try {
         const found = await listBehdins(state.currentAgyaryId, q);
         if (mine === token) paint(found);
-      } catch (err) { /* keep the last good list */ }
+      } catch (err) {
+        // The last good list stays on screen, but it is not what was asked
+        // for: say so, or a behdin who is on file reads as one who is not.
+        if (mine === token) showError("Couldn't search: " + err.message);
+      }
     }, 220);
   };
 
@@ -177,11 +182,13 @@ export function renderBehdinNew() {
   if (!stored || !(stored.name || stored.phone || (stored.names || []).length || stored.memOn)) {
     return buildBehdinNew(ctx, {});
   }
+  // The form takes the place of the question without the address changing, so
+  // the router does not put it at the top: do that here.
   offerDraft({
     title: "Unfinished behdin",
     summary: [stored.name || "No name yet", stored.phone ? `${stored.cc || ""} ${stored.phone}`.trim() : "No number yet"],
-    onStartNew: () => { clearDraft(draftKey); buildBehdinNew(ctx, {}); },
-    onContinue: () => buildBehdinNew(ctx, stored),
+    onStartNew: () => { clearDraft(draftKey); buildBehdinNew(ctx, {}); toTop(); },
+    onContinue: () => { buildBehdinNew(ctx, stored); toTop(); },
   });
 }
 
@@ -250,7 +257,8 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
   if (held.name && !prefillName) document.getElementById("bnName").value = held.name;
   if (held.cc) document.getElementById("bnPhone_cc").value = held.cc;
   if (held.phone) document.getElementById("bnPhone").value = held.phone;
-  if (!document.getElementById("bnName").value) document.getElementById("bnName").focus();
+  // Ready to type in, without the page being moved to it: a screen opens at its top.
+  if (!document.getElementById("bnName").value) document.getElementById("bnName").focus({ preventScroll: true });
 
   if (canPickContacts()) {
     document.getElementById("bnImport").onclick = async () => {
@@ -307,6 +315,9 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
   formRoot.addEventListener("input", keep);
   formRoot.addEventListener("change", keep);
   region.addEventListener("names-changed", keep);
+  // Removing or adding a pair is not typing, so a mark on the names would
+  // otherwise stay after what it complained of had been dealt with.
+  region.addEventListener("names-changed", () => clearProblems(formRoot));
 
   /** What the mobed typed, checked - or null after saying what is wrong. */
   const validate = () => {
@@ -339,9 +350,10 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
       return showError(e.message);
     }
     clearDraft(draftKey);   // saved: nothing left to hold on to
-    if (!created.created && !returnTo && !goMemorial) {
-      showInfo(`${created.name} was already on file - opening their record.`);
-    }
+    // Said on their record once it has opened (see the flash below), so the
+    // words are about the page it is read on.
+    const onFile = !created.created && !returnTo && !goMemorial
+      ? `${created.name} was already on file - this is their record.` : "";
 
     // Back to the event/machi draft with this behdin chosen, rather than
     // their own record - that record has nothing to do with what's being
@@ -371,21 +383,34 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
       if (namesProblem) flashError(namesProblem);
       return navigate(`#/behdins/${created.id}/memorials/new`, { replace: true });
     }
+    // Both are shown once the next screen has drawn: said on this one, the
+    // move away wipes them. There is room for one message, and names that did
+    // not save matter more than having been on file already.
+    if (namesProblem) flashError(namesProblem);
+    else if (onFile) flashInfo(onFile);
     landing();
-    if (namesProblem) showError(namesProblem);
   };
 
-  const showStep = () => {
+  /** Draw the step that `step` says. It moves nothing: choosing Yes or No on
+   *  the last step re-draws that same step, and the page must stay where it is. */
+  const paintStep = () => {
     mainEl.querySelectorAll(".step-sec").forEach(el => el.classList.toggle("hidden", Number(el.dataset.bstep) !== step));
     mainEl.querySelectorAll("#bnBar i").forEach((el, i) => el.classList.toggle("on", i < step));
     document.getElementById("bnCount").textContent = `Step ${step} of ${total}`;
     cancelBtn.textContent = step === 1 ? "Cancel" : "Back";
     saveBtn.textContent = step < total ? "Next" : wantsMemorial() ? "Add and continue" : "Add behdin";
-    window.scrollTo(0, 0);
   };
-  document.querySelectorAll('input[name="bnMem"]').forEach(r => r.addEventListener("change", showStep));
+  /** Go to step `n`. A different step is a new page to the person filling it
+   *  in, so it opens at the top. */
+  const goStep = (n) => {
+    const moved = n !== step;
+    step = n;
+    paintStep();
+    if (moved) toTop();
+  };
+  document.querySelectorAll('input[name="bnMem"]').forEach(r => r.addEventListener("change", paintStep));
   cancelBtn.onclick = () => {
-    if (step > 1) { step -= 1; return showStep(); }
+    if (step > 1) return goStep(step - 1);
     clearDraft(draftKey);
     back(backTarget);
   };
@@ -397,19 +422,17 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
       if (!document.getElementById("bnName").value.trim()) problems.push({ target: "#bnName", message: "Please enter the behdin's name." });
       if (!readPhone("bnPhone")) problems.push({ target: "#bnForm .phone-field", message: "Please enter a valid phone number." });
       if (problems.length) return flagProblems(formRoot, problems);
-      step = 2;
-      return showStep();
+      return goStep(2);
     }
-    if (step < total) { step += 1; return showStep(); }
+    if (step < total) return goStep(step + 1);
     const v = validate();
     if (!v) {   // something on an earlier step: go back to it and mark it there
-      step = (!document.getElementById("bnName").value.trim() || !readPhone("bnPhone")) ? 1 : 2;
-      showStep();
+      goStep((!document.getElementById("bnName").value.trim() || !readPhone("bnPhone")) ? 1 : 2);
       return void validate();
     }
     await saveAll(v, wantsMemorial(), saveBtn);
   };
-  showStep();
+  paintStep();
 }
 
 export async function renderBehdinDetail({ id }) {
@@ -432,8 +455,10 @@ export async function renderBehdinDetail({ id }) {
     [record, history, saved, memorials] = await Promise.all([
       getBehdin(aid, cid).catch(ifMissing(null)),
       // History is scoped to what THIS mobed entered, so it can legitimately
-      // be empty for a behdin someone else booked for.
-      customerHistory(cid).catch(() => null),
+      // be empty for a behdin someone else booked for (a 404). Any other
+      // failure is not allowed to take the page down with it, but it is said
+      // in the History card rather than shown as "nothing booked".
+      customerHistory(cid).catch((e) => (e.status === 404 ? null : { failed: true })),
       getSavedNames(aid, cid).catch(ifMissing([])),
       listMemorials(aid, cid).catch(ifMissing([])),
     ]);
@@ -443,10 +468,9 @@ export async function renderBehdinDetail({ id }) {
     return wireRetry(mainEl, () => renderBehdinDetail({ id }));
   }
   if (!alive()) return;
-  if (!record) {
-    mainEl.innerHTML = "";
-    return showError("That behdin isn't on file at this fire temple.");
-  }
+  // Not on file: said in the page. Trying again would only say the same, so
+  // there is no button for it - the header's Back is the way out.
+  if (!record) return screenFailed("That behdin isn't on file at this fire temple.");
   let reminders = record.reminders || { enabled: false, stopped_at: null, delivery: "off" };
 
   mainEl.innerHTML = `
@@ -456,7 +480,11 @@ export async function renderBehdinDetail({ id }) {
       <label for="bdPhone">WhatsApp number</label>${phoneField("bdPhone", record.phone)}
       <p class="meta" style="margin-top:6px">
         <a class="tel" href="tel:${esc(record.phone)}">Call ${esc(record.phone)}</a></p>
-      <div style="margin-top:12px"><button class="small" id="bdSave">Save details</button></div>
+      <div class="action-bar">
+        <button class="small" id="bdSave">Save details</button>
+        <button class="ghost small danger-outline" id="bdDeleteOpen">Delete behdin</button>
+      </div>
+      <div id="bdDeleteConfirm" style="margin-top:12px"></div>
     </div>
 
     ${hasMemorials ? `<div class="card">
@@ -495,26 +523,32 @@ export async function renderBehdinDetail({ id }) {
 
     <div class="card">
       <h2>History</h2>
-      ${history && history.history.length ? history.history.map(h => `
+      ${history && history.failed
+        ? `<p class="meta">The history couldn't be loaded. This does not mean there is none -
+            check your signal and open this page again.</p>`
+        : history && history.history.length ? history.history.map(h => `
         <div class="list-row"><div class="lr-main"><b>${esc(h.event)}</b><span>${esc(h.when)}</span></div></div>
       `).join("") : '<p class="meta">Nothing you have booked for this behdin yet.</p>'}
-    </div>
-
-    <div class="card">
-      <button class="ghost small" id="bdDeleteOpen">Delete behdin</button>
-      <div id="bdDeleteConfirm" style="margin-top:12px"></div>
     </div>`;
 
-  document.getElementById("bdSave").onclick = async () => {
+  const detailsCard = document.getElementById("bdName").closest(".card");
+  document.getElementById("bdSave").onclick = async (ev) => {
+    const btn = ev.currentTarget;
     const name = document.getElementById("bdName").value.trim();
     const phone = readPhone("bdPhone");
-    if (!name) return showError("Please enter a name.");
-    if (!phone) return showError("Please enter a valid phone number.");
+    // Said on the field that is wrong, as the Add behdin page does.
+    const problems = [];
+    if (!name) problems.push({ target: "#bdName", message: "Please enter a name." });
+    if (!phone) problems.push({ target: ".phone-field", message: "Please enter a valid phone number." });
+    if (problems.length) return flagProblems(detailsCard, problems);
+    btn.disabled = true;   // one save per tap
     try {
       await updateBehdin(aid, cid, { name, phone });
       showInfo("Saved.");
     } catch (e) {
       showError(e.message);
+    } finally {
+      btn.disabled = false;
     }
   };
 
@@ -539,7 +573,11 @@ export async function renderBehdinDetail({ id }) {
     paintNote();
 
     let consentVersion = null;
-    const apply = async (want, confirmRestart) => {
+    /** Save the choice. `btn` is the button that confirmed it, when there was
+     *  one. Neither it nor the tick can be pressed again while the save runs. */
+    const apply = async (want, confirmRestart, btn = null) => {
+      box.disabled = true;
+      if (btn) btn.disabled = true;
       try {
         reminders = await setBehdinReminders(aid, cid, want, confirmRestart, want ? consentVersion : null);
         box.checked = reminders.enabled;
@@ -554,11 +592,14 @@ export async function renderBehdinDetail({ id }) {
               <button class="small" id="bdRemConfirm">They asked me to - turn on</button>
               <button class="ghost small" id="bdRemCancel">Cancel</button>
             </div>`;
-          document.getElementById("bdRemConfirm").onclick = () => apply(true, true);
+          document.getElementById("bdRemConfirm").onclick = (ev) => apply(true, true, ev.currentTarget);
           document.getElementById("bdRemCancel").onclick = paintNote;
           return;
         }
+        if (btn) btn.disabled = false;   // still on screen: it can be tried again
         showError(e.message);
+      } finally {
+        box.disabled = false;
       }
     };
     // Turning reminders on is a record that the family agreed to particular
@@ -566,11 +607,14 @@ export async function renderBehdinDetail({ id }) {
     // (RM-6). Turning them off needs no ceremony.
     const askConsent = async () => {
       let wording;
+      box.disabled = true;   // not to be ticked and unticked while the words are fetched
       try {
         wording = await consentWording();
       } catch (e) {
         box.checked = false;
         return showError(e.message);
+      } finally {
+        box.disabled = false;
       }
       note.innerHTML = `<div class="card" style="margin:8px 0 0">
           <p style="margin:0 0 8px"><b>Before you turn this on, please ask ${esc(record.name)}:</b></p>
@@ -580,7 +624,10 @@ export async function renderBehdinDetail({ id }) {
             <button class="ghost small" id="bdConsentNo">Cancel</button>
           </div>
         </div>`;
-      document.getElementById("bdConsentYes").onclick = () => { consentVersion = wording.version; apply(true, false); };
+      document.getElementById("bdConsentYes").onclick = (ev) => {
+        consentVersion = wording.version;
+        apply(true, false, ev.currentTarget);
+      };
       document.getElementById("bdConsentNo").onclick = () => { box.checked = false; paintNote(); };
     };
     box.onchange = () => (box.checked ? askConsent() : apply(false, false));
@@ -589,8 +636,13 @@ export async function renderBehdinDetail({ id }) {
     el.onclick = () => navigate(`#/memorial/${el.dataset.mem}`);
   });
 
+  // Delete sits beside Save details, and its question opens directly under them.
+  const deleteBox = document.getElementById("bdDeleteConfirm");
   document.getElementById("bdDeleteOpen").onclick = () => {
-    openDeleteBox(document.getElementById("bdDeleteConfirm"), aid, { id: cid, name: record.name }, {
+    // Already asking. A second tap must not start the question again under a
+    // delete that is running; it shows the question that is there.
+    if (deleteBox.firstElementChild) return deleteBox.scrollIntoView({ block: "center" });
+    openDeleteBox(deleteBox, aid, { id: cid, name: record.name }, {
       onError: (m) => showError(m),
       onDone: (r) => {
         flashInfo(deleteResultText(record.name, r));
@@ -605,10 +657,18 @@ export async function renderBehdinDetail({ id }) {
   // one ceremony ends up using them for.
   const region = document.getElementById("savedRegion");
   renderNamesEditor(region, false, "gujrela_nu", saved);
-  document.getElementById("bdSaveNames").onclick = async () => {
+  const namesCard = region.closest(".card");
+  // Removing or adding a pair is not typing, so a mark on the names would
+  // otherwise stay after what it complained of had been dealt with.
+  region.addEventListener("names-changed", () => clearProblems(namesCard));
+  document.getElementById("bdSaveNames").onclick = async (ev) => {
+    const btn = ev.currentTarget;
     const rows = collectNames(region, false, "gujrela_nu");
     const problem = validateNames(rows);
-    if (problem) return showError(problem);
+    // Marked on the names themselves, as the Add behdin page does.
+    if (problem) return flagProblems(namesCard, [{ target: "#savedRegion", message: problem }]);
+    clearProblems(namesCard);
+    btn.disabled = true;   // one save per tap
     try {
       // Section-wholesale: the API replaces a section at a time, which is
       // also the level the "a pair is two names" rule lives at.
@@ -617,6 +677,8 @@ export async function renderBehdinDetail({ id }) {
       showInfo("Names for prayers updated.");
     } catch (e) {
       showError(e.message);
+    } finally {
+      btn.disabled = false;
     }
   };
 }

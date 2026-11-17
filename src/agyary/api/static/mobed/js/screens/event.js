@@ -19,7 +19,10 @@ import { renderCalendar } from "../calendar.js";
 import { renderAddBehdin } from "../behdin_add.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft, restoredDate } from "../drafts.js";
 import { setRepeat, repeatCountHtml, wireRepeatCount, repeatCountProblem } from "../repeat.js";
-import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading } from "../ui.js";
+import {
+  chrome, mainEl, showFab, showError, showInfo, flashError, refreshHeader, loading, screenFailed, toTop,
+} from "../ui.js";
+import { flagProblems } from "../fielderrors.js";
 import { esc, istYmd, istHm, todayIst, gregLabel } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 
@@ -72,8 +75,15 @@ function keep(draft) {
 }
 
 async function open(draft) {
+  const alive = navGuard();
   state.draft = draft;
-  await syncFromGregorian(draft);
+  // The screen being left comes off at once. Until the form was ready it used
+  // to stay on the page, still tappable, under this form's address.
+  loading();
+  const failed = await syncFromGregorian(draft);
+  if (!alive()) return;
+  // A form with no Roj and Mah to fall back on would show the wrong ones.
+  if (failed && draft.roj == null) return screenFailed(failed, () => open(draft));
   await render(draft);
 }
 
@@ -100,7 +110,7 @@ export async function renderNewEvent() {
       stored.service_name || "No service chosen yet",
       `${gregLabel(stored.gregorian)}${stored.time ? " · " + stored.time : ""}`,
     ],
-    onStartNew: () => { clearDraft(DRAFT_KEY); open(blankDraft(prefill)); },
+    onStartNew: () => { clearDraft(DRAFT_KEY); return open(blankDraft(prefill)); },
     onContinue: async () => {
       const draft = blankDraft(prefill);
       draft.behdin = stored.behdin;
@@ -127,7 +137,9 @@ export async function renderEditEvent({ kind, id }) {
   const alive = navGuard();
 
   if (kind === "machi") {
-    showError("Machi editing is not available in this view.");
+    // Said on the calendar it sends them to: a message shown here is cleared
+    // by the move, so the bounce used to come with no explanation.
+    flashError("Machi editing is not available in this view.");
     return navigate("#/calendar", { replace: true });
   }
 
@@ -141,12 +153,15 @@ export async function renderEditEvent({ kind, id }) {
   }
 
   const aid = state.currentAgyaryId;
+  const retry = () => renderEditEvent({ kind, id });
   let detail;
   try {
     detail = await bookingDetail(aid, Number(id));
   } catch (e) {
     if (!alive()) return;
-    return showError(e.message);
+    // In the page, not a passing message over "Loading...". An event that is
+    // not on file will not be there on a second try either.
+    return screenFailed(e.message, e.status === 404 ? null : retry);
   }
   if (!alive()) return;
 
@@ -157,7 +172,9 @@ export async function renderEditEvent({ kind, id }) {
   draft.service_id = detail.service_id;
   draft.gregorian = istYmd(detail.ceremony_datetime);
   draft.time = istHm(detail.ceremony_datetime);
-  await syncFromGregorian(draft);
+  const failed = await syncFromGregorian(draft);
+  if (!alive()) return;
+  if (failed) return screenFailed(failed, retry);   // no Roj and Mah to show beside the date
   state.draft = draft;
   render(draft);
 }
@@ -165,6 +182,10 @@ export async function renderEditEvent({ kind, id }) {
 // ---------------------------------------------------------------------------
 // Date <-> Roj/Mah, always via the server
 // ---------------------------------------------------------------------------
+// Both answer "" when the day was worked out, and otherwise say why not, with
+// the draft's Roj, Mah and label left as they were. The caller decides what
+// that means: it used to be swallowed here, which left a new date on the form
+// beside the old date's Roj with nothing said.
 async function syncFromGregorian(draft) {
   try {
     const p = await convertDate(draft.gregorian, system());
@@ -173,7 +194,10 @@ async function syncFromGregorian(draft) {
     draft.mah = p.is_gatha ? 13 : p.mah;
     draft.year = p.year;
     draft.parsiLabel = p.display;
-  } catch (e) { /* keep whatever was there */ }
+    return "";
+  } catch (e) {
+    return e.message || "Please try again.";
+  }
 }
 
 async function syncFromParsiFields(draft) {
@@ -183,7 +207,10 @@ async function syncFromParsiFields(draft) {
     draft.year = p.year;
     draft.isGatha = p.is_gatha;
     draft.parsiLabel = p.display;
-  } catch (e) { /* keep whatever was there */ }
+    return "";
+  } catch (e) {
+    return e.message || "Please try again.";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -191,13 +218,8 @@ async function syncFromParsiFields(draft) {
 // ---------------------------------------------------------------------------
 async function servicesFor(aid) {
   if (!state.formOptionsCache[aid]) {
-    try {
-      const all = await listServices(aid);
-      state.formOptionsCache[aid] = { services: all.filter(s => s.is_active) };
-    } catch (e) {
-      showError(e.message);
-      return null;
-    }
+    const all = await listServices(aid);
+    state.formOptionsCache[aid] = { services: all.filter(s => s.is_active) };
   }
   return state.formOptionsCache[aid];
 }
@@ -206,10 +228,19 @@ async function servicesFor(aid) {
 // The single screen
 // ---------------------------------------------------------------------------
 async function render(draft) {
+  const alive = navGuard();
   keep(draft);
   const aid = state.currentAgyaryId;
-  const opts = await servicesFor(aid);
-  if (!opts) return;
+  let opts;
+  try {
+    opts = await servicesFor(aid);
+  } catch (e) {
+    // Without the services there is no form to show. Say so in the page, with
+    // a way to try again, instead of leaving whatever was there before.
+    if (alive()) screenFailed(e.message, () => render(draft));
+    return;
+  }
+  if (!alive()) return;
 
   const calOpts = state.calendarOptions;
   const rojOptions = calOpts.roj.map(o => {
@@ -307,7 +338,7 @@ async function render(draft) {
   if (chosen) {
     document.getElementById("bhChange").onclick = () => { draft.behdin = null; draft.names = null; render(draft); };
   } else {
-    wireSearch(draft);
+    wireSearch(draft, alive);
     // A deliberate tap, not the mid-typing "nobody matched" fallback below -
     // send them to the full behdin page (saved names and all), the same one
     // Settings uses, rather than the compact inline form.
@@ -335,23 +366,37 @@ async function render(draft) {
   const note = document.getElementById("syncNote");
   const busy = (on) => box.classList.toggle("syncing", on);
 
-  document.getElementById("evDate").onchange = async (e) => {
-    draft.gregorian = e.target.value;
-    if (!draft.gregorian) return;
+  // A day chosen in the date box or from the calendar. If its Roj and Mah
+  // cannot be worked out, the date goes back to what it was - never a new
+  // date beside the old date's Roj - and the mobed is told.
+  const setDate = async (ymd) => {
+    const was = draft.gregorian;
+    draft.gregorian = ymd;
     busy(true);
-    await syncFromGregorian(draft);
-    busy(false);
-    render(draft);
+    const failed = await syncFromGregorian(draft);
+    if (!alive()) return;   // gone to another screen meanwhile: nothing here to redraw
+    if (failed) draft.gregorian = was;
+    await render(draft);
+    if (failed) showError("The date was not changed. " + failed);
+  };
+
+  document.getElementById("evDate").onchange = (e) => {
+    if (!e.target.value) { draft.gregorian = ""; return; }
+    return setDate(e.target.value);
   };
 
   const onParsiChange = async () => {
+    const was = { roj: draft.roj, mah: draft.mah };
     draft.roj = Number(document.getElementById("evRoj").value);
     draft.mah = Number(document.getElementById("evMah").value);
     busy(true);
     note.textContent = "Finding that day...";
-    await syncFromParsiFields(draft);
-    busy(false);
-    render(draft);
+    const failed = await syncFromParsiFields(draft);
+    if (!alive()) return;
+    // No such day could be found: back to the Roj and Mah of the date shown.
+    if (failed) Object.assign(draft, was);
+    await render(draft);
+    if (failed) showError("The Roj and Mah were not changed. " + failed);
   };
   document.getElementById("evRoj").onchange = onParsiChange;
   document.getElementById("evMah").onchange = onParsiChange;
@@ -363,11 +408,7 @@ async function render(draft) {
     const draw = () => renderCalendar(panel, {
       view,
       loadItems: async () => [],
-      onDayPick: async (day) => {
-        draft.gregorian = day;
-        await syncFromGregorian(draft);
-        render(draft);
-      },
+      onDayPick: setDate,
       rerender: draw,
     });
     await draw();
@@ -387,17 +428,21 @@ async function render(draft) {
   });
   wireRepeatCount(draft, "evCount", keep);
   if (stepped) {
-    const go = (n) => { draft.step = n; keep(draft); render(draft); window.scrollTo(0, 0); };
+    // Another step is another page to the person filling it in: it opens at
+    // its top, once it has been drawn.
+    const go = async (n) => { draft.step = n; keep(draft); await render(draft); if (alive()) toTop(); };
+    // What this step still needs is said on the control itself, which is on screen.
+    const missing = (target, message) => void flagProblems(mainEl, [{ target, message }]);
     document.getElementById("evBack").onclick = () => (step === 1 ? cancel() : go(step - 1));
     document.getElementById("evNext").onclick = () => {
-      if (step === 1 && !draft.behdin) return showError("Please choose who the event is for.");
-      if (step === 2 && !draft.service_id) return showError("Please choose a service.");
-      if (step === 3 && !draft.gregorian) return showError("Please choose a day.");
-      if (step === 4 && !draft.time) return showError("Please choose a time.");
+      if (step === 1 && !draft.behdin) return missing("#bhSearch", "Please choose who the event is for.");
+      if (step === 2 && !draft.service_id) return missing("#evService", "Please choose a service.");
+      if (step === 3 && !draft.gregorian) return missing("#evDate", "Please choose a day.");
+      if (step === 4 && !draft.time) return missing("#evTime", "Please choose a time.");
       if (step === total) {
         if (draft.isGatha) setRepeat(draft, null);   // a Gatha day cannot repeat
         const problem = repeatCountProblem(draft);
-        if (problem) return showError(problem);
+        if (problem) return missing("#evCount", problem);
         return save(draft);
       }
       go(step + 1);
@@ -411,7 +456,7 @@ async function render(draft) {
 // ---------------------------------------------------------------------------
 // Behdin search
 // ---------------------------------------------------------------------------
-function wireSearch(draft) {
+function wireSearch(draft, alive) {
   const input = document.getElementById("bhSearch");
   const results = document.getElementById("bhResults");
   const panel = document.getElementById("bhNewPanel");
@@ -434,7 +479,7 @@ function wireSearch(draft) {
     }
     renderAddBehdin(panel, {
       prefill: { name },
-      onCreated: (created) => choose(draft, created),
+      onCreated: (created) => choose(draft, created, alive),
       onCancel: () => { showNewBtn(true); input.focus(); },
     });
     // The name is already on screen in the search box directly above, so the
@@ -460,7 +505,17 @@ function wireSearch(draft) {
       const q = input.value.trim();
       let matches = [];
       try { matches = await listBehdins(state.currentAgyaryId, q); }
-      catch (e) { return; }
+      catch (e) {
+        if (mine !== token) return;
+        // Said under the box being typed in. A search that could not run
+        // used to look exactly like one that found nobody.
+        results.innerHTML = `<div class="field-msg" role="alert">Couldn't search: ${esc(e.message)}</div>`;
+        // An add form already open takes its name from this box (its own name
+        // row is hidden), so it must not be left holding an earlier spelling.
+        const open = document.getElementById("abName");
+        if (open && q.length >= 2) open.value = q;
+        return;
+      }
       if (mine !== token) return;
 
       if (matches.length) {
@@ -472,7 +527,7 @@ function wireSearch(draft) {
               <div>${esc(m.name)}</div><div class="addr">${esc(m.phone)}</div>
             </div>`).join("");
         results.querySelectorAll(".search-result").forEach(el => {
-          el.onclick = () => choose(draft, matches[Number(el.dataset.i)]);
+          el.onclick = () => choose(draft, matches[Number(el.dataset.i)], alive);
         });
         return;
       }
@@ -482,15 +537,26 @@ function wireSearch(draft) {
       if (q.length >= 2) openAdd(q); else closeAdd();
     }, 220);
   };
-  input.focus();
+  // Ready to type in, without the page being moved to it: the step has just
+  // opened at its top and the box is there.
+  input.focus({ preventScroll: true });
 }
 
-function choose(draft, match) {
+/** Awaited by the add form, so its note follows the redraw. */
+async function choose(draft, match, alive) {
   const id = match.id != null ? match.id : match.customer_id;
   draft.behdin = { id, name: match.name, phone: match.phone };
   draft.names = null;   // a different behdin has different saved names
   if (!draft.edit) draft.step = 2;
-  return render(draft);   // awaited by the add form, so its note follows the redraw
+  // The add form asks the server first. If the mobed has gone to another
+  // screen by the time it answers, the choice is kept on the draft for when
+  // they come back, and nothing is drawn over the screen they are on.
+  if (!alive()) return;
+  await render(draft);
+  // In a new event that was the answer to the first question, and the next
+  // one opens at its top - not wherever the list of matches had been scrolled
+  // to. Editing redraws the one page it already is, so that stays put.
+  if (!draft.edit && alive()) toTop();
 }
 
 // ---------------------------------------------------------------------------
@@ -508,9 +574,12 @@ function renderNewServicePanel(selectEl, draft) {
       </div>
     </div>`;
   document.getElementById("nsCancel").onclick = () => { panel.innerHTML = ""; selectEl.value = ""; };
-  document.getElementById("nsSave").onclick = async () => {
+  const saveBtn = document.getElementById("nsSave");
+  saveBtn.onclick = async () => {
     const name = document.getElementById("nsName").value.trim();
-    if (!name) return showError("Please enter a service name.");
+    if (!name) return void flagProblems(panel, [{ target: "#nsName", message: "Please enter a service name." }]);
+    // Held while it saves, so a second tap cannot add the service twice.
+    saveBtn.disabled = true;
     try {
       const svc = await createService(state.currentAgyaryId, name, false);
       delete state.formOptionsCache[state.currentAgyaryId];
@@ -518,6 +587,7 @@ function renderNewServicePanel(selectEl, draft) {
       draft.service_name = svc.name;
       render(draft);
     } catch (e) {
+      saveBtn.disabled = false;
       showError(e.message);
     }
   };
@@ -527,10 +597,19 @@ function renderNewServicePanel(selectEl, draft) {
 // Next: review. Saving happens there, after the mobed has seen the slip.
 // ---------------------------------------------------------------------------
 function save(draft) {
-  if (!draft.behdin) return showError("Please select a behdin.");
-  if (!draft.service_id) return showError("Please select a service.");
-  if (!draft.gregorian) return showError("Please select a date.");
-  if (!draft.time) return showError("Please select a time.");
+  const problems = [];
+  if (!draft.behdin) problems.push({ target: "#bhSearch", message: "Please select a behdin." });
+  if (!draft.service_id) problems.push({ target: "#evService", message: "Please select a service." });
+  if (!draft.gregorian) problems.push({ target: "#evDate", message: "Please select a date." });
+  if (!draft.time) problems.push({ target: "#evTime", message: "Please select a time." });
+  if (problems.length) {
+    // The edit form is one page, so each is marked on its own control. A new
+    // event has already checked every step as it was passed; should one still
+    // be missing its control is on a hidden step, so it is said in words.
+    if (draft.edit) flagProblems(mainEl, problems);
+    else showError(problems[0].message);
+    return;
+  }
   // Replace, so the form and the review are two steps of one screen: Back
   // from the finished slip goes to the calendar, not back through them.
   navigate("#/event/review", { replace: true });

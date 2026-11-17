@@ -191,8 +191,18 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
     if (mv) {
       const card = mv.closest(".pair-card");
       const box = card.parentElement;
-      if (mv.classList.contains("up") && card.previousElementSibling) box.insertBefore(card, card.previousElementSibling);
-      else if (mv.classList.contains("dn") && card.nextElementSibling) box.insertBefore(card.nextElementSibling, card);
+      // The pair above or below - not simply the next element, which can be
+      // the message a form has put under a pair it marked (fielderrors.js).
+      // Swapping places with that would use up the tap and move nothing.
+      const pairBeside = (dir) => {
+        let el = card[dir];
+        while (el && !el.classList.contains("pair-card")) el = el[dir];
+        return el;
+      };
+      const above = pairBeside("previousElementSibling");
+      const below = pairBeside("nextElementSibling");
+      if (mv.classList.contains("up") && above) box.insertBefore(card, above);
+      else if (mv.classList.contains("dn") && below) box.insertBefore(below, card);
       refreshPairControls(box);
       notify(region);
       return;
@@ -254,6 +264,20 @@ export function collectNames(region, isMachi, purpose) {
     if (m) out.push({ section: "farmayeshne", title: m.title, name: m.name, status: "living", pair_group: null });
   });
   return out;
+}
+
+/**
+ * Where validateNames' "a pair is exactly two names" is on the page: the pair
+ * with one of its two names filled in, and the box left empty - so a form can
+ * mark that pair and put the cursor in it rather than only saying so. null
+ * when no pair is half filled.
+ */
+export function halfFilledPair(region) {
+  for (const card of region.querySelectorAll(".pair-card")) {
+    const empty = [...card.querySelectorAll(".nm")].filter(box => !box.value.trim());
+    if (empty.length === 1) return { card, empty: empty[0] };
+  }
+  return null;
 }
 
 /**

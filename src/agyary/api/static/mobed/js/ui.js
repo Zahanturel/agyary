@@ -83,15 +83,130 @@ export function showBack(handler) {
   backEl.onclick = handler;
 }
 
+// --- Messages -----------------------------------------------------------------
+// A message is shown where the mobed is looking, not where the page begins: it
+// floats over the bottom of the screen whatever the scroll position. It used to
+// be a strip at the top of <main>, which someone at the foot of a long page
+// never saw. What is wrong with ONE field is still said on that field
+// (fielderrors.js); this is for everything else.
+let toastTimer = null;
+
+function toastHost() {
+  let host = document.getElementById("toasts");
+  if (host) return host;
+  host = document.createElement("div");
+  host.id = "toasts";
+  host.className = "toasts no-print";
+  document.body.appendChild(host);
+  // An open keyboard covers the bottom of the page without shrinking it, so the
+  // message is lifted above whatever part of the page is hidden.
+  const vv = window.visualViewport;
+  if (vv) {
+    const place = () => {
+      const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      host.style.setProperty("--kb", `${Math.round(hidden)}px`);
+    };
+    vv.addEventListener("resize", place);
+    vv.addEventListener("scroll", place);
+    place();
+  }
+  return host;
+}
+
+/** Take the message off the screen (the router does on every new screen). */
+export function clearToasts() {
+  clearTimeout(toastTimer);
+  const host = document.getElementById("toasts");
+  if (host) host.replaceChildren();
+}
+
 function banner(cls, msg) {
-  // Only one banner at a time - a second failed attempt on the same screen
-  // must replace the old message, not stack under it.
-  mainEl.querySelectorAll(".error-banner, .info-banner").forEach(el => el.remove());
+  const error = cls === "error-banner";
   const el = document.createElement("div");
-  el.className = cls;
-  el.textContent = msg;
-  mainEl.prepend(el);
-  el.scrollIntoView({ block: "nearest" });
+  el.className = `toast ${error ? "error" : "info"}`;
+  el.setAttribute("role", error ? "alert" : "status");
+  const text = document.createElement("span");
+  text.className = "toast-text";
+  text.textContent = msg;
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "toast-x";
+  x.setAttribute("aria-label", "Dismiss");
+  x.textContent = "×";
+  el.append(text, x);
+  el.onclick = clearToasts;
+  // Only one at a time - a second failed attempt replaces the old message
+  // rather than stacking on it.
+  clearToasts();
+  toastHost().replaceChildren(el);
+  // Long enough to read at an unhurried pace; an error stays longer.
+  const ms = Math.max(error ? 9000 : 4500, String(msg).length * 90);
+  toastTimer = setTimeout(clearToasts, ms);
+}
+
+/** A screen that could not be loaded at all: say so in the page itself, with a
+ *  way to try again, instead of a blank page under a passing message. Going
+ *  back is the header's job. */
+export function screenFailed(msg, retry = null) {
+  mainEl.innerHTML = `<div class="load-failed" role="alert">
+    <p><b data-msg></b></p>
+    ${retry ? `<button class="small" type="button" data-retry>Try again</button>` : ""}
+  </div>`;
+  mainEl.querySelector("[data-msg]").textContent = msg;
+  if (retry) mainEl.querySelector("[data-retry]").onclick = retry;
+  window.scrollTo(0, 0);
+}
+
+/** The top of the page: for a new step of a form, which is a new page to the
+ *  person filling it in even though the address has not changed. */
+export function toTop() { window.scrollTo(0, 0); }
+
+// --- Sheet ----------------------------------------------------------------------
+// One dialog at a time, over the page: up from the bottom on a phone, in the
+// middle on a wide screen. For a choice that belongs to the moment (where to go
+// in the calendar, what to do with a memorial just made) rather than to a page.
+let sheet = null;
+
+export function closeSheet() {
+  if (!sheet) return;
+  const s = sheet;
+  sheet = null;
+  s.el.remove();
+  document.removeEventListener("keydown", s.onKey);
+  document.body.classList.remove("sheet-open");
+  if (s.opener && s.opener.isConnected) s.opener.focus({ preventScroll: true });
+  if (s.onClose) s.onClose();
+}
+
+/**
+ * Open a sheet. Returns { body, close } - `body` is the element to wire.
+ * opts.dismissable (default true): the cross, a tap outside and Escape close
+ * it. Pass false for a question that has to be answered with its own buttons.
+ * opts.onClose runs however it closes, including a navigation.
+ */
+export function openSheet({ title, html, dismissable = true, onClose = null }) {
+  closeSheet();
+  const el = document.createElement("div");
+  el.className = "sheet-backdrop no-print";
+  el.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head"><h2 id="sheetTitle"></h2>
+      ${dismissable ? `<button type="button" class="sheet-x" aria-label="Close">×</button>` : ""}</div>
+    <div class="sheet-body"></div></div>`;
+  el.querySelector("#sheetTitle").textContent = title;
+  const body = el.querySelector(".sheet-body");
+  body.innerHTML = html;
+  const onKey = (e) => { if (e.key === "Escape" && dismissable) closeSheet(); };
+  sheet = { el, onKey, onClose, opener: document.activeElement };
+  document.body.appendChild(el);
+  document.body.classList.add("sheet-open");
+  document.addEventListener("keydown", onKey);
+  if (dismissable) {
+    el.addEventListener("click", (e) => { if (e.target === el) closeSheet(); });
+    el.querySelector(".sheet-x").onclick = closeSheet;
+  }
+  el.querySelector(".sheet").tabIndex = -1;
+  el.querySelector(".sheet").focus({ preventScroll: true });
+  return { body, close: closeSheet };
 }
 // Rows that open something are divs with their own click handlers, so neither a
 // keyboard nor a screen reader could reach them (UX-04). This gives every such row
@@ -151,9 +266,9 @@ export function paintOffline() {
 }
 
 // A message that has to outlive a navigation. Showing one the normal way
-// just before redirecting doesn't work: the destination screen replaces
-// the whole of <main>, taking the banner with it - so a guard that bounces
-// you somewhere would do it with no explanation at all.
+// just before redirecting doesn't work: a new screen starts with no message
+// on it - so a guard that bounces you somewhere would do it with no
+// explanation at all.
 let pendingFlash = null;
 export function flashError(msg) { pendingFlash = { cls: "error-banner", msg }; }
 export function flashInfo(msg) { pendingFlash = { cls: "info-banner", msg }; }

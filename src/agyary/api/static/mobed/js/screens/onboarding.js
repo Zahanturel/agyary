@@ -10,10 +10,39 @@
 
 import { searchAgyaries, joinAgyary, activateAgyary, createAgyary } from "../api.js";
 import { state } from "../state.js";
-import { chrome, mainEl, showError } from "../ui.js";
+import { chrome, mainEl, showError, toTop } from "../ui.js";
 import { esc, phoneField, readOptionalPhone } from "../util.js";
 import { navigate } from "../router.js";
 import { refreshHeader } from "../ui.js";
+import { flagProblems } from "../fielderrors.js";
+
+/**
+ * The fire temple's details as typed into the set-up or the new-temple form
+ * (`p` is "ac" or "cr", the start of that form's ids) - or null after marking
+ * what is missing on the fields themselves, each where it is.
+ */
+function readDetails(p) {
+  const el = (name) => document.getElementById(p + name);
+  const phoneRes = readOptionalPhone(p + "Phone");
+  const body = {
+    name: el("Name").value.trim(),
+    city: el("City").value.trim(),
+    address: el("Addr").value.trim() || null,
+    contact_phone: phoneRes.value,
+  };
+  const missing = "Please enter the fire temple's name and city.";
+  const problems = [];
+  if (!body.name) problems.push({ target: el("Name"), message: missing });
+  if (!body.city) problems.push({ target: el("City"), message: missing });
+  if (!phoneRes.ok) {
+    problems.push({
+      target: el("Phone").closest(".phone-field"),
+      message: "Please enter a valid phone number, or leave it blank.",
+    });
+  }
+  if (problems.length) { flagProblems(mainEl, problems); return null; }
+  return body;
+}
 
 export function renderOnboarding() {
   chrome(false);
@@ -34,7 +63,11 @@ export function renderOnboarding() {
     if (!q) { results.innerHTML = ""; return; }
     const mine = ++token;
     let list = [];
-    try { list = await searchAgyaries(q); } catch (e) { return showError(e.message); }
+    try { list = await searchAgyaries(q); } catch (e) {
+      // Only the latest search speaks: an older one failing is not news.
+      if (mine === token) showError(e.message);
+      return;
+    }
     if (mine !== token) return;   // a newer keystroke already superseded this
 
     results.innerHTML = "";
@@ -65,7 +98,13 @@ export function renderOnboarding() {
   input.oninput = () => { clearTimeout(timer); timer = setTimeout(run, 150); };
 }
 
+// A row is not a button, so nothing greys it out while it is joining: this
+// stops a second tap (on it, or on another row) from joining twice.
+let joining = false;
+
 async function pick(a) {
+  if (joining) return;
+  joining = true;
   try {
     const res = await joinAgyary(a.id);
     state.user = res.user;
@@ -76,6 +115,8 @@ async function pick(a) {
     else { refreshHeader(); navigate("#/calendar", { replace: true }); }
   } catch (e) {
     showError(e.message);
+  } finally {
+    joining = false;
   }
 }
 
@@ -92,16 +133,16 @@ function renderActivate(a) {
       <label>Contact phone (optional)</label>${phoneField("acPhone")}
       <div style="margin-top:14px"><button id="acGo">Looks right - set it up</button></div>
     </div>`;
-  document.getElementById("acGo").onclick = async () => {
-    const phoneRes = readOptionalPhone("acPhone");
-    if (!phoneRes.ok) return showError("Please enter a valid phone number, or leave it blank.");
-    const body = {
-      name: document.getElementById("acName").value.trim(),
-      city: document.getElementById("acCity").value.trim(),
-      address: document.getElementById("acAddr").value.trim() || null,
-      contact_phone: phoneRes.value,
-    };
-    if (!body.name || !body.city) return showError("Please enter the fire temple's name and city.");
+  // This took the place of the search without the address changing: a new
+  // page to the person reading it, so it opens at its top.
+  toTop();
+  document.getElementById("acGo").onclick = async (ev) => {
+    // `btn` was never defined here, so a failed set-up threw inside its own
+    // error handling and said nothing at all.
+    const btn = ev.currentTarget;
+    const body = readDetails("ac");
+    if (!body) return;
+    btn.disabled = true;   // one set-up per tap
     try {
       const res = await activateAgyary(a.id, body);
       state.user = res.user;
@@ -129,19 +170,14 @@ function renderCreate(prefillName) {
         <button id="crGo">Add it</button>
         <button class="ghost" id="crBack">Back to search</button></div>
     </div>`;
-  document.getElementById("crBack").onclick = () => renderOnboarding();
+  // A different view under the same address: each way opens at its top.
+  toTop();
+  document.getElementById("crBack").onclick = () => { renderOnboarding(); toTop(); };
   document.getElementById("crGo").onclick = async (ev) => {
     const btn = ev.currentTarget;
     if (btn.disabled) return;
-    const phoneRes = readOptionalPhone("crPhone");
-    if (!phoneRes.ok) return showError("Please enter a valid phone number, or leave it blank.");
-    const body = {
-      name: document.getElementById("crName").value.trim(),
-      city: document.getElementById("crCity").value.trim(),
-      address: document.getElementById("crAddr").value.trim() || null,
-      contact_phone: phoneRes.value,
-    };
-    if (!body.name || !body.city) return showError("Please enter the fire temple's name and city.");
+    const body = readDetails("cr");
+    if (!body) return;
     btn.disabled = true;
     try {
       const res = await createAgyary(body);
@@ -150,6 +186,8 @@ function renderCreate(prefillName) {
       refreshHeader();
       navigate("#/calendar", { replace: true });
     } catch (e) {
+      // Left disabled, a failed attempt could never be tried again.
+      btn.disabled = false;
       showError(e.message);
     }
   };

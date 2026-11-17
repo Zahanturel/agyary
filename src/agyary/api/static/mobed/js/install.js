@@ -74,14 +74,21 @@ if (typeof window !== "undefined" && window.addEventListener) {
   });
 }
 
-/** Asks the browser to install the site as an app. True if the mobed said yes. */
+/** Asks the browser to install the site as an app. True if the mobed said yes.
+ *  False as well when the browser would not ask at all (it throws then): the
+ *  card that called goes on to say what to do instead, where a throw used to
+ *  leave its button doing nothing. */
 async function useInstallOffer() {
   const offer = installOffer;
   if (!offer) return false;
   installOffer = null; // one use only, whatever the answer
-  await offer.prompt();
-  const choice = await offer.userChoice;
-  return choice && choice.outcome === "accepted";
+  try {
+    await offer.prompt();
+    const choice = await offer.userChoice;
+    return !!(choice && choice.outcome === "accepted");
+  } catch (e) {
+    return false;
+  }
 }
 
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -170,7 +177,8 @@ function androidCard(card, ua) {
     if (installOffer) {
       fallback.innerHTML = `<p class="meta">Phone won't install it?</p>
         <button class="ghost small" id="appChrome">Add it from Chrome instead</button>`;
-      fallback.querySelector("#appChrome").onclick = async () => {
+      fallback.querySelector("#appChrome").onclick = async (ev) => {
+        ev.currentTarget.disabled = true;   // one question at a time; either answer redraws this
         if (await useInstallOffer()) {
           fallback.innerHTML = `<p class="meta">Added. Open <b>Mobed Diary</b> from your home screen.</p>`;
         } else paintFallback();
@@ -213,6 +221,10 @@ function iosCard(card, ua) {
 
 function computerCard(card) {
   let done = false;
+  // Install was pressed and nothing was installed (the answer was no, or the
+  // browser would not ask). The button goes with the offer, so the card says
+  // what happened and where Install still is, rather than just losing it.
+  let notInstalled = false;
   const paint = () => {
     if (done) {
       card.innerHTML = `<h2>Get the app</h2>
@@ -226,12 +238,16 @@ function computerCard(card) {
         <p class="meta">Install Mobed Diary on this computer. It opens in its own window, like any other program.</p>
         <button class="secondary get-app-btn" id="appInstall">Install on this computer</button>
         ${phone}`;
-      card.querySelector("#appInstall").onclick = async () => {
+      card.querySelector("#appInstall").onclick = async (ev) => {
+        ev.currentTarget.disabled = true;   // one question at a time; the answer redraws the card
         done = await useInstallOffer();
+        notInstalled = !done;
         paint();
       };
     } else {
-      card.innerHTML = `<h2>Get the app</h2>${phone}`;
+      card.innerHTML = `<h2>Get the app</h2>
+        ${notInstalled ? `<p class="meta">Not installed on this computer. You can still install it from your
+          browser's menu.</p>` : ""}${phone}`;
     }
   };
   paint();

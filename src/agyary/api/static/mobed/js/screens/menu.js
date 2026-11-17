@@ -15,11 +15,13 @@ import { updateMyName, getPreferences, putPreferences, putDailyReport, logout, s
 import { state, currentAgyary, primarySystem, clearSession, forgetLastPhone } from "../state.js";
 import { clearAllDrafts } from "../drafts.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, getTextSize, setTextSize,
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, getTextSize, setTextSize, screenFailed,
+  keepScroll,
 } from "../ui.js";
 import { esc } from "../util.js";
 import { shellVersion } from "../update.js";
-import { navigate } from "../router.js";
+import { navigate, navGuard } from "../router.js";
+import { flagProblems } from "../fielderrors.js";
 
 const PARSI_SYSTEMS = [
   ["shenshai", "Shenshai"],
@@ -31,9 +33,19 @@ export async function renderMenu() {
   refreshHeader();
   showFab(false);
   loading();
+  const alive = navGuard();
 
+  // Normally loaded at sign-in (session.js), so this is the rare case. The
+  // page below is drawn from the preferences, so without them it says so and
+  // offers to try again; it used to stay on "Loading..." for good.
   if (!state.preferences) {
-    try { state.preferences = await getPreferences(); } catch (e) { /* defaults stand */ }
+    try {
+      state.preferences = await getPreferences();
+    } catch (e) {
+      if (!alive()) return;
+      return screenFailed(e.message, () => renderMenu());
+    }
+    if (!alive()) return;
   }
   const prefs = state.preferences;
   const visible = prefs.visible_calendar_systems || ["gregorian", "shenshai"];
@@ -133,14 +145,22 @@ export async function renderMenu() {
     r.onchange = () => setTextSize(r.value);
   });
 
-  document.getElementById("mSaveName").onclick = async () => {
-    const name = document.getElementById("mName").value.trim();
-    if (!name) return showError("Please enter your name.");
+  document.getElementById("mSaveName").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    const nameEl = document.getElementById("mName");
+    const name = nameEl.value.trim();
+    // Said on the name box itself.
+    if (!name) return flagProblems(nameEl.closest(".card"), [{ target: "#mName", message: "Please enter your name." }]);
+    btn.disabled = true;   // one save per tap
     try {
       state.user = await updateMyName(name);
       refreshHeader();
       showInfo("Saved.");
-    } catch (e) { showError(e.message); }
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
   };
 
   // One switch, saved as it is flipped; put back if the save fails.
@@ -159,13 +179,15 @@ export async function renderMenu() {
     }
   };
 
-  document.getElementById("mSavePrefs").onclick = async () => {
+  document.getElementById("mSavePrefs").onclick = async (ev) => {
+    const btn = ev.currentTarget;
     const primary = document.getElementById("mPrimary").value;
     const checked = Array.from(mainEl.querySelectorAll("[data-sys]"))
       .filter(cb => cb.checked).map(cb => cb.dataset.sys);
     // Gregorian is always shown, and the primary is by definition available -
     // so it goes in whether or not its box happens to be ticked.
     const systems = ["gregorian", primary, ...checked.filter(s => s !== primary)];
+    btn.disabled = true;   // one save per tap; the redraw below brings a fresh button
     try {
       state.preferences = await putPreferences({
         visible_calendar_systems: [...new Set(systems)],
@@ -178,21 +200,32 @@ export async function renderMenu() {
       state.parsiMonthCache = {};
       state.calendar.parsiMonth = null;
       showInfo("Calendar saved.");
-      renderMenu();
-    } catch (e) { showError(e.message); }
+      // The same screen drawn again (the primary's own box is now ticked):
+      // it stays where it was, at the Calendar card.
+      keepScroll(() => renderMenu());
+    } catch (e) {
+      btn.disabled = false;
+      showError(e.message);
+    }
   };
 
   document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
   const adminBar = document.getElementById("mAdminBar");
   if (adminBar) adminBar.onclick = () => navigate("#/admin");
 
-  document.getElementById("mSignOutOthers").onclick = async () => {
+  document.getElementById("mSignOutOthers").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;   // one request per tap
     try {
       const r = await signOutOtherDevices();
       showInfo(r.signed_out
         ? `Signed out of ${r.signed_out} other device${r.signed_out === 1 ? "" : "s"}.`
         : "You were not signed in anywhere else.");
-    } catch (e) { showError(e.message); }
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
   };
 
   // Two steps, in plain words: what goes, and that it cannot be undone.
@@ -227,7 +260,9 @@ export async function renderMenu() {
     };
   };
 
-  document.getElementById("mSignOut").onclick = async () => {
+  document.getElementById("mSignOut").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;   // one sign-out per tap; the page reloads when it is done
     // The server has to clear the refresh cookie - it's httpOnly, so
     // dropping the in-memory token alone would sign you back in on the
     // next load.
@@ -237,6 +272,7 @@ export async function renderMenu() {
       // Only the server can clear that cookie, so with no answer the next
       // launch would sign this phone straight back in. Say so (FE-04).
       if (e.status === 0 || e.status >= 500) {
+        btn.disabled = false;
         return showError("Could not sign out, because Mobed Diary can't be reached. "
           + "Please try again when you have signal.");
       }

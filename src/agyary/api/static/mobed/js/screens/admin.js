@@ -10,10 +10,17 @@
 
 import { adminOverview, adminSetPaused, adminSignOutEverywhere, adminEraseNumber } from "../api.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar,
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed,
 } from "../ui.js";
 import { esc, gregShort, istHm, phoneField, readPhone } from "../util.js";
 import { navGuard } from "../router.js";
+import { flagProblems } from "../fielderrors.js";
+
+/** A number that will not do is said on its own box: the card has only the one. */
+function flagPhone(id) {
+  const field = document.getElementById(id).closest(".phone-field");
+  flagProblems(field.closest(".card"), [{ target: field, message: "Please enter a valid phone number." }]);
+}
 
 const rupees = (n) => "Rs " + Number(n).toFixed(2);
 
@@ -33,8 +40,10 @@ export async function renderAdmin() {
     o = await adminOverview();
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError(e.status === 404 ? "That page isn't available." : e.message);
+    // Said in the page, not over a blank one. A 404 is the server saying this
+    // is not an admin's phone, which trying again will not change.
+    if (e.status === 404) return screenFailed("That page isn't available.");
+    return screenFailed(e.message, () => renderAdmin());
   }
   if (!alive()) return;
 
@@ -105,14 +114,20 @@ export async function renderAdmin() {
     </div>`;
 
   const askErase = document.getElementById("admEraseAsk");
-  document.getElementById("admEraseFind").onclick = async () => {
+  document.getElementById("admEraseFind").onclick = async (ev) => {
+    const findBtn = ev.currentTarget;
     askErase.innerHTML = "";
     const phone = readPhone("admErase");
-    if (!phone) return showError("Please enter a valid phone number.");
+    if (!phone) return flagPhone("admErase");
     let f;
+    findBtn.disabled = true;   // one look-up per tap
     try {
       f = (await adminEraseNumber(phone, false)).found;
-    } catch (e) { return showError(e.message); }
+    } catch (e) {
+      return showError(e.message);
+    } finally {
+      findBtn.disabled = false;
+    }
     if (!f.records && !f.messages) {
       askErase.innerHTML = `<p class="meta">We hold nothing for that number.</p>`;
       return;
@@ -128,35 +143,60 @@ export async function renderAdmin() {
       </div>`;
     document.getElementById("admEraseNo").onclick = () => { askErase.innerHTML = ""; };
     document.getElementById("admEraseGo").onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
+      const btn = ev.currentTarget;
+      btn.disabled = true;
       try {
         await adminEraseNumber(phone, true);
         askErase.innerHTML = "";
         showInfo("That family's details have been erased.");
-      } catch (e) { showError(e.message); }
+      } catch (e) {
+        // It stayed disabled after a failure, so the only way on was Cancel
+        // and the whole look-up again.
+        btn.disabled = false;
+        showError(e.message);
+      }
     };
   };
 
   const confirm = document.getElementById("admConfirm");
-  const apply = async (paused, reason) => {
+  /** Pause or resume. `btn` is the button pressed: off while the change is
+   *  made, and back on if it fails. */
+  const apply = async (paused, reason, btn) => {
+    btn.disabled = true;
     try {
       await adminSetPaused(paused, reason);
-      showInfo(paused ? "Sending paused." : "Sending resumed.");
-      renderAdmin();
-    } catch (e) { showError(e.message); }
+    } catch (e) {
+      btn.disabled = false;
+      return showError(e.message);
+    }
+    showInfo(paused ? "Sending paused." : "Sending resumed.");
+    // Gone to another screen meanwhile: it is done and said, and this page
+    // must not be drawn over the screen that is there now.
+    if (!alive()) return;
+    // The same screen with its new figures: it stays where it was. Drawing it
+    // again passes through "Loading...", which would otherwise leave it at the top.
+    const y = window.scrollY;
+    await renderAdmin();
+    if (alive()) window.scrollTo(0, y);
   };
 
-  document.getElementById("admOutGo").onclick = async () => {
+  document.getElementById("admOutGo").onclick = async (ev) => {
+    const btn = ev.currentTarget;
     const phone = readPhone("admOut");
-    if (!phone) return showError("Please enter a valid phone number.");
+    if (!phone) return flagPhone("admOut");
+    btn.disabled = true;   // one request per tap
     try {
       const r = await adminSignOutEverywhere(phone);
       showInfo(`Signed out of ${r.signed_out} device${r.signed_out === 1 ? "" : "s"}.`);
-    } catch (e) { showError(e.message); }
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
   };
 
   const resume = document.getElementById("admResume");
-  if (resume) resume.onclick = () => apply(false, "");
+  if (resume) resume.onclick = (ev) => apply(false, "", ev.currentTarget);
 
   const pause = document.getElementById("admPause");
   if (pause) pause.onclick = () => {
@@ -170,7 +210,7 @@ export async function renderAdmin() {
         <button class="ghost small" id="admPauseNo">Cancel</button>
       </div>`;
     document.getElementById("admPauseNo").onclick = () => { confirm.innerHTML = ""; };
-    document.getElementById("admPauseGo").onclick = () =>
-      apply(true, document.getElementById("admReason").value);
+    document.getElementById("admPauseGo").onclick = (ev) =>
+      apply(true, document.getElementById("admReason").value, ev.currentTarget);
   };
 }

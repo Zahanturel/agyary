@@ -7,7 +7,9 @@
  */
 
 import { machiSlip, bookingSlip, deleteMachi, deleteBooking } from "../api.js";
-import { chrome, mainEl, showFab, showError, refreshHeader, loading, flashInfo } from "../ui.js";
+import {
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, flashInfo, screenFailed,
+} from "../ui.js";
 import { state, homeHash } from "../state.js";
 import { esc } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
@@ -41,8 +43,11 @@ export async function renderSlip({ kind, aid, id }) {
     slip = kind === "machi" ? await machiSlip(agyaryId, numId) : await bookingSlip(agyaryId, numId);
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = "";
-    return showError("Couldn't load the slip: " + e.message);
+    // In the page, with a way to try again - it used to be a blank page under
+    // a passing message. A slip that is not on file (deleted, or a stale
+    // link) will not be there on a second try, so that one offers none.
+    return screenFailed("Couldn't load the slip: " + e.message,
+      e.status === 404 ? null : () => renderSlip({ kind, aid, id }));
   }
   // Navigated away while this was loading: writing now would put the slip on
   // top of whatever screen the mobed is actually on.
@@ -70,13 +75,24 @@ export async function renderSlip({ kind, aid, id }) {
 
   const doDelete = async (future) => {
     const panel = document.getElementById("slipDeleteConfirm");
-    panel.innerHTML = "";
+    // While it is being deleted neither Change nor Delete can be tapped: a
+    // second delete would answer "could not be found" over one that worked,
+    // and Change would open the form of an event on its way out. Where the
+    // question was says what is happening, so the wait is not a blank.
+    const held = [...mainEl.querySelectorAll("#slipEdit, #slipDeleteOpen")];
+    held.forEach(b => { b.disabled = true; });
+    panel.innerHTML = `<p class="meta" role="status">Deleting...</p>`;
     try {
       if (kind === "machi") await deleteMachi(agyaryId, numId, future);
       else await deleteBooking(agyaryId, numId, future);
     } catch (e) {
+      held.forEach(b => { b.disabled = false; });
+      panel.innerHTML = "";
       return showError("Couldn't delete: " + e.message);
     }
+    // Gone to another screen while it was being deleted: say so there and
+    // leave that screen be - Back from it would undo the move they made.
+    if (!alive()) return showInfo("Deleted.");
     flashInfo("Deleted.");
     // Back, not a fresh push: the slip is gone, so it must not stay behind us
     // in history as a page that can only say "couldn't load".

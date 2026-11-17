@@ -14,6 +14,7 @@
 import { createBehdin } from "./api.js";
 import { state } from "./state.js";
 import { showError, showInfo } from "./ui.js";
+import { flagProblems } from "./fielderrors.js";
 import { phoneField, readPhone, setPhoneField, splitE164, esc } from "./util.js";
 
 const E164 = /^\+[1-9]\d{7,14}$/;
@@ -152,12 +153,25 @@ export function renderAddBehdin(container, { onCreated, onCancel, prefill } = {}
   }
 
   const submit = async () => {
+    const btn = document.getElementById("abSave");
+    // Enter in a field comes here too, and a disabled button does not stop
+    // that: one save at a time.
+    if (btn.disabled) return;
     const name = nameEl.value.trim();
     const phone = readPhone("abPhone");
-    if (!name) return showError("Please enter the behdin's name.");
-    if (!phone) return showError("Please enter a valid phone number.");
+    // Said on the field that is wrong, not in a line somewhere else.
+    const problems = [];
+    if (!name) {
+      // A caller may have hidden the name row (its search box stands in for
+      // the name). A mark on a field that cannot be seen leads nowhere, so
+      // the row is shown first.
+      const row = document.getElementById("abNameRow");
+      if (row) row.style.display = "";
+      problems.push({ target: "#abName", message: "Please enter the behdin's name." });
+    }
+    if (!phone) problems.push({ target: ".phone-field", message: "Please enter a valid phone number." });
+    if (problems.length) return flagProblems(container, problems);
 
-    const btn = document.getElementById("abSave");
     btn.disabled = true;
     try {
       const created = await createBehdin(state.currentAgyaryId, name, phone);

@@ -73,17 +73,32 @@ export async function openDeleteBox(box, aid, behdin, { onDone, onCancel, onErro
         <button class="ghost small" type="button" data-no>Keep</button>
       </div>
     </div>`;
-  box.querySelector("[data-no]").onclick = () => { box.innerHTML = ""; if (onCancel) onCancel(); };
+  // Asked from a row low on the list, the question opens below the fold or
+  // under the tab bar: bring it to where it can be read and answered, as the
+  // slip's delete question is. Where it is already in full view, nothing moves.
+  const at = box.getBoundingClientRect();
+  const tabs = document.getElementById("tabs");
+  const tabsTop = tabs && !tabs.classList.contains("hidden") ? tabs.getBoundingClientRect().top : 0;
+  // The tab bar only covers the foot of the page on a phone; on a wide screen
+  // it stands at the side, and its top says nothing about what is hidden.
+  const floor = tabsTop > window.innerHeight / 2 ? tabsTop : window.innerHeight;
+  if (at.top < 0 || at.bottom > floor) box.scrollIntoView({ block: "center" });
+  const keepBtn = box.querySelector("[data-no]");
+  keepBtn.onclick = () => { box.innerHTML = ""; if (onCancel) onCancel(); };
   box.querySelector("[data-go]").onclick = async (ev) => {
     const btn = ev.currentTarget;
     const pick = box.querySelector("[name=bdScope]:checked");
     const scope = pick ? pick.value : "list";
+    // Neither button while the delete runs: not Delete twice, and not Keep on
+    // top of a delete that is already on its way.
     btn.disabled = true;
+    keepBtn.disabled = true;
     try {
       const result = await deleteBehdin(aid, behdin.id, scope);
       if (onDone) onDone({ ...result, scope });
     } catch (e) {
       btn.disabled = false;
+      keepBtn.disabled = false;
       if (onError) onError("Couldn't delete: " + e.message);
     }
   };
