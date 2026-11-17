@@ -43,6 +43,7 @@ from agyary.models import (
     User,
 )
 from agyary.services import guardrails, reminder_message, reminders, template_text, wa_send
+from agyary.models.enums import ACCESS_ON
 from agyary.services.memorials import OPENING_DAYS
 
 logger = logging.getLogger(__name__)
@@ -187,8 +188,9 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
                 MemorialObservance.day_number > OPENING_DAYS,
                 # The mobed already told the family themselves.
                 MemorialObservance.reminded_by_hand_at.is_(None),
-                # The account sends automatically at all (D4)...
+                # The account sends automatically at all (D4), and the owner has it switched on (D9)...
                 User.automatic_reminders.is_(True),
+                User.access == ACCESS_ON,
                 # ...for the memorial's own mobed's record of the family, with their consent.
                 Customer.owner_user_id == Memorial.created_by_user_id,
                 Customer.reminders_enabled.is_(True),
@@ -423,6 +425,9 @@ async def _withdrawn(db: AsyncSession, n: Notification) -> str | None:
     owner, _ = await _owner_and_name(db, n)
     if owner is None or customer.owner_user_id != owner or not customer.reminders_enabled:
         return "Reminders were turned off before it was sent"
+    mobed = await db.get(User, owner)
+    if mobed is None or mobed.access != ACCESS_ON:
+        return "The mobed was switched off before it was sent"
     return None
 
 

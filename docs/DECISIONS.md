@@ -14,6 +14,9 @@ Recorded 12 Oct 2026, in answer to the independent review's questions (section 7
 sign-in code sent over WhatsApp (D3), or by the existing "send us a code" flow. Later, when the
 Machi and Mobed apps are merged, a panthaky will approve the mobeds of their temple.
 
+**Since 17 Nov 2026, signing up is not the same as being let in: an admin approves every new mobed
+(D9).**
+
 **This is in force now** (12 Oct 2026): the server runs `SIGNUP_MODE=open` and `OTP_MODE=live`.
 It is the owner's decision and the invite-only mode that Phase 0 shipped is NOT a standing
 requirement; do not switch sign-up back to invite-only without the owner asking. (An earlier
@@ -150,6 +153,27 @@ the owner refused it; the code was removed, not left switched off, so that no se
 Records go only when someone asks: a mobed deleting something or their own account (D6), or a family
 asking to be erased (docs/DATA-REQUESTS.md). Sweeping what is not a record stays: expired notices,
 spent sign-in codes, and the digests of deleted accounts. Backups are copies, and still age out.
+
+## D9. The owner approves every mobed, and can turn any of them off (17 Nov 2026)
+
+**A new mobed can use the app only once an admin has approved them.** They sign in with WhatsApp and
+choose their fire temple as before, and then see one screen saying they are waiting. Every admin is
+told in the app ("A new mobed is waiting", kept for seven days) and approves them on Admin -> Mobeds.
+
+**Every mobed has one switch, on or off, and that is the whole of their access.** The owner uses it to
+give someone a free month and to stop it, and later for paying and not paying. There are no
+per-feature switches or limits per mobed: off is no app at all, on is all of it.
+
+- Off, or waiting: the mobed sees one screen saying so (with `SUPPORT_PHONE` to get in touch on, if
+  set). They can still sign out and delete their account. Nothing they saved is touched (D8).
+- Nothing goes out under an account that is not on: no automatic reminders (also not one planned
+  before it was turned off), no daily report, no schedule from our number.
+- Accounts that existed before this are on. An admin (`ADMIN_PHONES`) is always on and cannot be
+  turned off, so the owner can never lock themselves out.
+- In-app only for now. A notification on the admin's phone (web push) is the next step; it needs
+  keys the owner sets on the server.
+
+The owner chose this over keeping families' reminders going while their mobed is off.
 
 ## Not decided yet
 

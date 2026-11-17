@@ -13,7 +13,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed,
 } from "../ui.js";
 import { esc, gregShort, istHm, phoneField, readPhone } from "../util.js";
-import { navGuard } from "../router.js";
+import { navGuard, navigate } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 
 /** A number that will not do is said on its own box: the card has only the one. */
@@ -57,6 +57,15 @@ export async function renderAdmin() {
     <div class="card">
       ${backBar("Admin")}
       <p class="meta" style="margin:4px 0 0">What WhatsApp sending is doing, and what it could cost.</p>
+    </div>
+
+    <div class="card">
+      <h2>Mobeds ${o.mobeds_waiting
+        ? `<span class="tag" style="background:var(--amber-100);color:var(--amber-600)">${o.mobeds_waiting} waiting</span>` : ""}</h2>
+      <p class="meta">${o.mobeds_waiting
+        ? `${o.mobeds_waiting} new mobed${o.mobeds_waiting === 1 ? " is" : "s are"} waiting for your approval.`
+        : "Nobody is waiting for approval."} Approve new mobeds, and turn any mobed off or on.</p>
+      <div style="margin-top:10px"><button class="small" id="admMobeds">Open Mobeds</button></div>
     </div>
 
     <div class="card">
@@ -112,6 +121,8 @@ export async function renderAdmin() {
       <div style="margin-top:10px"><button class="secondary small" id="admEraseFind">See what we hold</button></div>
       <div id="admEraseAsk" style="margin-top:12px"></div>
     </div>`;
+
+  document.getElementById("admMobeds").onclick = () => navigate("#/admin/mobeds");
 
   const askErase = document.getElementById("admEraseAsk");
   document.getElementById("admEraseFind").onclick = async (ev) => {

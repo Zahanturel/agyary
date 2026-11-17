@@ -121,12 +121,21 @@ def signed_inbound(code: str, phone: str) -> tuple[bytes, dict]:
     return raw, {"x-hub-signature-256": f"sha256={digest}", "content-type": "application/json"}
 
 
-async def sign_in(client, phone: str, name: str = "Er. Test Mobed") -> dict:
+# The test database session the app is using, set by the `client` fixture.
+_shared: dict = {}
+
+
+async def sign_in(client, phone: str, name: str = "Er. Test Mobed", *, approve: bool = True) -> dict:
     """Full sign-in: start, signed webhook delivery, poll, name if new.
 
     Returns the session body. ``name`` is only used on a phone's first ever
     sign-in - a returning one keeps the stored name, and changing it is a
     PATCH /auth/me, not a side effect of logging in.
+
+    A new account waits for an admin's approval (DECISIONS D9). With
+    ``approve`` (the default) this test mobed is approved straight away, as an
+    admin would, so the tests about everything else can use the app; the
+    approval itself is tested in tests/test_mobed_access.py.
     """
     started = await client.post("/api/mobed/auth/wa/start")
     assert started.status_code == 200, started.text
@@ -141,6 +150,14 @@ async def sign_in(client, phone: str, name: str = "Er. Test Mobed") -> dict:
         assert done.status_code == 200, done.text
         body = done.json()
     assert body.get("status") == "signed_in", body
+    if approve and body["user"].get("access") == "pending":
+        from sqlalchemy import update
+
+        from agyary.models import User
+
+        await _shared["db"].execute(update(User).where(User.id == body["user"]["id"]).values(access="on"))
+        await _shared["db"].commit()
+        body["user"]["access"] = "on"
     return body
 
 
@@ -174,6 +191,7 @@ async def client(db):
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    _shared["db"] = db   # for sign_in's approval step, whichever client signs in
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

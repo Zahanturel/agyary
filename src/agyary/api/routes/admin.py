@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -20,7 +21,8 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import LoginOtp, Notification, User
-from agyary.services import bot_check, erasure, guardrails, mobed_auth
+from agyary.models.enums import ACCESS_PENDING
+from agyary.services import bot_check, erasure, guardrails, mobed_access, mobed_auth
 from agyary.services.phone import Phone
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,15 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
             {"when": when.isoformat(), "reason": reason or "", "to": _masked(phone)}
             for when, reason, phone in failures
         ],
+        # For the Mobeds card at the top: how many are waiting for approval (D9).
+        "mobeds_waiting": (
+            await db.execute(
+                select(func.count()).select_from(User).where(
+                    User.is_active.is_(True), User.access == ACCESS_PENDING,
+                    User.phone.notin_(guardrails.admin_phones(s) or {""}),
+                )
+            )
+        ).scalar_one(),
     }
 
 
@@ -160,3 +171,38 @@ async def set_paused(
         await guardrails.resume(db, user_id=admin.id)
     await db.commit()
     return {"paused": await guardrails.paused_reason(db)}
+
+
+# ---------------------------------------------------------------------------
+# Mobeds: who is waiting, and the one switch per mobed (DECISIONS D9)
+# ---------------------------------------------------------------------------
+@router.get("/mobeds")
+async def list_mobeds(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)) -> dict:
+    """Every mobed, those waiting for approval first. The admin sees the whole
+    number: they are the ones who call a mobed about their account."""
+    mobeds = await mobed_access.list_mobeds(db, get_settings())
+    return {"mobeds": mobeds, "waiting": sum(1 for m in mobeds if m["access"] == ACCESS_PENDING)}
+
+
+class AccessIn(BaseModel):
+    access: Literal["on", "off"]
+
+
+@router.post("/mobeds/{user_id}/access")
+async def set_mobed_access(
+    user_id: int, payload: AccessIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin),
+) -> dict:
+    """Approve a waiting mobed or turn one on, or turn one off. Off keeps
+    everything they saved; they see one screen saying so, and nothing is sent
+    under their account until they are on again."""
+    rate_limit.enforce_key(f"admin_access:{admin.id}", max_requests=60, window_seconds=60)
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=404, detail="That mobed could not be found.")
+    try:
+        await mobed_access.set_access(db, get_settings(), user, payload.access)
+    except mobed_access.AccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    logger.warning("Admin %s set mobed %s access to %s", admin.id, user.id, payload.access)
+    return {"id": user.id, "access": mobed_access.effective(get_settings(), user)}

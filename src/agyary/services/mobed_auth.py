@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
 from agyary.models import AgyaryUser, User, UserSession
+from agyary.models.enums import ACCESS_ON, ACCESS_PENDING
 
 JWT_ALGORITHM = "HS256"
 
@@ -88,7 +89,12 @@ async def login_user(db: AsyncSession, phone: str, name: str) -> User:
     if user is None:
         if not may_sign_up(phone):
             raise SignupRefused(NOT_INVITED)
-        user = User(phone=phone, name=name, automatic_reminders=get_settings().reminders_automatic_default)
+        settings = get_settings()
+        # A new mobed waits for an admin's approval (D9); an admin never does,
+        # so the owner can never lock themselves out.
+        access = ACCESS_ON if _listed(settings.admin_phones, phone) else ACCESS_PENDING
+        user = User(phone=phone, name=name, access=access,
+                    automatic_reminders=settings.reminders_automatic_default)
         db.add(user)
         await db.flush()
         return user

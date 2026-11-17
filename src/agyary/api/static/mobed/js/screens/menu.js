@@ -11,7 +11,8 @@
  * talking to actual panthakies.
  */
 
-import { updateMyName, getPreferences, putPreferences, putDailyReport, logout, signOutOtherDevices, deleteMyAccount } from "../api.js";
+import { updateMyName, getPreferences, putPreferences, putDailyReport, signOutOtherDevices, deleteMyAccount } from "../api.js";
+import { signOut } from "../session.js";
 import { state, currentAgyary, primarySystem, clearSession, forgetLastPhone } from "../state.js";
 import { clearAllDrafts } from "../drafts.js";
 import {
@@ -260,31 +261,5 @@ export async function renderMenu() {
     };
   };
 
-  document.getElementById("mSignOut").onclick = async (ev) => {
-    const btn = ev.currentTarget;
-    btn.disabled = true;   // one sign-out per tap; the page reloads when it is done
-    // The server has to clear the refresh cookie - it's httpOnly, so
-    // dropping the in-memory token alone would sign you back in on the
-    // next load.
-    try {
-      await logout();
-    } catch (e) {
-      // Only the server can clear that cookie, so with no answer the next
-      // launch would sign this phone straight back in. Say so (FE-04).
-      if (e.status === 0 || e.status >= 500) {
-        btn.disabled = false;
-        return showError("Could not sign out, because Mobed Diary can't be reached. "
-          + "Please try again when you have signal.");
-      }
-    }
-    clearSession();
-    clearAllDrafts();
-    forgetLastPhone();
-    state.accessToken = null;
-    state.user = null;
-    state.offline = false;
-    state.preferences = null;
-    location.hash = "#/login";
-    location.reload();
-  };
+  document.getElementById("mSignOut").onclick = (ev) => signOut(ev.currentTarget);
 }

@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
-from agyary.models.enums import USER_ROLES, sql_in
+from agyary.models.enums import ACCESS_ON, USER_ACCESS, USER_ROLES, sql_in
 
 
 class User(Base):
@@ -39,6 +39,13 @@ class User(Base):
     # The mobed's own switch for the daily report: the evening before, what is on
     # their day tomorrow (services/daily_report.py). Off until they turn it on.
     daily_report: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    # The owner's switch for this mobed (DECISIONS D9): "pending" (signed up,
+    # waiting for an admin's approval), "on", or "off". Anything but "on" can
+    # only choose a fire temple, and nothing is sent under the account. The
+    # server default is "on" for the accounts that existed before approval did;
+    # a sign-up is created "pending" (services/mobed_auth.login_user).
+    access: Mapped[str] = mapped_column(String(10), server_default=ACCESS_ON)
+    access_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Refresh tokens from before sessions existed (they carry no session) that
     # were issued before this moment are refused - set by "sign out everywhere".
     tokens_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -46,6 +53,8 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    __table_args__ = (CheckConstraint(f"access IN ({sql_in(USER_ACCESS)})", name="access"),)
 
 
 class DeletedAccount(Base):

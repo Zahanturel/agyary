@@ -34,6 +34,10 @@ DEFAULT_DISPLAY_LANGUAGE = "en"
 AGYARY_STATUSES = ("unclaimed", "active")
 
 USER_ROLES = ("panthaky", "mobed", "caretaker")
+# A mobed's access to the app, the owner's one switch per account (DECISIONS D9):
+# a new sign-up waits for an admin's approval, and an admin can turn anyone off and on.
+ACCESS_PENDING, ACCESS_ON, ACCESS_OFF = "pending", "on", "off"
+USER_ACCESS = (ACCESS_PENDING, ACCESS_ON, ACCESS_OFF)
 ADMIN_ROLES = ("panthaky", "caretaker")
 
 # Shared state machine for machis and bookings (doc 2 refinement of doc 1).

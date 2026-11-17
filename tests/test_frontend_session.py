@@ -244,9 +244,13 @@ def test_a_failed_load_is_never_shown_as_an_empty_day():
 def test_signing_out_with_no_signal_says_so_and_keeps_the_session():
     """FE-04: only the server can clear the cookie, so a sign-out that never
     reached it left the phone to sign itself back in."""
-    menu = (JS / "screens" / "menu.js").read_text(encoding="utf-8")
-    sign_out = menu[menu.index('getElementById("mSignOut")'):]
+    session = (JS / "session.js").read_text(encoding="utf-8")
+    sign_out = session[session.index("export async function signOut"):]
     assert sign_out.index("e.status === 0 || e.status >= 500") < sign_out.index("clearSession()")
+    # Settings and the waiting screen (D9) both sign out through it.
+    menu = (JS / "screens" / "menu.js").read_text(encoding="utf-8")
+    waiting = (JS / "screens" / "waiting.js").read_text(encoding="utf-8")
+    assert "signOut(ev.currentTarget)" in menu and "signOut(ev.currentTarget)" in waiting
 
 
 def test_signing_out_forgets_the_last_phone_number():
@@ -259,8 +263,9 @@ forgetLastPhone();
 console.log(JSON.stringify({{ key: LAST_PHONE_KEY, left: localStorage.getItem(LAST_PHONE_KEY) }}));
 """)
     assert out == {"key": "mobed_last_phone", "left": None}
+    session = (JS / "session.js").read_text(encoding="utf-8")
+    sign_out = session[session.index("export async function signOut"):session.index("export function hasAccess")]
     menu = (JS / "screens" / "menu.js").read_text(encoding="utf-8")
-    sign_out = menu[menu.index('getElementById("mSignOut")'):]
     delete = menu[menu.index('getElementById("mDeleteYes")'):menu.index('getElementById("mSignOut")')]
     assert "forgetLastPhone()" in sign_out and "forgetLastPhone()" in delete
 

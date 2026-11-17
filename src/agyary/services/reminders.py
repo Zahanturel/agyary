@@ -150,12 +150,14 @@ async def notify(
     link: str | None = None,
     agyary_id: int | None = None,
     now: datetime | None = None,
+    ttl: timedelta = NOTIFICATION_TTL,
 ) -> AppNotification:
-    """Leave something for a mobed to see the next time they open the app."""
+    """Leave something for a mobed to see the next time they open the app.
+    It lapses after ``ttl``: a day unless the caller needs longer."""
     now = now or _now()
     note = AppNotification(
         user_id=user_id, agyary_id=agyary_id, kind=kind, title=title, body=body,
-        link=link, created_at=now, expires_at=now + NOTIFICATION_TTL,
+        link=link, created_at=now, expires_at=now + ttl,
     )
     db.add(note)
     await db.flush()

@@ -136,6 +136,10 @@ class Settings(BaseSettings):
     # Comma separated E.164 numbers of the people who can see the admin screen,
     # pause sending, and receive alerts. Empty means nobody is an admin.
     admin_phones: str = ""
+    # The WhatsApp number a mobed waiting for approval, or switched off, is
+    # shown to get in touch (E.164). Empty: the screen asks them to contact the
+    # person who gave them Mobed Diary, with no number.
+    support_phone: str = ""
 
     # Mobed PWA session tokens. No passwords, no OAuth - priests don't want
     # another login to remember, and the WhatsApp number is already the

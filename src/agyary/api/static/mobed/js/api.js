@@ -59,6 +59,12 @@ export async function api(path, opts = {}) {
     if (refreshed === false && state.user) globalThis.dispatchEvent?.(new Event("mobed:signed-out"));
   }
 
+  // This mobed is waiting for approval, or an admin has switched them off
+  // (DECISIONS D9). main.js puts the waiting screen up in place of whatever
+  // asked; the error still goes to the caller, which says nothing more.
+  const access = res.status === 403 ? res.headers.get("X-Mobed-Access") : null;
+  if (access) globalThis.dispatchEvent?.(new CustomEvent("mobed:access", { detail: access }));
+
   if (!res.ok) {
     // Our own handlers answer in plain words; anything else gets a plain
     // sentence rather than "Unprocessable Entity" or "Internal Server Error".
@@ -142,6 +148,10 @@ export const del = (path) => api(path, { method: "DELETE" });
 // never on the code, which is public by the time it reaches WhatsApp.
 export const adminOverview = () => get("/admin/overview");
 export const adminSetPaused = (paused, reason) => post("/admin/reminders/pause", { paused, reason: reason || "" });
+/** Admin only: every mobed, those waiting for approval first. */
+export const adminMobeds = () => get("/admin/mobeds");
+/** Admin only: approve or turn on ("on"), or turn off ("off"), one mobed. */
+export const adminSetMobedAccess = (userId, access) => post(`/admin/mobeds/${userId}/access`, { access });
 export const authOptions = () => get("/auth/options");
 export const otpRequest = (phone, turnstileToken = null) =>
   post("/auth/otp/request", { phone, turnstile_token: turnstileToken });

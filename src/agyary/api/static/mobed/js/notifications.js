@@ -83,7 +83,8 @@ function show(list, { markSeen, title }) {
 /** Fetch the notifications; with `popup`, put anything unseen in front of the
  *  mobed. A failure is silent - a missing notification must never break the app. */
 export async function refreshNotifications({ popup = false } = {}) {
-  if (!state.user || !bell) return;
+  // A mobed who may not use the app yet (D9) is refused them: the waiting screen is all there is.
+  if (!state.user || !bell || (state.user.access && state.user.access !== "on")) return;
   try {
     items = await getNotifications();
   } catch (e) {

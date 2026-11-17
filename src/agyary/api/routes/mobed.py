@@ -28,6 +28,7 @@ from agyary.models import (
     UserPreferences,
 )
 from agyary.models.enums import (
+    ACCESS_ON,
     DEFAULT_SECONDARY_CALENDAR_SYSTEM,
     DISPLAY_LANGUAGES,
     NAME_SECTIONS,
@@ -41,6 +42,7 @@ from agyary.services import (
     account,
     behdin_directory,
     guardrails,
+    mobed_access,
     mobed_auth,
     mobed_dashboard,
     reminders,
@@ -75,10 +77,33 @@ async def _current(authorization: str, db: AsyncSession) -> tuple[User, int]:
     return user, session.id
 
 
-async def get_current_user(
+async def get_signed_in_user(
     authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
 ) -> User:
+    """Signed in, whether or not an admin has let them use the app yet - only
+    for what a waiting or switched-off mobed may still do: see who they are,
+    choose a fire temple, delete their account."""
     user, _ = await _current(authorization, db)
+    return user
+
+
+# Said to a mobed whose access is not on, with the access in a header the app
+# reads to show its waiting screen (D9).
+ACCESS_HEADER = "X-Mobed-Access"
+NO_ACCESS = {
+    "pending": "Your account is waiting for approval.",
+    "off": "Your access to Mobed Diary is switched off.",
+}
+
+
+async def get_current_user(user: User = Depends(get_signed_in_user)) -> User:
+    """Signed in AND switched on by an admin (D9). Everything in the app but
+    the few steps of signing up asks for this."""
+    access = mobed_access.effective(get_settings(), user)
+    if access != ACCESS_ON:
+        raise HTTPException(
+            status_code=403, detail=NO_ACCESS.get(access, NO_ACCESS["off"]), headers={ACCESS_HEADER: access},
+        )
     return user
 
 
@@ -361,6 +386,7 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
         }
         for a, role in result.all()
     ]
+    access = mobed_access.effective(get_settings(), user)
     return {
         "id": user.id, "name": user.name, "phone": user.phone, "agyaries": agyaries,
         "automatic_reminders": user.automatic_reminders,
@@ -370,6 +396,11 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
         "daily_report_whatsapp": get_settings().daily_report_send_mode == "live",
         # Only to show the admin screen's menu entry; the server checks again on every call.
         "is_admin": guardrails.is_admin(get_settings(), user.phone),
+        # "on", or "pending"/"off": the app then shows only its waiting screen (D9),
+        # with the number to get in touch on, if the server has one. Sent while on
+        # too, so a mobed switched off mid-use is shown it without asking again.
+        "access": access,
+        "support_phone": get_settings().support_phone.strip() or None,
     }
 
 
@@ -417,7 +448,7 @@ async def delete_my_account(
     payload: DeleteAccountIn,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_signed_in_user),
 ) -> dict:
     """Delete this account and everything that is the mobed's (PV-2; Google
     Play's account-deletion rule). Signs out everywhere, since the account is
@@ -445,7 +476,7 @@ async def sign_out_other_devices(
 
 
 @router.get("/auth/me")
-async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)) -> dict:
     return await _serialize_user(db, user)
 
 
@@ -455,7 +486,7 @@ class UpdateMeIn(BaseModel):
 
 @router.patch("/auth/me")
 async def update_me(
-    payload: UpdateMeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    payload: UpdateMeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)
 ) -> dict:
     """Let a mobed correct their own display name from the profile screen.
     Phone stays read-only here - it is the sign-in identity, and it is the
@@ -510,7 +541,7 @@ async def put_daily_report(
 
 @router.get("/me/preferences")
 async def get_preferences(
-    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)
 ) -> dict:
     """Someone who has never opened Settings has no row; they get the
     defaults rather than a 404, so the client has one shape to render."""
@@ -593,6 +624,12 @@ def _agyary_summary(a: Agyary) -> dict:
     }
 
 
+async def _has_membership(db: AsyncSession, user: User) -> bool:
+    """Whether this mobed has ever joined a fire temple: the first join is the
+    end of signing up."""
+    return (await db.execute(select(AgyaryUser.agyary_id).where(AgyaryUser.user_id == user.id))).first() is not None
+
+
 @router.get("/agyaries/search")
 async def search_agyaries(q: str = Query(default=""), db: AsyncSession = Depends(get_db)) -> list[dict]:
     agyaries = await mobed_dashboard.search_agyaries(db, q)
@@ -601,12 +638,16 @@ async def search_agyaries(q: str = Query(default=""), db: AsyncSession = Depends
 
 @router.post("/agyaries/{agyary_id}/join")
 async def join_agyari(
-    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_user)
 ) -> dict:
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
         raise HTTPException(status_code=404, detail="That fire temple could not be found.")
+    first = not await _has_membership(db, user)
     await mobed_auth.ensure_agyary_membership(db, agyary_id, user)
+    # A new mobed has finished signing up: the admins are asked to approve them (D9).
+    if first:
+        await mobed_access.tell_admins_of_request(db, get_settings(), user, agyary)
     await db.commit()
     # Include the agyari (with status) so the client knows whether an
     # activation step is still needed for an unclaimed seed entry.
@@ -625,7 +666,7 @@ async def activate_agyari(
     agyary_id: int,
     payload: ActivateAgyaryIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_signed_in_user),
 ) -> dict:
     """Claim + set up an unclaimed seed agyari. The mobed must already be a
     member (they join first). Confirms/corrects the stale seed details and
@@ -660,7 +701,7 @@ class CreateAgyaryIn(BaseModel):
 async def create_agyari(
     payload: CreateAgyaryIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_signed_in_user),
 ) -> dict:
     """Creation fallback: the agyari isn't in the seed list at all. Same
     activation outcome (born active), then the creating mobed joins it. Every
@@ -674,7 +715,10 @@ async def create_agyari(
         name=payload.name, city=payload.city,
         address=payload.address, contact_phone=payload.contact_phone,
     )
+    first = not await _has_membership(db, user)
     await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
+    if first:
+        await mobed_access.tell_admins_of_request(db, get_settings(), user, agyary)
     await db.commit()
     return {"user": await _serialize_user(db, user), "agyary": _agyary_summary(agyary)}
 

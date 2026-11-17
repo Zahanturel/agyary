@@ -19,7 +19,7 @@ import { clearAllDrafts } from "./drafts.js";
 import { calendarHash, boardHash } from "./calendar.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
 import { chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline, flashError } from "./ui.js";
-import { loadSessionExtras, signedIn } from "./session.js";
+import { loadSessionExtras, signedIn, hasAccess } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
 import { renderCalendarScreen } from "./screens/calendar.js";
@@ -32,6 +32,8 @@ import { renderMemorial } from "./screens/memorial.js";
 import { renderMemorialEdit } from "./screens/memorial_edit.js";
 import { renderReminders } from "./screens/reminders.js";
 import { renderAdmin } from "./screens/admin.js";
+import { renderAdminMobeds } from "./screens/admin_mobeds.js";
+import { renderWaiting } from "./screens/waiting.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
@@ -41,6 +43,8 @@ import { refreshNotifications, setupNotifications } from "./notifications.js";
 // `open: true` needs no session.
 route("#/login", renderLogin, { open: true });
 route("#/onboarding", renderOnboarding);
+// A mobed an admin has not let in yet, or has switched off (DECISIONS D9).
+route("#/waiting", renderWaiting);
 
 // `tab` puts the screen under a bottom tab and shows the tab bar. Every screen
 // has one except Settings (the menu and what opens from it), sign-in and
@@ -54,6 +58,7 @@ route("#/board/:mode/:date", renderMachiCalendarScreen, { tab: "machi" });
 route("#/menu", renderMenu, { parent: homeHash });
 // For the numbers in ADMIN_PHONES only (the server enforces it; the menu entry just hides).
 route("#/admin", renderAdmin, { parent: "#/menu" });
+route("#/admin/mobeds", renderAdminMobeds, { parent: "#/admin" });
 
 // `parent` is where Back goes when there is nothing behind the screen (a
 // reload, a shared link) - see router.back(). Screens with a parent get the
@@ -101,6 +106,11 @@ setGuard(async (matched) => {
   // Signed in but not yet at a fire temple: every screen is scoped to one.
   const hasAgyary = (state.user.agyaries || []).length > 0;
   if (!hasAgyary && matched.pattern !== "#/onboarding") return "#/onboarding";
+
+  // Waiting for an admin's approval, or switched off (D9): this one screen,
+  // once a fire temple is chosen. The server refuses everything else anyway.
+  if (!hasAccess()) return matched.pattern === "#/waiting" || matched.pattern === "#/onboarding" ? null : "#/waiting";
+  if (matched.pattern === "#/waiting") return "#/calendar";
   return null;
 });
 
@@ -187,7 +197,7 @@ async function boot() {
   }
   await start();
   // What a mobed must not miss goes in front of them as the app opens.
-  if (signedIn() && !state.offline) refreshNotifications({ popup: true });
+  if (signedIn() && !state.offline && hasAccess()) refreshNotifications({ popup: true });
 }
 
 // Signal came back after an offline boot. Take the session live and
@@ -203,6 +213,15 @@ window.addEventListener("mobed:signed-out", () => {
   state.offline = false;
   flashError("You have been signed out. Please sign in again.");
   location.hash = "#/login";
+});
+
+// The server says this mobed may not use the app (D9): waiting for approval,
+// or switched off while it was open. The one screen that says so.
+window.addEventListener("mobed:access", (e) => {
+  if (!state.user || state.user.access === e.detail) return;
+  state.user.access = e.detail;
+  saveSession();
+  navigate("#/waiting", { replace: true });
 });
 
 window.addEventListener("offline", paintOffline);

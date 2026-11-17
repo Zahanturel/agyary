@@ -31,7 +31,7 @@ from agyary.messaging.geh_times import IST
 from agyary.models import (
     AgyaryUser, AppNotification, Customer, Machi, Memorial, MemorialObservance, Notification, Service, User,
 )
-from agyary.models.enums import SLOT_RELEASING_STATUSES
+from agyary.models.enums import ACCESS_ON, SLOT_RELEASING_STATUSES
 from agyary.services import guardrails, mobed_dashboard, reminders, wa_send
 
 logger = logging.getLogger(__name__)
@@ -223,7 +223,8 @@ async def run(
     link = f"#/calendar/day/{tomorrow.isoformat()}"
 
     users = (await db.execute(
-        select(User).where(User.daily_report.is_(True), User.is_active.is_(True)).order_by(User.id)
+        select(User).where(User.daily_report.is_(True), User.is_active.is_(True), User.access == ACCESS_ON)
+        .order_by(User.id)
     )).scalars().all()
     made = 0
     paused = await guardrails.paused_reason(db) if users else None

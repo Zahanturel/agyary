@@ -144,6 +144,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Manual reminders (a `wa.me` link the mobed taps) | **Live** | none |
 | In-app notifications, closing notices, Reminders list/notice | **Live** | none |
 | Admin screen, pause switch, spend caps, alerts | **Live** | `ADMIN_PHONES` set |
+| Approve new mobeds, turn any mobed off and on (D9) | **Built 17 Nov 2026** | Admin -> Mobeds |
 | Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
 | Automatic WhatsApp reminders | **Live** (13 Oct 2026, owner decision D4) | `REMINDERS_SEND_MODE=live`, `REMINDERS_ALLOWLIST=*`. Each family still needs its mobed to record consent; each account has its own switch (`users.automatic_reminders`) |
 | Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set |
@@ -176,6 +177,7 @@ sending is off. Settings that matter operationally:
 | `DELETED_ACCOUNT_COOLDOWN_DAYS` | 30 | how long a number that deleted its account cannot send schedules from our number |
 | `ANDROID_PACKAGE_NAME` / `ANDROID_CERT_FINGERPRINTS` | the app / the upload key | what `/.well-known/assetlinks.json` lists; add Play's signing key after the first upload |
 | `ADMIN_PHONES` | empty | admin screen, pause switch, alerts |
+| `SUPPORT_PHONE` | empty | the WhatsApp number shown to a mobed waiting for approval or switched off (D9) |
 | `OTP_MODE` / `OTP_*` | `off` | sign-in by WhatsApp code and its limits |
 | `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID` | empty | needed to send anything; server `.env` only |
 | `APP_DEBUG` | false | `true` only on a laptop: it enables a sign-in bypass and `/docs`. Refused at startup when `APP_ENV=production` |

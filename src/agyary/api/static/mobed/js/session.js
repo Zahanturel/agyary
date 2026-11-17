@@ -6,10 +6,46 @@
  * and how they want dates displayed.
  */
 
-import { getPreferences, calendarOptions } from "./api.js";
-import { state, saveSession } from "./state.js";
-import { refreshHeader, chrome } from "./ui.js";
+import { getPreferences, calendarOptions, logout } from "./api.js";
+import { state, saveSession, clearSession, forgetLastPhone } from "./state.js";
+import { refreshHeader, chrome, showError } from "./ui.js";
 import { navigate } from "./router.js";
+import { clearAllDrafts } from "./drafts.js";
+
+/** Sign this phone out, from Settings or the waiting screen. `btn` is the
+ *  button pressed: off while it runs, back on if it could not be done. */
+export async function signOut(btn) {
+  btn.disabled = true;   // one sign-out per tap; the page reloads when it is done
+  // The server has to clear the refresh cookie - it's httpOnly, so
+  // dropping the in-memory token alone would sign you back in on the
+  // next load.
+  try {
+    await logout();
+  } catch (e) {
+    // Only the server can clear that cookie, so with no answer the next
+    // launch would sign this phone straight back in. Say so (FE-04).
+    if (e.status === 0 || e.status >= 500) {
+      btn.disabled = false;
+      return showError("Could not sign out, because Mobed Diary can't be reached. "
+        + "Please try again when you have signal.");
+    }
+  }
+  clearSession();
+  clearAllDrafts();
+  forgetLastPhone();
+  state.accessToken = null;
+  state.user = null;
+  state.offline = false;
+  state.preferences = null;
+  location.hash = "#/login";
+  location.reload();
+}
+
+/** Whether an admin has let this mobed use the app (DECISIONS D9). A session
+ *  saved before access existed has none, and the server is the judge anyway. */
+export function hasAccess() {
+  return !state.user || !state.user.access || state.user.access === "on";
+}
 
 export async function loadSessionExtras() {
   // Preferences drive every calendar label, so a failure here must not take
