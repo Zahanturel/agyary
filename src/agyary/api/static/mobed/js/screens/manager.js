@@ -93,7 +93,7 @@ export function renderPlacePick(back) {
         <div><strong>${esc(p.name)}</strong></div>
         <div class="addr">${esc(placeLine(p))}${p.run_by ? ` - ${esc(p.run_by)}` : ""}</div>
       </div>`).join("") + (q ? "" : `<p class="meta" style="margin-top:8px">Not here? Please get in touch, and we
-        will add it.</p>`);
+        will add it.</p><div class="action-bar">${contactHtml()}</div>`);
     results.querySelectorAll("[data-i]").forEach(row => {
       row.onclick = () => confirmPlace(places[+row.dataset.i]);
     });
@@ -112,7 +112,8 @@ function confirmPlace(p) {
     html: `
       <p class="meta" style="margin-top:0">${esc(placeLine(p))}</p>
       <p>You will be its manager in Mobed Diary. The admin checks this before you can start.</p>
-      <p class="meta">This account will then be for the Doongerwadi only. A mobed uses a different number.</p>
+      <p class="meta">This account is then for ${esc(p.name)} only. If you are also a mobed, please use another
+        number for that.</p>
       <div class="stack">
         <button type="button" id="fpYes">Yes, I work here</button>
         <button type="button" class="ghost" id="fpNo">Cancel</button>

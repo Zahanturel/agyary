@@ -38,8 +38,8 @@ function placeRow(p) {
   return `
     <div class="section-bar" data-place="${p.id}">
       <div class="sb-text"><b>${esc(p.name)}${p.is_active ? "" : ` <span class="tag grey">Off</span>`}</b>
-        <span>${esc(p.kind_label)} - ${esc(p.city)}${p.location ? "" : " - not on the map"}</span>
-        <span>${esc(managersText(p.managers))}</span></div>
+        <span style="display:block">${esc(p.kind_label)} - ${esc(p.city)}${p.location ? "" : " - not on the map"}</span>
+        <span style="display:block">${esc(managersText(p.managers))}</span></div>
       <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
     </div>`;
 }

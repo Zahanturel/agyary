@@ -63,7 +63,7 @@ const isManager = (m) => m.account_kind === "funeral_manager";
 function row(m) {
   const where = isManager(m)
     ? (m.funeral_places.length
-      ? m.funeral_places.map(p => `Manager at <b>${esc(p.name)}</b>${p.city && !p.name.includes(p.city) ? `, ${esc(p.city)}` : ""}`).join("; ")
+      ? m.funeral_places.map(p => `Manager at <strong>${esc(p.name)}</strong>${p.city && !p.name.includes(p.city) ? `, ${esc(p.city)}` : ""}`).join("; ")
       : "Doongerwadi manager, no place")
     : m.agyaries.length ? m.agyaries.map(esc).join(", ") : "No fire temple chosen yet";
   const when = m.signed_up ? `Signed up ${esc(gregShort(m.signed_up.slice(0, 10)))}` : "";

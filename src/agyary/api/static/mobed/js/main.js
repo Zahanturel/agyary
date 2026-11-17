@@ -127,7 +127,7 @@ setGuard(async (matched) => {
     if (matched.pattern === "#/menu") return "#/manager/settings";
     if (matched.pattern.startsWith("#/manager")) return null;
     if (!["#/calendar", "#/waiting", "#/onboarding"].includes(matched.pattern)) {
-      flashInfo("That part of Mobed Diary is for mobeds. This is your Doongerwadi's page.");
+      flashInfo("That part of Mobed Diary is for mobeds. This is your own page.");
     }
     return "#/manager";
   }
