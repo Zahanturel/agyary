@@ -24,6 +24,62 @@ working in this checkout, and each is checked before the next starts.
 - **Requests** on the agyari side are **a fourth bottom tab** beside Machi, Calendar and Behdins,
   with the red count on it. (This changes D7's three tabs; record it in DECISIONS when built.)
 
+## Beyond R3: the owner's ideas (18 Nov 2026, to discuss before planning)
+
+Not decided and not planned; written down so nothing is lost. To be talked through with the owner
+when R3 is done.
+
+- **A behdin (family) app (R4):** families see the agyaries and mobeds in the system, choose them,
+  and book services directly. Free for behdins.
+- **Each fire temple lists the services it offers** (and prices), set up at sign-up. The app
+  already has a per-agyari service catalog (`services`: name, default price, mobeds needed,
+  duration), seeded from a standard list, so this is mostly a setup screen.
+- **Payment requests from mobed to behdin**, in the app and outside it (WhatsApp, GPay / any UPI
+  app), e.g. "this is your memorial, this is the bill". Works for families who never install the
+  app, including those who come through a Doongerwadi.
+- **A chat between behdin and mobed** in the app, with payments inside it.
+- The paid / unpaid chip might go once payments are tracked by the app.
+
+What is already in the code: `agyaries.upi_id` and `qr_code_url`, a `payments` table with
+`upi_intent_link` and `upi_transaction_ref`, and `generate_upi_link()` in
+`messaging/booking_service.py` (from the old WhatsApp bot).
+
+Points to settle when it is discussed:
+- **Money straight to the mobed's (or agyari's) own UPI ID** through a UPI link or QR is free and
+  needs no licence: the money never passes through us. But a plain UPI link cannot tell the app the
+  money arrived, so the mobed (or the family, with the UPI reference) still marks it paid. That is
+  why the paid chip should stay until something confirms payments automatically.
+- **Automatic confirmation** needs a payment gateway (Razorpay, Cashfree and the like): a fee per
+  payment (about 2%), and each mobed or agyari signs up and does KYC with the gateway. **Collecting
+  money ourselves and paying it out** would make us a payment aggregator under RBI rules: not
+  something to take on.
+- **Sending the bill to a family not in the app:** by hand from the mobed's own WhatsApp (free,
+  works today) or from our WhatsApp number (needs an approved Utility template, costs per message,
+  and the consent rules apply).
+- **Chat** needs behdin accounts first (R4), plus notifications, privacy and abuse handling; until
+  then WhatsApp is the chat.
+
+**The owner's later idea (18 Nov 2026): money through the platform, with a platform fee (about
+10%), and automated accounting.**
+- **The fee is always shown, never hidden.** India's Consumer Protection (E-Commerce) Rules 2020
+  and the 2023 guidelines on dark patterns ban hidden charges and fees added at the last step; and
+  in a small community a hidden cut on funeral prayers would cost trust. Two honest ways:
+  - a **commission out of the mobed's payout** (the family pays exactly the mobed's price; the mobed
+    agrees to the commission in writing when joining and sees it on every payout), or
+  - a **small fee shown at checkout** before paying ("Booking fee").
+  Either can sit alongside the agyari subscription.
+- **We never hold the money.** Holding and paying out others' money needs RBI authorisation as a
+  payment aggregator (out of reach). Instead a gateway's **split payments** (Razorpay Route,
+  Cashfree split and the like): the family pays, the gateway splits instantly (mobed's share to the
+  mobed's KYC'd bank account, the fee to ours) and tells our server, which also makes "paid"
+  automatic.
+- **Accounting:** a ledger of every payment, fee, payout and refund, reconciled daily against the
+  gateway's settlement report; monthly reports, invoices, and a statement per mobed.
+- **First, with a CA:** a registered business (LLP or private limited) and business bank account;
+  GST registration (the platform fee is a taxable service; e-commerce operator rules such as GST
+  section 52 and income-tax 194-O may apply; whether a mobed's religious services are GST-exempt
+  is for the CA); terms of use and a fee agreement with mobeds and agyaries; refunds and disputes.
+
 ## Rules for every step
 
 - **Live production app.** Put things where the owner said; if a spec is unclear, stop and ask.
