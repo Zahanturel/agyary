@@ -13,7 +13,11 @@
 //
 // Routing lives in the client (hash-based), so every route is served by
 // "/mobed" itself - no per-route entries are needed or possible here.
-const CACHE_NAME = "mobed-shell-v76";
+//
+// Leaflet (/mobed-app/vendor/leaflet/) is not in the shell: it is loaded only
+// when a screen shows a map, and a map needs the network for its tiles anyway.
+// Offline, the picker says the map could not load.
+const CACHE_NAME = "mobed-shell-v77";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -46,6 +50,7 @@ const SHELL_FILES = [
   "/mobed-app/js/service_toggle.js",
   "/mobed-app/js/install.js",
   "/mobed-app/js/push.js",
+  "/mobed-app/js/location_picker.js",
   "/mobed-app/js/screens/login.js",
   "/mobed-app/js/screens/onboarding.js",
   "/mobed-app/js/screens/calendar.js",
@@ -61,6 +66,7 @@ const SHELL_FILES = [
   "/mobed-app/js/screens/admin_mobeds.js",
   "/mobed-app/js/screens/waiting.js",
   "/mobed-app/js/screens/menu.js",
+  "/mobed-app/js/screens/agyari_location.js",
   "/mobed-app/js/screens/slip.js",
   "/mobed-app/js/screens/review.js",
 ];

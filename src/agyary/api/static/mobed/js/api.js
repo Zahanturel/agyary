@@ -186,6 +186,11 @@ export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponen
 export const joinAgyary = (id) => post(`/agyaries/${id}/join`);
 export const activateAgyary = (id, body) => post(`/agyaries/${id}/activate`, body);
 export const createAgyary = (body) => post("/agyaries", body);
+/** Where a fire temple is (D10): its own mobeds and the admin read it and move its pin. */
+export const getAgyaryLocation = (aid) => get(`/agyaries/${aid}/location`);
+export const putAgyaryLocation = (aid, latitude, longitude) => put(`/agyaries/${aid}/location`, { latitude, longitude });
+/** An address or area on OpenStreetMap, asked by our server. */
+export const searchPlaces = (q) => get(`/places/search?q=${encodeURIComponent(q)}`);
 
 
 /** This mobed's services. With a window it is that window, past days

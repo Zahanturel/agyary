@@ -35,6 +35,7 @@ import { renderAdmin } from "./screens/admin.js";
 import { renderAdminMobeds } from "./screens/admin_mobeds.js";
 import { renderWaiting } from "./screens/waiting.js";
 import { renderMenu } from "./screens/menu.js";
+import { renderAgyariLocation } from "./screens/agyari_location.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
@@ -56,6 +57,8 @@ route("#/calendar/:mode/:date", renderCalendarScreen, { tab: "calendar" });
 route("#/board", renderMachiCalendarScreen, { tab: "machi" });
 route("#/board/:mode/:date", renderMachiCalendarScreen, { tab: "machi" });
 route("#/menu", renderMenu, { parent: homeHash });
+// Where the mobed's fire temple is on the map (D10), from Settings.
+route("#/fire-temple/location", renderAgyariLocation, { parent: "#/menu" });
 // For the numbers in ADMIN_PHONES only (the server enforces it; the menu entry just hides).
 route("#/admin", renderAdmin, { parent: "#/menu" });
 route("#/admin/mobeds", renderAdminMobeds, { parent: "#/admin" });

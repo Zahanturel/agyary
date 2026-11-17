@@ -29,6 +29,12 @@ const PARSI_SYSTEMS = [
   ["kadmi", "Kadmi"],
 ];
 
+/** Where the fire temple is, in a few words (D10). */
+function locationText(location) {
+  if (!location) return "Not on the map yet";
+  return location.source === "pin" ? "Pinned on the map" : "Only the town so far - please move the pin";
+}
+
 export async function renderMenu() {
   chrome(true);
   refreshHeader();
@@ -66,8 +72,11 @@ export async function renderMenu() {
             <div class="fv">${esc(agyary.name)}</div></div>
           <div class="fact"><div class="fl">Address</div>
             <div class="fv">${esc([agyary.address, agyary.city].filter(Boolean).join(", ") || "-")}</div></div>
+          <div class="fact"><div class="fl">Location</div>
+            <div class="fv">${locationText(agyary.location)}</div></div>
         ` : ""}
       </div>
+      ${agyary ? `<div style="margin-top:10px"><button class="secondary small" id="mEditLocation">Edit location</button></div>` : ""}
     </div>
 
     <div class="card">
@@ -210,6 +219,8 @@ export async function renderMenu() {
     }
   };
 
+  const editLocation = document.getElementById("mEditLocation");
+  if (editLocation) editLocation.onclick = () => navigate("#/fire-temple/location");
   document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
   const adminBar = document.getElementById("mAdminBar");
   if (adminBar) adminBar.onclick = () => navigate("#/admin");

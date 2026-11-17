@@ -12,3 +12,7 @@
 *.woff binary
 *.woff2 binary
 *.apk binary
+
+# Third-party files kept exactly as published (Leaflet's stylesheet has CRLF
+# line endings): never translated, so they match their published hashes.
+src/agyary/api/static/mobed/vendor/** -text

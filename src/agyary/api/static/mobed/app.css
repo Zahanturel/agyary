@@ -670,3 +670,21 @@ body.sheet-open { overflow: hidden; }
 .action-bar { display: flex; align-items: stretch; gap: var(--space-2); margin-top: var(--space-3); }
 .action-bar > button, .action-bar > a.button { flex: 1 1 0; min-width: 0; padding-left: var(--space-2);
   padding-right: var(--space-2); line-height: 1.2; }
+
+/* --- Where a fire temple is: the map picker (location_picker.js) ------------- */
+.loc-search { display: flex; gap: var(--space-2); align-items: stretch; }
+.loc-search input { flex: 1 1 auto; min-width: 0; }
+.loc-search button { flex: 0 0 auto; }
+.loc-results { margin-top: var(--space-2); }
+.loc-results .loc-from { margin: 0 0 var(--space-2); font-size: var(--text-xs); }
+.loc-tools { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+.loc-tools > button { flex: 1 1 auto; }
+.loc-map { position: relative; height: 320px; border: 2px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; background: var(--ink-100); z-index: 0; }
+.loc-map.tall { height: 52vh; min-height: 300px; max-height: 560px; }
+.loc-map .loc-map-msg { margin: var(--space-4); }
+.loc-status { margin: var(--space-2) 0 0; }
+.loc-map.leaflet-container { font-family: var(--font-sans); }
+/* Big enough to hit: the people using this are not at home with phones. */
+.loc-map.leaflet-container .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 26px; }
+.loc-map.leaflet-container .leaflet-control-attribution { font-size: 13px; }

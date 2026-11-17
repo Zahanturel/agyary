@@ -98,6 +98,10 @@ class _NoQueryStrings(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(_NoQueryStrings())
 
 
+# The map tiles of the fire temple's location picker (static/mobed/js/location_picker.js).
+OSM_TILES = "https://tile.openstreetmap.org"
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     response = await call_next(request)
@@ -109,20 +113,23 @@ async def security_headers(request, call_next):
     # browser is told to run nothing but our own files. That turns any injected
     # markup into text instead of code. Styles stay inline because the screens
     # set style attributes. frame-ancestors is the modern X-Frame-Options.
-    # The one exception: once the bot check is configured, Cloudflare's
-    # Turnstile script and its frame, for the sign-in code request (D3).
+    # The exceptions: once the bot check is configured, Cloudflare's
+    # Turnstile script and its frame, for the sign-in code request (D3); and
+    # OpenStreetMap's map tiles, as images only, for the fire temple's map
+    # (D10). Leaflet itself is served from our own folder.
     turnstile = bot_check.CHALLENGE_ORIGIN if get_settings().turnstile_site_key.strip() else None
     script_src = f"'self' {turnstile}" if turnstile else "'self'"
     frame_src = turnstile or "'none'"
     response.headers["Content-Security-Policy"] = (
         f"default-src 'self'; script-src {script_src}; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; "
+        f"img-src 'self' data: {OSM_TILES}; font-src 'self'; connect-src 'self'; manifest-src 'self'; "
         f"worker-src 'self'; frame-src {frame_src}; object-src 'none'; base-uri 'none'; "
         "form-action 'self'; frame-ancestors 'none'"
     )
-    # Camera, microphone, location and payment are never needed. The clipboard
-    # and contacts are, so they are not listed here.
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    # Camera, microphone and payment are never needed. The clipboard and
+    # contacts are, so they are not listed here. Location only for our own page:
+    # "I'm at the agyari now" puts the fire temple's pin where the phone is.
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self), payment=(), usb=()"
     if not settings.app_debug:
         # Production is HTTPS only (Cloudflare). Told once, a browser refuses
         # to talk to it over plain HTTP for six months. Not sent in debug, where

@@ -15,6 +15,7 @@ import { esc, phoneField, readOptionalPhone } from "../util.js";
 import { navigate } from "../router.js";
 import { refreshHeader } from "../ui.js";
 import { flagProblems } from "../fielderrors.js";
+import { mountLocationPicker } from "../location_picker.js";
 
 /**
  * The fire temple's details as typed into the set-up or the new-temple form
@@ -166,21 +167,35 @@ function renderCreate(prefillName) {
       <label>City</label><input type="text" id="crCity">
       <label>Address</label><input type="text" id="crAddr">
       <label>Contact phone (optional)</label>${phoneField("crPhone")}
-      <div style="margin-top:14px" class="row tight">
-        <button id="crGo">Add it</button>
-        <button class="ghost" id="crBack">Back to search</button></div>
-    </div>`;
+    </div>
+    <div class="card">
+      <h2>Where is it? (optional)</h2>
+      <p class="meta">Put the pin on the fire temple. You can also do this later, from Settings.</p>
+      <div id="crPicker"></div>
+    </div>
+    <div class="row tight" style="margin-bottom:14px">
+      <button id="crGo">Add it</button>
+      <button class="ghost" id="crBack">Back to search</button></div>`;
   // A different view under the same address: each way opens at its top.
   toTop();
-  document.getElementById("crBack").onclick = () => { renderOnboarding(); toTop(); };
+  // The map is only drawn here, so Leaflet loads only for this step.
+  const picker = mountLocationPicker(document.getElementById("crPicker"), {
+    suggest: () => [document.getElementById("crName").value.trim(), document.getElementById("crCity").value.trim()]
+      .filter(Boolean).join(", "),
+  });
+  document.getElementById("crBack").onclick = () => { picker.destroy(); renderOnboarding(); toTop(); };
   document.getElementById("crGo").onclick = async (ev) => {
     const btn = ev.currentTarget;
     if (btn.disabled) return;
     const body = readDetails("cr");
     if (!body) return;
+    // Optional: only if a pin was put down.
+    const pin = picker.get();
+    if (pin) body.location = pin;
     btn.disabled = true;
     try {
       const res = await createAgyary(body);
+      picker.destroy();
       state.user = res.user;
       state.currentAgyaryId = res.agyary.id;
       refreshHeader();
