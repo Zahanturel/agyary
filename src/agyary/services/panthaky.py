@@ -243,3 +243,39 @@ async def request_recipients(db: AsyncSession, settings: Settings, agyary_id: in
     if it has none whose access is on, its mobeds whose access is on. A claim
     to be panthaky changes nothing here until it is confirmed."""
     return await panthakys_of(db, settings, agyary_id) or await _members(db, settings, agyary_id, ROLE_MOBED)
+
+
+# Whether a fire temple can be reached at all, for the manager's list (Step 4),
+# by the same rule as request_recipients: "panthaky" (a confirmed panthaky whose
+# access is on), else "mobeds" (approved mobeds only), else "nobody" in the app.
+REACH_PANTHAKY, REACH_MOBEDS, REACH_NOBODY = "panthaky", "mobeds", "nobody"
+
+
+async def reach_of(db: AsyncSession, settings: Settings, agyary_ids) -> dict[int, str]:
+    """For each fire temple in ``agyary_ids``, who a request to it would reach."""
+    from agyary.services import mobed_access   # here: mobed_access imports this module
+
+    ids = list(agyary_ids)
+    out = {i: REACH_NOBODY for i in ids}
+    if not ids:
+        return out
+    rows = (
+        await db.execute(
+            select(AgyaryUser.agyary_id, AgyaryUser.role, User)
+            .join(User, User.id == AgyaryUser.user_id)
+            .where(
+                AgyaryUser.agyary_id.in_(ids),
+                AgyaryUser.role.in_((ROLE_PANTHAKY, ROLE_MOBED)),
+                AgyaryUser.is_active.is_(True),
+                User.is_active.is_(True),
+            )
+        )
+    ).all()
+    for agyary_id, role, user in rows:
+        if not mobed_access.has_access(settings, user):
+            continue
+        if role == ROLE_PANTHAKY:
+            out[agyary_id] = REACH_PANTHAKY
+        elif out[agyary_id] == REACH_NOBODY:
+            out[agyary_id] = REACH_MOBEDS
+    return out

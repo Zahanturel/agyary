@@ -30,7 +30,7 @@ from agyary.api.routes.mobed import _serialize_user, get_current_manager, get_us
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import FuneralPlace, User
-from agyary.services import funeral_places, funeral_records
+from agyary.services import funeral_places, funeral_records, funeral_requests
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
 
@@ -212,3 +212,39 @@ async def update_record(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await db.commit()
     return await _record_response(db, record)
+
+
+# ---------------------------------------------------------------------------
+# Choosing the fire temple (D10): suggested nearest first, or any by search
+# ---------------------------------------------------------------------------
+@router.get("/manager/records/{record_id}/agyaries")
+async def suggested_agyaries(
+    record_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+) -> dict:
+    """The fire temples to suggest for this record: the family's preferred one
+    first, then within 500 km of the place, nearest first, each saying whether
+    a request would reach anyone there."""
+    record = await _own_record(db, user, record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    return await funeral_requests.suggested(db, get_settings(), place, record.preferred_agyary_id)
+
+
+@router.get("/manager/agyaries/search")
+async def search_agyaries_for_manager(
+    q: str = Query(default="", max_length=200),
+    place_id: int | None = Query(default=None),
+    preferred_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_manager),
+) -> dict:
+    """Any fire temple in the app by name or town, with its distance from the
+    manager's place (``place_id``, or their first) where both are on the map."""
+    rate_limit.enforce_key(f"funeral_agyari_search:{user.id}", max_requests=60, window_seconds=60)
+    if place_id is not None:
+        place = await funeral_records.managed_place(db, user.id, place_id)
+    else:
+        places = await funeral_places.places_of(db, user.id)
+        place = places[0] if places else None
+    if place is None:
+        raise HTTPException(status_code=404, detail="That place could not be found.")
+    return {"agyaries": await funeral_requests.search(db, get_settings(), place, q, preferred_id)}
