@@ -29,6 +29,7 @@ import { signOut } from "../session.js";
 import { clearAllDrafts } from "../drafts.js";
 import { shellVersion } from "../update.js";
 import { flagProblems } from "../fielderrors.js";
+import { paintPushCard } from "../push_card.js";
 
 /** A way to reach the person who runs Mobed Diary, in words and (if the
  *  server has SUPPORT_PHONE) a WhatsApp button. */
@@ -212,6 +213,11 @@ export function renderManagerSettings() {
     </div>
 
     <div class="card">
+      <h2>Notifications on this phone</h2>
+      <div id="msPush"><p class="meta">Checking...</p></div>
+    </div>
+
+    <div class="card">
       <h2>Text size</h2>
       <p class="meta">Makes the words in the app bigger on this phone.</p>
       <label class="choice"><input type="radio" name="msText" value="large" ${getTextSize() === "large" ? "checked" : ""}><span>Large</span></label>
@@ -229,6 +235,8 @@ export function renderManagerSettings() {
       <button class="ghost small" id="msDelete">Delete my account</button>
       <div id="msDeleteConfirm"></div>
     </div>`;
+  paintPushCard(document.getElementById("msPush"), navGuard(),
+    { what: "Mobed Diary has news for you" });
   shellVersion().then((v) => {
     const el = document.getElementById("msVersion");
     if (el && v) el.textContent = "App version " + v;

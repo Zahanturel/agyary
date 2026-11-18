@@ -26,6 +26,7 @@ import { esc } from "../util.js";
 import { shellVersion } from "../update.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
+import { paintPushCard } from "../push_card.js";
 
 const PARSI_SYSTEMS = [
   ["shenshai", "Shenshai"],
@@ -143,6 +144,11 @@ export async function renderMenu() {
     </div>
 
     <div class="card">
+      <h2>Notifications on this phone</h2>
+      <div id="mPush"><p class="meta">Checking...</p></div>
+    </div>
+
+    <div class="card">
       <div class="section-bar" id="mRemindersBar">
         <div class="sb-text"><b>Reminders</b>
           <span>Families to remind about memorial prayers</span></div>
@@ -169,6 +175,7 @@ export async function renderMenu() {
       <button class="ghost small" id="mDelete">Delete my account</button>
       <div id="mDeleteConfirm"></div>
     </div>`;
+  paintPushCard(document.getElementById("mPush"), alive, { what: "a Doongerwadi asks your fire temple for prayers" });
   shellVersion().then((v) => {
     const el = document.getElementById("mVersion");
     if (el && v) el.textContent = "App version " + v;

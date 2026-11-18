@@ -10,7 +10,8 @@ class PushSubscription(Base):
     """One phone or browser that has agreed to show this user's notifications
     even when the app is closed (web push, services/web_push.py).
 
-    For admins only for now: a new mobed waiting for approval (D9). The
+    Any account that is on can have them: an admin's (a new mobed waiting,
+    D9), a mobed's (a Doongerwadi's request for prayers, D10). The
     endpoint is the push service's address for that device; the two keys are
     the device's, to encrypt what is sent to it. A device that is gone (the
     push service answers 404 or 410) is deleted the first time we find out.

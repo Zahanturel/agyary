@@ -242,6 +242,82 @@ def test_the_key_maker_refuses_when_keys_exist(monkeypatch, capsys, keys):
     assert out.out == "" and "already set" in out.err
 
 
+# --- Every account, from Settings (D10, Phase 2 Step 4) ----------------------------
+
+async def test_a_mobed_turns_it_on_and_a_doongerwadis_request_reaches_their_phone(
+    client, db, seeded, keys, monkeypatch,
+):
+    """A mobed who is no admin turns notifications on from Settings; a
+    Doongerwadi's request to their fire temple then reaches the phone, and
+    what the phone shows says only which place asks which fire temple: no
+    departed's name, no family's name or number."""
+    from tests.funeral_helpers import FAMILY, form, manager
+
+    panthaky = {"Authorization": f"Bearer {(await sign_in(client, seeded['panthaky_phone']))['access_token']}"}
+    status = (await client.get("/api/mobed/me/push", headers=panthaky)).json()
+    assert status == {"configured": True, "public_key": keys, "devices": 0}
+    phone = Phone()
+    r = await client.post("/api/mobed/me/push/subscribe", json=phone.subscription(), headers=panthaky)
+    assert r.status_code == 200 and r.json()["devices"] == 1
+    # The admin page is still not theirs.
+    assert (await client.get("/api/mobed/admin/push", headers=panthaky)).status_code == 404
+
+    service = FakePushService(monkeypatch)
+    headers, _ = await manager(client, db)
+    rec = (await client.post("/api/mobed/manager/records", json=form(), headers=headers)).json()["record"]
+    r = await client.post(f"/api/mobed/manager/records/{rec['id']}/requests",
+                          json={"agyary_id": seeded["agyary_id"], "family_agreed": True}, headers=headers)
+    assert r.status_code == 200, r.text
+    (sent,) = service.sent
+    shown = phone.open(sent["data"])
+    assert shown == {
+        "title": "A request for prayers",
+        "body": "Doongerwadi (test) asks Goti Adarian for prayers.",
+        "url": "/mobed#/requests",
+        "tag": f"funeral-request-{r.json()['record']['requests'][0]['id']}",
+    }
+    raw = str(shown)
+    assert FAMILY[3:] not in raw and "Test Family" not in raw and "Rustom" not in raw
+
+    # Their own test button, and off again.
+    service.sent.clear()
+    r = await client.post("/api/mobed/me/push/test", headers=panthaky)
+    assert r.json() == {"sent": 1, "devices": 1} and phone.open(service.sent[0]["data"])["tag"] == "push-test"
+    r = await client.post("/api/mobed/me/push/unsubscribe", json={"endpoint": ENDPOINT}, headers=panthaky)
+    assert r.json()["devices"] == 0
+
+
+async def test_a_manager_can_turn_it_on_too_and_only_a_real_push_service_is_taken(client, db, seeded, keys):
+    from tests.funeral_helpers import manager
+
+    headers, _ = await manager(client, db)
+    assert (await client.get("/api/mobed/me/push", headers=headers)).json()["configured"] is True
+    r = await client.post("/api/mobed/me/push/subscribe", json=Phone().subscription(), headers=headers)
+    assert r.status_code == 200 and r.json()["devices"] == 1
+    r = await client.post("/api/mobed/me/push/subscribe", json=Phone("https://evil.example/x").subscription(),
+                          headers=headers)
+    assert r.status_code == 400
+
+
+async def test_an_account_that_is_not_on_cannot_turn_it_on_but_can_turn_it_off(client, db, seeded, keys):
+    body = await sign_in(client, NEW, approve=False)
+    headers = {"Authorization": f"Bearer {body['access_token']}"}
+    r = await client.post("/api/mobed/me/push/subscribe", json=Phone().subscription(), headers=headers)
+    assert r.status_code == 403 and r.headers["X-Mobed-Access"] == "pending"
+    assert (await client.post("/api/mobed/me/push/test", headers=headers)).status_code == 403
+    r = await client.post("/api/mobed/me/push/unsubscribe", json={"endpoint": ENDPOINT}, headers=headers)
+    assert r.status_code == 200 and r.json()["devices"] == 0
+
+
+async def test_without_keys_settings_says_it_is_not_set_up(client, seeded):
+    body = await sign_in(client, seeded["mobed_phone"])
+    headers = {"Authorization": f"Bearer {body['access_token']}"}
+    assert (await client.get("/api/mobed/me/push", headers=headers)).json() == {
+        "configured": False, "public_key": None, "devices": 0}
+    r = await client.post("/api/mobed/me/push/subscribe", json=Phone().subscription(), headers=headers)
+    assert r.status_code == 409
+
+
 # --- The phone's side -------------------------------------------------------------
 
 @pytest.mark.skipif(NODE is None, reason="Node is not installed")

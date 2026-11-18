@@ -55,6 +55,7 @@ from agyary.services import (
     reminders,
     template_text,
     wa_login,
+    web_push,
 )
 from agyary.services.phone import OptionalPhone, Phone
 
@@ -615,6 +616,81 @@ async def put_daily_report(
     user.daily_report = payload.enabled
     await db.commit()
     return {"daily_report": user.daily_report, "daily_report_whatsapp": get_settings().daily_report_send_mode == "live"}
+
+
+# ---------------------------------------------------------------------------
+# Notifications on this phone (web push, services/web_push.py), for every
+# account that is on: a mobed's (a Doongerwadi's request for prayers) and a
+# manager's, as well as an admin's. Each phone is turned on by itself.
+# ---------------------------------------------------------------------------
+class PushKeysIn(BaseModel):
+    p256dh: str = Field(min_length=20, max_length=200)
+    auth: str = Field(min_length=8, max_length=100)
+
+
+class PushSubscribeIn(BaseModel):
+    endpoint: str = Field(max_length=2000)
+    keys: PushKeysIn
+
+
+class PushUnsubscribeIn(BaseModel):
+    endpoint: str = Field(max_length=2000)
+
+
+NO_PUSH_KEYS = "Phone notifications are not set up on the server yet."
+
+
+@router.get("/me/push")
+async def my_push_status(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_account)) -> dict:
+    """Whether the server can send to phones, the public key a phone needs to
+    sign up, and how many of this account's phones are signed up."""
+    s = get_settings()
+    return {
+        "configured": web_push.configured(s),
+        "public_key": s.vapid_public_key.strip() or None,
+        "devices": await web_push.devices(db, user.id),
+    }
+
+
+@router.post("/me/push/subscribe")
+async def my_push_subscribe(
+    payload: PushSubscribeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_account),
+) -> dict:
+    rate_limit.enforce_key(f"push_subscribe:{user.id}", max_requests=20, window_seconds=60)
+    if not web_push.configured(get_settings()):
+        raise HTTPException(status_code=409, detail=NO_PUSH_KEYS)
+    # Only the browsers' own push services: this cannot be pointed anywhere else.
+    if not web_push.allowed_endpoint(payload.endpoint):
+        raise HTTPException(status_code=400, detail="This browser's notification service is not one we know.")
+    await web_push.save(db, user.id, payload.endpoint, payload.keys.p256dh, payload.keys.auth)
+    await db.commit()
+    return {"devices": await web_push.devices(db, user.id)}
+
+
+@router.post("/me/push/unsubscribe")
+async def my_push_unsubscribe(
+    payload: PushUnsubscribeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_account),
+) -> dict:
+    """Stop this phone. Open to an account that is off or waiting too: turning
+    notifications off is never refused."""
+    await web_push.remove(db, user.id, payload.endpoint)
+    await db.commit()
+    return {"devices": await web_push.devices(db, user.id)}
+
+
+@router.post("/me/push/test")
+async def my_push_test(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_account)) -> dict:
+    """A test notification to every phone this account turned it on for."""
+    rate_limit.enforce_key(f"push_test:{user.id}", max_requests=5, window_seconds=60)
+    s = get_settings()
+    if not web_push.configured(s):
+        raise HTTPException(status_code=409, detail=NO_PUSH_KEYS)
+    sent = await web_push.send_to_users(
+        db, s, [user.id], title="Mobed Diary", body="Notifications are working on this phone.",
+        url="/mobed", tag="push-test",
+    )
+    await db.commit()
+    return {"sent": sent, "devices": await web_push.devices(db, user.id)}
 
 
 @router.get("/me/preferences")

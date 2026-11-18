@@ -1,7 +1,9 @@
 """Web push: a notification on a phone even when Mobed Diary is closed.
 
-For admins only, for now: "a new mobed is waiting" (DECISIONS D9). An admin
-turns it on per phone from the admin screen; the browser asks the person, and
+For every account that is on (DECISIONS D9, D10): an admin's "a new mobed is
+waiting", and a mobed's "a Doongerwadi asks for prayers". Each person turns it
+on per phone from Settings (an admin also from the admin screen); the browser
+asks the person, and
 hands us an address at its push service (Google's for Chrome on Android,
 Apple's for an iPhone home-screen app, Mozilla's for Firefox) and two keys.
 We sign each send with our VAPID key and encrypt it with the device's keys.

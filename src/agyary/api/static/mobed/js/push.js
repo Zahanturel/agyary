@@ -2,14 +2,16 @@
 
 /**
  * Notifications on this phone even when Mobed Diary is closed (web push).
- * For admins only for now: "a new mobed is waiting" (DECISIONS D9).
+ * For every account that is on: an admin's "a new mobed is waiting" (D9), a
+ * mobed's "a Doongerwadi asks for prayers" (D10). Turned on from Settings
+ * (push_card.js), and by an admin also on the admin screen.
  *
  * The phone's browser asks the person first, then gives us an address at its
  * push service, which the server keeps (services/web_push.py). The service
  * worker shows what arrives (mobed-sw.js). Each phone is turned on by itself.
  */
 
-import { adminPush, adminPushSubscribe, adminPushUnsubscribe } from "./api.js";
+import { myPush, myPushSubscribe, myPushUnsubscribe } from "./api.js";
 import { detectPlatform, runningAsApp } from "./install.js";
 
 /** Why this browser cannot have notifications, in words for the person, or
@@ -78,7 +80,7 @@ export async function current() {
 export async function turnOn() {
   const blocked = blockerHere();
   if (blocked) throw new Error(blocked);
-  const status = await adminPush();
+  const status = await myPush();
   if (!status.configured || !status.public_key) {
     throw new Error("Phone notifications are not set up on the server yet.");
   }
@@ -107,7 +109,7 @@ export async function turnOn() {
     }
   }
   const json = sub.toJSON();
-  return adminPushSubscribe({ endpoint: json.endpoint, keys: json.keys });
+  return myPushSubscribe({ endpoint: json.endpoint, keys: json.keys });
 }
 
 /** Stop notifications on this phone, here and on the server. */
@@ -116,5 +118,5 @@ export async function turnOff() {
   if (!sub) return null;
   const endpoint = sub.endpoint;
   await sub.unsubscribe().catch(() => {});
-  return adminPushUnsubscribe(endpoint);
+  return myPushUnsubscribe(endpoint);
 }

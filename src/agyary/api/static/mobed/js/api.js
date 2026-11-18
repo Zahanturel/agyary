@@ -170,6 +170,11 @@ export const adminPush = () => get("/admin/push");
 export const adminPushSubscribe = (sub) => post("/admin/push/subscribe", sub);
 export const adminPushUnsubscribe = (endpoint) => post("/admin/push/unsubscribe", { endpoint });
 export const adminPushTest = () => post("/admin/push/test", {});
+// Notifications on this phone, for every account that is on (Settings).
+export const myPush = () => get("/me/push");
+export const myPushSubscribe = (sub) => post("/me/push/subscribe", sub);
+export const myPushUnsubscribe = (endpoint) => post("/me/push/unsubscribe", { endpoint });
+export const myPushTest = () => post("/me/push/test", {});
 export const authOptions = () => get("/auth/options");
 export const otpRequest = (phone, turnstileToken = null) =>
   post("/auth/otp/request", { phone, turnstile_token: turnstileToken });

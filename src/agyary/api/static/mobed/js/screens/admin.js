@@ -9,9 +9,9 @@
  */
 
 import {
-  adminOverview, adminSetPaused, adminSignOutEverywhere, adminEraseNumber, adminPush, adminPushTest,
+  adminOverview, adminSetPaused, adminSignOutEverywhere, adminEraseNumber,
 } from "../api.js";
-import * as push from "../push.js";
+import { paintPushCard } from "../push_card.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed,
 } from "../ui.js";
@@ -26,81 +26,6 @@ function flagPhone(id) {
 }
 
 const rupees = (n) => "Rs " + Number(n).toFixed(2);
-
-/** The "Notifications on this phone" card: a new mobed waiting shows on this
- *  phone even when the app is closed. Drawn into `box` once it knows. */
-async function paintPush(box, alive) {
-  const plural = (n) => `${n} phone${n === 1 ? "" : "s"}`;
-  let status, sub;
-  try {
-    [status, sub] = await Promise.all([adminPush(), push.current()]);
-  } catch (e) {
-    if (alive()) box.innerHTML = `<p class="meta">${esc(e.message)}</p>`;
-    return;
-  }
-  if (!alive()) return;
-  const again = () => paintPush(box, alive);
-
-  if (!status.configured) {
-    box.innerHTML = `<p class="meta">Not set up on the server yet. Once the server has its notification keys,
-      you can turn them on here.</p>`;
-    return;
-  }
-  const blocked = push.blockerHere();
-  if (blocked && !sub) {
-    box.innerHTML = `<p class="meta">${esc(blocked)}</p>
-      <div style="margin-top:10px"><button class="secondary small" id="admPushRetry">Check again</button></div>`;
-    document.getElementById("admPushRetry").onclick = again;
-    return;
-  }
-  if (sub) {
-    box.innerHTML = `<p class="meta"><b>On for this phone.</b> When a new mobed is waiting, it shows here even
-        when Mobed Diary is closed.${status.devices > 1 ? ` On for ${plural(status.devices)} in all.` : ""}</p>
-      <div class="action-bar" style="margin-top:10px">
-        <button class="small" id="admPushTest">Send a test</button>
-        <button class="ghost small" id="admPushOff">Turn off on this phone</button>
-      </div>`;
-    document.getElementById("admPushTest").onclick = async (ev) => {
-      const btn = ev.currentTarget;
-      btn.disabled = true;
-      try {
-        const r = await adminPushTest();
-        if (r.sent) showInfo(`Test sent to ${plural(r.sent)}. It should appear in a few seconds.`);
-        else showError("The test could not be delivered. Turn notifications off on this phone and on again.");
-      } catch (e) {
-        showError(e.message);
-      } finally {
-        btn.disabled = false;
-      }
-    };
-    document.getElementById("admPushOff").onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
-      try {
-        await push.turnOff();
-        showInfo("Notifications are off on this phone.");
-      } catch (e) {
-        showError(e.message);
-      }
-      if (alive()) again();
-    };
-    return;
-  }
-  box.innerHTML = `<p class="meta">Get a notification on this phone when a new mobed is waiting for approval,
-      even when Mobed Diary is closed.${status.devices ? ` On for ${plural(status.devices)} already.` : ""}</p>
-    <div style="margin-top:10px"><button class="small" id="admPushOn">Turn on for this phone</button></div>`;
-  document.getElementById("admPushOn").onclick = async (ev) => {
-    const btn = ev.currentTarget;
-    btn.disabled = true;
-    try {
-      await push.turnOn();
-      showInfo("Notifications are on for this phone. Try Send a test.");
-    } catch (e) {
-      btn.disabled = false;
-      return showError(e.message);
-    }
-    if (alive()) again();
-  };
-}
 
 function fact(label, value) {
   return `<div class="fact"><div class="fl">${esc(label)}</div><div class="fv">${value}</div></div>`;
@@ -235,7 +160,7 @@ export async function renderAdmin() {
 
   document.getElementById("admMobeds").onclick = () => navigate("#/admin/mobeds");
   document.getElementById("admFuneral").onclick = () => navigate("#/admin/funeral-places");
-  paintPush(document.getElementById("admPush"), alive);
+  paintPushCard(document.getElementById("admPush"), alive, { what: "a new mobed or manager is waiting for approval" });
 
   const askErase = document.getElementById("admEraseAsk");
   document.getElementById("admEraseFind").onclick = async (ev) => {

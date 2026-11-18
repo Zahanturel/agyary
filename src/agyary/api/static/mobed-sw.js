@@ -17,7 +17,7 @@
 // Leaflet (/mobed-app/vendor/leaflet/) is not in the shell: it is loaded only
 // when a screen shows a map, and a map needs the network for its tiles anyway.
 // Offline, the picker says the map could not load.
-const CACHE_NAME = "mobed-shell-v80";
+const CACHE_NAME = "mobed-shell-v81";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -50,6 +50,7 @@ const SHELL_FILES = [
   "/mobed-app/js/service_toggle.js",
   "/mobed-app/js/install.js",
   "/mobed-app/js/push.js",
+  "/mobed-app/js/push_card.js",
   "/mobed-app/js/location_picker.js",
   "/mobed-app/js/screens/login.js",
   "/mobed-app/js/screens/onboarding.js",
@@ -125,7 +126,8 @@ self.addEventListener("fetch", event => {
 });
 
 // --- Phone notifications (web push, services/web_push.py) ---------------------
-// For admins only for now: "a new mobed is waiting". The server sends a title,
+// For every account that is on (an admin's "a new mobed is waiting", a mobed's
+// "a Doongerwadi asks for prayers"). The server sends a title,
 // a body, the page to open and a tag; one of each tag shows at a time.
 self.addEventListener("push", event => {
   let data = {};

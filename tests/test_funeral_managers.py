@@ -33,6 +33,11 @@ MANAGER_MAY = {
     ("GET", "/api/mobed/notifications"),
     ("POST", "/api/mobed/notifications/seen"),
     ("GET", "/api/mobed/manager/place"),
+    # Notifications on this phone, for every account that is on.
+    ("GET", "/api/mobed/me/push"),
+    ("POST", "/api/mobed/me/push/subscribe"),
+    ("POST", "/api/mobed/me/push/unsubscribe"),
+    ("POST", "/api/mobed/me/push/test"),
     # Recording a death (Step 4).
     ("POST", "/api/mobed/manager/death-day"),
     ("GET", "/api/mobed/manager/records"),

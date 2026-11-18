@@ -17,7 +17,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api import rate_limit
-from agyary.api.routes.mobed import LocationIn, _checked_position, get_current_account
+from agyary.api.routes.mobed import (
+    LocationIn,
+    PushSubscribeIn,
+    PushUnsubscribeIn,
+    _checked_position,
+    get_current_account,
+)
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, AgyaryUser, FuneralPlace, LoginOtp, Notification, User
@@ -328,16 +334,6 @@ async def push_status(db: AsyncSession = Depends(get_db), admin: User = Depends(
     }
 
 
-class PushKeysIn(BaseModel):
-    p256dh: str = Field(min_length=20, max_length=200)
-    auth: str = Field(min_length=8, max_length=100)
-
-
-class PushSubscribeIn(BaseModel):
-    endpoint: str = Field(max_length=2000)
-    keys: PushKeysIn
-
-
 @router.post("/push/subscribe")
 async def push_subscribe(
     payload: PushSubscribeIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin),
@@ -350,10 +346,6 @@ async def push_subscribe(
     await web_push.save(db, admin.id, payload.endpoint, payload.keys.p256dh, payload.keys.auth)
     await db.commit()
     return {"devices": await web_push.devices(db, admin.id)}
-
-
-class PushUnsubscribeIn(BaseModel):
-    endpoint: str = Field(max_length=2000)
 
 
 @router.post("/push/unsubscribe")
