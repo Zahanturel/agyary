@@ -9,6 +9,9 @@
  *    confirm), four days or one, bungli, Geh-saarnu, Uthamna, mobeds wanted,
  *    the family's preferred fire temple, and one family contact.
  *  - The record: everything on it, its requests, and Send / Withdraw / Edit.
+ *    Once a fire temple accepts (Step 5): who accepted and where, and - only
+ *    if they ticked "Share my name and number" - their number with Call and
+ *    WhatsApp (the manager's own WhatsApp, a short message ready).
  *  - Choosing the fire temple: Suggested (nearest first) or Search all, then
  *    the tick that the family agreed, and Send.
  *
@@ -50,7 +53,7 @@ export function requestState(q) {
   const where = q.agyari ? q.agyari.name : "the fire temple";
   if (q.status === "waiting") return `Waiting at ${where} since ${when(q.sent_at)}`;
   if (q.status === "accepted" || q.status === "taken") {
-    return q.accepted_by ? `Accepted by ${q.accepted_by} (${where})` : `Accepted at ${where}`;
+    return q.accepted_by ? `Accepted by ${q.accepted_by} of ${where}` : `Accepted at ${where}`;
   }
   if (q.status === "declined") return `Declined by ${where}${q.decline_reason ? `: ${q.decline_reason}` : ""}`;
   if (q.status === "withdrawn") return `Withdrawn from ${where}`;
@@ -468,6 +471,25 @@ export async function renderRecordEdit({ id }) {
 
 // --- The record ---------------------------------------------------------------------
 
+/** Who accepted, and a way to reach them only if they shared their number. */
+function accepterHtml(rec, q) {
+  if (!q || !q.accepter_phone) {
+    return q ? `<p class="meta" style="margin:4px 0 0">They did not share their number. You can reach them through
+      ${esc(q.agyari ? q.agyari.name : "the fire temple")}.</p>` : "";
+  }
+  const me = state.user ? state.user.name : "";
+  const place = rec.funeral_place ? rec.funeral_place.name : "";
+  const text = `Namaste ${q.accepted_by}, about the prayers for ${rec.prayed_name} - ${[me, place].filter(Boolean).join(", ")}.`;
+  const digits = q.accepter_phone.replace(/\D/g, "");
+  return `
+    <p style="margin:6px 0 0"><a class="tel" href="tel:${esc(q.accepter_phone)}">${esc(q.accepter_phone)}</a></p>
+    <div class="row tight" style="margin-top:8px;flex-wrap:wrap">
+      <a class="button small secondary" id="mrCall" href="tel:${esc(q.accepter_phone)}">Call</a>
+      <a class="button small secondary" id="mrWa" target="_blank" rel="noopener"
+        href="https://wa.me/${esc(digits)}?text=${esc(encodeURIComponent(text))}">WhatsApp</a>
+    </div>`;
+}
+
 function fact(label, value) {
   return `<div class="fact"><div class="fl">${esc(label)}</div><div class="fv">${value}</div></div>`;
 }
@@ -481,6 +503,7 @@ export async function renderRecordView({ id }) {
   const rec = await fetchRecord(id, () => renderRecordView({ id }));
   if (!rec || !alive()) return;
   const waiting = rec.requests.find(q => q.status === "waiting");
+  const taken = rec.requests.find(q => q.status === "accepted" || q.status === "taken");
   const death = rec.death;
   mainEl.innerHTML = `
     <div class="card">
@@ -502,6 +525,7 @@ export async function renderRecordView({ id }) {
     <div class="card">
       <h2>Prayers</h2>
       <p style="margin:4px 0 0"><b>${esc(recordState(rec))}</b></p>
+      ${taken ? accepterHtml(rec, taken) : ""}
       ${waiting ? `<p class="meta" style="margin:4px 0 0">${waiting.asked} ${waiting.asked === 1 ? "person was" : "people were"}
         told. You see here when they answer.</p>` : ""}
       ${rec.requests.length > 1 ? `<div style="margin-top:10px">${rec.requests.slice(1).map(q =>
