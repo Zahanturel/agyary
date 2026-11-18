@@ -296,3 +296,30 @@ async def test_a_yes_not_picked_inside_the_window_is_told_enough_are_going(clien
     # Picking someone who said no (or nothing) is refused.
     r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [999]}, headers=panthaky)
     assert r.status_code == 400
+
+
+async def test_details_that_did_not_go_can_be_sent_again_but_never_twice(client, db, seeded, meta, pushes, live):
+    from agyary.services import guardrails
+
+    aid = seeded["agyary_id"]
+    rid = await _accepted(client, db, aid)
+    panthaky = await _as(client, PANTHAKY)
+    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
+    keys = [c["key"] for c in view["candidates"] if c["may_ask"]]
+    assert (await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": keys}, headers=panthaky)).status_code == 200
+    (answer,) = (await db.execute(select(PrayerCalloutAnswer))).scalars().all()
+    await _signed_tap(client, MOBED, f"pca:{answer.token}:y")
+    await guardrails.pause(db, config.get_settings(), "test pause")
+    await db.commit()
+    meta.sent.clear()
+    r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [answer.id]}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"]["details_sent"] == 0 and meta.sent == []
+    (person,) = r.json()["asked"]
+    assert person["picked"] and person["may_pick"] and "paused" in person["details"]["why"]
+    await guardrails.resume(db)
+    await db.commit()
+    r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [answer.id]}, headers=panthaky)
+    assert r.json()["done"]["details_sent"] == 1 and len(meta.templates("prayer_details_mobed")) == 1
+    assert not r.json()["asked"][0]["may_pick"]
+    r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [answer.id]}, headers=panthaky)
+    assert r.json()["done"]["details_sent"] == 0 and len(meta.templates("prayer_details_mobed")) == 1

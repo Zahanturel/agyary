@@ -279,7 +279,8 @@ async def view(db: AsyncSession, settings: Settings, user: User, request: Funera
             "picked": a.picked_at is not None,
             "details": {"state": fw.state_words(details_n), "why": fw.why(details_n)} if details_n else None,
             "enough": enough,
-            "may_pick": a.answer == CALLOUT_YES and a.picked_at is None,
+            # Picked again only while their details have not gone (say, sending was paused).
+            "may_pick": a.answer == CALLOUT_YES and a.details_sent_at is None,
             "in_window": fw.in_window(a.answered_at, now),
         })
     candidates = []
@@ -485,10 +486,11 @@ async def pick(
         a, _ = found
         if a.answer != CALLOUT_YES:
             raise CalloutError(f"{a.name} has not said yes, so they cannot be picked.", status=400)
-        if a.picked_at is None:
+        if a.details_sent_at is None:      # picked before, but the details did not go: try again
             chosen.append(a)
     for a in chosen:
-        a.picked_at, a.picked_by_user_id = now, user.id
+        if a.picked_at is None:
+            a.picked_at, a.picked_by_user_id = now, user.id
     for c in {c.id: c for _, c in answered}.values():
         c.picked_at = now
     await db.flush()
