@@ -53,7 +53,10 @@ function uthamnaText(u) {
 
 function placeText(q) {
   const p = q.funeral_place;
-  return [p.name, p.kind_label, p.city].filter(Boolean).join(" · ");
+  // "Doongerwadi" once: the kind only when the name does not already say it.
+  const kind = p.kind_label && !p.name.toLowerCase().includes(p.kind_label.toLowerCase()) ? p.kind_label : "";
+  const town = p.city && !p.name.toLowerCase().includes(p.city.toLowerCase()) ? p.city : "";
+  return [p.name, kind, town].filter(Boolean).join(" · ");
 }
 
 /** Where an answered request stands, for the list and the page. */
@@ -99,7 +102,7 @@ function waitingCardHtml(q) {
 function earlierRowHtml(q) {
   return `<div class="search-result" data-rid="${q.id}">
       <div><strong>${esc(q.prayed_name)}</strong></div>
-      <div class="addr">${esc(q.funeral_place.name)} · ${esc(stateText(q))}</div>
+      <div class="addr">${q.status === "withdrawn" ? "" : `${esc(q.funeral_place.name)} · `}${esc(stateText(q))}</div>
     </div>`;
 }
 
@@ -142,7 +145,7 @@ function familyCardHtml(q) {
   const c = q.family_contact;
   return `
     <div class="card">
-      <h2>The family</h2>
+      <h2>The family of ${esc(q.prayed_name)}</h2>
       ${fact("Family contact", `${esc(c.name)}<br><a class="tel" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`)}
       <label for="rqMsg" style="margin-top:10px">Message to the family</label>
       <textarea id="rqMsg" rows="7" maxlength="1000">${esc(q.family_message)}</textarea>
@@ -186,6 +189,7 @@ export async function renderRequest({ id }) {
   if (!alive()) return;
   const waiting = q.status === "waiting";
   mainEl.innerHTML = `
+    ${q.accepted_by_me ? familyCardHtml(q) : ""}
     <div class="card">
       <h2>${esc(q.prayed_name)}</h2>
       <p style="margin:0"><b>${esc(stateText(q))}</b>${q.decided_at && !waiting
@@ -199,8 +203,7 @@ export async function renderRequest({ id }) {
         <button type="button" class="secondary" id="rqDecline">Decline</button>
         <button type="button" id="rqAccept">Accept</button>
       </div>` : ""}
-    </div>
-    ${q.accepted_by_me ? familyCardHtml(q) : ""}`;
+    </div>`;
 
   const on = (sel, fn) => { const el = document.getElementById(sel); if (el) el.onclick = fn; };
   on("rqAccept", () => confirmAccept(q));

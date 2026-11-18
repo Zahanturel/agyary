@@ -676,6 +676,8 @@ body.sheet-open { overflow: hidden; }
 .action-bar { display: flex; align-items: stretch; gap: var(--space-2); margin-top: var(--space-3); }
 .action-bar > button, .action-bar > a.button { flex: 1 1 0; min-width: 0; padding-left: var(--space-2);
   padding-right: var(--space-2); line-height: 1.2; }
+/* A link drawn as a button (WhatsApp, Call) centres its words like a button does. */
+.action-bar > a.button { display: flex; align-items: center; justify-content: center; text-align: center; }
 
 /* --- Where a fire temple is: the map picker (location_picker.js) ------------- */
 .loc-search { display: flex; gap: var(--space-2); align-items: stretch; }
