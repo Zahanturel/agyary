@@ -217,8 +217,8 @@ async def test_the_whole_call_out(client, db, seeded, meta, pushes, live, caplog
     assert sorted(m["to"] for m in asked) == sorted([MOBED, LISTED])
     for m in asked:
         body = [p["text"] for p in m["template"]["components"][0]["parameters"]]
-        assert body[0] == "Behdin Rustom Jamshed" and body[1] == "Doongerwadi (test)"
-        assert body[4:] == ["Er. Hormuz Dadachanji", "Goti Adarian"]
+        assert body[0] == "Goti Adarian" and body[1] == "Behdin Rustom Jamshed" and body[2] == "Doongerwadi (test)"
+        assert body[5] == "Er. Hormuz Dadachanji"
         assert FAMILY.lstrip("+") not in json.dumps(m) and "Test Family" not in json.dumps(m)
         buttons = [c for c in m["template"]["components"] if c["type"] == "button"]
         assert [b["sub_type"] for b in buttons] == ["quick_reply", "quick_reply"]

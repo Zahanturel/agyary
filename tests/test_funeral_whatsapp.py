@@ -113,10 +113,10 @@ def _body(m) -> list[str]:
     return [p["text"] for p in m["template"]["components"][0]["parameters"]]
 
 
-def _url(m) -> str:
-    (button,) = [c for c in m["template"]["components"] if c["type"] == "button"]
-    assert button["sub_type"] == "url" and button["index"] == "0"
-    return button["parameters"][0]["text"]
+def _buttons(m) -> list:
+    # Meta does not allow buttons that link straight to WhatsApp, so these three
+    # templates have none: the number in the text is tappable instead.
+    return [c for c in m["template"]["components"] if c["type"] == "button"]
 
 
 async def test_switched_off_nothing_is_sent_and_the_accepter_is_told_why(client, db, seeded, meta, pushes):
@@ -149,19 +149,19 @@ async def test_live_with_share_the_three_templates_go_to_the_right_people(client
     to_manager = sent["funeral_accepted_manager"]
     assert to_manager["to"] == MANAGER
     assert _body(to_manager) == ["Behdin Rustom Jamshed", "Er. Hormuz Dadachanji", "Goti Adarian", PANTHAKY]
-    assert _url(to_manager) == PANTHAKY.lstrip("+")
+    assert _buttons(to_manager) == []
 
     details = sent["prayer_details_mobed"]
     assert details["to"] == PANTHAKY
     b = _body(details)
     assert b[0] == "Behdin Rustom Jamshed" and b[1] == "Doongerwadi (test)" and b[2] == "not fixed yet"
     assert b[3].endswith(", Havan geh") and b[4] == "not fixed yet"
-    assert b[5:] == ["Test Family", FAMILY] and _url(details) == FAMILY.lstrip("+")
+    assert b[5:] == ["Test Family", FAMILY] and _buttons(details) == []
 
     family = sent["prayers_mobed_family"]
     assert family["to"] == FAMILY
     assert _body(family) == ["Behdin Rustom Jamshed", "Er. Hormuz Dadachanji", "Goti Adarian", PANTHAKY]
-    assert _url(family) == PANTHAKY.lstrip("+")
+    assert _buttons(family) == []
 
     rows = await _rows(db)
     assert {(n.notification_type, n.recipient_type, n.status) for n in rows} == {

@@ -25,15 +25,11 @@ mobed's number are right.
 > The prayers for **[departed]** have been accepted by **[mobed's name]** of **[agyari]**.
 > You can reach them on **[mobed's number]** by phone or WhatsApp.
 
-Button (URL, dynamic): **Message them**, `https://wa.me/[mobed's number without +]`
-
 ## 2. To the mobed who will pray: `prayer_details_mobed`
 
 > You will pray for **[departed]** at **[place]**. Bungli: **[bungli]**. Geh-saarnu:
 > **[day and geh]**. Uthamna: **[day and time]**. The family's contact is **[family name]**,
 > **[family number]**. Thank you for your service.
-
-Button (URL, dynamic): **Message the family**, `https://wa.me/[family number without +]`
 
 Sent to the panthaky (or mobed) who accepted in the app, and to each mobed who answers "Yes" to
 message 4. A blank the record does not have is sent as "not fixed yet".
@@ -48,16 +44,18 @@ the prayers support the soul's journey towards Garothman, the highest heaven (Ka
 death and Dokhmenashini; Dastur Antia's guide to prayers for the departed); "attain Garothman
 Behesht" is the community's own condolence wording.)
 
-Button (URL, dynamic): **Message the mobed**, `https://wa.me/[mobed's number without +]`
-
 Sent only when the manager's tick recorded the family's agreement to hear from Mobed Diary (the
 tick's words become: "The family agreed to share their name and number with this agyari, and to
 get WhatsApp messages about the prayers from Mobed Diary"). A STOP from the family is honoured.
 
 ## 4. To the agyari's mobeds, asking who can pray: `prayer_request_mobeds` (owner's idea, 18 Nov)
 
-> Prayers are needed for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
-> **[day and time]**. **[panthaky's name]** of **[agyari]** asks whether you can pray.
+> A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:
+> **[day and geh]**. Uthamna: **[day and time]**. Please reply to tell **[panthaky's name]** whether
+> you can take it.
+
+(Reworded 18 Nov 2026: Meta's check said the first wording, "Prayers are needed for... asks whether
+you can pray", read as Marketing and would be rejected as Utility.)
 
 Quick-reply buttons: **Yes, I can pray** / **Not this time**
 
@@ -72,9 +70,15 @@ messages from Mobed Diary. A STOP from a mobed is honoured.
 
 ---
 
-## What the owner does
+## Submitted to Meta (18 Nov 2026)
 
-1. Read and change the wording above if wanted.
-2. In WhatsApp Manager (Meta Business), create the templates with these names, category Utility,
-   language English, with the URL / quick-reply buttons. Submit.
-3. When Meta approves them, tell the session; starting to send is a setting, not a code change.
+All four were created in WhatsApp Manager on the Mobed Diary account, Utility, English, exactly as
+above. `funeral_accepted_manager` was approved within minutes; the other three were in review.
+
+**No buttons on 1-3.** Meta refuses buttons that link straight to WhatsApp ("Direct links to
+WhatsApp aren't allowed for buttons"), so the "Message them / the family / the mobed" buttons were
+dropped; the number in the text is tappable in WhatsApp instead. Template 4 keeps its two
+quick-reply buttons.
+
+When all four are approved: set `FUNERAL_WHATSAPP_MODE=live` in the server's `.env` and restart
+the app; then test with the owner's own numbers first.

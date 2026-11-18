@@ -365,8 +365,11 @@ async def send(
         db.add(a)
         pairs.append((m, a))
     await db.flush()
-    params = [fw.departed(record), place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record),
-              user.name, agyary.name]
+    # The order of the approved template (docs/phase2-whatsapp-templates.md): "A prayer request has
+    # come to {{1 agyari}} for {{2 departed}} at {{3 place}}. Geh-saarnu: {{4}}. Uthamna: {{5}}.
+    # Please reply to tell {{6 panthaky}} whether you can take it."
+    params = [agyary.name, fw.departed(record), place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record),
+              user.name]
     sends = [fw.Send(kind=fw.TYPE_CALLOUT, phone=a.phone, recipient_type="user" if m["kind"] == "app" else "contact",
                      recipient_id=m["id"], agyary_id=agyary.id, params=params,
                      quick_replies=(f"{PAYLOAD_PREFIX}{a.token}:y", f"{PAYLOAD_PREFIX}{a.token}:n"),

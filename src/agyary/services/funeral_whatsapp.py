@@ -440,7 +440,7 @@ def details_send(
         agyary_id=agyary_id,
         params=[departed(record), place.name, record.bungli or NOT_FIXED, geh_saarnu_text(record),
                 uthamna_text(record), record.family_contact_name, record.family_contact_phone],
-        hidden=(7,), url_digits=digits(record.family_contact_phone), refs=refs,
+        hidden=(7,), refs=refs,
         names=[("the departed's name", departed(record), template_text.DEPARTED_MAX),
                ("the place's name", place.name, template_text.TEMPLE_MAX),
                ("the bungli", record.bungli or "", BUNGLI_MAX),
@@ -486,7 +486,7 @@ async def _after_accept(db, settings, request_id, *, now, client) -> dict:
     who_params = [name, mobed.name, agyary.name, mobed.phone]
     sends = [
         Send(kind=TYPE_MANAGER, phone=m.phone, recipient_type="user", recipient_id=m.id, agyary_id=agyary.id,
-             params=who_params, hidden=(4,), url_digits=digits(mobed.phone),
+             params=who_params, hidden=(4,),
              refs={"request": request.id, "to": "manager"}, names=who)
         for m in await funeral_answers._managers(db, settings, record.funeral_place_id)
     ]
@@ -495,7 +495,7 @@ async def _after_accept(db, settings, request_id, *, now, client) -> dict:
     if request.family_whatsapp_agreed:
         sends.append(Send(kind=TYPE_FAMILY, phone=record.family_contact_phone, recipient_type="family",
                           recipient_id=record.id, agyary_id=agyary.id, params=who_params, hidden=(4,),
-                          url_digits=digits(mobed.phone), refs={"request": request.id, "to": "family"}, names=who))
+                          refs={"request": request.id, "to": "family"}, names=who))
     await deliver(db, settings, sends, now=now, client=client)
     return await summary(db, settings, request)
 
