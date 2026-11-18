@@ -124,6 +124,11 @@ class FuneralRequest(Base):
     agyary_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("agyaries.id"))
     status: Mapped[str] = mapped_column(String(10), server_default="waiting")
     family_share_agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Step 5b: whether the manager's tick also said the family agreed to get
+    # WhatsApp messages about the prayers from Mobed Diary (the tick's words
+    # since 18 Nov 2026). Only then is the family messaged from our number.
+    # False for every request sent before those words.
+    family_whatsapp_agreed: Mapped[bool] = mapped_column(Boolean, server_default="false")
     sent_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # When it stopped waiting, and who did it: the manager withdrawing, or the

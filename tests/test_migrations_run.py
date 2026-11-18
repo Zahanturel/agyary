@@ -376,3 +376,73 @@ async def test_the_funeral_accept_migration_holds_its_rule_and_comes_off_cleanly
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_whatsapp_and_callout_migrations_hold_their_rules_and_come_off_cleanly():
+    """c5d6e7f8a9b1 and d6e7f8a9b0c2 (Steps 5b, 5c): a request from before the
+    new tick has no WhatsApp agreement; a send can be to a family or a listed
+    mobed; a fire temple lists a number once, with the consent's time; an
+    answer is yes or no with its time, only a yes is picked, its token is
+    unique, and a mobed is asked once per call-out; the downgrade takes it all
+    off and keeps the requests."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "b4c5d6e7f8a0"))
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES"
+                               " ('Manager', '+919000000001', 'funeral_manager'), ('Er. Asked', '+919000000002', 'mobed')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at,"
+                               " decided_at, accepted_by_user_id) VALUES (1, 1, 'accepted', now(), now(), 2)")
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute("SELECT family_whatsapp_agreed FROM funeral_requests") == [(False,)]
+        send = ("INSERT INTO notifications (agyary_id, recipient_phone, recipient_type, recipient_id, notification_type,"
+                " template_name) VALUES (1, '+919000000009', :t, 1, 'prayers_mobed_family', 'x')")
+        for kind in ("family", "contact", "user"):
+            await _scratch_execute(send, {"t": kind})
+        await _refused(send, {"t": "stranger"}, "an unknown recipient type")
+
+        add = ("INSERT INTO agyary_mobed_contacts (agyary_id, name, phone, consent_at, consent_by_user_id)"
+               " VALUES (1, 'Er. Listed', :p, :c, 2)")
+        await _scratch_execute(add, {"p": "+919000000005", "c": AT})
+        await _refused(add, {"p": "+919000000005", "c": AT}, "the same number twice", needle="uq_agyary_mobed_contacts")
+        await _refused(add, {"p": "98200", "c": AT}, "a number not in E.164")
+        await _refused(add, {"p": "+919000000006", "c": None}, "no consent", needle="not-null")
+
+        await _scratch_execute("INSERT INTO prayer_callouts (funeral_request_id, agyary_id, sent_by_user_id, asked)"
+                               " VALUES (1, 1, 2, 1)")
+        answer = ("INSERT INTO prayer_callout_answers (callout_id, contact_id, user_id, name, phone, token, answer,"
+                  " answered_at, picked_at) VALUES (1, :c, :u, 'Er. Listed', :p, :t, :a, :at, :pk)")
+        base = {"c": 1, "u": None, "p": "+919000000005", "t": "t" * 24, "a": "yes", "at": AT, "pk": AT}
+        await _scratch_execute(answer, base)
+        await _refused(answer, {**base, "p": "+919000000007"}, "a repeated token", needle="uq_prayer_callout_answers_token")
+        await _refused(answer, {**base, "t": "u" * 24}, "one mobed twice in a call-out",
+                       needle="uq_prayer_callout_answers_callout_phone")
+        for change in ({"a": "maybe"}, {"at": None}, {"a": "no"}, {"u": 2}):
+            await _refused(answer, {**base, "p": "+919000000008", "t": "v" * 24, **change}, change)
+        await _scratch_execute(answer, {**base, "c": None, "u": 2, "p": "+919000000002", "t": "w" * 24,
+                                        "a": None, "at": None, "pk": None})
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid IN ('agyary_mobed_contacts'::regclass,"
+            " 'prayer_callouts'::regclass, 'prayer_callout_answers'::regclass, 'notifications'::regclass)")
+        assert {"ck_agyary_mobed_contacts_phone_e164", "ck_prayer_callout_answers_answered",
+                "ck_prayer_callout_answers_picked_said_yes", "ck_notifications_recipient_type",
+                "fk_prayer_callout_answers_callout_id_prayer_callouts"} <= {n for (n,) in names}
+
+        _ok(_alembic("downgrade", "b4c5d6e7f8a0"))
+        tables = {t for (t,) in await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
+        assert not {"agyary_mobed_contacts", "prayer_callouts", "prayer_callout_answers"} & tables
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'funeral_requests'")
+        assert "family_whatsapp_agreed" not in {c for (c,) in cols}
+        assert await _scratch_execute("SELECT recipient_type FROM notifications") == [("user",)]
+        assert await _scratch_execute("SELECT status FROM funeral_requests") == [("accepted",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

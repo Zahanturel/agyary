@@ -18,6 +18,7 @@ from agyary.models.machi import Machi
 from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
+from agyary.models.prayer_callout import AgyaryMobedContact, PrayerCallout, PrayerCalloutAnswer
 from agyary.models.preferences import UserPreferences
 from agyary.models.push_subscription import PushSubscription
 from agyary.models.recurrence import RecurrenceRule
@@ -28,6 +29,7 @@ from agyary.models.wa_login import WaLoginAttempt
 __all__ = [
     "Agyary",
     "AgyaryCustomer",
+    "AgyaryMobedContact",
     "AgyaryUser",
     "DeletedAccount",
     "AppNotification",
@@ -50,6 +52,8 @@ __all__ = [
     "MemorialObservanceService",
     "Notification",
     "Payment",
+    "PrayerCallout",
+    "PrayerCalloutAnswer",
     "PushSubscription",
     "RecurrenceRule",
     "ReminderOptOut",

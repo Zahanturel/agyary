@@ -118,7 +118,13 @@ BULK_BATCH_STATUSES = ("open", "in_progress", "completed")
 
 # "sending": handed to Meta, no answer yet - never retried (at most once).
 NOTIFICATION_STATUSES = ("pending", "queued", "sending", "sent", "delivered", "read", "failed")
-RECIPIENT_TYPES = ("user", "customer")
+# "family": a funeral record's family contact (recipient_id is the record);
+# "contact": a mobed on a fire temple's own list (agyary_mobed_contacts), D10.
+RECIPIENT_TYPES = ("user", "customer", "family", "contact")
+# A mobed's answer to a panthaky's call-out on WhatsApp (D10): "yes" (Yes, I can
+# pray) or "no" (Not this time); no answer yet is NULL.
+CALLOUT_YES, CALLOUT_NO = "yes", "no"
+CALLOUT_ANSWERS = (CALLOUT_YES, CALLOUT_NO)
 
 MESSAGE_DIRECTIONS = ("inbound", "outbound")
 
