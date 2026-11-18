@@ -9,12 +9,17 @@
  * Two steps on one route. The form, then a preview of every date - nothing is
  * saved until the mobed has seen the dates and confirms them. The form itself
  * is in memorial_form.js.
+ *
+ * Opened from an accepted request for prayers (D10, requests.js), it starts
+ * filled in with the departed's name and death as the Doongerwadi gave them,
+ * for the mobed to check and save as ever; the saved memorial is noted on the
+ * request, and they go back to it (the family's contact and WhatsApp).
  */
 
 import { getBehdin, previewMemorial, createMemorial } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, refreshHeader, loading, backBar, screenFailed, toTop,
+  chrome, mainEl, showFab, showError, refreshHeader, loading, backBar, screenFailed, toTop, flashInfo,
 } from "../ui.js";
 import { esc } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
@@ -24,6 +29,17 @@ import {
   wireSchedulePreview, showMemorialProblems, newReview, reviewPayload, reviewHasEmptyDate,
 } from "../memorial_form.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft } from "../drafts.js";
+
+// The request a memorial is being made from, handed over by requests.js and
+// taken once by the form for that behdin.
+let fromRequest = null;
+
+/** Open the next memorial form for behdin ``customerId`` filled in from an
+ *  accepted request: ``req`` is { id, place, prefill } (prefill has the draft's
+ *  fields: name, calendar, deathBy, death, deathRoj, deathMah). */
+export function memorialFromRequest(customerId, req) {
+  fromRequest = { cid: Number(customerId), ...req };
+}
 
 export async function renderMemorialNew({ id }) {
   chrome(true);
@@ -48,6 +64,8 @@ export async function renderMemorialNew({ id }) {
   // asks whether to continue it or start a new one.
   const draftKey = `memorial:${aid}:${cid}`;
   let draft = blankMemorialDraft();
+  const incoming = fromRequest && fromRequest.cid === cid ? fromRequest : null;
+  fromRequest = null;
   const keep = () => saveDraft(draftKey, draft);
   // Dates taken out on the review screen; kept while the form is changed and
   // reviewed again, dropped with the draft.
@@ -68,7 +86,9 @@ export async function renderMemorialNew({ id }) {
       </div>
       ${memorialFormHtml(draft, services, {
         heading: "",
-        intro: step === 1 ? `For the family of ${esc(behdin.name)}.` : "",
+        intro: step === 1 ? `For the family of ${esc(behdin.name)}.${draft.fromRequest
+          ? ` Filled in from ${esc(draft.fromPlace || "the Doongerwadi")}'s request: please check the name and the date.`
+          : ""}` : "",
       })}
       <div class="wizard-nav" style="margin-top:4px">
         <button class="secondary" id="mmCancel">${step === 1 ? "Cancel" : "Back"}</button>
@@ -123,8 +143,15 @@ export async function renderMemorialNew({ id }) {
       const btn = document.getElementById("mmCreate");
       btn.disabled = true;
       try {
-        const made = await createMemorial(aid, cid, { ...body, ...reviewPayload(body, preview, services, review) });
+        const made = await createMemorial(aid, cid, {
+          ...body, ...reviewPayload(body, preview, services, review), funeral_request_id: draft.fromRequest || null,
+        });
         clearDraft(draftKey);
+        if (draft.fromRequest) {
+          // Back to the request: the family's contact and the message to them are there.
+          flashInfo("Memorial saved. You can now message the family.");
+          return navigate(`#/requests/${draft.fromRequest}`, { replace: true });
+        }
         // The form is finished; the memorial takes its place in history, and
         // opens by asking whether to send the dates to the family.
         memorialJustCreated(made.id);
@@ -136,6 +163,12 @@ export async function renderMemorialNew({ id }) {
     };
   }
 
+  if (incoming) {
+    // Asked for just now, from the request: what it says, not an older draft.
+    draft = { ...blankMemorialDraft(), ...incoming.prefill, fromRequest: incoming.id, fromPlace: incoming.place };
+    keep();
+    return showForm();
+  }
   const stored = loadDraft(draftKey);
   if (!stored) return showForm();
   offerDraft({

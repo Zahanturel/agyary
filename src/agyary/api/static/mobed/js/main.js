@@ -3,8 +3,8 @@
 /**
  * Wiring: the route table, the guard, and boot.
  *
- * The mobed app is three tabs (Machi, Calendar, Behdins) and the screens
- * behind them. Anything not listed here does not exist
+ * The mobed app is four tabs (Machi, Calendar, Behdins, Requests) and the
+ * screens behind them. Anything not listed here does not exist
  * as far as this app is concerned - notably service-catalog
  * editing and fire-temple editing, whose screens remain in the tree but
  * have no route into them. They belong to the agyari management system,
@@ -44,6 +44,8 @@ import { renderRecordNew, renderRecordView, renderRecordEdit, renderRecordSend }
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
+import { renderRequests, renderRequest } from "./screens/requests.js";
+import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
 
 // --- Routes -----------------------------------------------------------------
 // `open: true` needs no session.
@@ -113,6 +115,9 @@ route("#/memorial/:id", renderMemorial, { parent: "#/behdins", tab: "behdins" })
 route("#/memorial/:id/edit", renderMemorialEdit, { parent: (p) => `#/memorial/${p.id}`, tab: "behdins" });
 // Opened from the calendar on one observance's day, landing on that observance.
 route("#/memorial/:id/:oid", renderMemorial, { parent: "#/behdins", tab: "behdins" });
+// Requests for prayers from a Doongerwadi or prayer hall (D10), the fourth tab.
+route("#/requests", renderRequests, { tab: "requests" });
+route("#/requests/:id", renderRequest, { parent: "#/requests", tab: "requests" });
 
 // The calendar is home; anything unrecognised lands there.
 setNotFound(() => navigate("#/calendar", { replace: true }));
@@ -159,6 +164,7 @@ onTab((tab) => navigate({
   machi: boardHash(state.calendar),
   calendar: calendarHash(state.calendar),
   behdins: "#/behdins",
+  requests: "#/requests",
 }[tab]));
 
 // What the add button does unless a screen overrides it (see ui.showFab).
@@ -235,6 +241,7 @@ async function boot() {
   await start();
   // What a mobed must not miss goes in front of them as the app opens.
   if (signedIn() && !state.offline && hasAccess()) refreshNotifications({ popup: true });
+  refreshRequestCount();
 }
 
 // Signal came back after an offline boot. Take the session live and
@@ -286,6 +293,7 @@ window.addEventListener("online", async () => {
     refreshHeader();
     navigate(location.hash || homeFor());
     refreshNotifications({ popup: true });
+    refreshRequestCount();
   } catch (e) { /* still not really back; the next online event retries */ }
 });
 
@@ -296,4 +304,5 @@ if ("serviceWorker" in navigator) {
 // but never while a form is half filled in.
 onNavigated(watchForUpdates({ busy: () => !!state.draft }));
 setupNotifications();
+setupRequestCount();
 boot();

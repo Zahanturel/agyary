@@ -220,6 +220,12 @@ export const managerSearchAgyaries = (q, placeId) =>
 export const managerSend = (id, agyaryId, familyAgreed) =>
   post(`/manager/records/${id}/requests`, { agyary_id: agyaryId, family_agreed: familyAgreed });
 export const managerWithdraw = (requestId) => post(`/manager/requests/${requestId}/withdraw`, {});
+/** The fire temple's side (D10, Step 5): the requests this mobed was asked. */
+export const myRequestCount = () => get("/requests/count");
+export const myRequests = () => get("/requests");
+export const myRequest = (id) => get(`/requests/${id}`);
+export const acceptRequest = (id, shareContact) => post(`/requests/${id}/accept`, { share_contact: shareContact });
+export const declineRequest = (id, reason) => post(`/requests/${id}/decline`, { reason: reason || null });
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).

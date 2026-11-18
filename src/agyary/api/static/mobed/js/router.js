@@ -41,7 +41,7 @@ let shownDepth = 0;
  * Back control; the roots (calendar, login, onboarding) have none.
  *
  * opts.tab: which bottom tab this screen belongs to ("machi", "calendar",
- * "behdins"), which also shows the tab bar. "inherit" shows the bar with the
+ * "behdins", "requests"), which also shows the tab bar. "inherit" shows the bar with the
  * tab the mobed came from lit - for a slip, an edit or a review, which can be
  * reached from more than one tab. Omit it and the bar is hidden: Settings
  * (the menu), sign-in and onboarding.

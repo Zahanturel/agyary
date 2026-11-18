@@ -434,6 +434,12 @@ a.tel:active { text-decoration: underline; }
   padding: var(--space-2); font-size: var(--text-xs); font-weight: 700; border-top: 4px solid transparent; }
 .tabs button svg { width: 30px; height: 30px; fill: none; }
 .tabs button.active { color: var(--primary); background: var(--primary-tint); border-top-color: var(--primary); }
+/* The red count of requests waiting (D10), on the Requests tab's icon. */
+.tabs button { position: relative; }
+.tab-badge { position: absolute; top: 6px; left: calc(50% + 6px); min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: var(--radius-pill); background: var(--danger-600); color: #fff; font-size: 13px; font-weight: 700;
+  line-height: 22px; text-align: center; }
+.tab-badge.hidden { display: none; }
 body.has-tabs main { padding-bottom: calc(var(--space-4) + 88px + var(--safe-bottom)); }
 body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
 /* Settings > Text size > Extra large. */
