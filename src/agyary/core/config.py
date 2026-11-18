@@ -61,6 +61,26 @@ class Settings(BaseSettings):
     # for this long after signing up again (SEC-02).
     deleted_account_cooldown_days: int = 30
 
+    # --- The Doongerwadi side on WhatsApp (DECISIONS D10, 18 Nov 2026) ---------
+    # One switch for all four templates of docs/phase2-whatsapp-templates.md:
+    # off until Meta has approved them, then live. Off: nothing is sent, and the
+    # app says that the messages start once Meta approves them. Live still needs
+    # the token and number id above, and keeps to the pause switch, STOP, the
+    # allowlist (REMINDERS_ALLOWLIST) and the limits below. The template names
+    # are settings so a renamed or re-approved template needs no code change.
+    funeral_whatsapp_mode: str = "off"                                 # off | live
+    whatsapp_funeral_manager_template: str = "funeral_accepted_manager"   # 1: to the manager
+    whatsapp_prayer_details_template: str = "prayer_details_mobed"       # 2: to the mobed who prays
+    whatsapp_prayers_family_template: str = "prayers_mobed_family"       # 3: to the family
+    whatsapp_prayer_request_template: str = "prayer_request_mobeds"      # 4: the panthaky's call-out
+    # Ceilings, per IST day, over every one of these messages (and the short
+    # "enough mobeds are going" text reply): all fire temples together, and one
+    # fire temple. A message over either is not sent, the person who asked for it
+    # is shown why, and the admins are alerted. One call-out asks at most this many.
+    funeral_whatsapp_daily_cap: int = 300
+    funeral_whatsapp_per_agyari_daily_cap: int = 80
+    prayer_callout_max_recipients: int = 40
+
     # off: nothing is planned or sent. dry_run: reminders are planned and
     # logged as they would be sent, and nothing leaves the building. live:
     # they are sent - but only to numbers in `reminders_allowlist` (a comma

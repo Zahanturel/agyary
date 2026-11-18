@@ -34,7 +34,7 @@ from agyary.api.routes.mobed import _serialize_user, get_current_manager, get_cu
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, FuneralPlace, FuneralRequest, User
-from agyary.services import funeral_answers, funeral_places, funeral_records, funeral_requests
+from agyary.services import funeral_answers, funeral_places, funeral_records, funeral_requests, funeral_whatsapp
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
 
@@ -261,8 +261,12 @@ async def search_agyaries_for_manager(
 # ---------------------------------------------------------------------------
 class SendIn(BaseModel):
     agyary_id: int
-    # "The family agreed to share their name and number with this agyari."
+    # The tick: "The family agreed to share their name and number with this
+    # agyari, and to get WhatsApp messages about the prayers from Mobed Diary".
+    # The app sends both from that one tick; an app from before those words
+    # sends only the first, and the family is then never messaged from our number.
     family_agreed: bool = False
+    family_whatsapp_agreed: bool = False
 
 
 def _send_error(exc: funeral_requests.SendError) -> HTTPException:
@@ -284,7 +288,8 @@ async def send_request(
     if agyary is None:
         raise HTTPException(status_code=404, detail="That fire temple could not be found. Please choose it again.")
     try:
-        request = await funeral_requests.send(db, get_settings(), user, record, agyary, family_agreed=True)
+        request = await funeral_requests.send(db, get_settings(), user, record, agyary, family_agreed=True,
+                                              family_whatsapp_agreed=payload.family_whatsapp_agreed)
     except funeral_requests.SendError as exc:
         raise _send_error(exc) from exc
     asked = len(await funeral_requests.asked(db, request))
@@ -373,17 +378,25 @@ async def accept_request(
     calendar, and returns the memorial form's fields for them to check."""
     rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
     request = await _asked_request(db, user, request_id)
+    settings = get_settings()
     try:
-        done = await funeral_answers.accept(db, get_settings(), user, request, share_contact=payload.share_contact)
+        done = await funeral_answers.accept(db, settings, user, request, share_contact=payload.share_contact)
     except funeral_answers.AnswerError as exc:
         raise _answer_error(exc) from exc
     await db.commit()
+    # Only now, with the accept committed: the WhatsApp messages from our number
+    # (Step 5b). They never make the accept fail; what happened is said.
+    whatsapp = await funeral_whatsapp.after_accept(db, settings, request.id)
+    # Read again: a failure in sending rolls the session back, which forgets them.
+    await db.refresh(request)
+    await db.refresh(user)
     return {
         "request": await _one(db, user, request),
         "customer_id": done.customer_id,
         "behdin_created": done.behdin_created,
         "events": done.events,
         "skipped": done.skipped,
+        "whatsapp": whatsapp,
     }
 
 

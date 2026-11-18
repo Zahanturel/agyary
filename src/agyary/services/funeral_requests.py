@@ -221,9 +221,11 @@ async def asked(db: AsyncSession, request: FuneralRequest) -> list[User]:
 
 async def send(
     db: AsyncSession, settings: Settings, manager: User, record: FuneralRecord, agyary: Agyary, *,
-    family_agreed: bool, now: datetime | None = None,
+    family_agreed: bool, family_whatsapp_agreed: bool = False, now: datetime | None = None,
 ) -> FuneralRequest:
-    """Send ``record`` to ``agyary``. SendError says why not."""
+    """Send ``record`` to ``agyary``. SendError says why not.
+    ``family_whatsapp_agreed``: the tick's words also said the family agreed to
+    get WhatsApp messages about the prayers from Mobed Diary (Step 5b)."""
     if not family_agreed:
         raise SendError(NO_TICK, status=400)
     now = now or datetime.now(timezone.utc)
@@ -248,7 +250,8 @@ async def send(
 
     request = FuneralRequest(
         funeral_record_id=record.id, agyary_id=agyary.id, status=REQUEST_WAITING,
-        family_share_agreed_at=now, sent_by_user_id=manager.id, sent_at=now,
+        family_share_agreed_at=now, family_whatsapp_agreed=bool(family_whatsapp_agreed),
+        sent_by_user_id=manager.id, sent_at=now,
     )
     db.add(request)
     await db.flush()

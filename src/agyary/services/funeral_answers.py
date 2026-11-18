@@ -27,8 +27,9 @@ The funeral place's managers are told in the app and on their phones; neither
 carries the family's name or number. Whether the accepter let the place have
 their name and number (the tick, on by default) is kept on the request
 (accepter_shared_contact): the manager's screen shows the number only when it
-is set, and the WhatsApp messages from our number (Step 5b, not built: approved
-templates only, sending off until then) will read the same column.
+is set, and the WhatsApp messages from our number (Step 5b,
+services/funeral_whatsapp.py: approved templates only, sent only once
+FUNERAL_WHATSAPP_MODE is live) read the same column.
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ from agyary.services import (
     behdin_directory,
     funeral_records,
     funeral_requests,
+    funeral_whatsapp,
     mobed_access,
     mobed_dashboard,
     reminders,
@@ -262,6 +264,8 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
                 "customer_id": own.id if own is not None and own.is_active else None,
                 "memorial_id": q.memorial_id,
                 "memorial_prefill": memorial_prefill(r),
+                # The WhatsApp messages from our number on accepting (Step 5b).
+                "whatsapp": await funeral_whatsapp.summary(db, None, q),
             })
         out.append(item)
     return out

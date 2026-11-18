@@ -68,8 +68,11 @@ async def what_we_hold(db: AsyncSession, phone: str) -> dict:
 
 
 def _sent_to(phone: str, records: list[int]):
-    return (Notification.recipient_type == "customer") & or_(
-        Notification.recipient_phone == phone, Notification.recipient_id.in_(records)
+    return or_(
+        (Notification.recipient_type == "customer")
+        & or_(Notification.recipient_phone == phone, Notification.recipient_id.in_(records)),
+        # A family messaged from a Doongerwadi's request (D10, Step 5b).
+        (Notification.recipient_type == "family") & (Notification.recipient_phone == phone),
     )
 
 

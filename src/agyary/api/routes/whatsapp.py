@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Notification, User
-from agyary.services import reminder_sender, reminders, wa_login, wa_send
+from agyary.services import funeral_whatsapp, reminder_sender, reminders, wa_login, wa_send
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,12 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
                     detail = (first.get("error_data") or {}).get("details") or first.get("message") or first.get("title")
                     reason = f"{detail} ({first.get('code')})" if first.get("code") else detail
                 if receipt.get("id") and receipt.get("status"):
+                    # The Doongerwadi side's messages (Steps 5b, 5c), else a reminder.
+                    if await funeral_whatsapp.apply_status(
+                        db, receipt["id"], receipt["status"], reason, now,
+                        recipient_user_id=receipt.get("recipient_user_id"),
+                    ):
+                        continue
                     await reminder_sender.apply_status(
                         db, receipt["id"], receipt["status"], reason, now,
                         recipient_user_id=receipt.get("recipient_user_id"),
