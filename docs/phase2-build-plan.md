@@ -68,6 +68,10 @@ Points to settle when it is discussed:
     agrees to the commission in writing when joining and sees it on every payout), or
   - a **small fee shown at checkout** before paying ("Booking fee").
   Either can sit alongside the agyari subscription.
+- **The owner's preference (18 Nov 2026):** the fee is paid by the **behdin**, on top of the
+  mobed's price, about 10% capped at around ₹50 (to discuss). The mobed or panthaky gets their full
+  price and need not see the fee. The behdin must see it at checkout before paying (the consumer
+  rules above), e.g. "Service fee ₹50".
 - **We never hold the money.** Holding and paying out others' money needs RBI authorisation as a
   payment aggregator (out of reach). Instead a gateway's **split payments** (Razorpay Route,
   Cashfree split and the like): the family pays, the gateway splits instantly (mobed's share to the
