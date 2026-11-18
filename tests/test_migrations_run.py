@@ -293,7 +293,7 @@ async def test_the_funeral_record_migration_holds_its_rules_and_comes_off_cleanl
         await _scratch_execute(insert, base)
         await _scratch_execute(insert, {**base, "t": "ervad", "by": "roj_mah", "roj": 2, "mah": 13, "ob": "one_day",
                                         "gd": None, "gg": None, "ud": None, "ut": None, "mw": None})
-        for change in ({"t": "khud"}, {"ob": "three_days"}, {"by": "guess"}, {"cal": "gregorian"},
+        for change in ({"t": "mister"}, {"ob": "three_days"}, {"by": "guess"}, {"cal": "gregorian"},
                        {"mah": 14}, {"roj": 31}, {"gg": None}, {"gd": None}, {"gg": 6}, {"ud": None},
                        {"mw": 0}, {"mw": 21}):
             await _refused(insert, {**base, **change}, change)
@@ -443,6 +443,29 @@ async def test_the_whatsapp_and_callout_migrations_hold_their_rules_and_come_off
         assert "family_whatsapp_agreed" not in {c for (c,) in cols}
         assert await _scratch_execute("SELECT recipient_type FROM notifications") == [("user",)]
         assert await _scratch_execute("SELECT status FROM funeral_requests") == [("accepted",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
+
+
+async def test_the_khud_title_migration_lets_khud_in_and_comes_off_cleanly():
+    """e7f8a9b0c1d4 (19 Nov 2026): a departed may be Khud; an unknown title is
+    still refused; the downgrade calls a Khud record Behdin and keeps it."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        insert = (
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, :t, 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')"
+        )
+        await _scratch_execute(insert, {"t": "khud"})
+        await _refused(insert, {"t": "mister"}, "an unknown title")
+        _ok(_alembic("downgrade", "d6e7f8a9b0c2"))
+        assert await _scratch_execute("SELECT departed_title, departed_name FROM funeral_records") == [("behdin", "Rustom")]
+        await _refused(insert, {"t": "khud"}, "Khud before this migration")
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)

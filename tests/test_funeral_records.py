@@ -67,6 +67,14 @@ async def test_a_death_by_roj_and_mah_is_the_most_recent_such_day(client, db, se
     assert rec["death"]["calendar"] == "kadmi" and rec["death"]["given_by"] == "roj_mah"
 
 
+async def test_the_departed_may_be_khud(client, db, seeded):
+    """Changed 19 Nov 2026: Khud is offered too, like the rest of the app."""
+    headers, _ = await manager(client, db)
+    r = await client.post(RECORDS, json=form(departed_title="khud"), headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["record"]["prayed_name"] == "Khud Rustom Jamshed"
+
+
 async def test_a_gatha_day_is_a_death_day_too(client, db, seeded):
     headers, _ = await manager(client, db)
     r = await client.post("/api/mobed/manager/death-day", json={"death_roj": 2, "death_mah": 13}, headers=headers)
@@ -81,7 +89,7 @@ async def test_a_gatha_day_is_a_death_day_too(client, db, seeded):
     ({"death_date": "2020-01-01"}, "death"),                          # not this year's
     ({"death_date": None, "death_roj": 31, "death_mah": 4}, "death"),
     ({"calendar": "fasli"}, "calendar"),                              # no Fasli (D5)
-    ({"departed_title": "khud"}, "departed_title"),
+    ({"departed_title": "mister"}, "departed_title"),
     ({"departed_name": "  "}, "departed_name"),
     ({"departed_name": "Rustom www.example.com"}, "departed_name"),
     ({"departed_parent_name": "@someone"}, "departed_parent_name"),

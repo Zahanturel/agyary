@@ -54,10 +54,10 @@ FUNERAL_PLACE_KINDS = (FUNERAL_DOONGERWADI, FUNERAL_PRAYER_HALL, FUNERAL_ARAMGAH
 FUNERAL_MANAGER = "manager"
 FUNERAL_PLACE_ROLES = (FUNERAL_MANAGER,)
 # A death recorded at a funeral place (D10, Phase 2 Step 4). The title the
-# departed is prayed with: the name titles a departed person can have ("khud",
-# oneself, is for the living). Four days or one day of obsequies. How the death
-# was given (D5): by its Gregorian date, or by Roj and Mah.
-DEPARTED_TITLES = ("ervad", "osta", "osti", "behdin")
+# departed is prayed with: the name titles of the rest of the app, Khud too
+# (owner, 19 Nov 2026). Four days or one day of obsequies. How the death was
+# given (D5): by its Gregorian date, or by Roj and Mah.
+DEPARTED_TITLES = ("ervad", "osta", "osti", "behdin", "khud")
 OBSEQUIES = ("four_days", "one_day")
 DEATH_BY_DATE, DEATH_BY_ROJ_MAH = "date", "roj_mah"
 DEATH_GIVEN_BY = (DEATH_BY_DATE, DEATH_BY_ROJ_MAH)
