@@ -36,6 +36,11 @@ export const state = {
   // own record. Read once and cleared by the screen that consumes it.
   behdinReturnTo: null,
   behdinPrefillName: null,
+
+  // The admin acting for one funeral place (acting.js): its id, from the
+  // address #/admin/act/<id>/..., and the place once fetched. Never saved.
+  actFor: null,
+  actPlace: null,
 };
 
 /** Where "home" is for the tab the mobed came from: the page Back falls back

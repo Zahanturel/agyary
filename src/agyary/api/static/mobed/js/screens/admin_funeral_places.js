@@ -7,6 +7,9 @@
  * (D8): it is then no longer offered at sign-up, and its managers keep their
  * accounts (their own switch is on Admin -> Mobeds).
  *
+ * Each place in use has "Act for this place": the place's manager's own screens,
+ * for the admin to show and try (acting.js); what they do there is the place's.
+ *
  * For the numbers in ADMIN_PHONES only; the server answers anyone else with a
  * 404, so hiding the way here is a courtesy and not the protection.
  */
@@ -19,6 +22,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed, flashInfo,
 } from "../ui.js";
 import { esc } from "../util.js";
+import { state } from "../state.js";
 import { navGuard, navigate, returnTo } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { mountLocationPicker } from "../location_picker.js";
@@ -39,7 +43,9 @@ function placeRow(p) {
     <div class="section-bar" data-place="${p.id}">
       <div class="sb-text"><b>${esc(p.name)}${p.is_active ? "" : ` <span class="tag grey">Off</span>`}</b>
         <span style="display:block">${esc(p.kind_label)} - ${esc(p.city)}${p.location ? "" : " - not on the map"}</span>
-        <span style="display:block">${esc(managersText(p.managers))}</span></div>
+        <span style="display:block">${esc(managersText(p.managers))}</span>
+        ${p.is_active ? `<button type="button" class="small secondary" data-act="${p.id}" style="margin-top:8px">Act
+          for this place</button>` : ""}</div>
       <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
     </div>`;
 }
@@ -85,6 +91,13 @@ export async function renderAdminFuneralPlaces() {
   document.getElementById("fpAdd").onclick = () => navigate(LIST + "/new");
   mainEl.querySelectorAll("[data-place]").forEach(row => {
     row.onclick = () => navigate(`${LIST}/${row.dataset.place}`);
+  });
+  mainEl.querySelectorAll("[data-act]").forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();   // the row itself opens the place's details
+      state.actPlace = data.places.find(p => p.id === Number(btn.dataset.act)) || null;
+      navigate(`#/admin/act/${btn.dataset.act}`);
+    };
   });
 }
 

@@ -206,23 +206,29 @@ export const putPreferences = (prefs) => put("/me/preferences", prefs);
 // the admin has added, and "I work here" (the account becomes a manager's and waits).
 export const searchFuneralPlaces = (q) => get(`/funeral-places?q=${encodeURIComponent(q || "")}`);
 export const joinFuneralPlace = (id) => post(`/funeral-places/${id}/join`, {});
-/** A manager's own place(s), for their home screen. */
-export const managerPlace = () => get("/manager/place");
+// An admin acting for one funeral place ("Act for this place", #/admin/act/<id>/...)
+// calls the manager's routes for that place: main.js sets state.actFor from the
+// address, and the server checks it is an admin and a place in use.
+function asManager(path) {
+  return state.actFor ? `${path}${path.includes("?") ? "&" : "?"}act_for=${state.actFor}` : path;
+}
+/** A manager's own place(s), for their home screen (the admin's: the one they act for). */
+export const managerPlace = () => get(asManager("/manager/place"));
 /** Recording a death and sending it to a fire temple (D10, Step 4). */
-export const managerDeathDay = (body) => post("/manager/death-day", body);
-export const managerRecords = (before) => get("/manager/records" + (before ? `?before=${before}` : ""));
-export const managerRecord = (id) => get(`/manager/records/${id}`);
-export const managerCreateRecord = (body) => post("/manager/records", body);
-export const managerUpdateRecord = (id, body) => put(`/manager/records/${id}`, body);
-export const managerSuggested = (id) => get(`/manager/records/${id}/agyaries`);
+export const managerDeathDay = (body) => post(asManager("/manager/death-day"), body);
+export const managerRecords = (before) => get(asManager("/manager/records" + (before ? `?before=${before}` : "")));
+export const managerRecord = (id) => get(asManager(`/manager/records/${id}`));
+export const managerCreateRecord = (body) => post(asManager("/manager/records"), body);
+export const managerUpdateRecord = (id, body) => put(asManager(`/manager/records/${id}`), body);
+export const managerSuggested = (id) => get(asManager(`/manager/records/${id}/agyaries`));
 export const managerSearchAgyaries = (q, placeId) =>
-  get(`/manager/agyaries/search?q=${encodeURIComponent(q || "")}${placeId ? `&place_id=${placeId}` : ""}`);
+  get(asManager(`/manager/agyaries/search?q=${encodeURIComponent(q || "")}${placeId ? `&place_id=${placeId}` : ""}`));
 // The one tick says both: the family agreed to share their name and number, and to
 // get WhatsApp messages about the prayers from Mobed Diary (D10, Step 5b).
 export const managerSend = (id, agyaryId, familyAgreed) =>
-  post(`/manager/records/${id}/requests`,
+  post(asManager(`/manager/records/${id}/requests`),
     { agyary_id: agyaryId, family_agreed: familyAgreed, family_whatsapp_agreed: familyAgreed });
-export const managerWithdraw = (requestId) => post(`/manager/requests/${requestId}/withdraw`, {});
+export const managerWithdraw = (requestId) => post(asManager(`/manager/requests/${requestId}/withdraw`), {});
 /** The fire temple's side (D10, Step 5): the requests this mobed was asked. */
 export const myRequestCount = () => get("/requests/count");
 export const myRequests = () => get("/requests");

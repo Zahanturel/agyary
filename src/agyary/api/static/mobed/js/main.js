@@ -17,7 +17,7 @@ import { watchForUpdates } from "./update.js";
 import { state, saveSession, restoreSession, clearSession, homeHash } from "./state.js";
 import { clearAllDrafts } from "./drafts.js";
 import { calendarHash, boardHash } from "./calendar.js";
-import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
+import { tryRefresh, getMe, managerPlace, REFRESH_OFFLINE } from "./api.js";
 import {
   chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline, flashError, flashInfo,
 } from "./ui.js";
@@ -48,6 +48,7 @@ import { renderRequests, renderRequest } from "./screens/requests.js";
 import { renderCallout } from "./screens/callout.js";
 import { renderOurMobeds } from "./screens/our_mobeds.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
+import { paintActBanner } from "./acting.js";
 
 // --- Routes -----------------------------------------------------------------
 // `open: true` needs no session.
@@ -85,6 +86,14 @@ route("#/admin/mobeds", renderAdminMobeds, { parent: "#/admin" });
 route("#/admin/funeral-places", renderAdminFuneralPlaces, { parent: "#/admin" });
 route("#/admin/funeral-places/new", () => renderAdminFuneralPlace(), { parent: "#/admin/funeral-places" });
 route("#/admin/funeral-places/:id", renderAdminFuneralPlace, { parent: "#/admin/funeral-places" });
+// The admin acting for one of them (acting.js): the manager's own screens for that
+// place. The guard lets only an admin in; the server checks again on every call.
+const actHome = (p) => `#/admin/act/${p.placeId}`;
+route("#/admin/act/:placeId", renderManagerHome, { parent: "#/admin/funeral-places" });
+route("#/admin/act/:placeId/record/new", renderRecordNew, { parent: actHome });
+route("#/admin/act/:placeId/record/:id", renderRecordView, { parent: actHome });
+route("#/admin/act/:placeId/record/:id/edit", renderRecordEdit, { parent: (p) => `${actHome(p)}/record/${p.id}` });
+route("#/admin/act/:placeId/record/:id/send", renderRecordSend, { parent: (p) => `${actHome(p)}/record/${p.id}` });
 
 // `parent` is where Back goes when there is nothing behind the screen (a
 // reload, a shared link) - see router.back(). Screens with a parent get the
@@ -128,7 +137,35 @@ route("#/our-mobeds", renderOurMobeds, { parent: "#/menu" });
 setNotFound(() => navigate("#/calendar", { replace: true }));
 
 // --- Guard ------------------------------------------------------------------
-setGuard(async (matched) => {
+setGuard(async (matched, params) => {
+  state.actFor = null;   // set again only for an admin acting for a place
+  const to = await guardFor(matched, params);
+  paintActBanner();
+  return to;
+});
+
+/** The admin acting for a place: in, with the place known for the banner; or
+ *  back to the list, saying why, if the server says no (unknown or turned off). */
+async function enterActing(params) {
+  if (!state.user.is_admin) return "#/calendar";
+  const id = Number(params.placeId);
+  if (!Number.isInteger(id) || id <= 0) return "#/admin/funeral-places";
+  state.actFor = id;
+  if (state.actPlace && state.actPlace.id === id) return null;
+  try {
+    state.actPlace = (await managerPlace()).places[0] || null;
+  } catch (e) {
+    if (e.status === 403 || e.status === 404) {
+      if (state.actFor === id) state.actFor = null;
+      flashError(e.message);
+      return "#/admin/funeral-places";
+    }
+    // No signal or a passing failure: the screen itself says so, with Try again.
+  }
+  return null;
+}
+
+async function guardFor(matched, params) {
   if (matched.open) {
     // Already signed in? The login screen has nothing to offer.
     return signedIn() ? "#/calendar" : null;
@@ -156,10 +193,11 @@ setGuard(async (matched) => {
   // once a fire temple is chosen. The server refuses everything else anyway.
   if (!hasAccess()) return matched.pattern === "#/waiting" || matched.pattern === "#/onboarding" ? null : "#/waiting";
   if (matched.pattern === "#/waiting") return "#/calendar";
-  // The manager's screens are not a mobed's.
+  // The manager's screens are not a mobed's; an admin reaches them only acting for a place.
   if (matched.pattern.startsWith("#/manager")) return "#/calendar";
+  if (matched.pattern.startsWith("#/admin/act/")) return enterActing(params);
   return null;
-});
+}
 
 // --- Chrome -----------------------------------------------------------------
 menuBtn.onclick = () => navigate("#/menu");

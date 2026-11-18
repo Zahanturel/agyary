@@ -17,6 +17,9 @@
  *
  * Nothing about the cause of death, age, address, certificate, ID numbers or
  * how the body goes is asked.
+ *
+ * The admin acting for one place (acting.js) uses these same screens: every
+ * address goes through managerHash, and what the admin recorded says so.
  */
 
 import {
@@ -30,6 +33,7 @@ import {
 import { esc, gregLabel, istHm, istYmd, todayIst, phoneField, readPhone, setPhoneField, MAH_NAMES_JS } from "../util.js";
 import { navigate, navGuard, returnTo } from "../router.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
+import { managerHash, managerPlaces } from "../acting.js";
 
 const TITLES = [["behdin", "Behdin"], ["ervad", "Ervad"], ["osta", "Osta"], ["osti", "Osti"]];
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
@@ -93,7 +97,7 @@ function blankDraft() {
     title: "behdin", name: "", parent: "", calendar: "shenshai", deathBy: "date", death: "",
     deathRoj: "", deathMah: "", obsequies: "", bungli: "", gsDate: "", gsGeh: "", utDate: "", utTime: "",
     mobeds: "", preferred: null, contactName: "", contactPhone: "",
-    placeId: ((state.user.funeral_places || [])[0] || {}).id || null,
+    placeId: (managerPlaces()[0] || {}).id || null,
   };
 }
 
@@ -127,7 +131,7 @@ function radio(name, id, value, checked, text) {
 }
 
 function formHtml(d, { editing }) {
-  const places = state.user.funeral_places || [];
+  const places = managerPlaces();
   const today = todayIst();
   return `
     <div class="card" id="frCard">
@@ -426,23 +430,23 @@ async function renderForm(rec) {
         ? `Saved. The ${res.told === 1 ? "person" : `${res.told} people`} asked at the fire temple ${res.told === 1
           ? "was" : "were"} sent the new details.`
         : "Saved.");
-      returnTo(`#/manager/record/${saved.id}`);
+      returnTo(managerHash(`/record/${saved.id}`));
     } else if (saved.may_send) {
       flashInfo("Saved. Now choose the fire temple to ask for the prayers.");
-      navigate(`#/manager/record/${saved.id}`, { replace: true });
-      navigate(`#/manager/record/${saved.id}/send`);
+      navigate(managerHash(`/record/${saved.id}`), { replace: true });
+      navigate(managerHash(`/record/${saved.id}/send`));
     } else {
       flashInfo("Saved.");
-      navigate(`#/manager/record/${saved.id}`, { replace: true });
+      navigate(managerHash(`/record/${saved.id}`), { replace: true });
     }
   };
 }
 
 export function renderRecordNew() {
-  const places = state.user.funeral_places || [];
+  const places = managerPlaces();
   if (places.length && !places.some(p => p.is_active)) {
     flashInfo("Your place is turned off in Mobed Diary at the moment, so a death cannot be recorded there.");
-    return navigate("#/manager", { replace: true });
+    return navigate(managerHash(), { replace: true });
   }
   return renderForm(null);
 }
@@ -464,7 +468,7 @@ export async function renderRecordEdit({ id }) {
   if (!rec || !alive()) return;
   if (!rec.may_edit) {
     flashInfo("A fire temple has accepted this request, so the record can no longer be changed here.");
-    return navigate(`#/manager/record/${id}`, { replace: true });
+    return navigate(managerHash(`/record/${id}`), { replace: true });
   }
   return renderForm(rec);
 }
@@ -509,6 +513,7 @@ export async function renderRecordView({ id }) {
     <div class="card">
       <h2>${esc(rec.prayed_name)}</h2>
       ${rec.funeral_place ? `<p class="meta" style="margin:0">${esc(rec.funeral_place.name)}</p>` : ""}
+      ${rec.recorded_by_admin ? `<p class="meta" style="margin:4px 0 0">Recorded by the admin</p>` : ""}
       <div style="margin-top:10px">
         ${fact("Died", `${esc(gregLabel(death.date))}<br><span class="meta">${esc(death.label)}${death.given_by === "roj_mah"
           ? " (given by Roj and Mah)" : ""}</span>`)}
@@ -540,8 +545,8 @@ export async function renderRecordView({ id }) {
         turned off in Mobed Diary at the moment, so nothing can be sent from it.</p>` : ""}
     </div>`;
   const on = (sel, fn) => { const el = document.getElementById(sel); if (el) el.onclick = fn; };
-  on("mrSend", () => navigate(`#/manager/record/${rec.id}/send`));
-  on("mrEdit", () => navigate(`#/manager/record/${rec.id}/edit`));
+  on("mrSend", () => navigate(managerHash(`/record/${rec.id}/send`)));
+  on("mrEdit", () => navigate(managerHash(`/record/${rec.id}/edit`)));
   on("mrWithdraw", () => confirmWithdraw(rec, waiting));
 }
 
@@ -610,7 +615,7 @@ export async function renderRecordSend({ id }) {
     flashInfo(rec.requests.some(q => q.status === "waiting")
       ? "This request is already waiting at a fire temple. Withdraw it first to send it to another."
       : "This record cannot be sent now.");
-    return navigate(`#/manager/record/${id}`, { replace: true });
+    return navigate(managerHash(`/record/${id}`), { replace: true });
   }
   mainEl.innerHTML = `
     <div class="card">
@@ -739,6 +744,6 @@ function confirmSend(rec, a) {
     sheet.close();
     const n = res.asked;
     flashInfo(`Sent to ${a.name}. ${n} ${n === 1 ? "person there was" : "people there were"} told.`);
-    returnTo(`#/manager/record/${rec.id}`);
+    returnTo(managerHash(`/record/${rec.id}`));
   };
 }

@@ -14,6 +14,9 @@
  * A manager has none of the mobed app (no Machi, Calendar or Behdins tabs);
  * the guard in main.js keeps them to these screens and the server refuses
  * them every mobed route anyway.
+ *
+ * The same home and record screens serve the admin acting for one place
+ * (#/admin/act/<placeId>, acting.js): every address goes through managerHash.
  */
 
 import {
@@ -33,6 +36,7 @@ import { clearAllDrafts } from "../drafts.js";
 import { shellVersion } from "../update.js";
 import { flagProblems } from "../fielderrors.js";
 import { paintPushCard } from "../push_card.js";
+import { managerHash, paintActBanner } from "../acting.js";
 
 /** A way to reach the person who runs Mobed Diary, in words and (if the
  *  server has SUPPORT_PHONE) a WhatsApp button. */
@@ -162,10 +166,16 @@ export async function renderManagerHome() {
     return screenFailed(e.message, () => renderManagerHome());
   }
   if (!alive()) return;
-  // What the app keeps follows what the server has now.
-  state.user.funeral_places = places;
-  saveSession();
-  refreshHeader();
+  if (state.actFor) {
+    // The admin acting for this place: their own account keeps no places.
+    state.actPlace = places[0] || null;
+    paintActBanner();
+  } else {
+    // What the app keeps follows what the server has now.
+    state.user.funeral_places = places;
+    saveSession();
+    refreshHeader();
+  }
 
   if (!places.length) {
     mainEl.innerHTML = `
@@ -190,7 +200,7 @@ export async function renderManagerHome() {
       <div id="mhRecords"><p class="meta">Loading...</p></div>
     </div>`;
   const rec = document.getElementById("mhRecord");
-  if (rec) rec.onclick = () => navigate("#/manager/record/new");
+  if (rec) rec.onclick = () => navigate(managerHash("/record/new"));
   paintRecords(document.getElementById("mhRecords"), alive);
 }
 
@@ -229,7 +239,7 @@ async function paintRecords(box, alive, before = null) {
     </div>`).join("") + (page.more ? `<div data-older style="margin-top:4px">
       <button type="button" class="ghost small">Show older</button></div>` : ""));
   box.querySelectorAll("[data-rec]").forEach(row => {
-    row.onclick = () => navigate(`#/manager/record/${row.dataset.rec}`);
+    row.onclick = () => navigate(managerHash(`/record/${row.dataset.rec}`));
   });
   const more = box.querySelector("[data-older] button");
   if (more) {
