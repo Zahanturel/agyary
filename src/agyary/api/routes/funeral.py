@@ -15,6 +15,10 @@ only that place's managers see (services/funeral_records.py). A record at
 another place answers 404, the same as one that does not exist. What is wrong
 with one field of the form is said with that field's name in the X-Field
 header, so the app can mark it.
+
+The fire temple's side (Step 5): the requests a mobed was asked, answered from
+their Requests tab (services/funeral_answers.py). These are mobed routes,
+closed to a manager's account like the rest of the mobed app.
 """
 
 from __future__ import annotations
@@ -26,11 +30,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api import rate_limit
-from agyary.api.routes.mobed import _serialize_user, get_current_manager, get_user_not_switched_off
+from agyary.api.routes.mobed import _serialize_user, get_current_manager, get_current_user, get_user_not_switched_off
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, FuneralPlace, FuneralRequest, User
-from agyary.services import funeral_places, funeral_records, funeral_requests
+from agyary.services import funeral_answers, funeral_places, funeral_records, funeral_requests
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
 
@@ -303,3 +307,98 @@ async def withdraw_request(
         raise _send_error(exc) from exc
     await db.commit()
     return await _record_response(db, record)
+
+
+# ---------------------------------------------------------------------------
+# The fire temple's side (D10, Step 5): the Requests tab of the people asked
+# ---------------------------------------------------------------------------
+# Mobed routes: get_current_user refuses a manager's account (and anyone whose
+# access is not on). A request is 404 to anyone who was not asked.
+class AcceptIn(BaseModel):
+    # "Share my name and number with <the funeral place>", on by default.
+    share_contact: bool = True
+
+
+class DeclineIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=600)
+
+
+def _answer_error(exc: funeral_answers.AnswerError) -> HTTPException:
+    headers = {FIELD_HEADER: exc.field} if exc.field else None
+    return HTTPException(status_code=exc.status, detail=str(exc), headers=headers)
+
+
+async def _asked_request(db: AsyncSession, user: User, request_id: int) -> FuneralRequest:
+    request = await funeral_answers.get_for_user(db, user.id, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail=funeral_answers.NOT_FOUND)
+    return request
+
+
+async def _one(db: AsyncSession, user: User, request: FuneralRequest) -> dict:
+    return (await funeral_answers.serialize(db, user, [request]))[0]
+
+
+@router.get("/requests/count")
+async def my_request_count(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """How many requests wait for this mobed's answer: the red count on the tab."""
+    return {"waiting": await funeral_answers.waiting_count(db, user.id)}
+
+
+@router.get("/requests")
+async def my_requests(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """The requests this mobed was asked: those waiting, and the last few
+    answered or withdrawn. No family name or number until they accept."""
+    waiting, earlier = await funeral_answers.for_user(db, user.id)
+    return {
+        "waiting": await funeral_answers.serialize(db, user, waiting),
+        "earlier": await funeral_answers.serialize(db, user, earlier),
+    }
+
+
+@router.get("/requests/{request_id}")
+async def my_request(
+    request_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user),
+) -> dict:
+    return {"request": await _one(db, user, await _asked_request(db, user, request_id))}
+
+
+@router.post("/requests/{request_id}/accept")
+async def accept_request(
+    request_id: int, payload: AcceptIn, db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Accept for the fire temple; the first to accept takes it. Sets up the
+    behdin in this mobed's own book and the Geh-saarnu and Uthamna on their
+    calendar, and returns the memorial form's fields for them to check."""
+    rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
+    request = await _asked_request(db, user, request_id)
+    try:
+        done = await funeral_answers.accept(db, get_settings(), user, request, share_contact=payload.share_contact)
+    except funeral_answers.AnswerError as exc:
+        raise _answer_error(exc) from exc
+    await db.commit()
+    return {
+        "request": await _one(db, user, request),
+        "customer_id": done.customer_id,
+        "behdin_created": done.behdin_created,
+        "events": done.events,
+        "skipped": done.skipped,
+    }
+
+
+@router.post("/requests/{request_id}/decline")
+async def decline_request(
+    request_id: int, payload: DeclineIn, db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Decline for the fire temple, with an optional short reason for the
+    manager, who can then ask another fire temple."""
+    rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
+    request = await _asked_request(db, user, request_id)
+    try:
+        await funeral_answers.decline(db, get_settings(), user, request, reason=payload.reason)
+    except funeral_answers.AnswerError as exc:
+        raise _answer_error(exc) from exc
+    await db.commit()
+    return {"request": await _one(db, user, request)}

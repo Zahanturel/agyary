@@ -342,6 +342,14 @@ async def update(db: AsyncSession, record: FuneralRecord, user: User, values: di
 
 # --- What the manager sees ---------------------------------------------------------
 
+def _accepter(accepters: dict, q: FuneralRequest) -> tuple[str | None, str | None]:
+    """Who accepted, and their number only if they let the place have it."""
+    if q.status not in ACCEPTED or not q.accepted_by_user_id or q.accepted_by_user_id not in accepters:
+        return None, None
+    name, phone = accepters[q.accepted_by_user_id]
+    return name, phone if q.accepter_shared_contact else None
+
+
 def _hhmm(t: time | None) -> str | None:
     return t.strftime("%H:%M") if t else None
 
@@ -361,7 +369,10 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
         a.id: a for a in (await db.execute(select(Agyary).where(Agyary.id.in_(agyary_ids)))).scalars()
     } if agyary_ids else {}
     people = {q.accepted_by_user_id for q in requests if q.accepted_by_user_id}
-    names = dict((await db.execute(select(User.id, User.name).where(User.id.in_(people)))).all()) if people else {}
+    accepters = {
+        uid: (name, phone) for uid, name, phone in
+        (await db.execute(select(User.id, User.name, User.phone).where(User.id.in_(people)))).all()
+    } if people else {}
     asked = dict(
         (await db.execute(
             select(FuneralRequestRecipient.funeral_request_id, func.count())
@@ -417,7 +428,9 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
                 {
                     "id": q.id, "agyari": agyari(q.agyary_id), "status": q.status,
                     "sent_at": _when(q.sent_at), "decided_at": _when(q.decided_at),
-                    "accepted_by": names.get(q.accepted_by_user_id) if q.accepted_by_user_id else None,
+                    "accepted_by": _accepter(accepters, q)[0],
+                    # The accepter's number only if they ticked "Share my name and number" (Step 5).
+                    "accepter_phone": _accepter(accepters, q)[1],
                     "decline_reason": q.decline_reason, "asked": asked.get(q.id, 0),
                 }
                 for q in qs

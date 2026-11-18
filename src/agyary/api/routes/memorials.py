@@ -23,7 +23,7 @@ from agyary.calendar.memorial import OPENING_5_TO_9, OPENING_ALL, OPENING_NONE, 
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Customer, Memorial, User
-from agyary.services import guardrails, memorial_share, memorials
+from agyary.services import funeral_answers, guardrails, memorial_share, memorials
 
 router = APIRouter(prefix="/api/mobed", tags=["memorials"])
 
@@ -101,6 +101,9 @@ class CreateMemorialIn(MemorialIn):
     service_overrides: dict[str, list[int]] = {}
     # The family has already paid for every date.
     all_paid: bool = False
+    # Made from a request for prayers this mobed accepted (D10, Step 5): the
+    # memorial is noted on it, for their Requests tab. Anything else is ignored.
+    funeral_request_id: int | None = None
 
 
 def _choice(p: MemorialIn) -> memorials.Choice:
@@ -240,6 +243,7 @@ async def create_memorial(
         )
     except memorials.MemorialError as exc:
         raise _bad_request(exc) from exc
+    await funeral_answers.link_memorial(db, user, payload.funeral_request_id, memorial)
     await db.commit()
     # Re-read so the response is exactly what a later GET would return.
     fresh = await memorials.get_for_user(db, user.id, memorial.id)
