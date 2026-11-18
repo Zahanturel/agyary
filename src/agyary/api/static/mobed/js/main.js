@@ -45,6 +45,8 @@ import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
+import { renderCallout } from "./screens/callout.js";
+import { renderOurMobeds } from "./screens/our_mobeds.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
 
 // --- Routes -----------------------------------------------------------------
@@ -118,6 +120,9 @@ route("#/memorial/:id/:oid", renderMemorial, { parent: "#/behdins", tab: "behdin
 // Requests for prayers from a Doongerwadi or prayer hall (D10), the fourth tab.
 route("#/requests", renderRequests, { tab: "requests" });
 route("#/requests/:id", renderRequest, { parent: "#/requests", tab: "requests" });
+// A confirmed panthaky asks the agyari's mobeds on WhatsApp (D10, Step 5c).
+route("#/requests/:id/callout", renderCallout, { parent: (p) => `#/requests/${p.id}`, tab: "requests" });
+route("#/our-mobeds", renderOurMobeds, { parent: "#/menu" });
 
 // The calendar is home; anything unrecognised lands there.
 setNotFound(() => navigate("#/calendar", { replace: true }));

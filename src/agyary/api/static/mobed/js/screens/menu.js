@@ -100,6 +100,8 @@ export async function renderMenu() {
         ` : ""}
       </div>
       ${agyary ? `<div style="margin-top:10px"><button class="secondary small" id="mEditLocation">Edit location</button></div>
+        ${agyary.role === "panthaky" ? `<div style="margin-top:10px"><button class="secondary small" id="mOurMobeds">Our mobeds</button>
+          <p class="meta" style="margin:4px 0 0">The mobeds you can ask on WhatsApp whether they can pray.</p></div>` : ""}
         <div id="mClaimBox">${claimHtml(agyary)}</div>` : ""}
     </div>
 
@@ -298,6 +300,8 @@ export async function renderMenu() {
 
   const editLocation = document.getElementById("mEditLocation");
   if (editLocation) editLocation.onclick = () => navigate("#/fire-temple/location");
+  const ourMobedsBtn = document.getElementById("mOurMobeds");
+  if (ourMobedsBtn) ourMobedsBtn.onclick = () => navigate("#/our-mobeds");
   document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
   const adminBar = document.getElementById("mAdminBar");
   if (adminBar) adminBar.onclick = () => navigate("#/admin");

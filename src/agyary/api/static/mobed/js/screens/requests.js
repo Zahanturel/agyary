@@ -16,13 +16,16 @@
  *    request then shows the family's contact with "Message the family on
  *    WhatsApp" (their own WhatsApp, a message ready to change) and "Call".
  *
- * Nothing is sent from Mobed Diary's own number here (that is Step 5b).
+ * With the share tick, accepting can also send WhatsApp messages from Mobed
+ * Diary's own number (Step 5b, once Meta approves them): what went, or why not,
+ * is said after accepting and on the request. A confirmed panthaky can ask the
+ * agyari's mobeds on WhatsApp from here (Step 5c, screens/callout.js).
  */
 
 import { myRequests, myRequest, acceptRequest, declineRequest } from "../api.js";
 import { state, saveSession } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, flashInfo,
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, flashInfo, flashError,
 } from "../ui.js";
 import { esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
@@ -158,6 +161,7 @@ function familyCardHtml(q) {
       <p class="meta" style="margin:10px 0 0">${q.shared_contact
         ? `You shared your name and number with ${esc(q.funeral_place.name)}.`
         : `You did not share your number with ${esc(q.funeral_place.name)}: they see your name and fire temple.`}</p>
+      ${whatsappHtml(q.whatsapp)}
     </div>
     <div class="card">
       <h2>In your book</h2>
@@ -169,6 +173,29 @@ function familyCardHtml(q) {
           : q.customer_id ? `<button type="button" id="rqMakeMemorial">Make the memorial</button>` : ""}
         ${q.customer_id ? `<button type="button" class="ghost" id="rqBehdin">Open ${esc(c.name)}</button>` : ""}
       </div>
+    </div>`;
+}
+
+/** What Mobed Diary's own WhatsApp sent on accepting (Step 5b), if anything. */
+function whatsappHtml(wa) {
+  if (!wa || wa.state === "not_shared") return "";
+  const failed = (wa.items || []).filter(i => i.status === "failed");
+  return `<p class="meta" style="margin:6px 0 0">${wa.state === "failed" ? "" : esc(wa.message || "")}</p>
+    ${failed.map(i => `<p class="meta" style="margin:4px 0 0"><b>The WhatsApp message to ${esc(i.to_words)} could not be
+      sent:</b> ${esc(i.why || "")}</p>`).join("")}
+    ${wa.family_note ? `<p class="meta" style="margin:4px 0 0">${esc(wa.family_note)}</p>` : ""}`;
+}
+
+/** A confirmed panthaky of the fire temple that accepted can ask its mobeds (Step 5c). */
+function calloutCardHtml(q) {
+  const wa = q.callout_whatsapp || { on: false, why_not: "" };
+  return `<div class="card">
+      <h2>Mobeds to pray</h2>
+      <p class="meta" style="margin:0">Ask the mobeds of ${esc(q.agyari.name)} on WhatsApp whether they can pray,
+        and pick who goes. Only those you pick get the family's contact.</p>
+      ${wa.on ? "" : `<p class="meta" style="margin:6px 0 0"><b>${esc(wa.why_not)}</b> Until then you can build your
+        list of mobeds.</p>`}
+      <div class="action-bar"><button type="button" class="secondary" id="rqCallout">Ask our mobeds on WhatsApp</button></div>
     </div>`;
 }
 
@@ -203,9 +230,11 @@ export async function renderRequest({ id }) {
         <button type="button" class="secondary" id="rqDecline">Decline</button>
         <button type="button" id="rqAccept">Accept</button>
       </div>` : ""}
-    </div>`;
+    </div>
+    ${q.may_call_out ? calloutCardHtml(q) : ""}`;
 
   const on = (sel, fn) => { const el = document.getElementById(sel); if (el) el.onclick = fn; };
+  on("rqCallout", () => navigate(`#/requests/${q.id}/callout`));
   on("rqAccept", () => confirmAccept(q));
   on("rqDecline", () => confirmDecline(q));
   if (!q.accepted_by_me) return;
@@ -254,6 +283,13 @@ function acceptedWords(res) {
   return words.join(" ");
 }
 
+/** What to add about Mobed Diary's own WhatsApp messages after accepting. */
+function whatsappWords(wa) {
+  if (!wa || wa.state === "not_shared") return { text: "" };
+  if (wa.state === "off") return { text: `${wa.message} Nothing was sent from Mobed Diary's WhatsApp.` };
+  return { text: wa.message || "", error: wa.state === "failed" };
+}
+
 function confirmAccept(q) {
   const place = q.funeral_place.name;
   const sheet = openSheet({
@@ -297,7 +333,8 @@ function confirmAccept(q) {
     }
     sheet.close();
     refreshRequestCount();
-    flashInfo(acceptedWords(res));
+    const wa = whatsappWords(res.whatsapp);
+    (wa.error ? flashError : flashInfo)([acceptedWords(res), wa.text].filter(Boolean).join(" "));
     openMemorialForm(res.request, res.customer_id);
   };
 }

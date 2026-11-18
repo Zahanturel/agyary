@@ -705,7 +705,8 @@ function confirmSend(rec, a) {
       <p class="meta" style="margin-top:0">${esc(rec.prayed_name)}. It goes to ${who}, with the prayers and their
         times. The family's name and number are shown only to the one who accepts.</p>
       <div class="check-row" id="msTickRow"><input type="checkbox" id="msTick">
-        <label for="msTick">The family agreed to share their name and number with this agyari</label></div>
+        <label for="msTick">The family agreed to share their name and number with this agyari, and to get
+          WhatsApp messages about the prayers from Mobed Diary</label></div>
       <p class="meta" data-msg role="alert" style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">
         <button type="button" data-send>Send</button>

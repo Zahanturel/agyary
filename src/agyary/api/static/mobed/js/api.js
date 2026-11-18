@@ -217,8 +217,11 @@ export const managerUpdateRecord = (id, body) => put(`/manager/records/${id}`, b
 export const managerSuggested = (id) => get(`/manager/records/${id}/agyaries`);
 export const managerSearchAgyaries = (q, placeId) =>
   get(`/manager/agyaries/search?q=${encodeURIComponent(q || "")}${placeId ? `&place_id=${placeId}` : ""}`);
+// The one tick says both: the family agreed to share their name and number, and to
+// get WhatsApp messages about the prayers from Mobed Diary (D10, Step 5b).
 export const managerSend = (id, agyaryId, familyAgreed) =>
-  post(`/manager/records/${id}/requests`, { agyary_id: agyaryId, family_agreed: familyAgreed });
+  post(`/manager/records/${id}/requests`,
+    { agyary_id: agyaryId, family_agreed: familyAgreed, family_whatsapp_agreed: familyAgreed });
 export const managerWithdraw = (requestId) => post(`/manager/requests/${requestId}/withdraw`, {});
 /** The fire temple's side (D10, Step 5): the requests this mobed was asked. */
 export const myRequestCount = () => get("/requests/count");
@@ -226,6 +229,13 @@ export const myRequests = () => get("/requests");
 export const myRequest = (id) => get(`/requests/${id}`);
 export const acceptRequest = (id, shareContact) => post(`/requests/${id}/accept`, { share_contact: shareContact });
 export const declineRequest = (id, reason) => post(`/requests/${id}/decline`, { reason: reason || null });
+/** A fire temple's own list of mobeds, and the panthaky's call-out on WhatsApp (D10, Step 5c). */
+export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
+export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });
+export const removeOurMobed = (aid, id) => del(`/agyaries/${aid}/our-mobeds/${id}`);
+export const getCallout = (rid) => get(`/requests/${rid}/callout`);
+export const sendCallout = (rid, who) => post(`/requests/${rid}/callout`, { who });
+export const pickFromCallout = (rid, answers) => post(`/requests/${rid}/callout/pick`, { answers });
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).
