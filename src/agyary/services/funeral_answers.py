@@ -165,20 +165,27 @@ def _clock(t: time) -> str:
 
 def family_message(record: FuneralRecord, place: FuneralPlace, agyary: Agyary, mobed: User) -> str:
     """What the accepter's own WhatsApp opens with, to the family, for them to
-    change as they like before sending. Short, and only what is known."""
+    change as they like before sending. Short, and only what is known; it ends
+    with the Zoroastrian wish of the family's template (owner, 19 Nov 2026),
+    not "our prayers are with you"."""
     departed = funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
-    where = place.name
     parts = [
         f"Sahebji {record.family_contact_name}, I am {mobed.name} of {agyary.name}.",
         f"{place.name} has asked me to perform the prayers for {departed}.",
     ]
-    if record.geh_saarnu_date:
-        parts.append(f"I will be at {where} for the Geh-saarnu on {_day(record.geh_saarnu_date)}, "
-                     f"{GEH_NAMES.get(record.geh_saarnu_geh)} geh.")
+    gs = (f"on {_day(record.geh_saarnu_date)}, {GEH_NAMES.get(record.geh_saarnu_geh)} geh"
+          if record.geh_saarnu_date else None)
+    ut = None
     if record.uthamna_date:
-        at = f", {_clock(record.uthamna_time)}" if record.uthamna_time else ""
-        parts.append(f"The Uthamna is on {_day(record.uthamna_date)}{at}.")
-    parts.append("Please call or message me here for anything you need. Our prayers are with you and your family.")
+        ut = f"on {_day(record.uthamna_date)}" + (f", {_clock(record.uthamna_time)}" if record.uthamna_time else "")
+    if gs and ut:
+        parts.append(f"The Geh-saarnu is {gs}, and the Uthamna {ut}.")
+    elif gs:
+        parts.append(f"The Geh-saarnu is {gs}.")
+    elif ut:
+        parts.append(f"The Uthamna is {ut}.")
+    parts.append("Please call or message me here for anything you need.")
+    parts.append(f"May the ruvan of {departed} attain Garothman Behesht.")
     return " ".join(parts)
 
 
@@ -467,9 +474,9 @@ async def accept(
     await _tell_managers(
         db, settings, record, request, kind=KIND_ACCEPTED,
         title=f"{agyary.name} accepted the prayers",
-        body=f"{user.name} of {agyary.name} accepted the prayers for {prayed}. "
-             + ("Their number is on the record." if share_contact
-                else "They chose not to share their number; you can reach them through the fire temple."),
+        body=f"{user.name} of {agyary.name} accepted the prayers for {prayed}."
+             + ("" if share_contact
+                else " They chose not to share their number; you can reach them through the fire temple."),
         push=("Prayers accepted", f"{agyary.name} accepted the request from {place.name}."), now=now,
     )
     await _tell_the_others(

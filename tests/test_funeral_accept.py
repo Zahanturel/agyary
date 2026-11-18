@@ -129,7 +129,14 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
     assert req["status"] == "accepted" and req["accepted_by_me"] is True
     assert req["family_contact"] == {"name": "Test Family", "phone": FAMILY}
     assert req["family_message"].startswith("Sahebji Test Family, I am Er. Hormuz Dadachanji of ")
-    assert "Behdin Rustom Jamshed" in req["family_message"] and "Doongerwadi (test)" in req["family_message"]
+    today = funeral_records.today_ist()
+    day = lambda d: f"{d:%a} {d.day} {d:%b}"   # noqa: E731
+    assert req["family_message"] == (
+        f"Sahebji Test Family, I am Er. Hormuz Dadachanji of {req['agyari']['name']}. Doongerwadi (test) has asked me "
+        "to perform the prayers for Behdin Rustom Jamshed. "
+        f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, 4:00 pm. "
+        "Please call or message me here for anything you need. "
+        "May the ruvan of Behdin Rustom Jamshed attain Garothman Behesht.")
     assert req["memorial_prefill"] == {
         "name": "Behdin Rustom Jamshed", "calendar": "shenshai", "deathBy": "date",
         "death": rec["death"]["date"], "deathRoj": "", "deathMah": "",
@@ -320,7 +327,8 @@ async def test_the_manager_sees_the_number_only_with_the_tick(client, db, seeded
     notes = (await db.execute(select(AppNotification).where(AppNotification.kind == "funeral_request_accepted")
                               .order_by(AppNotification.id))).scalars().all()
     assert len(notes) == 2 and notes[0].link == f"#/manager/record/{shared['id']}"
-    assert notes[0].body.startswith("Er. Hormuz Dadachanji of ") and "Their number is on the record." in notes[0].body
+    assert notes[0].body.startswith("Er. Hormuz Dadachanji of ") and notes[0].body.endswith("Behdin Rustom Jamshed.")
+    assert "number" not in notes[0].body       # owner, 19 Nov 2026: no "Their number is on the record."
     assert "chose not to share their number" in notes[1].body
     assert len(pushes) == 2 and pushes[0]["title"] == "Prayers accepted"
     for text in [n.title + n.body for n in notes] + [p["title"] + p["body"] for p in pushes]:
@@ -399,3 +407,19 @@ async def test_a_manager_cannot_reach_the_requests_and_a_mobed_none_of_the_manag
 
 async def _count(db, model, *where) -> int:
     return (await db.execute(select(func.count()).select_from(model).where(*where))).scalar_one()
+
+
+def test_the_family_message_leaves_out_what_is_not_known():
+    """Owner, 19 Nov 2026: it ends with the wish of the family's template, and a
+    day the record does not have is simply not mentioned."""
+    from types import SimpleNamespace as NS
+
+    from agyary.services.funeral_answers import family_message
+
+    record = NS(departed_title="khud", departed_name="Rustom", departed_parent_name=None, family_contact_name="Test Family",
+                geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None)
+    words = family_message(record, NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test"))
+    assert words == ("Sahebji Test Family, I am Er. Test of Goti Adarian. Doongerwadi (test) has asked me to perform "
+                     "the prayers for Khud Rustom. Please call or message me here for anything you need. "
+                     "May the ruvan of Khud Rustom attain Garothman Behesht.")
+    assert "Our prayers" not in words and "Geh-saarnu" not in words
