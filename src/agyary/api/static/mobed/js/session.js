@@ -11,6 +11,7 @@ import { state, saveSession, clearSession, forgetLastPhone } from "./state.js";
 import { refreshHeader, chrome, showError } from "./ui.js";
 import { navigate } from "./router.js";
 import { clearAllDrafts } from "./drafts.js";
+import { refreshRequestCount } from "./requests_count.js";
 
 /** Sign this phone out, from Settings or the waiting screen. `btn` is the
  *  button pressed: off while it runs, back on if it could not be done. */
@@ -96,6 +97,7 @@ export async function afterSignIn() {
   // (it would bounce straight forward again and look like Back did nothing).
   navigate(isFuneralManager() ? homeFor() : state.user.agyaries.length ? "#/calendar" : "#/onboarding",
     { replace: true });
+  refreshRequestCount();
 }
 
 /** Signed in, which is not the same as "holding a live access token".
