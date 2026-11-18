@@ -7,7 +7,7 @@ from datetime import date
 
 from sqlalchemy import select
 
-from agyary.calendar import CalendarSystem, parsi_to_gregorian
+from agyary.calendar import CalendarSystem, gregorian_to_parsi, parsi_to_gregorian
 from agyary.models import (
     Agyary,
     AgyaryCustomer,
@@ -608,9 +608,25 @@ async def test_editing_a_machi_without_names_keeps_its_own_names(db, client, see
 # ---------------------------------------------------------------------------
 # History grouping and delete
 # ---------------------------------------------------------------------------
-async def _start_recurring_machi(db, client, aid, headers, phone, name, *, roj=6, mah=1, year=1396, geh=3):
+def _next_year_with(system: CalendarSystem, *, mah: int, roj: int) -> int:
+    """The first Parsi year whose Roj/Mah falls at least two days after today.
+
+    The series below counts the source and the next RECURRENCE_HORIZON_PERIODS
+    months, and only future months are made: a fixed year (it was 1396, Aug
+    2026) silently loses a month each month once it is in the past (18 Nov 2026).
+    """
+    year = gregorian_to_parsi(date.today(), system).year
+    while parsi_to_gregorian(year, system, mah=mah, roj=roj) <= date.fromordinal(date.today().toordinal() + 2):
+        year += 1
+    return year
+
+
+async def _start_recurring_machi(db, client, aid, headers, phone, name, *, roj=6, mah=1, year=None, geh=3):
     agyary = await db.get(Agyary, aid)
-    gregorian = parsi_to_gregorian(year, CalendarSystem(agyary.calendar_system), mah=mah, roj=roj)
+    system = CalendarSystem(agyary.calendar_system)
+    if year is None:
+        year = _next_year_with(system, mah=mah, roj=roj)
+    gregorian = parsi_to_gregorian(year, system, mah=mah, roj=roj)
     r = await client.post(
         f"/api/mobed/agyaries/{aid}/manual-add/machi",
         json={
