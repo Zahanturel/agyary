@@ -263,10 +263,10 @@ async def test_the_whole_call_out(client, db, seeded, meta, pushes, live, caplog
     r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [kias.id]}, headers=panthaky)
     assert r.status_code == 200, r.text
     assert r.json()["done"] == {"picked": 1, "details_sent": 1, "enough_sent": 0, "enough_too_late": 1}
-    details = meta.templates("prayer_details_mobed")
+    details = meta.templates("prayer_details_mobed_v2")
     assert [m["to"] for m in details] == [MOBED] and meta.texts() == []
     body = [p["text"] for p in details[0]["template"]["components"][0]["parameters"]]
-    assert body[5:] == ["Test Family", FAMILY]
+    assert body[4:] == ["Test Family", FAMILY] and len(body) == 6
     people = {p["name"]: p for p in r.json()["asked"]}
     assert people["Er. Pervez Kias"]["picked"] and people["Er. Pervez Kias"]["details"]["state"] == "Sent"
     assert people["Er. Listed"]["enough"]["state"] == "Not told" and "24 hours" in people["Er. Listed"]["enough"]["why"]
@@ -290,7 +290,7 @@ async def test_a_yes_not_picked_inside_the_window_is_told_enough_are_going(clien
     r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [answers[LISTED].id]},
                           headers=panthaky)
     assert r.status_code == 200, r.text
-    assert [m["to"] for m in meta.templates("prayer_details_mobed")] == [LISTED]
+    assert [m["to"] for m in meta.templates("prayer_details_mobed_v2")] == [LISTED]
     (text,) = meta.texts()
     assert text["to"] == MOBED and text["text"]["body"] == fw.ENOUGH_TEXT
     # Picking someone who said no (or nothing) is refused.
@@ -319,7 +319,7 @@ async def test_details_that_did_not_go_can_be_sent_again_but_never_twice(client,
     await guardrails.resume(db)
     await db.commit()
     r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [answer.id]}, headers=panthaky)
-    assert r.json()["done"]["details_sent"] == 1 and len(meta.templates("prayer_details_mobed")) == 1
+    assert r.json()["done"]["details_sent"] == 1 and len(meta.templates("prayer_details_mobed_v2")) == 1
     assert not r.json()["asked"][0]["may_pick"]
     r = await client.post(f"/api/mobed/requests/{rid}/callout/pick", json={"answers": [answer.id]}, headers=panthaky)
-    assert r.json()["done"]["details_sent"] == 0 and len(meta.templates("prayer_details_mobed")) == 1
+    assert r.json()["done"]["details_sent"] == 0 and len(meta.templates("prayer_details_mobed_v2")) == 1

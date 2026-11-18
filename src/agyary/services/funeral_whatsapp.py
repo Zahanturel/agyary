@@ -5,9 +5,9 @@ Phase 2 Steps 5b and 5c).
 Four approved Utility templates, and one short text reply:
 
   1  funeral_accepted_manager  to the funeral place's managers: who accepted
-  2  prayer_details_mobed      to the mobed who will pray: the details and the
-                               family's contact (the accepter, and each mobed a
-                               panthaky picks from a call-out)
+  2  prayer_details_mobed_v2   to the mobed who will pray: the details and the
+                               family's contact (the accepter, and each of the
+                               first mobeds to say yes to a call-out)
   3  prayers_mobed_family      to the family: who will pray
   4  prayer_request_mobeds     the panthaky's call-out to the agyari's mobeds,
                                with "Yes, I can pray" / "Not this time"
@@ -78,7 +78,6 @@ HIDDEN = "[number]"
 CAP_TITLE = "Doongerwadi WhatsApp limit reached"
 UNKNOWN = "No answer from WhatsApp: it may or may not have been sent, so it was not tried again"
 CONTACT_NAME_MAX = 100
-BUNGLI_MAX = 80
 
 
 def make_client() -> httpx.AsyncClient:
@@ -434,16 +433,17 @@ def details_send(
     record: FuneralRecord, place: FuneralPlace, *, phone: str, recipient_type: str, recipient_id: int,
     agyary_id: int, refs: dict,
 ) -> Send:
-    """Template 2: the details and the family's contact, to a mobed who will pray."""
+    """Template 2 (prayer_details_mobed_v2, the owner's wording of 19 Nov 2026, no bungli): "You
+    will pray for {{1 departed}} at {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}.
+    The family's contact is {{5 name}}, {{6 number}}. Thank you for your service."""
     return Send(
         kind=TYPE_DETAILS, phone=phone, recipient_type=recipient_type, recipient_id=recipient_id,
         agyary_id=agyary_id,
-        params=[departed(record), place.name, record.bungli or NOT_FIXED, geh_saarnu_text(record),
-                uthamna_text(record), record.family_contact_name, record.family_contact_phone],
-        hidden=(7,), refs=refs,
+        params=[departed(record), place.name, geh_saarnu_text(record), uthamna_text(record),
+                record.family_contact_name, record.family_contact_phone],
+        hidden=(6,), refs=refs,
         names=[("the departed's name", departed(record), template_text.DEPARTED_MAX),
                ("the place's name", place.name, template_text.TEMPLE_MAX),
-               ("the bungli", record.bungli or "", BUNGLI_MAX),
                ("the family's name", record.family_contact_name, CONTACT_NAME_MAX)],
     )
 

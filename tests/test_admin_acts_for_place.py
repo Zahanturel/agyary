@@ -94,8 +94,8 @@ async def test_the_admin_does_all_a_manager_does_for_that_place_and_its_managers
     assert [x["id"] for x in theirs] == [rec["id"]] and theirs[0]["recorded_by_admin"] is True
     assert (await client.get(f"{RECORDS}/{rec['id']}", headers=mgr)).json()["record"]["recorded_by_admin"] is True
 
-    changed = await client.put(f"{RECORDS}/{rec['id']}?{act}", json=form(bungli="Bungli 4"), headers=admin)
-    assert changed.status_code == 200 and changed.json()["record"]["bungli"] == "Bungli 4"
+    changed = await client.put(f"{RECORDS}/{rec['id']}?{act}", json=form(mobeds_wanted=4), headers=admin)
+    assert changed.status_code == 200 and changed.json()["record"]["mobeds_wanted"] == 4
     near = (await client.get(f"{RECORDS}/{rec['id']}/agyaries?{act}", headers=admin)).json()["agyaries"]
     assert near[0]["id"] == seeded["agyary_id"] and near[0]["reach"] == "panthaky"
     found = await client.get(f"{MANAGER}/agyaries/search?q=goti&place_id={at.id}&{act}", headers=admin)

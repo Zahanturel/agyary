@@ -295,7 +295,6 @@ async def view(db: AsyncSession, settings: Settings, user: User, request: Funera
         "agyari": {"id": agyary.id, "name": agyary.name},
         "prayed_name": fw.departed(record),
         "place": place.name,
-        "bungli": record.bungli,
         "geh_saarnu": fw.geh_saarnu_text(record),
         "uthamna": fw.uthamna_text(record),
         "mobeds_wanted": record.mobeds_wanted,

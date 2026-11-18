@@ -167,7 +167,7 @@ def family_message(record: FuneralRecord, place: FuneralPlace, agyary: Agyary, m
     """What the accepter's own WhatsApp opens with, to the family, for them to
     change as they like before sending. Short, and only what is known."""
     departed = funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
-    where = f"{record.bungli}, {place.name}" if record.bungli else place.name
+    where = place.name
     parts = [
         f"Sahebji {record.family_contact_name}, I am {mobed.name} of {agyary.name}.",
         f"{place.name} has asked me to perform the prayers for {departed}.",
@@ -244,7 +244,6 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
                 "label": funeral_records.parsi_label(r.death_date, CalendarSystem(r.calendar_system)),
             },
             "obsequies_label": funeral_records.OBSEQUIES_LABELS.get(r.obsequies, r.obsequies),
-            "bungli": r.bungli,
             "geh_saarnu": {
                 "date": r.geh_saarnu_date.isoformat(), "geh": r.geh_saarnu_geh,
                 "geh_name": GEH_NAMES.get(r.geh_saarnu_geh),
@@ -413,7 +412,7 @@ async def _put_on_calendar(
     db: AsyncSession, user: User, agyary: Agyary, record: FuneralRecord, place: FuneralPlace, customer, done: Accepted,
     today: date,
 ) -> None:
-    where = ", ".join(p for p in (record.bungli, place.name) if p)
+    where = place.name
     events = (
         (GEH_SAARNU, record.geh_saarnu_date,
          machi_ceremony_datetime(record.geh_saarnu_date, record.geh_saarnu_geh) if record.geh_saarnu_date else None,

@@ -33,8 +33,8 @@ class FuneralRecord(Base):
     """A death recorded by a funeral place's manager (DECISIONS D10), to ask a
     fire temple for the prayers. Only what is needed to arrange them: the name
     as it is prayed, the death (date and its Roj and Mah, D5), four days or
-    one, the bungli, the Geh-saarnu and Uthamna, how many mobeds, the family's
-    preferred fire temple, and one family contact.
+    one, the Geh-saarnu and Uthamna, how many mobeds, the family's preferred
+    fire temple, and one family contact.
 
     Never recorded (D10): cause of death, age, address, the death certificate,
     ID numbers, how the body goes. The record belongs to the place, not to the
@@ -64,7 +64,8 @@ class FuneralRecord(Base):
     calendar_system: Mapped[str] = mapped_column(String(10))
 
     obsequies: Mapped[str] = mapped_column(String(10))
-    # The bungli or hall where the prayers are (short text).
+    # The bungli or hall where the prayers are. No longer asked or shown (owner,
+    # 19 Nov 2026); kept for the records that have it (D8), and never sent anywhere.
     bungli: Mapped[str | None] = mapped_column(String(80))
     # The Geh-saarnu: the day and the geh, both or neither.
     geh_saarnu_date: Mapped[date | None] = mapped_column(Date)

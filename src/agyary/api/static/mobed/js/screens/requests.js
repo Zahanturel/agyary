@@ -5,7 +5,7 @@
  * Doongerwadi or prayer hall asks this mobed's fire temple for the prayers.
  *
  *  - The list: what waits for their answer (the departed's prayed name, the
- *    place, the bungli, four days or one, the Geh-saarnu and Uthamna, mobeds
+ *    place, four days or one, the Geh-saarnu and Uthamna, mobeds
  *    wanted, which fire temple it was sent to, when), and "Earlier": accepted
  *    (by whom), declined, withdrawn.
  *  - One request: Accept (with the tick "Share my name and number", on) or
@@ -79,7 +79,6 @@ function fact(label, value) {
 function factsHtml(q) {
   return `
     ${fact("Place", esc(placeText(q)))}
-    ${fact("Bungli or hall", esc(q.bungli || "Not given"))}
     ${fact("Died", `${esc(gregLabel(q.death.date))}<br><span class="meta">${esc(q.death.label)}</span>`)}
     ${fact("Obsequies", esc(q.obsequies_label))}
     ${fact("Geh-saarnu", esc(gehSaarnuText(q.geh_saarnu)))}
@@ -93,7 +92,7 @@ function factsHtml(q) {
 function waitingCardHtml(q) {
   return `<div class="card search-result req-card" data-rid="${q.id}">
       <h2>${esc(q.prayed_name)}</h2>
-      <p class="meta" style="margin:0">${esc(placeText(q))}${q.bungli ? ` · ${esc(q.bungli)}` : ""}</p>
+      <p class="meta" style="margin:0">${esc(placeText(q))}</p>
       <p style="margin:6px 0 0">${esc(q.obsequies_label)}${q.mobeds_wanted
         ? ` · ${q.mobeds_wanted} mobed${q.mobeds_wanted === 1 ? "" : "s"} wanted` : ""}</p>
       <p style="margin:2px 0 0">Geh-saarnu: ${esc(gehSaarnuText(q.geh_saarnu))}</p>

@@ -6,7 +6,7 @@
  *
  *  - The record form: the name as it is prayed, the death by its date or by
  *    its Roj and Mah (the other is worked out by the server and shown, to
- *    confirm), four days or one, bungli, Geh-saarnu, Uthamna, mobeds wanted,
+ *    confirm), four days or one, Geh-saarnu, Uthamna, mobeds wanted,
  *    the family's preferred fire temple, and one family contact.
  *  - The record: everything on it, its requests, and Send / Withdraw / Edit.
  *    Once a fire temple accepts (Step 5): who accepted and where, and - only
@@ -95,7 +95,7 @@ async function loadCalendarOptions() {
 function blankDraft() {
   return {
     title: "behdin", name: "", parent: "", calendar: "shenshai", deathBy: "date", death: "",
-    deathRoj: "", deathMah: "", obsequies: "", bungli: "", gsDate: "", gsGeh: "", utDate: "", utTime: "",
+    deathRoj: "", deathMah: "", obsequies: "", gsDate: "", gsGeh: "", utDate: "", utTime: "",
     mobeds: "", preferred: null, contactName: "", contactPhone: "",
     placeId: (managerPlaces()[0] || {}).id || null,
   };
@@ -106,7 +106,7 @@ function draftFrom(rec) {
     title: rec.departed_title, name: rec.departed_name, parent: rec.departed_parent_name || "",
     calendar: rec.death.calendar, deathBy: rec.death.given_by === "roj_mah" ? "parsi" : "date",
     death: rec.death.date, deathRoj: String(rec.death.roj), deathMah: String(rec.death.mah),
-    obsequies: rec.obsequies, bungli: rec.bungli || "",
+    obsequies: rec.obsequies,
     gsDate: rec.geh_saarnu ? rec.geh_saarnu.date : "", gsGeh: rec.geh_saarnu ? String(rec.geh_saarnu.geh) : "",
     utDate: rec.uthamna ? rec.uthamna.date : "", utTime: rec.uthamna && rec.uthamna.time ? rec.uthamna.time : "",
     mobeds: rec.mobeds_wanted ? String(rec.mobeds_wanted) : "",
@@ -181,9 +181,6 @@ function formHtml(d, { editing }) {
         ${radio("frOb", "frObOne", "one_day", d.obsequies === "one_day", "One day")}
       </div>
 
-      <label for="frBungli">Bungli or hall</label>
-      <input type="text" id="frBungli" autocomplete="off" maxlength="80" value="${esc(d.bungli)}">
-
       <label for="frGsDate">Geh-saarnu: day</label>
       <input type="date" id="frGsDate" value="${esc(d.gsDate)}">
       <label for="frGsGeh">Geh-saarnu: geh</label>
@@ -217,7 +214,7 @@ function fieldTarget(field, d) {
   return {
     departed_title: "#frTitle", departed_name: "#frName", departed_parent_name: "#frParent",
     calendar: "#frCalendar", death: d.deathBy === "parsi" ? "#frDeathRoj" : "#frDeathDate",
-    obsequies: "#frObsequies", bungli: "#frBungli", geh_saarnu_date: "#frGsDate", geh_saarnu_geh: "#frGsGeh",
+    obsequies: "#frObsequies", geh_saarnu_date: "#frGsDate", geh_saarnu_geh: "#frGsGeh",
     uthamna_date: "#frUtDate", mobeds_wanted: "#frMobeds", preferred_agyary_id: "#frPreferredBox",
     family_contact_name: "#frContact", family_contact_phone: "#frPhoneBox .phone-field",
   }[field] || null;
@@ -257,7 +254,7 @@ function build(d) {
       death_date: byParsi ? null : d.death || null,
       death_roj: byParsi && d.deathRoj ? Number(d.deathRoj) : null,
       death_mah: byParsi && d.deathMah ? Number(d.deathMah) : null,
-      obsequies: d.obsequies, bungli: d.bungli.trim() || null,
+      obsequies: d.obsequies,
       geh_saarnu_date: d.gsDate || null, geh_saarnu_geh: d.gsGeh ? Number(d.gsGeh) : null,
       uthamna_date: d.utDate || null, uthamna_time: d.utTime || null,
       mobeds_wanted: mobeds,
@@ -374,7 +371,6 @@ async function renderForm(rec) {
   bind("#frCalendar", "calendar", showDay);
   bind("#frDeathDate", "death", showDay);
   bind("#frDeathMah", "deathMah", showDay);
-  bind("#frBungli", "bungli");
   bind("#frGsDate", "gsDate");
   bind("#frGsGeh", "gsGeh");
   bind("#frUtDate", "utDate");
@@ -518,7 +514,6 @@ export async function renderRecordView({ id }) {
         ${fact("Died", `${esc(gregLabel(death.date))}<br><span class="meta">${esc(death.label)}${death.given_by === "roj_mah"
           ? " (given by Roj and Mah)" : ""}</span>`)}
         ${fact("Obsequies", esc(rec.obsequies_label))}
-        ${fact("Bungli or hall", esc(rec.bungli || "Not given"))}
         ${fact("Geh-saarnu", esc(gehSaarnuText(rec.geh_saarnu)))}
         ${fact("Uthamna", esc(uthamnaText(rec.uthamna)))}
         ${rec.mobeds_wanted ? fact("Mobeds wanted", String(rec.mobeds_wanted)) : ""}

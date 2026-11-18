@@ -95,7 +95,6 @@ async def test_a_gatha_day_is_a_death_day_too(client, db, seeded):
     ({"departed_parent_name": "@someone"}, "departed_parent_name"),
     ({"departed_name": "R" * 70}, "departed_name"),                   # with the title and parent, over 80
     ({"obsequies": "three_days"}, "obsequies"),
-    ({"bungli": "Bungli 3, call 98765 43210"}, "bungli"),
     ({"geh_saarnu_geh": 4}, "geh_saarnu_geh"),                        # Aiwisruthrem is at night
     ({"geh_saarnu_geh": None}, "geh_saarnu_geh"),
     ({"geh_saarnu_date": None}, "geh_saarnu_date"),
@@ -126,12 +125,21 @@ async def test_what_is_not_recorded_has_nowhere_to_go(client, db, seeded):
     assert r.status_code == 200 and not {"cause_of_death", "age", "address"} & set(r.json()["record"])
 
 
+async def test_the_bungli_is_no_longer_asked_or_kept(client, db, seeded):
+    """Changed 19 Nov 2026: no bungli. An app from before that sends one has it
+    ignored; the column stays for the records that have it (D8)."""
+    headers, _ = await manager(client, db)
+    r = await client.post(RECORDS, json=form(bungli="Bungli 3"), headers=headers)
+    assert r.status_code == 200 and "bungli" not in r.json()["record"]
+    assert (await db.get(FuneralRecord, r.json()["record"]["id"])).bungli is None
+
+
 async def test_optional_parts_can_be_left_out(client, db, seeded):
     headers, _ = await manager(client, db)
-    body = form(departed_parent_name=None, bungli="", geh_saarnu_date=None, geh_saarnu_geh=None,
+    body = form(departed_parent_name=None, geh_saarnu_date=None, geh_saarnu_geh=None,
                 uthamna_date=None, uthamna_time=None, mobeds_wanted=None, obsequies="one_day")
     rec = (await client.post(RECORDS, json=body, headers=headers)).json()["record"]
-    assert rec["prayed_name"] == "Behdin Rustom" and rec["bungli"] is None
+    assert rec["prayed_name"] == "Behdin Rustom" and "bungli" not in rec
     assert rec["geh_saarnu"] is None and rec["uthamna"] is None and rec["obsequies_label"] == "One day"
 
 
@@ -152,8 +160,8 @@ async def test_a_manager_sees_only_their_own_places_records(client, db, seeded):
     # A colleague at the same place sees and can change it.
     listed = (await client.get(RECORDS, headers=colleague)).json()["records"]
     assert [x["id"] for x in listed] == [rec["id"]]
-    r = await client.put(f"{RECORDS}/{rec['id']}", json=form(bungli="Bungli 5"), headers=colleague)
-    assert r.status_code == 200 and r.json()["record"]["bungli"] == "Bungli 5"
+    r = await client.put(f"{RECORDS}/{rec['id']}", json=form(mobeds_wanted=3), headers=colleague)
+    assert r.status_code == 200 and r.json()["record"]["mobeds_wanted"] == 3
 
 
 async def test_a_record_changes_until_a_fire_temple_accepts_it(client, db, seeded):

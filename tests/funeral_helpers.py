@@ -46,7 +46,7 @@ def form(**changes) -> dict:
     body = {
         "departed_title": "behdin", "departed_name": "Rustom", "departed_parent_name": "Jamshed",
         "calendar": "shenshai", "death_date": (today - timedelta(days=1)).isoformat(),
-        "obsequies": "four_days", "bungli": "Bungli 3",
+        "obsequies": "four_days",
         "geh_saarnu_date": today.isoformat(), "geh_saarnu_geh": 1,
         "uthamna_date": (today + timedelta(days=2)).isoformat(), "uthamna_time": "16:00",
         "mobeds_wanted": 5, "family_contact_name": "Test Family", "family_contact_phone": FAMILY,

@@ -63,7 +63,6 @@ assert set(OBSEQUIES_LABELS) == set(OBSEQUIES)
 # The whole prayed name ("Behdin <name> <father's or husband's name>") becomes the
 # memorial's departed name when a mobed accepts (Step 5), so it keeps that limit.
 PRAYED_NAME_MAX = template_text.DEPARTED_MAX
-BUNGLI_MAX = 80
 CONTACT_NAME_MAX = 100
 # The Geh-saarnu is prayed in daylight only (after sunrise, up to an hour before
 # sunset): Havan, Rapithwin or Uziran.
@@ -201,7 +200,6 @@ async def checked(db: AsyncSession, data: dict, *, today: date | None = None) ->
     obsequies = data.get("obsequies")
     if obsequies not in OBSEQUIES:
         raise RecordError("obsequies", "Please choose four days or one day.")
-    bungli = _text(data.get("bungli"), "bungli", "bungli or hall", BUNGLI_MAX)
 
     gs_date, gs_geh = data.get("geh_saarnu_date"), data.get("geh_saarnu_geh")
     if gs_date is None and gs_geh is not None:
@@ -242,7 +240,7 @@ async def checked(db: AsyncSession, data: dict, *, today: date | None = None) ->
         "departed_title": title, "departed_name": name, "departed_parent_name": parent,
         "death_date": death.date, "death_given_by": death.given_by, "death_roj": death.roj,
         "death_mah": death.mah, "death_year": death.year, "calendar_system": death.calendar,
-        "obsequies": obsequies, "bungli": bungli,
+        "obsequies": obsequies,
         "geh_saarnu_date": gs_date, "geh_saarnu_geh": gs_geh,
         "uthamna_date": u_date, "uthamna_time": u_time,
         "mobeds_wanted": wanted, "preferred_agyary_id": preferred,
@@ -410,7 +408,6 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
             },
             "obsequies": r.obsequies,
             "obsequies_label": OBSEQUIES_LABELS.get(r.obsequies, r.obsequies),
-            "bungli": r.bungli,
             "geh_saarnu": {
                 "date": r.geh_saarnu_date.isoformat(), "geh": r.geh_saarnu_geh,
                 "geh_name": GEH_NAMES.get(r.geh_saarnu_geh),

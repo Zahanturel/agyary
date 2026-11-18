@@ -141,22 +141,24 @@ async def test_the_new_tick_is_stored_and_an_old_app_never_agrees_for_the_family
 
 async def test_live_with_share_the_three_templates_go_to_the_right_people(client, db, seeded, meta, pushes, live, caplog):
     caplog.set_level(logging.DEBUG)
-    rid = await _sent(client, db, seeded["agyary_id"], bungli=None, uthamna_date=None, uthamna_time=None)
+    rid = await _sent(client, db, seeded["agyary_id"], uthamna_date=None, uthamna_time=None)
     body, headers = await _accept(client, rid)
     sent = _by_template(meta)
-    assert set(sent) == {"funeral_accepted_manager", "prayer_details_mobed", "prayers_mobed_family"}
+    assert set(sent) == {"funeral_accepted_manager", "prayer_details_mobed_v2", "prayers_mobed_family"}
 
     to_manager = sent["funeral_accepted_manager"]
     assert to_manager["to"] == MANAGER
     assert _body(to_manager) == ["Behdin Rustom Jamshed", "Er. Hormuz Dadachanji", "Goti Adarian", PANTHAKY]
     assert _buttons(to_manager) == []
 
-    details = sent["prayer_details_mobed"]
+    details = sent["prayer_details_mobed_v2"]
     assert details["to"] == PANTHAKY
     b = _body(details)
-    assert b[0] == "Behdin Rustom Jamshed" and b[1] == "Doongerwadi (test)" and b[2] == "not fixed yet"
-    assert b[3].endswith(", Havan geh") and b[4] == "not fixed yet"
-    assert b[5:] == ["Test Family", FAMILY] and _buttons(details) == []
+    # prayer_details_mobed_v2 (19 Nov 2026): six blanks, no bungli.
+    assert details["template"]["name"] == "prayer_details_mobed_v2"
+    assert b[0] == "Behdin Rustom Jamshed" and b[1] == "Doongerwadi (test)"
+    assert b[2].endswith(", Havan geh") and b[3] == "not fixed yet"
+    assert b[4:] == ["Test Family", FAMILY] and _buttons(details) == []
 
     family = sent["prayers_mobed_family"]
     assert family["to"] == FAMILY
@@ -184,7 +186,7 @@ async def test_live_with_share_the_three_templates_go_to_the_right_people(client
 async def test_the_family_only_with_their_agreement_and_without_a_stop(client, db, seeded, meta, pushes, live):
     rid = await _sent(client, db, seeded["agyary_id"], whatsapp_agreed=False)
     body, _ = await _accept(client, rid)
-    assert set(_by_template(meta)) == {"funeral_accepted_manager", "prayer_details_mobed"}
+    assert set(_by_template(meta)) == {"funeral_accepted_manager", "prayer_details_mobed_v2"}
     assert "did not include their agreement" in body["whatsapp"]["family_note"]
 
     meta.sent.clear()
@@ -264,6 +266,6 @@ async def test_a_name_that_breaks_the_rules_is_not_sent_and_says_why(client, db,
     rid = await _sent(client, db, seeded["agyary_id"])
     body, _ = await _accept(client, rid)
     # Only the details went: the other two would carry the name.
-    assert set(_by_template(meta)) == {"prayer_details_mobed"}
+    assert set(_by_template(meta)) == {"prayer_details_mobed_v2"}
     failed = [n for n in await _rows(db) if n.status == "failed"]
     assert len(failed) == 2 and all("link" in n.error_message for n in failed)

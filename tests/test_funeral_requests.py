@@ -206,7 +206,7 @@ async def test_it_goes_to_the_confirmed_panthakys_and_says_nothing_of_the_family
     (note,) = await _notices(db, "funeral_request")
     assert note.user_id == panthaky_user.id and note.link == "#/requests" and note.agyary_id == near.id
     assert note.title == "A Doongerwadi asks for prayers"
-    assert note.body.startswith("Behdin Rustom Jamshed. Doongerwadi (test), Bungli 3. Four days. Geh-saarnu: ")
+    assert note.body.startswith("Behdin Rustom Jamshed. Doongerwadi (test). Four days. Geh-saarnu: ")
     assert "Havan geh" in note.body and "Uthamna: " in note.body and "4:00 pm" in note.body
     assert "5 mobeds wanted" in note.body and "Asked of Near Agyari (test)" in note.body
     (push,) = pushes
@@ -281,13 +281,13 @@ async def test_a_change_while_waiting_reaches_those_asked_once(client, db, seede
     headers, _ = await manager(client, db)
     rec = await _record(client, headers)
     await _send(client, headers, rec["id"], near.id)
-    r = await client.put(f"{RECORDS}/{rec['id']}", json=form(bungli="Bungli 7"), headers=headers)
+    r = await client.put(f"{RECORDS}/{rec['id']}", json=form(mobeds_wanted=7), headers=headers)
     assert r.status_code == 200 and r.json()["told"] == 1
     (changed,) = await _notices(db, "funeral_request_changed")
-    assert "Bungli 7" in changed.body and FAMILY[3:] not in changed.body
+    assert "7 mobeds wanted" in changed.body and FAMILY[3:] not in changed.body
     assert pushes[-1]["body"] == "Doongerwadi (test) changed its request to Near Agyari (test)."
     # Saved again with nothing different: nobody is told twice.
-    r = await client.put(f"{RECORDS}/{rec['id']}", json=form(bungli="Bungli 7"), headers=headers)
+    r = await client.put(f"{RECORDS}/{rec['id']}", json=form(mobeds_wanted=7), headers=headers)
     assert r.json()["told"] == 0 and len(await _notices(db, "funeral_request_changed")) == 1
 
 

@@ -89,7 +89,7 @@ async def test_only_those_asked_see_it_and_not_the_family_until_they_accept(clie
     assert got.status_code == 200
     (req,) = got.json()["waiting"]
     assert req["id"] == rid and req["status"] == "waiting" and got.json()["earlier"] == []
-    assert req["prayed_name"] == "Behdin Rustom Jamshed" and req["bungli"] == "Bungli 3"
+    assert req["prayed_name"] == "Behdin Rustom Jamshed" and "bungli" not in req
     assert req["funeral_place"]["name"] == "Doongerwadi (test)" and req["funeral_place"]["kind_label"] == "Doongerwadi"
     assert req["geh_saarnu"]["geh_name"] == "Havan" and req["uthamna"]["time"] == "16:00"
     assert req["mobeds_wanted"] == 5 and req["obsequies_label"] == "Four days"
@@ -129,7 +129,7 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
     assert req["status"] == "accepted" and req["accepted_by_me"] is True
     assert req["family_contact"] == {"name": "Test Family", "phone": FAMILY}
     assert req["family_message"].startswith("Sahebji Test Family, I am Er. Hormuz Dadachanji of ")
-    assert "Behdin Rustom Jamshed" in req["family_message"] and "Bungli 3, Doongerwadi (test)" in req["family_message"]
+    assert "Behdin Rustom Jamshed" in req["family_message"] and "Doongerwadi (test)" in req["family_message"]
     assert req["memorial_prefill"] == {
         "name": "Behdin Rustom Jamshed", "calendar": "shenshai", "deathBy": "date",
         "death": rec["death"]["date"], "deathRoj": "", "deathMah": "",
@@ -163,7 +163,7 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
         service = await db.get(Service, b.service_id)
         assert service.name == e["what"] and service.agyary_id == aid
         assert b.customer_id == mine.id and b.agyary_id == aid and b.created_by_user_id == panthaky_user.id
-        assert b.location == "Bungli 3, Doongerwadi (test)" and b.status == "approved"
+        assert b.location == "Doongerwadi (test)" and b.status == "approved"
         assert (await db.execute(select(BookingMobed.user_id).where(BookingMobed.booking_id == b.id))).scalars().all() \
             == [panthaky_user.id]
     # Nothing was put in the other mobed's book.

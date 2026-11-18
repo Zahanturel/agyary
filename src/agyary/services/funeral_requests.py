@@ -15,7 +15,7 @@ the manager is told why - never sent to no one. One request waits per record at
 a time; the manager can withdraw it and send to another fire temple.
 
 Each person asked gets a notice in the app (the departed's prayed name, the
-place and bungli, the prayers and their times) and a phone notification that
+place, the prayers and their times) and a phone notification that
 says only which place asks which fire temple. The family's name and number are
 in neither: a mobed sees them only once they accept (Step 5).
 """
@@ -163,10 +163,9 @@ def notice_text(record: FuneralRecord, place: FuneralPlace, agyary: Agyary) -> t
     """The in-app notice to the people asked: who is prayed for, where, which
     prayers and when. Never the family's name or number."""
     title = f"{KIND_WORDS.get(place.kind, 'A Doongerwadi')} asks for prayers"
-    where = place.name + (f", {record.bungli}" if record.bungli else "")
     parts = [
         f"{funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)}.",
-        f"{where}.",
+        f"{place.name}.",
         f"{funeral_records.OBSEQUIES_LABELS.get(record.obsequies, '')}.",
     ]
     if record.geh_saarnu_date:

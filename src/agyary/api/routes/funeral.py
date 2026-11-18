@@ -183,7 +183,6 @@ class RecordIn(DeathDayIn):
     departed_name: str = Field(default="", max_length=300)
     departed_parent_name: str | None = Field(default=None, max_length=300)
     obsequies: str = Field(default="", max_length=20)
-    bungli: str | None = Field(default=None, max_length=300)
     geh_saarnu_date: date | None = None
     geh_saarnu_geh: int | None = None
     uthamna_date: date | None = None

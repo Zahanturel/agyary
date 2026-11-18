@@ -25,14 +25,22 @@ mobed's number are right.
 > The prayers for **[departed]** have been accepted by **[mobed's name]** of **[agyari]**.
 > You can reach them on **[mobed's number]** by phone or WhatsApp.
 
-## 2. To the mobed who will pray: `prayer_details_mobed`
+## 2. To the mobed who will pray: `prayer_details_mobed_v2`
 
-> You will pray for **[departed]** at **[place]**. Bungli: **[bungli]**. Geh-saarnu:
-> **[day and geh]**. Uthamna: **[day and time]**. The family's contact is **[family name]**,
-> **[family number]**. Thank you for your service.
+> You will pray for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
+> **[day and time]**. The family's contact is **[family name]**, **[family number]**. Thank you for
+> your service.
 
-Sent to the panthaky (or mobed) who accepted in the app, and to each mobed who answers "Yes" to
-message 4. A blank the record does not have is sent as "not fixed yet".
+Six blanks, in this order: departed, place, Geh-saarnu, Uthamna, family name, family number. No
+button. Sent to the panthaky (or mobed) who accepted in the app, and to each of the first mobeds who
+answer "Yes" to message 4 (up to the number wanted). A blank the record does not have is sent as
+"not fixed yet".
+
+(Changed 19 Nov 2026, owner: the funeral record has no bungli any more, so the first version,
+`prayer_details_mobed`, which had "Bungli: [bungli]" as its third blank, was resubmitted without
+it as `prayer_details_mobed_v2`. The server's default for `WHATSAPP_PRAYER_DETAILS_TEMPLATE` is
+the v2 name; a server `.env` that still names the old one must be changed, or the six blanks will
+not fit the old template's seven.)
 
 ## 3. To the family: `prayers_mobed_family`
 

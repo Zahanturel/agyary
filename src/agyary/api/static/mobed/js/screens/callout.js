@@ -77,7 +77,7 @@ function draw(id, v) {
   mainEl.innerHTML = `
     <div class="card">
       <h2>Ask our mobeds: ${esc(v.prayed_name)}</h2>
-      <div class="fact"><div class="fl">Place</div><div class="fv">${esc(v.place)}${v.bungli ? `, ${esc(v.bungli)}` : ""}</div></div>
+      <div class="fact"><div class="fl">Place</div><div class="fv">${esc(v.place)}</div></div>
       <div class="fact"><div class="fl">Geh-saarnu</div><div class="fv">${esc(v.geh_saarnu)}</div></div>
       <div class="fact"><div class="fl">Uthamna</div><div class="fv">${esc(v.uthamna)}</div></div>
       ${v.mobeds_wanted ? `<div class="fact"><div class="fl">Mobeds wanted</div><div class="fv">${v.mobeds_wanted}</div></div>` : ""}

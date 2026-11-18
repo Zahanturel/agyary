@@ -70,7 +70,8 @@ class Settings(BaseSettings):
     # are settings so a renamed or re-approved template needs no code change.
     funeral_whatsapp_mode: str = "off"                                 # off | live
     whatsapp_funeral_manager_template: str = "funeral_accepted_manager"   # 1: to the manager
-    whatsapp_prayer_details_template: str = "prayer_details_mobed"       # 2: to the mobed who prays
+    # 2: to the mobed who prays. v2 (19 Nov 2026) has no bungli and six blanks.
+    whatsapp_prayer_details_template: str = "prayer_details_mobed_v2"
     whatsapp_prayers_family_template: str = "prayers_mobed_family"       # 3: to the family
     whatsapp_prayer_request_template: str = "prayer_request_mobeds"      # 4: the panthaky's call-out
     # Ceilings, per IST day, over every one of these messages (and the short
