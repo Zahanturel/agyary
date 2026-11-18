@@ -55,6 +55,15 @@ Being built now, not live: Steps 5b and 5c (WhatsApp on accept, and the panthaky
    is a real death the family agreed to. Tell me afterwards and I can remove test records on the
    server.
 
+## Trying it alone (v84, 18 Nov 2026): "Act for this place"
+
+Without a manager's phone: Admin -> Doongerwadis -> **Act for this place** opens that place's
+manager screens with a strip "You are acting for <place> as admin". Record a death, send it to
+Goti Adarian, then accept it yourself on the Requests tab as its confirmed panthaky. The record
+says "Recorded by the admin". The WhatsApp templates (all four submitted 18 Nov) have no
+"Message them" buttons: Meta refuses buttons that link to WhatsApp, so the number in the text is
+tappable instead.
+
 ## Trying the whole run (Surat Doongerwadi -> Goti Adarian)
 
 On each phone first: reload the app once (to get v82), then Settings -> Notifications on this phone.
