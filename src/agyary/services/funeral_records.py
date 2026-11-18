@@ -13,7 +13,9 @@ knows which it was. Either way both are kept, and the Roj and Mah are shown
 for the manager to confirm.
 
 A record belongs to its place: any manager of that place sees and edits it,
-nobody else. It can be changed until a fire temple has accepted it. Nothing is
+and so does an admin acting for that one place ("Act for this place", so the
+owner can show and try the whole of it); nobody else. What the admin records
+or sends says so (``recorded_by_admin``, ``sent_by_admin``). It can be changed until a fire temple has accepted it. Nothing is
 deleted for its age (D8).
 """
 
@@ -31,13 +33,13 @@ from agyary.messaging.availability import parsi_slot_fields
 from agyary.models import (
     Agyary,
     FuneralPlace,
-    FuneralPlaceManager,
     FuneralRecord,
     FuneralRequest,
     FuneralRequestRecipient,
     User,
 )
 from agyary.models.enums import (
+    ACCOUNT_FUNERAL_MANAGER,
     DEATH_BY_DATE,
     DEATH_BY_ROJ_MAH,
     DEPARTED_TITLES,
@@ -249,38 +251,28 @@ async def checked(db: AsyncSession, data: dict, *, today: date | None = None) ->
 
 
 # --- Whose records ----------------------------------------------------------------
+# A record belongs to its place. Who may see it is decided by the route: a
+# manager's own places, or the one place an admin acts for (api/routes/funeral.py,
+# get_acting_manager); here it is always a list of place ids.
 
-def _managed_by(user_id: int):
-    """The places this account manages (an active link)."""
-    return select(FuneralPlaceManager.funeral_place_id).where(
-        FuneralPlaceManager.user_id == user_id, FuneralPlaceManager.is_active.is_(True)
-    )
-
-
-async def managed_place(db: AsyncSession, user_id: int, place_id: int) -> FuneralPlace | None:
-    place = await db.get(FuneralPlace, place_id)
-    if place is None:
+async def get_for_places(db: AsyncSession, place_ids: list[int], record_id: int) -> FuneralRecord | None:
+    """The record, if it is at one of these places; else None (the API answers
+    404 either way: another place's deaths are not to be probed)."""
+    if not place_ids:
         return None
-    linked = (await db.execute(_managed_by(user_id).where(FuneralPlaceManager.funeral_place_id == place_id))).first()
-    return place if linked else None
-
-
-async def get_for_manager(db: AsyncSession, user_id: int, record_id: int) -> FuneralRecord | None:
-    """The record, if it is at a place this account manages; else None (the
-    API answers 404 either way: another place's deaths are not to be probed)."""
     return (
         await db.execute(
-            select(FuneralRecord).where(
-                FuneralRecord.id == record_id, FuneralRecord.funeral_place_id.in_(_managed_by(user_id))
-            )
+            select(FuneralRecord).where(FuneralRecord.id == record_id, FuneralRecord.funeral_place_id.in_(place_ids))
         )
     ).scalar_one_or_none()
 
 
-async def list_for_manager(db: AsyncSession, user_id: int, *, before: int | None = None) -> list[FuneralRecord]:
-    """The records of every place this account manages, newest first, a page
-    at a time (``before``: the last id of the page before)."""
-    stmt = select(FuneralRecord).where(FuneralRecord.funeral_place_id.in_(_managed_by(user_id)))
+async def list_for_places(db: AsyncSession, place_ids: list[int], *, before: int | None = None) -> list[FuneralRecord]:
+    """The records of these places, newest first, a page at a time
+    (``before``: the last id of the page before)."""
+    if not place_ids:
+        return []
+    stmt = select(FuneralRecord).where(FuneralRecord.funeral_place_id.in_(place_ids))
     if before is not None:
         stmt = stmt.where(FuneralRecord.id < before)
     return list((await db.execute(stmt.order_by(FuneralRecord.id.desc()).limit(PAGE))).scalars().all())
@@ -314,7 +306,7 @@ async def create(db: AsyncSession, user: User, place: FuneralPlace, values: dict
     record = FuneralRecord(funeral_place_id=place.id, created_by_user_id=user.id, **values)
     db.add(record)
     await db.flush()
-    logger.info("Funeral record %s made at funeral place %s by manager %s", record.id, place.id, user.id)
+    logger.info("Funeral record %s made at funeral place %s by user %s", record.id, place.id, user.id)
     return record
 
 
@@ -336,7 +328,7 @@ async def update(db: AsyncSession, record: FuneralRecord, user: User, values: di
         setattr(record, key, value)
     record.updated_at = datetime.now(timezone.utc)
     await db.flush()
-    logger.info("Funeral record %s changed by manager %s", record.id, user.id)
+    logger.info("Funeral record %s changed by user %s", record.id, user.id)
     return True
 
 
@@ -373,6 +365,14 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
         uid: (name, phone) for uid, name, phone in
         (await db.execute(select(User.id, User.name, User.phone).where(User.id.in_(people)))).all()
     } if people else {}
+    # Who recorded and who sent: a manager, or the admin acting for the place
+    # (an admin's account is never a manager's, so the kind of account says it).
+    makers = {r.created_by_user_id for r in records} | {q.sent_by_user_id for q in requests}
+    makers.discard(None)
+    by_admin = {
+        uid for uid, kind in (await db.execute(select(User.id, User.account_kind).where(User.id.in_(makers)))).all()
+        if kind != ACCOUNT_FUNERAL_MANAGER
+    } if makers else set()
     asked = dict(
         (await db.execute(
             select(FuneralRequestRecipient.funeral_request_id, func.count())
@@ -420,6 +420,7 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
             "preferred_agyari": agyari(r.preferred_agyary_id),
             "family_contact": {"name": r.family_contact_name, "phone": r.family_contact_phone},
             "created_at": _when(r.created_at),
+            "recorded_by_admin": r.created_by_user_id in by_admin,
             "updated_at": _when(r.updated_at),
             # Changed until accepted; sent while nothing waits and nothing is accepted.
             "may_edit": accepted(qs) is None,
@@ -432,6 +433,7 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
                     # The accepter's number only if they ticked "Share my name and number" (Step 5).
                     "accepter_phone": _accepter(accepters, q)[1],
                     "decline_reason": q.decline_reason, "asked": asked.get(q.id, 0),
+                    "sent_by_admin": q.sent_by_user_id in by_admin,
                 }
                 for q in qs
             ],

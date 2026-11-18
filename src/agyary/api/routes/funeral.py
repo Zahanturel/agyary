@@ -16,6 +16,14 @@ another place answers 404, the same as one that does not exist. What is wrong
 with one field of the form is said with that field's name in the X-Field
 header, so the app can mark it.
 
+Acting for a place (owner, 18 Nov 2026): an admin names one funeral place in
+use with ``?act_for=<place id>`` on any of the manager's routes and is that
+place's manager for the call - the same checks, limits and records, made in
+the admin's own name, which the place's real managers see too
+(get_acting_manager below). Without naming a place an admin is refused like
+any mobed; a manager may not name one; a place that is unknown or turned off
+answers 404.
+
 The fire temple's side (Step 5): the requests a mobed was asked, answered from
 their Requests tab (services/funeral_answers.py). These are mobed routes,
 closed to a manager's account like the rest of the mobed app.
@@ -23,6 +31,7 @@ closed to a manager's account like the rest of the mobed app.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,11 +39,27 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api import rate_limit
-from agyary.api.routes.mobed import _serialize_user, get_current_manager, get_current_user, get_user_not_switched_off
+from agyary.api.routes.mobed import (
+    NOT_FOR_MOBEDS,
+    _serialize_user,
+    get_current_account,
+    get_current_manager,
+    get_current_user,
+    get_signed_in_account,
+    get_user_not_switched_off,
+)
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, FuneralPlace, FuneralRequest, User
-from agyary.services import funeral_answers, funeral_places, funeral_records, funeral_requests, funeral_whatsapp
+from agyary.models.enums import ACCOUNT_FUNERAL_MANAGER
+from agyary.services import (
+    funeral_answers,
+    funeral_places,
+    funeral_records,
+    funeral_requests,
+    funeral_whatsapp,
+    guardrails,
+)
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
 
@@ -77,10 +102,58 @@ async def join_funeral_place(
     return {"user": await _serialize_user(db, user)}
 
 
+# ---------------------------------------------------------------------------
+# Who is acting for which places: a manager for their own, or an admin for one
+# ---------------------------------------------------------------------------
+ONLY_ADMINS_ACT = "Only the admin can act for a Doongerwadi or prayer hall."
+NO_PLACE = "That place could not be found, or it is turned off in Mobed Diary."
+
+
+@dataclass
+class Acting:
+    """Who is doing this, and for which places. ``user`` is who it is recorded
+    under: the manager, or the admin acting for ``places[0]``."""
+
+    user: User
+    places: list[FuneralPlace]
+    as_admin: bool = False
+
+    @property
+    def place_ids(self) -> list[int]:
+        return [p.id for p in self.places]
+
+    def place(self, place_id: int) -> FuneralPlace | None:
+        return next((p for p in self.places if p.id == place_id), None)
+
+
+async def get_acting_manager(
+    act_for: int | None = Query(default=None, description="An admin acting for this funeral place"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_signed_in_account),
+) -> Acting:
+    """A manager (signed in, on) for their own places, as before; or an admin
+    who names one funeral place in use, for that place alone. Nobody else:
+    a mobed who is not an admin, an admin who names no place, and a manager
+    who names any place are refused."""
+    if act_for is None:
+        manager = await get_current_manager(user)
+        return Acting(manager, await funeral_places.places_of(db, manager.id))
+    if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
+        raise HTTPException(status_code=403, detail=ONLY_ADMINS_ACT)
+    if not guardrails.is_admin(get_settings(), user.phone):
+        raise HTTPException(status_code=403, detail=NOT_FOR_MOBEDS)
+    admin = await get_current_account(user)
+    place = await db.get(FuneralPlace, act_for)
+    if place is None or not place.is_active:
+        raise HTTPException(status_code=404, detail=NO_PLACE)
+    return Acting(admin, [place], as_admin=True)
+
+
 @router.get("/manager/place")
-async def my_funeral_place(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager)) -> dict:
-    """The place (or places) this manager works at, for their home screen."""
-    return {"places": [funeral_places.summary(p) for p in await funeral_places.places_of(db, user.id)]}
+async def my_funeral_place(acting: Acting = Depends(get_acting_manager)) -> dict:
+    """The place (or places) this manager works at, for their home screen;
+    for an admin acting for a place, that place."""
+    return {"places": [funeral_places.summary(p) for p in acting.places], "as_admin": acting.as_admin}
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +200,7 @@ class NewRecordIn(RecordIn):
 
 
 @router.post("/manager/death-day")
-async def check_death_day(payload: DeathDayIn, user: User = Depends(get_current_manager)) -> dict:
+async def check_death_day(payload: DeathDayIn, acting: Acting = Depends(get_acting_manager)) -> dict:
     """The death's date and its Roj and Mah, worked out from whichever was
     given, for the form to show the manager to confirm (D5)."""
     try:
@@ -154,11 +227,11 @@ async def _record_response(db: AsyncSession, record) -> dict:
 @router.get("/manager/records")
 async def list_records(
     before: int | None = Query(default=None), db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_manager),
+    acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """The deaths recorded at this manager's place(s), newest first, with each
     request's state. ``before`` gives the page after the one ending there."""
-    records = await funeral_records.list_for_manager(db, user.id, before=before)
+    records = await funeral_records.list_for_places(db, acting.place_ids, before=before)
     return {
         "records": await funeral_records.serialize(db, records),
         "more": len(records) == funeral_records.PAGE,
@@ -167,16 +240,16 @@ async def list_records(
 
 @router.post("/manager/records")
 async def create_record(
-    payload: NewRecordIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+    payload: NewRecordIn, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
 ) -> dict:
+    user = acting.user
     rate_limit.enforce_key(f"funeral_record_save:{user.id}", max_requests=60, window_seconds=3600)
     if payload.funeral_place_id is not None:
-        place = await funeral_records.managed_place(db, user.id, payload.funeral_place_id)
+        place = acting.place(payload.funeral_place_id)
     else:
-        places = await funeral_places.places_of(db, user.id)
-        if len(places) > 1:
+        if len(acting.places) > 1:
             raise HTTPException(status_code=400, detail="Please choose which place this death is recorded at.")
-        place = places[0] if places else None
+        place = acting.places[0] if acting.places else None
     if place is None:
         raise HTTPException(status_code=404, detail="That place could not be found.")
     if not place.is_active:
@@ -187,8 +260,8 @@ async def create_record(
     return await _record_response(db, record)
 
 
-async def _own_record(db: AsyncSession, user: User, record_id: int):
-    record = await funeral_records.get_for_manager(db, user.id, record_id)
+async def _own_record(db: AsyncSession, acting: Acting, record_id: int):
+    record = await funeral_records.get_for_places(db, acting.place_ids, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail=NO_RECORD)
     return record
@@ -196,20 +269,21 @@ async def _own_record(db: AsyncSession, user: User, record_id: int):
 
 @router.get("/manager/records/{record_id}")
 async def get_record(
-    record_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+    record_id: int, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
 ) -> dict:
-    return await _record_response(db, await _own_record(db, user, record_id))
+    return await _record_response(db, await _own_record(db, acting, record_id))
 
 
 @router.put("/manager/records/{record_id}")
 async def update_record(
     record_id: int, payload: RecordIn, db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_manager),
+    acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """Change a record until a fire temple has accepted it. If it is waiting
     at a fire temple, those asked are sent the new details (``told``)."""
+    user = acting.user
     rate_limit.enforce_key(f"funeral_record_save:{user.id}", max_requests=60, window_seconds=3600)
-    record = await _own_record(db, user, record_id)
+    record = await _own_record(db, acting, record_id)
     values = await _values(db, payload)
     try:
         changed = await funeral_records.update(db, record, user, values)
@@ -225,12 +299,12 @@ async def update_record(
 # ---------------------------------------------------------------------------
 @router.get("/manager/records/{record_id}/agyaries")
 async def suggested_agyaries(
-    record_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+    record_id: int, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """The fire temples to suggest for this record: the family's preferred one
     first, then within 500 km of the place, nearest first, each saying whether
     a request would reach anyone there."""
-    record = await _own_record(db, user, record_id)
+    record = await _own_record(db, acting, record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
     return await funeral_requests.suggested(db, get_settings(), place, record.preferred_agyary_id)
 
@@ -241,16 +315,15 @@ async def search_agyaries_for_manager(
     place_id: int | None = Query(default=None),
     preferred_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_manager),
+    acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """Any fire temple in the app by name or town, with its distance from the
     manager's place (``place_id``, or their first) where both are on the map."""
-    rate_limit.enforce_key(f"funeral_agyari_search:{user.id}", max_requests=60, window_seconds=60)
+    rate_limit.enforce_key(f"funeral_agyari_search:{acting.user.id}", max_requests=60, window_seconds=60)
     if place_id is not None:
-        place = await funeral_records.managed_place(db, user.id, place_id)
+        place = acting.place(place_id)
     else:
-        places = await funeral_places.places_of(db, user.id)
-        place = places[0] if places else None
+        place = acting.places[0] if acting.places else None
     if place is None:
         raise HTTPException(status_code=404, detail="That place could not be found.")
     return {"agyaries": await funeral_requests.search(db, get_settings(), place, q, preferred_id)}
@@ -275,12 +348,14 @@ def _send_error(exc: funeral_requests.SendError) -> HTTPException:
 
 @router.post("/manager/records/{record_id}/requests")
 async def send_request(
-    record_id: int, payload: SendIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+    record_id: int, payload: SendIn, db: AsyncSession = Depends(get_db),
+    acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """Send the record to one fire temple: its confirmed panthakys, or if none,
     its mobeds whose access is on. Refused without the family's agreement, with
     nobody there to reach, or while another request waits."""
-    record = await _own_record(db, user, record_id)
+    user = acting.user
+    record = await _own_record(db, acting, record_id)
     if not payload.family_agreed:
         raise HTTPException(status_code=400, detail=funeral_requests.NO_TICK, headers={FIELD_HEADER: "family_agreed"})
     rate_limit.enforce_key(f"funeral_send:{user.id}", max_requests=20, window_seconds=3600)
@@ -299,11 +374,12 @@ async def send_request(
 
 @router.post("/manager/requests/{request_id}/withdraw")
 async def withdraw_request(
-    request_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+    request_id: int, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """Take back a waiting request (to send it to another fire temple)."""
+    user = acting.user
     request = await db.get(FuneralRequest, request_id)
-    record = await funeral_records.get_for_manager(db, user.id, request.funeral_record_id) if request else None
+    record = await funeral_records.get_for_places(db, acting.place_ids, request.funeral_record_id) if request else None
     if record is None:
         raise HTTPException(status_code=404, detail="That request could not be found.")
     try:

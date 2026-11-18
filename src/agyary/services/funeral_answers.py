@@ -23,8 +23,10 @@ and the memorial form, filled in, for them to check and save. No other mobed's
 book is read or touched: the family's number is looked up only among the
 accepter's own records.
 
-The funeral place's managers are told in the app and on their phones; neither
-carries the family's name or number. Whether the accepter let the place have
+The funeral place's managers are told in the app and on their phones, and so
+is the admin who sent the request while acting for the place; neither carries
+the family's name or number. (The WhatsApp message to "the manager" goes to
+the place's managers only.) Whether the accepter let the place have
 their name and number (the tick, on by default) is kept on the request
 (accepter_shared_contact): the manager's screen shows the number only when it
 is set, and the WhatsApp messages from our number (Step 5b,
@@ -57,6 +59,7 @@ from agyary.models import (
     User,
 )
 from agyary.models.enums import (
+    ACCOUNT_FUNERAL_MANAGER,
     GEH_NAMES,
     REQUEST_ACCEPTED,
     REQUEST_DECLINED,
@@ -68,6 +71,7 @@ from agyary.services import (
     funeral_records,
     funeral_requests,
     funeral_whatsapp,
+    guardrails,
     mobed_access,
     prayer_callout,
     mobed_dashboard,
@@ -330,19 +334,41 @@ async def _managers(db: AsyncSession, settings: Settings, place_id: int) -> list
     return [u for u in rows if mobed_access.has_access(settings, u)]
 
 
+async def _acting_admin(
+    db: AsyncSession, settings: Settings, request: FuneralRequest, managers: list[User],
+) -> User | None:
+    """The admin who sent this request while acting for the place ("Act for
+    this place"), so the owner sees the answer come back too; only while they
+    are still an admin and on, and never twice."""
+    uid = request.sent_by_user_id
+    if uid is None or any(m.id == uid for m in managers):
+        return None
+    sender = await db.get(User, uid)
+    if (sender is None or not sender.is_active or sender.account_kind == ACCOUNT_FUNERAL_MANAGER
+            or not guardrails.is_admin(settings, sender.phone) or not mobed_access.has_access(settings, sender)):
+        return None
+    return sender
+
+
 async def _tell_managers(
     db: AsyncSession, settings: Settings, record: FuneralRecord, request: FuneralRequest, *, kind: str,
     title: str, body: str, push: tuple[str, str], now: datetime,
 ) -> list[User]:
+    """The place's managers, in the app and on their phones; and the admin who
+    sent it while acting for the place, with a link back to that place."""
     managers = await _managers(db, settings, record.funeral_place_id)
-    link = f"#/manager/record/{record.id}"
-    for m in managers:
-        await reminders.notify(db, m.id, kind, title, body, link=link, now=now, ttl=NOTICE_TTL)
-    if managers:
-        await web_push.send_to_users(
-            db, settings, [m.id for m in managers], title=push[0], body=push[1],
-            url="/mobed" + link, tag=f"funeral-answer-{request.id}",
-        )
+    groups = [(managers, f"#/manager/record/{record.id}")]
+    admin = await _acting_admin(db, settings, request, managers)
+    if admin is not None:
+        groups.append(([admin], f"#/admin/act/{record.funeral_place_id}/record/{record.id}"))
+    for people, link in groups:
+        for person in people:
+            await reminders.notify(db, person.id, kind, title, body, link=link, now=now, ttl=NOTICE_TTL)
+        if people:
+            await web_push.send_to_users(
+                db, settings, [p.id for p in people], title=push[0], body=push[1],
+                url="/mobed" + link, tag=f"funeral-answer-{request.id}",
+            )
     return managers
 
 
