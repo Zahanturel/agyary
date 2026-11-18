@@ -477,7 +477,7 @@ async def decline(
         db, settings, record, request, kind=KIND_DECLINED,
         title=f"{agyary.name} declined the request",
         body=f"{user.name} of {agyary.name} cannot take the prayers for {prayed}"
-             + (f": {reason}" if reason else ".") + " You can send it to another fire temple.",
+             + (f": {reason.rstrip('.!? ')}." if reason else ".") + " You can send it to another fire temple.",
         push=("A request was declined", f"{agyary.name} declined the request from {place.name}."), now=now,
     )
     await _tell_the_others(

@@ -282,7 +282,8 @@ async def test_withdrawn_declined_and_accepted_are_refused_in_plain_words(client
     # The manager is told, with the reason, and can send it elsewhere.
     (note,) = (await db.execute(select(AppNotification).where(AppNotification.kind == "funeral_request_declined"))
                ).scalars().all()
-    assert "No mobed free that day" in note.body and note.link == f"#/manager/record/{rec['id']}"
+    assert ": No mobed free that day. You can send it to another fire temple." in note.body
+    assert note.link == f"#/manager/record/{rec['id']}"
     (push,) = pushes
     assert push["title"] == "A request was declined" and push["url"] == f"/mobed#/manager/record/{rec['id']}"
     for text in (note.title, note.body, push["title"], push["body"]):
