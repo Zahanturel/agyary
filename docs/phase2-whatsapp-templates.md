@@ -67,14 +67,24 @@ you can pray", read as Marketing and would be rejected as Utility.)
 
 Quick-reply buttons: **Yes, I can pray** / **Not this time**
 
-No family details in this message. **Every "Yes" is shown to the panthaky, who picks who goes**
-(owner, 18 Nov 2026). Only those picked get message 2 (the details). Those not picked get a
-short free-form reply inside WhatsApp's 24-hour window ("Thank you. Enough mobeds are going this
-time."), which needs no template. Payment stays with the panthaky, outside the app.
+No family details in this message. **It goes at once when the Doongerwadi sends the request, and
+the first Yeses go** (owner, 19 Nov 2026; this replaced "the panthaky picks who goes" of 18 Nov):
+the first mobeds to answer "Yes", up to the record's "mobeds wanted" (2 if it gives none), get
+message 2 (the details) automatically, and the panthaky is told in the app and on their phone
+"<name> is going". A later "Yes" gets a short free-form reply ("Thank you. Enough mobeds are going
+this time."). If the request is withdrawn or declined, each mobed who said "Yes" gets "This prayer
+request was withdrawn." Both replies need no template, so they go only inside WhatsApp's 24-hour
+window from the mobed's answer; after that nothing is sent. Payment stays with the panthaky,
+outside the app.
 
-Who gets it: the agyari's approved mobeds in the app, plus mobeds the panthaky adds by name and
-number, each added one only with the panthaky's tick that they agreed to get these WhatsApp
-messages from Mobed Diary. A STOP from a mobed is honoured.
+Who gets it: the agyari's approved mobeds in the app whose access is on, plus mobeds the panthaky
+adds by name and number, each added one only with the panthaky's tick that they agreed to get
+these WhatsApp messages from Mobed Diary; not the agyari's confirmed panthakys (they have the
+request in the app, and the message asks the mobeds to tell them), and not whoever sent the
+request. A STOP from a mobed is honoured. Each mobed is asked once per request; the panthaky can
+ask again by hand those not asked yet (someone added to the list since). The panthaky's name in the
+last blank is the agyari's first confirmed panthaky, or the agyari's own name when it has none in
+the app.
 
 ---
 

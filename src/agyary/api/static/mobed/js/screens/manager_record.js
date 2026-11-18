@@ -29,6 +29,7 @@ import {
 import { state } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, openSheet, flashInfo,
+  flashError,
 } from "../ui.js";
 import { esc, gregLabel, istHm, istYmd, todayIst, phoneField, readPhone, setPhoneField, MAH_NAMES_JS } from "../util.js";
 import { navigate, navGuard, returnTo } from "../router.js";
@@ -703,7 +704,8 @@ function confirmSend(rec, a) {
     title: `Send to ${a.name}?`,
     html: `
       <p class="meta" style="margin-top:0">${esc(rec.prayed_name)}. It goes to ${who}, with the prayers and their
-        times. The family's name and number are shown only to the one who accepts.</p>
+        times, and its mobeds are asked on WhatsApp whether they can pray. The family's name and number go only to
+        the one who accepts and to the mobeds who go.</p>
       <div class="check-row" id="msTickRow"><input type="checkbox" id="msTick">
         <label for="msTick">The family agreed to share their name and number with this agyari, and to get
           WhatsApp messages about the prayers from Mobed Diary</label></div>
@@ -738,7 +740,12 @@ function confirmSend(rec, a) {
     }
     sheet.close();
     const n = res.asked;
-    flashInfo(`Sent to ${a.name}. ${n} ${n === 1 ? "person there was" : "people there were"} told.`);
+    // What the WhatsApp call-out to its mobeds did, or why nothing went (19 Nov 2026).
+    const wa = res.callout || {};
+    const waWords = wa.state === "off" || wa.state === "not_now"
+      ? `${wa.message} So no mobed was asked on WhatsApp.` : (wa.message || "");
+    (wa.state === "failed" ? flashError : flashInfo)(
+      `Sent to ${a.name}. ${n} ${n === 1 ? "person there was" : "people there were"} told in the app. ${waWords}`.trim());
     returnTo(managerHash(`/record/${rec.id}`));
   };
 }

@@ -59,6 +59,7 @@ from agyary.services import (
     funeral_requests,
     funeral_whatsapp,
     guardrails,
+    prayer_callout,
 )
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
@@ -352,7 +353,9 @@ async def send_request(
 ) -> dict:
     """Send the record to one fire temple: its confirmed panthakys, or if none,
     its mobeds whose access is on. Refused without the family's agreement, with
-    nobody there to reach, or while another request waits."""
+    nobody there to reach, or while another request waits. Once it is sent, the
+    fire temple's mobeds are asked on WhatsApp (``callout``: what happened, or
+    why nothing was sent); that never makes the send fail."""
     user = acting.user
     record = await _own_record(db, acting, record_id)
     if not payload.family_agreed:
@@ -368,7 +371,10 @@ async def send_request(
         raise _send_error(exc) from exc
     asked = len(await funeral_requests.asked(db, request))
     await db.commit()
-    return {**await _record_response(db, record), "asked": asked}
+    callout = await prayer_callout.at_send(db, get_settings(), request.id)
+    # Read again: a failure in sending rolls the session back, which forgets it.
+    await db.refresh(record)
+    return {**await _record_response(db, record), "asked": asked, "callout": callout}
 
 
 @router.post("/manager/requests/{request_id}/withdraw")
@@ -386,6 +392,9 @@ async def withdraw_request(
     except funeral_requests.SendError as exc:
         raise _send_error(exc) from exc
     await db.commit()
+    # Mobeds who said yes on WhatsApp are told, inside WhatsApp's 24 hours.
+    await prayer_callout.after_closed(db, get_settings(), request.id)
+    await db.refresh(record)
     return await _record_response(db, record)
 
 
@@ -489,4 +498,8 @@ async def decline_request(
     except funeral_answers.AnswerError as exc:
         raise _answer_error(exc) from exc
     await db.commit()
+    # Mobeds who said yes on WhatsApp are told, inside WhatsApp's 24 hours.
+    await prayer_callout.after_closed(db, get_settings(), request.id)
+    await db.refresh(request)
+    await db.refresh(user)
     return {"request": await _one(db, user, request)}

@@ -18,8 +18,9 @@
  *
  * With the share tick, accepting can also send WhatsApp messages from Mobed
  * Diary's own number (Step 5b, once Meta approves them): what went, or why not,
- * is said after accepting and on the request. A confirmed panthaky can ask the
- * agyari's mobeds on WhatsApp from here (Step 5c, screens/callout.js).
+ * is said after accepting and on the request. A confirmed panthaky sees here
+ * how many of the agyari's mobeds were asked on WhatsApp when the request came
+ * and how many are going, and opens who is going (screens/callout.js).
  */
 
 import { myRequests, myRequest, acceptRequest, declineRequest } from "../api.js";
@@ -185,16 +186,22 @@ function whatsappHtml(wa) {
     ${wa.family_note ? `<p class="meta" style="margin:4px 0 0">${esc(wa.family_note)}</p>` : ""}`;
 }
 
-/** A confirmed panthaky of the fire temple that accepted can ask its mobeds (Step 5c). */
+/** A confirmed panthaky of the fire temple: who was asked on WhatsApp when the
+ *  request came, and who is going (the first yeses go, 19 Nov 2026). */
 function calloutCardHtml(q) {
   const wa = q.callout_whatsapp || { on: false, why_not: "" };
+  const c = q.callout || { asked: 0, yes: 0, going: 0, wanted: 2 };
+  const words = c.asked
+    ? `${c.asked} ${c.asked === 1 ? "mobed was" : "mobeds were"} asked on WhatsApp. <b>${c.going} of ${c.wanted}
+        going</b>${c.yes > c.going ? `; ${c.yes - c.going} more said yes and were thanked` : ""}.`
+    : wa.on ? "Nobody on your list has been asked on WhatsApp for this request."
+      : `<b>${esc(wa.why_not)}</b> So nobody has been asked on WhatsApp yet.`;
   return `<div class="card">
       <h2>Mobeds to pray</h2>
-      <p class="meta" style="margin:0">Ask the mobeds of ${esc(q.agyari.name)} on WhatsApp whether they can pray,
-        and pick who goes. Only those you pick get the family's contact.</p>
-      ${wa.on ? "" : `<p class="meta" style="margin:6px 0 0"><b>${esc(wa.why_not)}</b> Until then you can build your
-        list of mobeds.</p>`}
-      <div class="action-bar"><button type="button" class="secondary" id="rqCallout">Ask our mobeds on WhatsApp</button></div>
+      <p style="margin:0">${words}</p>
+      <p class="meta" style="margin:6px 0 0">The first ${c.wanted === 1 ? "mobed" : `${c.wanted} mobeds`} of
+        ${esc(q.agyari.name)} to say yes go, and get the details and the family's contact on WhatsApp.</p>
+      <div class="action-bar"><button type="button" class="secondary" id="rqCallout">Who is going</button></div>
     </div>`;
 }
 

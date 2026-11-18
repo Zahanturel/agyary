@@ -9,11 +9,14 @@ Four approved Utility templates, and one short text reply:
                                family's contact (the accepter, and each of the
                                first mobeds to say yes to a call-out)
   3  prayers_mobed_family      to the family: who will pray
-  4  prayer_request_mobeds     the panthaky's call-out to the agyari's mobeds,
-                               with "Yes, I can pray" / "Not this time"
+  4  prayer_request_mobeds     the call-out to the agyari's mobeds, at once when
+                               a request is sent (and again by the panthaky's
+                               hand), with "Yes, I can pray" / "Not this time"
      "Thank you. Enough mobeds are going this time."  plain text to a mobed who
-                               said yes and was not picked, only inside the 24
-                               hours their answer opened
+                               said yes once enough were going
+     "This prayer request was withdrawn."  plain text to a mobed who said yes,
+                               when the request is withdrawn or declined
+     Both texts go only inside the 24 hours the mobed's answer opened.
 
 Everything here is off until FUNERAL_WHATSAPP_MODE=live (once Meta has approved
 the templates): while it is off nothing is sent and the app says so. Live, every
@@ -63,7 +66,10 @@ TYPE_DETAILS = "prayer_details_mobed"
 TYPE_FAMILY = "prayers_mobed_family"
 TYPE_CALLOUT = "prayer_request_mobeds"
 TYPE_ENOUGH = "prayer_enough_reply"
-TYPES = (TYPE_MANAGER, TYPE_DETAILS, TYPE_FAMILY, TYPE_CALLOUT, TYPE_ENOUGH)
+TYPE_WITHDRAWN = "prayer_withdrawn_reply"
+TYPES = (TYPE_MANAGER, TYPE_DETAILS, TYPE_FAMILY, TYPE_CALLOUT, TYPE_ENOUGH, TYPE_WITHDRAWN)
+# What a call-out's screen reads, per mobed asked.
+CALLOUT_TYPES = (TYPE_CALLOUT, TYPE_DETAILS, TYPE_ENOUGH, TYPE_WITHDRAWN)
 TEXT_TEMPLATE = "text"   # template_name of the plain text reply
 
 OFF_WORDS = "WhatsApp messages from Mobed Diary start once Meta approves them."
@@ -71,6 +77,7 @@ NOT_SET_UP = "WhatsApp sending is not set up on this server."
 PAUSED = "All WhatsApp sending from Mobed Diary is paused at the moment."
 NOT_FIXED = "not fixed yet"
 ENOUGH_TEXT = "Thank you. Enough mobeds are going this time."
+WITHDRAWN_TEXT = "This prayer request was withdrawn."
 # WhatsApp's customer-service window: plain text may answer a person only this
 # long after their last message to us.
 WINDOW = timedelta(hours=24)

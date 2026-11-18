@@ -106,7 +106,8 @@ async def _request(db: AsyncSession, user: User, request_id: int):
 @router.get("/requests/{request_id}/callout")
 async def callout(request_id: int, db: AsyncSession = Depends(get_db),
                   user: User = Depends(get_current_user)) -> dict:
-    """Who can be asked, and everyone asked with their answer. No family details."""
+    """Everyone asked with their answer and who is going, and who can still be
+    asked. No family details."""
     request = await _request(db, user, request_id)
     return await prayer_callout.view(db, get_settings(), user, request)
 
@@ -119,7 +120,8 @@ class CalloutIn(BaseModel):
 @router.post("/requests/{request_id}/callout")
 async def send_callout(request_id: int, payload: CalloutIn, db: AsyncSession = Depends(get_db),
                        user: User = Depends(get_current_user)) -> dict:
-    """Ask the chosen mobeds on WhatsApp whether they can pray (template 4)."""
+    """Ask again, by hand: the chosen mobeds not asked yet for this request
+    (template 4). Everyone who could be was asked when the request was sent."""
     request = await _request(db, user, request_id)
     rate_limit.enforce_key(f"prayer_callout:{user.id}", max_requests=10, window_seconds=3600)
     settings = get_settings()
@@ -130,20 +132,16 @@ async def send_callout(request_id: int, payload: CalloutIn, db: AsyncSession = D
     return {**await prayer_callout.view(db, settings, user, request), "asked_now": sent.asked}
 
 
-class PickIn(BaseModel):
-    answers: list[int] = Field(default_factory=list, max_length=200)
-
-
-@router.post("/requests/{request_id}/callout/pick")
-async def pick(request_id: int, payload: PickIn, db: AsyncSession = Depends(get_db),
-               user: User = Depends(get_current_user)) -> dict:
-    """Pick who goes from those who said yes: they get the details; the other
-    yeses are told enough mobeds are going (only inside WhatsApp's 24 hours)."""
+@router.post("/requests/{request_id}/callout/details-again")
+async def details_again(request_id: int, db: AsyncSession = Depends(get_db),
+                        user: User = Depends(get_current_user)) -> dict:
+    """The first yeses go and get the details at once (19 Nov 2026); this sends
+    them again to those going whose details did not go. Never twice."""
     request = await _request(db, user, request_id)
-    rate_limit.enforce_key(f"prayer_callout_pick:{user.id}", max_requests=30, window_seconds=3600)
+    rate_limit.enforce_key(f"prayer_callout_again:{user.id}", max_requests=30, window_seconds=3600)
     settings = get_settings()
     try:
-        done = await prayer_callout.pick(db, settings, user, request, payload.answers)
+        done = await prayer_callout.details_again(db, settings, user, request)
     except prayer_callout.CalloutError as exc:
         raise _error(exc) from exc
     return {**await prayer_callout.view(db, settings, user, request), "done": done}

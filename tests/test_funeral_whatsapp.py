@@ -100,13 +100,23 @@ async def _accept(client, rid, share=True):
     return r.json(), headers
 
 
+# What accepting sends. Since 19 Nov 2026 the mobeds' call-out (template 4) goes
+# when the request is sent: tests/test_prayer_callout.py covers it, so it is left
+# out of what is counted here.
+ON_ACCEPT = (fw.TYPE_MANAGER, fw.TYPE_DETAILS, fw.TYPE_FAMILY)
+
+
 async def _rows(db) -> list[Notification]:
-    return list((await db.execute(select(Notification).where(Notification.notification_type.in_(fw.TYPES))
+    return list((await db.execute(select(Notification).where(Notification.notification_type.in_(ON_ACCEPT))
                                   .order_by(Notification.id))).scalars().all())
 
 
+def _on_accept(meta) -> list[dict]:
+    return [m for m in meta.sent if m.get("type") == "template" and m["template"]["name"] != "prayer_request_mobeds"]
+
+
 def _by_template(meta) -> dict:
-    return {m["template"]["name"]: m for m in meta.sent}
+    return {m["template"]["name"]: m for m in _on_accept(meta)}
 
 
 def _body(m) -> list[str]:
@@ -207,7 +217,7 @@ async def test_the_family_only_with_their_agreement_and_without_a_stop(client, d
 async def test_without_the_share_tick_nothing_goes_by_whatsapp(client, db, seeded, meta, pushes, live):
     rid = await _sent(client, db, seeded["agyary_id"])
     body, _ = await _accept(client, rid, share=False)
-    assert meta.sent == [] and await _rows(db) == []
+    assert _on_accept(meta) == [] and await _rows(db) == []
     assert body["whatsapp"]["state"] == "not_shared"
 
 
@@ -223,12 +233,14 @@ async def test_the_pause_switch_stops_every_send(client, db, seeded, meta, pushe
 
 
 async def test_the_daily_limit_stops_sends_and_tells_the_admins(client, db, seeded, meta, pushes, live, monkeypatch):
-    monkeypatch.setenv("FUNERAL_WHATSAPP_DAILY_CAP", "1")
+    # Two: the call-out at sending takes one (to the one mobed there), accepting the other.
+    monkeypatch.setenv("FUNERAL_WHATSAPP_DAILY_CAP", "2")
     config.get_settings.cache_clear()
     await sign_in(client, ADMIN)
     rid = await _sent(client, db, seeded["agyary_id"])
-    await _accept(client, rid)
     assert len(meta.sent) == 1
+    await _accept(client, rid)
+    assert len(_on_accept(meta)) == 1
     rows = await _rows(db)
     assert [n.status for n in rows].count("sent") == 1
     assert all("limit" in n.error_message for n in rows if n.status == "failed")

@@ -1,28 +1,28 @@
 "use strict";
 
 /**
- * "Ask our mobeds on WhatsApp" (DECISIONS D10, Phase 2 Step 5c): on a request
- * the panthaky's fire temple accepted, ask the agyari's mobeds whether they can
- * pray, see every answer, and pick who goes.
+ * Who is going (DECISIONS D10, changed 19 Nov 2026): when a Doongerwadi sends a
+ * request, the agyari's mobeds are asked on WhatsApp at once whether they can
+ * pray, and the first to say yes, up to the number wanted, go. This page is for
+ * the panthaky: read-only lists of who is going, who said yes, who said no and
+ * who has not answered, and what WhatsApp did with each message.
  *
- *  - Who to ask: everyone on "Our mobeds" who can be messaged is ticked; those
- *    who replied STOP, are switched off, or were asked already say why.
- *  - The message has no family details. The answers come back as the mobeds
- *    tap "Yes, I can pray" or "Not this time" in WhatsApp.
- *  - Picking: those picked get the details and the family's contact; the other
- *    yeses are told enough mobeds are going, but only within 24 hours of their
- *    answer (WhatsApp's rule), and the page says when it was too late.
+ *  - Going: they got the details and the family's contact on WhatsApp.
+ *    "Send the details again" is there only for someone going whose details
+ *    did not go (sending was paused, say).
+ *  - Said yes after enough were going: thanked ("Enough mobeds are going").
+ *  - Ask on WhatsApp: those on "Our mobeds" not asked yet for this request
+ *    (someone added since). Nobody is asked twice.
  *
- * While the messages are not switched on (Meta has not approved them yet) the
- * page says so, and the list of mobeds can still be built.
+ * The message has no family details. While the messages are not switched on
+ * (Meta has not approved them yet) the page says so, and the list of mobeds can
+ * still be built.
  */
 
-import { getCallout, sendCallout, pickFromCallout } from "../api.js";
+import { getCallout, sendCallout, calloutDetailsAgain } from "../api.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop } from "../ui.js";
 import { esc } from "../util.js";
 import { navigate, navGuard } from "../router.js";
-
-const ANSWERS = { yes: "Yes, can pray", no: "Not this time" };
 
 function candidateHtml(c) {
   const why = c.asked_already ? "Asked already" : c.may_ask ? "" : `Not asked: ${c.why_not}`;
@@ -37,19 +37,19 @@ function stateLine(label, s) {
   return `<div class="meta">${esc(label)}: ${esc(s.state)}${s.why ? ` (${esc(s.why)})` : ""}</div>`;
 }
 
-function answerHtml(p) {
-  const answer = p.answer ? ANSWERS[p.answer] : "No answer yet";
+function personHtml(p) {
   const lines = [
-    p.asked && p.asked.why ? stateLine("WhatsApp", p.asked) : "",
-    p.picked ? `<div><b>Going</b></div>${stateLine("Details", p.details)}` : "",
-    stateLine("Enough mobeds message", p.enough),
+    p.asked && p.asked.why ? stateLine("Asked on WhatsApp", p.asked) : "",
+    p.going ? stateLine("Details", p.details) : "",
+    !p.going && p.answer === "yes" ? stateLine("Thank-you message", p.enough) : "",
+    stateLine("Told it was withdrawn", p.withdrawn_note),
   ].join("");
-  const label = `<strong>${esc(p.name)}</strong> · ${esc(answer)}${lines}`;
-  if (p.may_pick) {
-    return `<div class="check-row"><input type="checkbox" id="pk_${p.id}" data-answer="${p.id}">
-      <label for="pk_${p.id}">${label}</label></div>`;
-  }
-  return `<div class="search-result">${label}</div>`;
+  return `<div class="search-result" style="cursor:default"><strong>${esc(p.name)}</strong>${lines}</div>`;
+}
+
+function group(title, people, empty) {
+  return `<div class="names-group-label"><b>${esc(title)}</b><span>${people.length}</span></div>
+    ${people.length ? people.map(personHtml).join("") : `<p class="meta" style="margin:0">${esc(empty)}</p>`}`;
 }
 
 export async function renderCallout({ id }) {
@@ -63,7 +63,7 @@ export async function renderCallout({ id }) {
     v = await getCallout(id);
   } catch (e) {
     if (!alive()) return;
-    if (e.status === 404) return screenFailed("Only the panthaky of the fire temple that accepted this request can ask its mobeds.");
+    if (e.status === 404) return screenFailed("Only the panthaky of the fire temple this request was sent to can see this.");
     return screenFailed("Couldn't open this: " + e.message, () => renderCallout({ id }));
   }
   if (!alive()) return;
@@ -72,80 +72,91 @@ export async function renderCallout({ id }) {
 
 function draw(id, v) {
   const on = v.whatsapp.on;
+  const going = v.asked.filter(p => p.going);
+  const yes = v.asked.filter(p => !p.going && p.answer === "yes");
+  const no = v.asked.filter(p => p.answer === "no");
+  const silent = v.asked.filter(p => !p.answer);
   const askable = v.candidates.filter(c => c.may_ask).length;
-  const yeses = v.asked.filter(p => p.answer === "yes").length;
+  const resend = v.asked.some(p => p.may_resend);
   mainEl.innerHTML = `
     <div class="card">
-      <h2>Ask our mobeds: ${esc(v.prayed_name)}</h2>
+      <h2>Who is going: ${esc(v.prayed_name)}</h2>
       <div class="fact"><div class="fl">Place</div><div class="fv">${esc(v.place)}</div></div>
       <div class="fact"><div class="fl">Geh-saarnu</div><div class="fv">${esc(v.geh_saarnu)}</div></div>
       <div class="fact"><div class="fl">Uthamna</div><div class="fv">${esc(v.uthamna)}</div></div>
-      ${v.mobeds_wanted ? `<div class="fact"><div class="fl">Mobeds wanted</div><div class="fv">${v.mobeds_wanted}</div></div>` : ""}
-      <p class="meta" style="margin:10px 0 0">The WhatsApp message asks whether they can pray, with these times. It
-        has no family details: only those you pick get them.</p>
+      <div class="fact"><div class="fl">Mobeds wanted</div><div class="fv">${v.wanted}${v.mobeds_wanted ? "" : " (none given, so 2)"}</div></div>
+      ${v.open ? "" : `<p style="margin:10px 0 0"><b>This request is closed.</b> Nobody more is asked or sent anything for it.</p>`}
+      ${on ? "" : `<p style="margin:10px 0 0"><b>${esc(v.whatsapp.why_not)}</b> Until then nobody is asked on WhatsApp, and
+        you can build your list of mobeds.</p>`}
+      <p class="meta" style="margin:10px 0 0">When the request came, the mobeds on your list were asked on WhatsApp
+        whether they can pray (no family details). The first ${v.wanted === 1 ? "to say yes goes" : `${v.wanted} to say yes go`}
+        and get the details and the family's contact at once. Those who say yes later are thanked.</p>
     </div>
-    ${v.asked.length ? `<div class="card">
-      <h2>Answers</h2>
-      <p class="meta" style="margin:0 0 6px">${yeses} said yes. Tick who goes: they get the details and the family's
-        contact. The others who said yes are told enough mobeds are going (only within 24 hours of their answer).</p>
-      ${v.asked.map(answerHtml).join("")}
-      ${v.asked.some(p => p.may_pick) ? `<div class="action-bar"><button type="button" id="coPick">Send the details to those picked</button></div>` : ""}
-    </div>` : ""}
     <div class="card">
+      <h2>Answers</h2>
+      ${v.asked.length ? `
+        ${group(`Going (${going.length} of ${v.wanted})`, going, "Nobody yet.")}
+        ${resend ? `<div class="action-bar"><button type="button" id="coAgain">Send the details again</button></div>` : ""}
+        ${group("Said yes, not needed", yes, "Nobody.")}
+        ${group("Said no", no, "Nobody.")}
+        ${group("No answer yet", silent, "Nobody.")}`
+        : `<p class="meta" style="margin:0">Nobody has been asked on WhatsApp for this request.</p>`}
+    </div>
+    ${v.open ? `<div class="card">
       <h2>Ask on WhatsApp</h2>
-      ${on ? "" : `<p class="meta" style="margin:0 0 8px"><b>${esc(v.whatsapp.why_not)}</b> Until then you can build
-        your list of mobeds.</p>`}
+      <p class="meta" style="margin:0 0 8px">For mobeds not asked yet, such as someone you added to your list since.
+        Nobody is asked twice.</p>
       ${v.candidates.length ? v.candidates.map(candidateHtml).join("")
         : `<p class="meta" style="margin:0">Nobody is on your list yet besides you.</p>`}
       <div class="action-bar">
         <button type="button" class="secondary" id="coList">Our mobeds</button>
         <button type="button" id="coSend" ${askable ? "" : "disabled"}>Ask on WhatsApp</button>
       </div>
-    </div>`;
+    </div>` : ""}`;
 
-  document.getElementById("coList").onclick = () => navigate("#/our-mobeds");
-  document.getElementById("coSend").onclick = async (ev) => {
-    if (!on) return showInfo(`${v.whatsapp.why_not} Until then you can build your list of mobeds.`);
-    const who = [...mainEl.querySelectorAll("[data-key]:checked")].map(el => el.dataset.key);
-    if (!who.length) return showError("Please tick who to ask.");
-    if (who.length > v.max) return showError(`One call-out can ask at most ${v.max} mobeds.`);
-    const btn = ev.currentTarget;
-    btn.disabled = true;
-    let res;
-    try {
-      res = await sendCallout(id, who);
-    } catch (e) {
-      btn.disabled = false;
-      return showError(e.message);
-    }
-    draw(id, res);
-    toTop();
-    const failed = who.length - res.asked_now;
-    (failed ? showError : showInfo)(failed
-      ? `Asked ${res.asked_now} of ${who.length} on WhatsApp. The others could not be sent: see below.`
-      : `Asked ${res.asked_now} on WhatsApp. Their answers will show here.`);
-  };
-  const pickBtn = document.getElementById("coPick");
-  if (pickBtn) {
-    pickBtn.onclick = async () => {
-      const answers = [...mainEl.querySelectorAll("[data-answer]:checked")].map(el => Number(el.dataset.answer));
-      if (!answers.length) return showError("Please tick who goes.");
-      pickBtn.disabled = true;
+  const list = document.getElementById("coList");
+  if (list) list.onclick = () => navigate("#/our-mobeds");
+  const send = document.getElementById("coSend");
+  if (send) {
+    send.onclick = async (ev) => {
+      if (!on) return showInfo(`${v.whatsapp.why_not} Until then you can build your list of mobeds.`);
+      const who = [...mainEl.querySelectorAll("[data-key]:checked")].map(el => el.dataset.key);
+      if (!who.length) return showError("Please tick who to ask.");
+      if (who.length > v.max) return showError(`One call-out can ask at most ${v.max} mobeds.`);
+      const btn = ev.currentTarget;
+      btn.disabled = true;
       let res;
       try {
-        res = await pickFromCallout(id, answers);
+        res = await sendCallout(id, who);
       } catch (e) {
-        pickBtn.disabled = false;
+        btn.disabled = false;
+        return showError(e.message);
+      }
+      draw(id, res);
+      toTop();
+      const failed = who.length - res.asked_now;
+      (failed ? showError : showInfo)(failed
+        ? `Asked ${res.asked_now} of ${who.length} on WhatsApp. The others could not be sent: see the answers.`
+        : `Asked ${res.asked_now} on WhatsApp. Their answers will show here.`);
+    };
+  }
+  const again = document.getElementById("coAgain");
+  if (again) {
+    again.onclick = async () => {
+      again.disabled = true;
+      let res;
+      try {
+        res = await calloutDetailsAgain(id);
+      } catch (e) {
+        again.disabled = false;
         return showError(e.message);
       }
       draw(id, res);
       toTop();
       const d = res.done;
-      const words = [`${d.picked} picked. Details sent to ${d.details_sent}.`];
-      if (d.enough_sent) words.push(`${d.enough_sent} told enough mobeds are going.`);
-      if (d.enough_too_late) words.push(`${d.enough_too_late} not told: more than 24 hours had passed since they answered.`);
-      (d.details_sent < d.picked ? showError : showInfo)(
-        d.details_sent < d.picked ? words.join(" ") + " Some details could not be sent: see below." : words.join(" "));
+      (d.sent < d.tried ? showError : showInfo)(d.sent < d.tried
+        ? `Details sent to ${d.sent} of ${d.tried}. The others could not be sent: see the answers.`
+        : `Details sent to ${d.sent}.`);
     };
   }
 }

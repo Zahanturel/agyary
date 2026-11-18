@@ -241,7 +241,8 @@ export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/
 export const removeOurMobed = (aid, id) => del(`/agyaries/${aid}/our-mobeds/${id}`);
 export const getCallout = (rid) => get(`/requests/${rid}/callout`);
 export const sendCallout = (rid, who) => post(`/requests/${rid}/callout`, { who });
-export const pickFromCallout = (rid, answers) => post(`/requests/${rid}/callout/pick`, { answers });
+/** Message 2 again to those going whose details did not go (19 Nov 2026: the first yeses go). */
+export const calloutDetailsAgain = (rid) => post(`/requests/${rid}/callout/details-again`, {});
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).

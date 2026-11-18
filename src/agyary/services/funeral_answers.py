@@ -278,11 +278,14 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
                 # The WhatsApp messages from our number on accepting (Step 5b).
                 "whatsapp": await funeral_whatsapp.summary(db, None, q),
             })
-        if accepted:
-            # A confirmed panthaky of the fire temple can ask its mobeds (Step 5c).
-            item["may_call_out"] = await prayer_callout.is_confirmed_panthaky(db, q.agyary_id, user.id)
-            if item["may_call_out"]:
-                item["callout_whatsapp"] = await funeral_whatsapp.status(db, get_settings())
+        # A confirmed panthaky of the fire temple sees who was asked on WhatsApp
+        # and who is going, while the request still wants mobeds (19 Nov 2026).
+        item["may_call_out"] = False
+        if await prayer_callout.is_confirmed_panthaky(db, q.agyary_id, user.id):
+            callout = await prayer_callout.summary(db, q)
+            if prayer_callout.is_open(q) or callout["asked"]:
+                item.update(may_call_out=True, callout=callout,
+                            callout_whatsapp=await funeral_whatsapp.status(db, get_settings()))
         out.append(item)
     return out
 

@@ -58,9 +58,11 @@ class AgyaryMobedContact(Base):
 
 
 class PrayerCallout(Base):
-    """A panthaky asking the agyari's mobeds on WhatsApp whether they can pray
-    for an accepted funeral request (template 4, no family details). Kept with
-    the request; who was asked, and what they said, is in the answers."""
+    """Asking the agyari's mobeds on WhatsApp whether they can pray for a
+    funeral request (template 4, no family details): at once when the request
+    is sent (19 Nov 2026; sent_by is who sent the request), or again by the
+    panthaky's hand. Kept with the request; who was asked, and what they said,
+    is in the answers."""
 
     __tablename__ = "prayer_callouts"
 
@@ -70,7 +72,8 @@ class PrayerCallout(Base):
     sent_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     asked: Mapped[int] = mapped_column(Integer, server_default="0")
-    # When the panthaky last picked who goes from this call-out.
+    # When the panthaky last picked who goes from this call-out (18 Nov 2026;
+    # since 19 Nov the first yeses go and this is no longer set).
     picked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (Index("idx_prayer_callouts_request", "funeral_request_id"),)
@@ -80,7 +83,9 @@ class PrayerCalloutAnswer(Base):
     """One mobed asked in a call-out, and their answer. The quick-reply
     buttons carry ``token`` (unguessable, never the row's id), which is how a
     tap on WhatsApp finds this row; only the first answer counts. The name and
-    number are as they were when asked."""
+    number are as they were when asked. ``picked_at`` is when they became one
+    of those going: since 19 Nov 2026 the first yeses up to the number wanted
+    (``picked_by_user_id`` empty); before, the panthaky's pick."""
 
     __tablename__ = "prayer_callout_answers"
 
