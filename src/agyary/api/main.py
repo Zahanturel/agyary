@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from agyary.api.routes.admin import router as admin_router
 from agyary.api.routes.calendar import router as calendar_router
+from agyary.api.routes.callouts import router as callouts_router
 from agyary.api.routes.funeral import router as funeral_router
 from agyary.api.routes.memorials import router as memorials_router
 from agyary.api.routes.mobed import router as mobed_router
@@ -160,6 +161,7 @@ app.include_router(calendar_router)
 app.include_router(admin_router)
 app.include_router(mobed_router)
 app.include_router(funeral_router)
+app.include_router(callouts_router)
 app.include_router(memorials_router)
 app.include_router(otp_router)
 app.include_router(places_router)

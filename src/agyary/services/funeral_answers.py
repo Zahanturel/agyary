@@ -42,7 +42,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem
-from agyary.core.config import Settings
+from agyary.core.config import Settings, get_settings
 from agyary.messaging import booking_service
 from agyary.messaging.geh_times import GEH_START_TIMES, IST, machi_ceremony_datetime
 from agyary.models import (
@@ -69,6 +69,7 @@ from agyary.services import (
     funeral_requests,
     funeral_whatsapp,
     mobed_access,
+    prayer_callout,
     mobed_dashboard,
     reminders,
     template_text,
@@ -267,6 +268,11 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
                 # The WhatsApp messages from our number on accepting (Step 5b).
                 "whatsapp": await funeral_whatsapp.summary(db, None, q),
             })
+        if accepted:
+            # A confirmed panthaky of the fire temple can ask its mobeds (Step 5c).
+            item["may_call_out"] = await prayer_callout.is_confirmed_panthaky(db, q.agyary_id, user.id)
+            if item["may_call_out"]:
+                item["callout_whatsapp"] = await funeral_whatsapp.status(db, get_settings())
         out.append(item)
     return out
 

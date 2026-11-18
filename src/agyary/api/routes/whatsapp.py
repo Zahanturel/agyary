@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Notification, User
-from agyary.services import funeral_whatsapp, reminder_sender, reminders, wa_login, wa_send
+from agyary.services import funeral_whatsapp, prayer_callout, reminder_sender, reminders, wa_login, wa_send
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +172,13 @@ async def _sender_phone(db: AsyncSession, message: dict) -> str | None:
 async def _process_message(db: AsyncSession, message: dict) -> None:
     from_phone = await _sender_phone(db, message)
     wa_user_id = message.get("from_user_id")
+    # A mobed's tap on "Yes, I can pray" / "Not this time" under a panthaky's
+    # call-out (D10, Step 5c): its payload is ours alone ("pca:<token>:y|n").
+    payload = (message.get("button") or {}).get("payload") if message.get("type") == "button" else None
+    if prayer_callout.is_ours(payload):
+        outcome = await prayer_callout.record_answer(db, get_settings(), payload, from_phone, wa_user_id=wa_user_id)
+        logger.info("Call-out answer: %s", outcome)
+        return
     text = _extract_text(message)
     if not from_phone:
         # Nothing to stop, forward or prove - except a sign-in, which is told
@@ -254,6 +261,13 @@ async def simulate_inbound(
 
     code = str(payload.get("code", "")).strip()
     phone = str(payload.get("phone", "")).strip()
+    # A quick-reply tap (a call-out's Yes / Not this time), as Meta delivers one.
+    button = str(payload.get("button_payload", "")).strip()
+    if button and phone:
+        await _process_message(db, {"type": "button", "from": phone.lstrip("+"),
+                                    "button": {"payload": button, "text": str(payload.get("button_text", ""))[:40]}})
+        await db.commit()
+        return {"simulated": True, "button": True}
     if not code or not phone:
         raise HTTPException(status_code=400, detail="code and phone are required")
 

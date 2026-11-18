@@ -87,6 +87,9 @@ _STEPS = [
     # notices and preferences go with it). login_otps stay: they are what the
     # code limits count, and they are swept after two days.
     "DELETE FROM agyary_users WHERE user_id = :u",
+    # Their answers to a panthaky's call-out are the fire temple's record (D10):
+    # kept, without their name or number.
+    "UPDATE prayer_callout_answers SET name = 'A deleted account', phone = NULL WHERE user_id = :u",
     # A Doongerwadi manager's link to their place (D10). The place stays, and so
     # do places an admin added (their created_by is cleared by the foreign key).
     "DELETE FROM funeral_place_managers WHERE user_id = :u",
