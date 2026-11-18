@@ -89,14 +89,16 @@ function draw(id, v) {
       ${on ? "" : `<p style="margin:10px 0 0"><b>${esc(v.whatsapp.why_not)}</b> Until then nobody is asked on WhatsApp, and
         you can build your list of mobeds.</p>`}
       <p class="meta" style="margin:10px 0 0">When the request came, the mobeds on your list were asked on WhatsApp
-        whether they can pray (no family details). The first ${v.wanted === 1 ? "to say yes goes" : `${v.wanted} to say yes go`}
-        and get the details and the family's contact at once. Those who say yes later are thanked.</p>
+        whether they can pray (no family details). ${v.wanted === 1 ? "The first to say yes goes and gets"
+        : `The first ${v.wanted} to say yes go and get`} the details and the family's contact at once. Those who say yes
+        later are thanked.</p>
     </div>
     <div class="card">
       <h2>Answers</h2>
       ${v.asked.length ? `
         ${group(`Going (${going.length} of ${v.wanted})`, going, "Nobody yet.")}
-        ${resend ? `<div class="action-bar"><button type="button" id="coAgain">Send the details again</button></div>` : ""}
+        ${resend && on ? `<div style="margin:8px 0 4px"><button type="button" class="small" id="coAgain">Send the details
+          again</button></div>` : ""}
         ${group("Said yes, not needed", yes, "Nobody.")}
         ${group("Said no", no, "Nobody.")}
         ${group("No answer yet", silent, "Nobody.")}`

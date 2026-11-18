@@ -193,14 +193,17 @@ function calloutCardHtml(q) {
   const c = q.callout || { asked: 0, yes: 0, going: 0, wanted: 2 };
   const words = c.asked
     ? `${c.asked} ${c.asked === 1 ? "mobed was" : "mobeds were"} asked on WhatsApp. <b>${c.going} of ${c.wanted}
-        going</b>${c.yes > c.going ? `; ${c.yes - c.going} more said yes and were thanked` : ""}.`
+        going</b>${c.yes > c.going ? `; ${c.yes - c.going} more said yes but ${c.yes - c.going === 1 ? "is" : "are"}
+        not needed` : ""}.`
     : wa.on ? "Nobody on your list has been asked on WhatsApp for this request."
       : `<b>${esc(wa.why_not)}</b> So nobody has been asked on WhatsApp yet.`;
   return `<div class="card">
       <h2>Mobeds to pray</h2>
       <p style="margin:0">${words}</p>
-      <p class="meta" style="margin:6px 0 0">The first ${c.wanted === 1 ? "mobed" : `${c.wanted} mobeds`} of
-        ${esc(q.agyari.name)} to say yes go, and get the details and the family's contact on WhatsApp.</p>
+      <p class="meta" style="margin:6px 0 0">${c.wanted === 1
+        ? `The first mobed of ${esc(q.agyari.name)} to say yes goes, and gets`
+        : `The first ${c.wanted} mobeds of ${esc(q.agyari.name)} to say yes go, and get`} the details and the family's
+        contact on WhatsApp.</p>
       <div class="action-bar"><button type="button" class="secondary" id="rqCallout">Who is going</button></div>
     </div>`;
 }
