@@ -7,7 +7,9 @@
  *  - The record form: the name as it is prayed, the death by its date or by
  *    its Roj and Mah (the other is worked out by the server and shown, to
  *    confirm), four days or one, Geh-saarnu, Uthamna, mobeds wanted,
- *    the family's preferred fire temple, and one family contact.
+ *    one family contact (chosen from the place's book of behdins, or added to
+ *    it on the spot: manager_behdins.js), and the family's preferred fire
+ *    temple - their usual one from the book, unless the manager chooses.
  *  - The record: everything on it, its requests, and Send / Withdraw / Edit.
  *    Once a fire temple accepts (Step 5): who accepted and where, and - only
  *    if they ticked "Share my name and number" - their number with Call and
@@ -24,8 +26,9 @@
 
 import {
   calendarOptions, managerDeathDay, managerRecord, managerCreateRecord, managerUpdateRecord,
-  managerSuggested, managerSearchAgyaries, managerSend, managerWithdraw,
+  managerSuggested, managerSearchAgyaries, managerSend, managerWithdraw, managerBook,
 } from "../api.js";
+import { openBehdinSheet, familyLineHtml } from "./manager_behdins.js";
 import { state } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, openSheet, flashInfo,
@@ -196,13 +199,18 @@ function formHtml(d, { editing }) {
       <label for="frMobeds">Mobeds wanted (optional)</label>
       <input type="number" id="frMobeds" inputmode="numeric" min="1" max="20" value="${esc(d.mobeds)}">
 
-      <label for="frPrefSearch">The family's fire temple (optional)</label>
-      <div id="frPreferredBox"></div>
+      <label for="frFamilySearch">Family</label>
+      <p class="meta" style="margin:0 0 6px">Choose them from your book of behdins, or add them to it.</p>
+      <div id="frFamilyBox"></div>
+      <p class="meta" id="frFamilyNote" role="status" style="margin:6px 0 0"></p>
 
       <label for="frContact">Family contact: name</label>
       <input type="text" id="frContact" autocomplete="off" maxlength="100" value="${esc(d.contactName)}">
       <label for="frPhone">Family contact: number</label>
       <div id="frPhoneBox">${phoneField("frPhone")}</div>
+
+      <label for="frPrefSearch">The family's fire temple (optional)</label>
+      <div id="frPreferredBox"></div>
 
       <div class="action-bar">
         <button type="button" id="frSave">${editing ? "Save changes" : "Save"}</button>
@@ -307,6 +315,68 @@ function paintPreferred(box, d) {
   };
 }
 
+/** The family from the place's book: a search, and "Add a new family" (which
+ *  saves them to the book). Choosing one fills the family contact and, if no
+ *  fire temple is chosen yet, their usual one, which is then suggested first. */
+function paintFamily(box, d, root, repaintPreferred) {
+  box.innerHTML = `<input type="text" id="frFamilySearch" placeholder="Search your book by name or number"
+      autocomplete="off">
+    <div id="frFamilyResults" style="margin-top:8px"></div>
+    <div class="row tight" style="margin-top:8px"><button type="button" class="secondary small" id="frFamilyAdd">Add a new
+      family</button></div>`;
+  const input = box.querySelector("#frFamilySearch");
+  const results = box.querySelector("#frFamilyResults");
+  const note = root.querySelector("#frFamilyNote");
+  const use = (b) => {
+    d.contactName = b.name;
+    d.contactPhone = b.phone;
+    root.querySelector("#frContact").value = b.name;
+    setPhoneField("frPhone", b.phone);
+    input.value = "";
+    results.innerHTML = "";
+    const words = [`${b.name}, from your book.`];
+    if (b.usual_agyari && !d.preferred) {
+      d.preferred = { ...b.usual_agyari };
+      repaintPreferred();
+      words.push(`Their usual fire temple, ${b.usual_agyari.name}, is suggested first.`);
+    } else if (b.usual_agyari && d.preferred.id !== b.usual_agyari.id) {
+      words.push(`Their usual fire temple is ${b.usual_agyari.name}; you have chosen ${d.preferred.name}.`);
+    }
+    note.textContent = words.join(" ");
+  };
+  let timer, token = 0;
+  input.oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = input.value.trim();
+      const mine = ++token;
+      if (!q) { results.innerHTML = ""; return; }
+      let found;
+      try {
+        found = (await managerBook(q)).behdins;
+      } catch (e) {
+        if (mine === token) results.innerHTML = `<p class="meta" role="alert">${esc(e.message)}</p>`;
+        return;
+      }
+      if (mine !== token || !box.isConnected) return;
+      if (!found.length) {
+        results.innerHTML = `<p class="meta">Nobody in your book for “${esc(q)}”. Add them as a new family.</p>`;
+        return;
+      }
+      results.innerHTML = found.map((b, i) => `<div class="search-result" data-i="${i}">${familyLineHtml(b)}</div>`).join("");
+      results.querySelectorAll("[data-i]").forEach(row => { row.onclick = () => use(found[+row.dataset.i]); });
+    }, 250);
+  };
+  box.querySelector("#frFamilyAdd").onclick = () => {
+    const typed = input.value.trim();
+    openBehdinSheet({
+      placeId: d.placeId,
+      prefill: { name: typed && !/\d/.test(typed) ? typed : d.contactName, phone: readPhone("frPhone") || "" },
+      onSaved: (b) => { use(b); showInfo(`${b.name} is in your book of behdins.`); },
+    });
+  };
+}
+
 async function renderForm(rec) {
   chrome(true);
   refreshHeader();
@@ -400,6 +470,7 @@ async function renderForm(rec) {
   });
   root.querySelectorAll("[name=frOb]").forEach(r => { r.onchange = () => { d.obsequies = r.value; }; });
   paintPreferred($("#frPreferredBox"), d);
+  paintFamily($("#frFamilyBox"), d, root, () => paintPreferred($("#frPreferredBox"), d));
 
   let saving = false;
   $("#frSave").onclick = async (ev) => {

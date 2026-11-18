@@ -41,6 +41,7 @@ import { renderMenu } from "./screens/menu.js";
 import { renderAgyariLocation } from "./screens/agyari_location.js";
 import { renderManagerHome, renderManagerSettings } from "./screens/manager.js";
 import { renderRecordNew, renderRecordView, renderRecordEdit, renderRecordSend } from "./screens/manager_record.js";
+import { renderManagerBehdins } from "./screens/manager_behdins.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
@@ -66,6 +67,8 @@ route("#/manager/record/new", renderRecordNew, { parent: "#/manager" });
 route("#/manager/record/:id", renderRecordView, { parent: "#/manager" });
 route("#/manager/record/:id/edit", renderRecordEdit, { parent: (p) => `#/manager/record/${p.id}` });
 route("#/manager/record/:id/send", renderRecordSend, { parent: (p) => `#/manager/record/${p.id}` });
+// The place's book of behdins (19 Nov 2026).
+route("#/manager/behdins", renderManagerBehdins, { parent: "#/manager" });
 
 // `tab` puts the screen under a bottom tab and shows the tab bar. Every screen
 // has one except Settings (the menu and what opens from it), sign-in and
@@ -94,6 +97,7 @@ route("#/admin/act/:placeId/record/new", renderRecordNew, { parent: actHome });
 route("#/admin/act/:placeId/record/:id", renderRecordView, { parent: actHome });
 route("#/admin/act/:placeId/record/:id/edit", renderRecordEdit, { parent: (p) => `${actHome(p)}/record/${p.id}` });
 route("#/admin/act/:placeId/record/:id/send", renderRecordSend, { parent: (p) => `${actHome(p)}/record/${p.id}` });
+route("#/admin/act/:placeId/behdins", renderManagerBehdins, { parent: actHome });
 
 // `parent` is where Back goes when there is nothing behind the screen (a
 // reload, a shared link) - see router.back(). Screens with a parent get the

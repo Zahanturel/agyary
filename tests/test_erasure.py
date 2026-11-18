@@ -82,7 +82,8 @@ async def test_a_number_is_erased_from_every_book_and_only_that_number(client, d
     await db.commit()
 
     found = await erasure.what_we_hold(db, FAMILY)
-    assert found == {"records": 2, "mobeds": 2, "memorials": 1, "events": 2, "messages": 1, "funeral_records": 0}
+    assert found == {"records": 2, "mobeds": 2, "memorials": 1, "events": 2, "messages": 1, "funeral_records": 0,
+                     "funeral_books": 0}
     assert await erasure.erase_number(db, FAMILY) == found
     await db.commit()
     db.expire_all()

@@ -11,6 +11,7 @@ from agyary.models.booking import Booking, BookingMobed
 from agyary.models.bulk_batch import BulkBatch
 from agyary.models.ceremony_name import CeremonyName
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName, ReminderOptOut
+from agyary.models.funeral_book import FuneralBehdin
 from agyary.models.funeral_place import FuneralPlace, FuneralPlaceManager
 from agyary.models.funeral_record import FuneralRecord, FuneralRequest, FuneralRequestRecipient
 from agyary.models.login_otp import LoginOtp
@@ -40,6 +41,7 @@ __all__ = [
     "CeremonyName",
     "Customer",
     "CustomerSavedName",
+    "FuneralBehdin",
     "FuneralPlace",
     "FuneralPlaceManager",
     "FuneralRecord",

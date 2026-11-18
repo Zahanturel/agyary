@@ -52,8 +52,10 @@ from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, FuneralPlace, FuneralRequest, User
 from agyary.models.enums import ACCOUNT_FUNERAL_MANAGER
+from agyary.services.phone import Phone
 from agyary.services import (
     funeral_answers,
+    funeral_book,
     funeral_places,
     funeral_records,
     funeral_requests,
@@ -295,6 +297,102 @@ async def update_record(
 
 
 # ---------------------------------------------------------------------------
+# The place's book of behdins (D10, 19 Nov 2026): the families it deals with
+# ---------------------------------------------------------------------------
+NO_FAMILY = "That family could not be found in the book."
+
+
+class BehdinIn(BaseModel):
+    name: str = Field(default="", max_length=300)
+    phone: Phone
+    usual_agyary_id: int | None = None
+
+
+class NewBehdinIn(BehdinIn):
+    # Which of their places; may be left out by a manager of one place.
+    funeral_place_id: int | None = None
+
+
+def _book_error(exc: funeral_book.BookError) -> HTTPException:
+    headers = {FIELD_HEADER: exc.field} if exc.field else None
+    return HTTPException(status_code=exc.status, detail=str(exc), headers=headers)
+
+
+def _one_place(acting: Acting, place_id: int | None) -> FuneralPlace:
+    if place_id is not None:
+        place = acting.place(place_id)
+    else:
+        if len(acting.places) > 1:
+            raise HTTPException(status_code=400, detail="Please choose which place this is for.")
+        place = acting.places[0] if acting.places else None
+    if place is None:
+        raise HTTPException(status_code=404, detail="That place could not be found.")
+    return place
+
+
+@router.get("/manager/behdins")
+async def list_book(
+    q: str = Query(default="", max_length=200), db: AsyncSession = Depends(get_db),
+    acting: Acting = Depends(get_acting_manager),
+) -> dict:
+    """The families in this place's book (the admin acting for it: that
+    place's), by name; with ``q``, those whose name or number has it."""
+    rate_limit.enforce_key(f"funeral_book_search:{acting.user.id}", max_requests=120, window_seconds=60)
+    rows = await funeral_book.listed(db, acting.place_ids, q)
+    return {"behdins": await funeral_book.serialize(db, rows), "more": len(rows) == funeral_book.PAGE}
+
+
+@router.post("/manager/behdins")
+async def add_to_book(
+    payload: NewBehdinIn, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
+) -> dict:
+    rate_limit.enforce_key(f"funeral_book_save:{acting.user.id}", max_requests=120, window_seconds=3600)
+    place = _one_place(acting, payload.funeral_place_id)
+    try:
+        row = await funeral_book.add(db, acting.user, place, name=payload.name, phone=payload.phone,
+                                     usual_agyary_id=payload.usual_agyary_id)
+    except funeral_book.BookError as exc:
+        raise _book_error(exc) from exc
+    await db.commit()
+    return {"behdin": (await funeral_book.serialize(db, [row]))[0]}
+
+
+async def _own_behdin(db: AsyncSession, acting: Acting, behdin_id: int):
+    row = await funeral_book.get(db, acting.place_ids, behdin_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=NO_FAMILY)
+    return row
+
+
+@router.put("/manager/behdins/{behdin_id}")
+async def change_in_book(
+    behdin_id: int, payload: BehdinIn, db: AsyncSession = Depends(get_db),
+    acting: Acting = Depends(get_acting_manager),
+) -> dict:
+    rate_limit.enforce_key(f"funeral_book_save:{acting.user.id}", max_requests=120, window_seconds=3600)
+    row = await _own_behdin(db, acting, behdin_id)
+    try:
+        await funeral_book.update(db, acting.user, row, name=payload.name, phone=payload.phone,
+                                  usual_agyary_id=payload.usual_agyary_id)
+    except funeral_book.BookError as exc:
+        raise _book_error(exc) from exc
+    await db.commit()
+    return {"behdin": (await funeral_book.serialize(db, [row]))[0]}
+
+
+@router.delete("/manager/behdins/{behdin_id}")
+async def remove_from_book(
+    behdin_id: int, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
+) -> dict:
+    """Out of the book (kept, turned off: D8). Records already made keep their
+    family contact."""
+    row = await _own_behdin(db, acting, behdin_id)
+    await funeral_book.remove(db, acting.user, row)
+    await db.commit()
+    return {"removed": row.id}
+
+
+# ---------------------------------------------------------------------------
 # Choosing the fire temple (D10): suggested nearest first, or any by search
 # ---------------------------------------------------------------------------
 @router.get("/manager/records/{record_id}/agyaries")
@@ -302,11 +400,14 @@ async def suggested_agyaries(
     record_id: int, db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """The fire temples to suggest for this record: the family's preferred one
-    first, then within 500 km of the place, nearest first, each saying whether
-    a request would reach anyone there."""
+    first (or, if none was chosen, their usual one from the place's book of
+    behdins), then within 500 km of the place, nearest first, each saying
+    whether a request would reach anyone there."""
     record = await _own_record(db, acting, record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
-    return await funeral_requests.suggested(db, get_settings(), place, record.preferred_agyary_id)
+    first = record.preferred_agyary_id or await funeral_book.usual_agyari_of(
+        db, record.funeral_place_id, record.family_contact_phone)
+    return await funeral_requests.suggested(db, get_settings(), place, first)
 
 
 @router.get("/manager/agyaries/search")

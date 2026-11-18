@@ -6,7 +6,8 @@ reaches every mobed's book: the name and number, the saved names, the memorials,
 the names recited at their ceremonies, the notes, and every message sent to them.
 
 A Doongerwadi's funeral record that named them as the family's contact keeps the
-death (the place's record, D8) but loses the contact's name and number.
+death (the place's record, D8) but loses the contact's name and number, and a
+funeral place's book of behdins loses them altogether (19 Nov 2026).
 
 A ceremony that was performed is the mobed's history and a slip must still
 print, so a record that events or payments point at stays, called "Erased", with
@@ -30,6 +31,7 @@ from agyary.models import (
     CeremonyName,
     Customer,
     CustomerSavedName,
+    FuneralBehdin,
     FuneralRecord,
     Machi,
     Memorial,
@@ -64,6 +66,7 @@ async def what_we_hold(db: AsyncSession, phone: str) -> dict:
         + await _count(db, Booking, Booking.customer_id.in_(records)),
         "messages": await _count(db, Notification, _sent_to(phone, records)),
         "funeral_records": await _count(db, FuneralRecord, FuneralRecord.family_contact_phone == phone),
+        "funeral_books": await _count(db, FuneralBehdin, FuneralBehdin.phone == phone),
     }
 
 
@@ -120,6 +123,8 @@ async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = N
         await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
             family_contact_name=ERASED, family_contact_phone=_no_ones_number(record_id),
         ))
+    # A funeral place's book of behdins: the family's name and number, nothing more.
+    await db.execute(delete(FuneralBehdin).where(FuneralBehdin.phone == phone))
     for owner in {owner for _i, owner in rows if owner is not None}:
         await reminders.notify(
             db, owner, KIND_ERASED, "A family's details were erased",

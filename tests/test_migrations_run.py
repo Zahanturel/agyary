@@ -469,3 +469,29 @@ async def test_the_khud_title_migration_lets_khud_in_and_comes_off_cleanly():
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_funeral_book_migration_holds_its_rules_and_comes_off_cleanly():
+    """f8a9b0c1d2e5 (19 Nov 2026): a place lists a number once, in E.164; the
+    usual fire temple is cleared if it goes; the downgrade takes the table off."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        add = "INSERT INTO funeral_behdins (funeral_place_id, name, phone, usual_agyary_id) VALUES (1, 'Family', :p, :a)"
+        await _scratch_execute(add, {"p": "+919000000009", "a": 1})
+        await _refused(add, {"p": "+919000000009", "a": None}, "the same number twice", needle="uq_funeral_behdins")
+        await _refused(add, {"p": "98200", "a": None}, "a number not in E.164")
+        assert await _scratch_execute("SELECT is_active FROM funeral_behdins") == [(True,)]
+        await _scratch_execute("DELETE FROM agyaries")
+        assert await _scratch_execute("SELECT usual_agyary_id FROM funeral_behdins") == [(None,)]
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'funeral_behdins'::regclass")
+        assert {"ck_funeral_behdins_phone_e164", "fk_funeral_behdins_funeral_place_id_funeral_places",
+                "uq_funeral_behdins_place_phone"} <= {n for (n,) in names}
+        _ok(_alembic("downgrade", "e7f8a9b0c1d4"))
+        tables = {t for (t,) in await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
+        assert "funeral_behdins" not in tables
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

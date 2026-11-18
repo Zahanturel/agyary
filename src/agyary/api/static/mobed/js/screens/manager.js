@@ -7,8 +7,9 @@
  *  - Signing up: a brand-new account that said "I work at a Doongerwadi or
  *    prayer hall" picks its place from the ones the admin has added, and then
  *    waits for the admin's approval like a new mobed (D9).
- *  - Home, once approved: their place, "Record a death", and the deaths
- *    recorded with where each request stands (manager_record.js has the rest).
+ *  - Home, once approved: their place, "Record a death", the book of behdins
+ *    (manager_behdins.js), and the deaths recorded with where each request
+ *    stands (manager_record.js has the rest).
  *  - Settings: name, text size, sign out, delete the account.
  *
  * A manager has none of the mobed app (no Machi, Calendar or Behdins tabs);
@@ -194,13 +195,17 @@ export async function renderManagerHome() {
       ${p.is_active ? "" : `<p class="meta" style="margin:10px 0 0">This place is turned off in Mobed Diary at the
         moment. Please get in touch if that is not right.</p>`}
     </div>`).join("") + `
-    ${anyOn ? `<div class="action-bar" style="margin:0 0 14px"><button type="button" id="mhRecord">Record a death</button></div>` : ""}
+    <div class="action-bar" style="margin:0 0 14px">
+      <button type="button" class="secondary" id="mhBook">Book of behdins</button>
+      ${anyOn ? `<button type="button" id="mhRecord">Record a death</button>` : ""}
+    </div>
     <div class="card">
       <h2>Deaths recorded</h2>
       <div id="mhRecords"><p class="meta">Loading...</p></div>
     </div>`;
   const rec = document.getElementById("mhRecord");
   if (rec) rec.onclick = () => navigate(managerHash("/record/new"));
+  document.getElementById("mhBook").onclick = () => navigate(managerHash("/behdins"));
   paintRecords(document.getElementById("mhRecords"), alive);
 }
 

@@ -48,6 +48,11 @@ MANAGER_MAY = {
     ("GET", "/api/mobed/manager/agyaries/search"),
     ("POST", "/api/mobed/manager/records/{record_id}/requests"),
     ("POST", "/api/mobed/manager/requests/{request_id}/withdraw"),
+    # The place's book of behdins (19 Nov 2026).
+    ("GET", "/api/mobed/manager/behdins"),
+    ("POST", "/api/mobed/manager/behdins"),
+    ("PUT", "/api/mobed/manager/behdins/{behdin_id}"),
+    ("DELETE", "/api/mobed/manager/behdins/{behdin_id}"),
 }
 # Signing in, and what anyone may ask without an account: no session is read.
 NO_SESSION = {

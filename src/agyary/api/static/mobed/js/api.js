@@ -229,6 +229,11 @@ export const managerSend = (id, agyaryId, familyAgreed) =>
   post(asManager(`/manager/records/${id}/requests`),
     { agyary_id: agyaryId, family_agreed: familyAgreed, family_whatsapp_agreed: familyAgreed });
 export const managerWithdraw = (requestId) => post(asManager(`/manager/requests/${requestId}/withdraw`), {});
+/** The place's book of behdins (D10, 19 Nov 2026): the families it deals with. */
+export const managerBook = (q) => get(asManager(`/manager/behdins?q=${encodeURIComponent(q || "")}`));
+export const managerAddToBook = (body) => post(asManager("/manager/behdins"), body);
+export const managerChangeInBook = (id, body) => put(asManager(`/manager/behdins/${id}`), body);
+export const managerRemoveFromBook = (id) => del(asManager(`/manager/behdins/${id}`));
 /** The fire temple's side (D10, Step 5): the requests this mobed was asked. */
 export const myRequestCount = () => get("/requests/count");
 export const myRequests = () => get("/requests");
