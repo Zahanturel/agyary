@@ -41,7 +41,12 @@ message 4. A blank the record does not have is sent as "not fixed yet".
 ## 3. To the family: `prayers_mobed_family`
 
 > The prayers for **[departed]** will be offered by **[mobed's name]** of **[agyari]**. You can
-> reach them on **[mobed's number]**. May the departed soul rest in peace.
+> reach them on **[mobed's number]**. May the ruvan of the departed attain Garothman Behesht.
+
+(Owner, 18 Nov 2026: not "rest in peace", which is not a Zoroastrian idea. After the fourth dawn
+the prayers support the soul's journey towards Garothman, the highest heaven (Karanjia, QA about
+death and Dokhmenashini; Dastur Antia's guide to prayers for the departed); "attain Garothman
+Behesht" is the community's own condolence wording.)
 
 Button (URL, dynamic): **Message the mobed**, `https://wa.me/[mobed's number without +]`
 
