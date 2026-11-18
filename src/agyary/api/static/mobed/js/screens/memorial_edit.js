@@ -1,30 +1,33 @@
 "use strict";
 
 /**
- * Edit a saved memorial: the name, the death (date, or Roj and Mah), the
- * calendar, what is kept and for how long - the same four steps as a new one,
- * filled in with what was saved.
+ * Edit a saved memorial, on one page (owner, 19 Nov 2026: "all the details in
+ * one page, not step by step; keep step by step when creating"): the name, the
+ * death (date, or Roj and Mah, with its Roj and Mah shown), the calendar, where
+ * the schedule starts, the named days, what repeats and for how long, the
+ * Parabs, Roj Fravardin, the birthday and the prayers for new dates - every
+ * choice at once, filled in with what was saved.
  *
- * Nothing is saved until the mobed has seen what the change does to each date.
- * Every date is counted again from the death, past ones included (the owner's
- * call, 17 Nov 2026), and a date that is still there keeps its prayers, time,
- * note and paid mark, so the review says which dates move, which are new and
- * which come off. Dates removed one at a time stay out, and can be put back
- * here. A date moved by hand stays where it was put.
+ * Nothing is saved until the mobed has seen what the change does: "Preview
+ * changes" asks the server (the same re-work as before) and lists the dates
+ * that are new, that move, and that come off. Every date is counted again from
+ * the death, past ones included (the owner's call, 17 Nov 2026), and a date
+ * that is still there keeps its prayers, time, note and paid mark. Dates
+ * removed one at a time stay out, and can be put back here. A date moved by
+ * hand stays where it was put. Changing anything after the preview asks for a
+ * new preview before Save. One date at a time is still changed on the
+ * memorial's own page; making a memorial keeps its steps (memorial_new.js).
  */
 
 import { memorialEditForm, previewMemorialEdit, saveMemorialEdit } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, flashInfo, refreshHeader, loading, backBar, screenFailed,
+  chrome, mainEl, showFab, showError, showInfo, flashInfo, refreshHeader, loading, screenFailed, toTop,
 } from "../ui.js";
 import { esc, gregLabel, todayIst } from "../util.js";
 import { returnTo, navGuard } from "../router.js";
 import { prayerServices, parsiText } from "./memorial.js";
-import {
-  blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialForm, schedulePreviewHtml,
-  wireSchedulePreview, showMemorialProblems, newReview, reviewPayload, reviewHasEmptyDate,
-} from "../memorial_form.js";
+import { blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialForm, showMemorialProblems } from "../memorial_form.js";
 
 /** The saved memorial as the form's draft. */
 function draftFrom(form) {
@@ -58,6 +61,53 @@ function draftFrom(form) {
   };
 }
 
+function dateRow(o, side) {
+  return `<div class="obs${o.date < todayIst() ? " past" : ""}"><div class="obs-head" style="cursor:default">
+      <div class="obs-title"><b>${esc(o.label)}</b><span>${esc(parsiText(o))}${side ? ` · ${esc(side)}` : ""}</span></div>
+      <div class="obs-when">${esc(gregLabel(o.date))}</div></div></div>`;
+}
+
+function section(title, intro, rows) {
+  if (!rows.length) return "";
+  return `<div class="names-group-label"><b>${esc(title)}</b><span>${rows.length}</span></div>
+    ${intro ? `<p class="meta" style="margin:0 0 6px">${intro}</p>` : ""}${rows.join("")}`;
+}
+
+/** What the change does, date by date: new, moving, coming off, and the dates
+ *  taken out earlier (with Put back). `restored` is the set of those put back. */
+function changesHtml(preview, restored) {
+  const back = preview.left_out.filter(o => restored.has(o.code));
+  const stillOut = preview.left_out.filter(o => !restored.has(o.code));
+  const added = [...preview.observances.filter(o => o.status === "new"), ...back]
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const moved = preview.observances.filter(o => o.status === "moved");
+  const same = preview.observances.filter(o => o.status === "same" || o.status === "moved_by_hand").length;
+  const total = preview.observances.length + back.length;
+  const nothing = !added.length && !moved.length && !preview.dropped.length;
+  return `
+    <div class="card" id="mmChanges">
+      <h2>What changes</h2>
+      <p style="margin:0">${nothing ? "No date changes." : [
+        added.length ? `${added.length} new date${added.length === 1 ? "" : "s"}` : "",
+        moved.length ? `${moved.length} date${moved.length === 1 ? " moves" : "s move"}` : "",
+        preview.dropped.length ? `${preview.dropped.length} date${preview.dropped.length === 1 ? " comes" : "s come"} off` : "",
+      ].filter(Boolean).join(", ") + "."}</p>
+      <p class="meta" style="margin:4px 0 8px">The memorial will have ${total} date${total === 1 ? "" : "s"}. ${same} stay as
+        they are, keeping their prayers, time, note and paid mark.</p>
+      ${section("New dates", "With the prayers chosen above.", added.map(o => dateRow(o, "")))}
+      ${section("Moving", "", moved.map(o => dateRow(o, `from ${gregLabel(o.old_date)}`)))}
+      ${section("Coming off", "No longer in what you chose.", preview.dropped.map(o =>
+        dateRow(o, [o.paid ? "paid" : "", o.notes ? "has a note" : ""].filter(Boolean).join(", "))))}
+      ${stillOut.length ? `${section("Removed earlier", "You took these off before, so they stay off. Put one back to keep it again.",
+        stillOut.map(o => `<div class="obs"><div class="obs-head" style="cursor:default">
+          <div class="obs-title"><b>${esc(o.label)}</b><span>${esc(parsiText(o))}</span></div>
+          <div class="obs-when">${esc(gregLabel(o.date))}</div>
+          <button type="button" class="ghost small" data-put-back="${esc(o.code)}">Put back</button></div></div>`))}` : ""}
+      ${back.length ? `<p class="meta" style="margin:8px 0 0">Put back: ${back.map(o => esc(o.label)).join(", ")}.
+        <button type="button" class="ghost small" data-undo-back>Leave them off</button></p>` : ""}
+    </div>`;
+}
+
 export async function renderMemorialEdit({ id }) {
   chrome(true);
   refreshHeader();
@@ -80,128 +130,81 @@ export async function renderMemorialEdit({ id }) {
 
   const editing = { oneToTen: form.opening === "days_1_to_10" };
   const draft = draftFrom(form);
-  // The review's own state: dates taken out and prayers changed on it, and
-  // dates taken out earlier that are put back.
-  let review = Object.assign(newReview(), { restored: new Set() });
+  // The preview shown, for the body it was made from; and the dates taken out
+  // earlier that are put back.
+  let shown = null;
+  const restored = new Set();
 
-  const QUESTIONS = ["Who are we remembering?", "When did they pass away?", "Which prayers?"];
-  const stepOfTarget = (t) => (t === "#mmName" ? 1 : /^#mmDeath/.test(t) ? 2 : 3);
-  let step = 1;
+  mainEl.innerHTML = `
+    <div id="mmForm">${memorialFormHtml(draft, services, {
+      heading: `<h2>Edit memorial</h2>`,
+      intro: "Every choice is here. Change what you need, then tap Preview changes to see which dates are added, "
+        + "moved or taken off. Nothing is saved until you tap Save changes.",
+      editing,
+    })}</div>
+    <div id="mmPreview"></div>
+    <div class="action-bar">
+      <button type="button" class="secondary" id="mmPreviewBtn">Preview changes</button>
+      <button type="button" id="mmSave" disabled>Save changes</button>
+    </div>`;
+  toTop();
+  const formEl = document.getElementById("mmForm");
+  const previewEl = document.getElementById("mmPreview");
+  const previewBtn = document.getElementById("mmPreviewBtn");
+  const saveBtn = document.getElementById("mmSave");
 
-  function showForm() {
-    mainEl.innerHTML = `
-      <div class="step-head">
-        <div class="step-count">Edit memorial · Step ${step} of 4</div>
-        <div class="step-bar">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? "on" : ""}"></i>`).join("")}</div>
-        <h2 class="step-q">${esc(QUESTIONS[step - 1])}</h2>
-      </div>
-      ${memorialFormHtml(draft, services, {
-        heading: "",
-        intro: step === 1 ? "Change what you need; the next steps show what was saved." : "",
-        editing,
-      })}
-      <div class="wizard-nav" style="margin-top:4px">
-        <button class="secondary" id="mmCancel">${step === 1 ? "Cancel" : "Back"}</button>
-        <button id="mmReview">${step === 3 ? "Check the changes" : "Next"}</button>
-      </div>`;
-    wireMemorialForm(mainEl, draft, null, { editing });
-    mainEl.querySelectorAll(".mstep").forEach(el => el.classList.toggle("hidden", Number(el.dataset.mstep) !== step));
-    mainEl.querySelector(".card").classList.toggle("hidden", step === 3);
-    window.scrollTo(0, 0);
+  // Anything changed after a preview needs a new one before it can be saved.
+  const stale = () => {
+    if (!shown) return;
+    shown = null;
+    restored.clear();
+    previewEl.innerHTML = `<div class="card" role="status"><p class="meta" style="margin:0">You changed something.
+      Tap Preview changes again to see what it does before saving.</p></div>`;
+    saveBtn.disabled = true;
+  };
+  wireMemorialForm(formEl, draft, stale, { editing });
 
-    document.getElementById("mmCancel").onclick = () => {
-      if (step > 1) { step -= 1; return showForm(); }
-      returnTo(home);
-    };
-    document.getElementById("mmReview").onclick = async () => {
-      const built = buildMemorialBody(draft);
-      const mine = built.problems ? built.problems.filter(p => stepOfTarget(p.target) === step) : [];
-      if (mine.length) return void showMemorialProblems(mainEl, { problems: mine, error: mine[0].message });
-      if (step < 3) { step += 1; return showForm(); }
-      if (built.problems) {
-        step = Math.min(...built.problems.map(p => stepOfTarget(p.target)));
-        showForm();
-        return void showMemorialProblems(mainEl, { problems: built.problems.filter(p => stepOfTarget(p.target) === step), error: built.error });
-      }
-      const btn = document.getElementById("mmReview");
-      btn.disabled = true;
-      try {
-        const preview = await previewMemorialEdit(aid, mid, built.body);
-        if (!alive()) return;
-        review = Object.assign(newReview(), { restored: new Set() });   // a changed form is a new schedule
-        showPreview(built.body, preview);
-      } catch (e) {
-        btn.disabled = false;
-        showError(e.message);
-      }
-    };
-  }
-
-  function showPreview(body, preview) {
-    // Dates taken out earlier and put back here join the list as new ones.
-    const back = preview.left_out.filter(o => review.restored.has(o.code))
-      .map(o => ({ ...o, status: "new", service_ids: null }));
-    const shown = {
-      ...preview,
-      observances: [...preview.observances, ...back].sort((a, b) => a.date.localeCompare(b.date)),
-    };
-    const stillOut = preview.left_out.filter(o => !review.restored.has(o.code));
-    const where = (o) => parsiText(o);   // a Gatha day comes with its gatha_index
-
-    mainEl.innerHTML = `
-      ${schedulePreviewHtml(body, shown, services, { heading: backBar("Check the changes"), review, editing: true })}
-      ${preview.dropped.length ? `<div class="card">
-        <h2>Coming off</h2>
-        <p class="meta" style="margin:4px 0 8px">${preview.dropped.length === 1 ? "This date is" : "These dates are"}
-          no longer in what you chose, so ${preview.dropped.length === 1 ? "it comes" : "they come"} off the memorial
-          when you save.</p>
-        ${preview.dropped.map(o => `<div class="obs past">
-          <div class="obs-head"><div class="obs-title"><b>${esc(o.label)}</b>
-            <span>${esc(where(o))}${o.paid ? " · paid" : ""}${o.notes ? " · has a note" : ""}</span></div>
-            <div class="obs-when">${esc(gregLabel(o.date))}</div></div></div>`).join("")}
-      </div>` : ""}
-      ${stillOut.length ? `<div class="card">
-        <h2>Removed earlier</h2>
-        <p class="meta" style="margin:4px 0 8px">You took ${stillOut.length === 1 ? "this date" : "these dates"} off
-          before, so ${stillOut.length === 1 ? "it stays" : "they stay"} off. Put one back to keep it again.</p>
-        ${stillOut.map(o => `<div class="obs">
-          <div class="obs-head"><div class="obs-title"><b>${esc(o.label)}</b><span>${esc(where(o))}</span></div>
-            <div class="obs-when">${esc(gregLabel(o.date))}</div>
-            <button type="button" class="ghost small" data-put-back="${esc(o.code)}">Put back</button></div></div>`).join("")}
-      </div>` : ""}
-      <div class="wizard-nav" style="margin-top:4px">
-        <button class="ghost" id="mmEdit">Change</button>
-        <button id="mmSave">Save changes</button>
-      </div>`;
-    wireSchedulePreview(mainEl, shown, review, services);
-    window.scrollTo(0, 0);
-
-    mainEl.querySelectorAll("[data-put-back]").forEach(btn => {
-      btn.onclick = () => {
-        review.restored.add(btn.dataset.putBack);
-        review.removed.delete(btn.dataset.putBack);
-        showPreview(body, preview);
-      };
+  const paintPreview = () => {
+    previewEl.innerHTML = changesHtml(shown.preview, restored);
+    previewEl.querySelectorAll("[data-put-back]").forEach(btn => {
+      btn.onclick = () => { restored.add(btn.dataset.putBack); paintPreview(); };
     });
-    document.getElementById("mmEdit").onclick = () => { step = 3; showForm(); };
-    document.getElementById("mmSave").onclick = async () => {
-      if (reviewHasEmptyDate(mainEl, review)) return;
-      const btn = document.getElementById("mmSave");
-      btn.disabled = true;
-      try {
-        await saveMemorialEdit(aid, mid, {
-          ...body,
-          ...reviewPayload(body, shown, services, review),
-          restore_codes: [...review.restored],
-        });
-      } catch (e) {
-        btn.disabled = false;
-        return showError(e.message);
-      }
-      flashInfo("Memorial saved.");
-      returnTo(home);
-    };
-  }
+    const undo = previewEl.querySelector("[data-undo-back]");
+    if (undo) undo.onclick = () => { restored.clear(); paintPreview(); };
+  };
 
-  showForm();
+  previewBtn.onclick = async () => {
+    const built = buildMemorialBody(draft);
+    if (showMemorialProblems(mainEl, built)) return;
+    previewBtn.disabled = true;
+    let preview;
+    try {
+      preview = await previewMemorialEdit(aid, mid, built.body);
+    } catch (e) {
+      previewBtn.disabled = false;
+      return showError(e.message);
+    }
+    previewBtn.disabled = false;
+    if (!alive()) return;
+    restored.clear();
+    shown = { body: built.body, preview };
+    paintPreview();
+    saveBtn.disabled = false;
+    document.getElementById("mmChanges").scrollIntoView({ block: "start" });
+  };
+
+  saveBtn.onclick = async () => {
+    if (!shown) return showInfo("Tap Preview changes first, to see what the change does.");
+    saveBtn.disabled = true;
+    try {
+      await saveMemorialEdit(aid, mid, {
+        ...shown.body, exclude_codes: [], service_overrides: {}, restore_codes: [...restored],
+      });
+    } catch (e) {
+      saveBtn.disabled = false;
+      return showError(e.message);
+    }
+    flashInfo("Memorial saved.");
+    returnTo(home);
+  };
 }
