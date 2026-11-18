@@ -167,6 +167,21 @@ Points to settle when it is discussed:
 - When several people were asked, the first to accept takes it; the others see "taken".
 - Tests: D2 isolation (no other book is read), the number only after accept, first accept wins.
 
+### Step 5b. Automatic WhatsApp on accept (right after R3)
+
+- Templates 1-3 of `docs/phase2-whatsapp-templates.md`, sent when the accepter ticked "Share my
+  name and number"; the family's only with their agreement recorded by the manager's tick (new
+  wording). Off until Meta approves (a setting), with STOP, pause switch, caps and D9.
+
+### Step 5c. The panthaky's WhatsApp call-out (right after R3)
+
+- An agyari's list of mobeds: its approved app mobeds, plus mobeds the panthaky adds by name and
+  number with a consent tick (like behdins, private to that agyari's panthakys).
+- On a request, "Ask our mobeds on WhatsApp": template 4 with Yes / Not this time buttons; the
+  webhook records each answer; the panthaky sees every Yes and picks who goes; those picked get
+  template 2 (details); the rest get a short free-form "enough mobeds are going" reply.
+- Payment stays with the panthaky. Off until the templates are approved.
+
 ### Step 6. Whole check, then the owner's push
 
 - The full test suite; a security pass over every new endpoint (access, D2, ownership checks).

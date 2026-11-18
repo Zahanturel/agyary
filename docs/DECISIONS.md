@@ -224,6 +224,16 @@ Decided, not built. The research, the sources and the full design are in
   under an account that is not on) apply. Alongside, buttons that open the person's own WhatsApp
   (the manager: Call / WhatsApp the accepter; the accepter: the family's chat with a short message
   ready to edit) work without any template.
+- **The panthaky's WhatsApp call-out (owner, 18 Nov 2026; built right after R3):** each agyari has
+  a list of its mobeds: its approved mobeds in the app, plus mobeds the panthaky adds by name and
+  number, each with the panthaky's tick that they agreed to get WhatsApp messages from Mobed Diary.
+  On a request, the panthaky can send them all a template asking "can you pray?" with Yes / Not
+  this time buttons (no family details). Every Yes is shown to the panthaky, who picks who goes;
+  only those picked get the details (family contact and times). Payment stays with the panthaky,
+  outside the app. Same safeguards as above (approved templates, STOP, pause switch, caps, D9).
+- **Template wording (owner, 18 Nov 2026):** utility only, no "thank you for using Mobed Diary";
+  the mobed's details message ends "Thank you for your service"; the family's message never says
+  "funeral" and uses the person's name. Drafts: `docs/phase2-whatsapp-templates.md`.
 - **Requests is a fourth bottom tab** for mobeds, beside Machi, Calendar and Behdins, with the
   red count of requests waiting for them (changes D7's three tabs).
 
