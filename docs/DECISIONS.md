@@ -234,6 +234,20 @@ Decided, not built. The research, the sources and the full design are in
 - **Template wording (owner, 18 Nov 2026):** utility only, no "thank you for using Mobed Diary";
   the mobed's details message ends "Thank you for your service"; the family's message never says
   "funeral" and uses the person's name. Drafts: `docs/phase2-whatsapp-templates.md`.
+- **Changed 19 Nov 2026 (owner, after trying it):**
+  - The departed's title offers **Khud** too, like the rest of the app.
+  - **No bungli field** on a funeral record. Message 2 is resubmitted without it as
+    `prayer_details_mobed_v2`.
+  - **The call-out goes at Send, not after the panthaky accepts.** When the Doongerwadi sends a
+    request, the WhatsApp request (template 4) goes at once to all of that agyari's mobeds (its
+    approved app mobeds plus the panthaky's list, consent ticks and STOP as before). The panthaky
+    still gets the request in the app. **The first Yeses, up to the number of mobeds wanted, go**:
+    they get the details (message 2) automatically; later Yeses get "Enough mobeds are going this
+    time" inside the 24-hour window; the panthaky is told who is going. This replaces "the
+    panthaky picks". Payment stays with the panthaky.
+  - **The Doongerwadi manager keeps a book of behdins** (families): name, number (typed, or
+    imported from the phone's contacts inside the name/number form) and their usual agyari, private
+    to that funeral place. Recording a death picks the family from it and suggests their agyari.
 - **Requests is a fourth bottom tab** for mobeds, beside Machi, Calendar and Behdins, with the
   red count of requests waiting for them (changes D7's three tabs).
 
