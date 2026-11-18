@@ -16,6 +16,7 @@ from agyary.models import (
     CeremonyName,
     Customer,
     CustomerSavedName,
+    FuneralRecord,
     Machi,
     Memorial,
     Notification,
@@ -81,7 +82,7 @@ async def test_a_number_is_erased_from_every_book_and_only_that_number(client, d
     await db.commit()
 
     found = await erasure.what_we_hold(db, FAMILY)
-    assert found == {"records": 2, "mobeds": 2, "memorials": 1, "events": 2, "messages": 1}
+    assert found == {"records": 2, "mobeds": 2, "memorials": 1, "events": 2, "messages": 1, "funeral_records": 0}
     assert await erasure.erase_number(db, FAMILY) == found
     await db.commit()
     db.expire_all()
@@ -138,6 +139,28 @@ async def test_the_admin_sees_counts_first_and_erasing_needs_the_confirmation(cl
     assert r.status_code == 200 and r.json()["erased"]["records"] == 2
     db.expire_all()
     assert await _count(db, Customer, Customer.phone == FAMILY) == 0
+
+
+async def test_a_doongerwadi_record_loses_the_family_contact_and_keeps_the_death(client, db, seeded):
+    """D10: the family contact on a funeral record is that number's too. The
+    record of the death stays (the place's, D8); only the contact goes."""
+    from tests.funeral_helpers import form, manager
+
+    headers, _ = await manager(client, db)
+    url = "/api/mobed/manager/records"
+    theirs = (await client.post(url, json=form(family_contact_phone=FAMILY), headers=headers)).json()["record"]
+    other = (await client.post(url, json=form(family_contact_phone=ANOTHER_FAMILY, family_contact_name="Another"),
+                               headers=headers)).json()["record"]
+    assert (await erasure.what_we_hold(db, FAMILY))["funeral_records"] == 1
+    await erasure.erase_number(db, FAMILY)
+    await db.commit()
+    db.expire_all()
+    erased = await db.get(FuneralRecord, theirs["id"])
+    assert erased.family_contact_name == erasure.ERASED and erased.family_contact_phone.startswith("+999")
+    assert erased.departed_name == "Rustom"
+    kept = await db.get(FuneralRecord, other["id"])
+    assert (kept.family_contact_name, kept.family_contact_phone) == ("Another", ANOTHER_FAMILY)
+    assert await _count(db, FuneralRecord, FuneralRecord.family_contact_phone == FAMILY) == 0
 
 
 async def test_a_mobed_who_is_not_an_admin_cannot_reach_it(client, db, seeded):

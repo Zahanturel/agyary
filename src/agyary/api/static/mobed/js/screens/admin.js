@@ -177,7 +177,8 @@ export async function renderAdmin() {
     } finally {
       findBtn.disabled = false;
     }
-    if (!f.records && !f.messages) {
+    const funeral = f.funeral_records || 0;
+    if (!f.records && !f.messages && !funeral) {
       askErase.innerHTML = `<p class="meta">We hold nothing for that number.</p>`;
       return;
     }
@@ -185,6 +186,8 @@ export async function renderAdmin() {
       <p class="meta">We hold ${f.records} record${f.records === 1 ? "" : "s"} with ${f.mobeds}
         mobed${f.mobeds === 1 ? "" : "s"}: ${f.memorials} memorial${f.memorials === 1 ? "" : "s"},
         ${f.events} event${f.events === 1 ? "" : "s"} and ${f.messages} message${f.messages === 1 ? "" : "s"}.
+        ${funeral ? `They are the family contact on ${funeral} Doongerwadi record${funeral === 1 ? "" : "s"}: the
+        contact's name and number go, the record of the death stays.` : ""}
         Past events stay on the calendar, marked Erased. Each mobed is told. If they replied STOP, that stays.</p>
       <div class="row tight" style="margin-top:10px">
         <button class="danger small" id="admEraseGo">Erase for good</button>

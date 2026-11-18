@@ -5,6 +5,9 @@ each mobed who serves them has a record of their own (D2), so erasing a number
 reaches every mobed's book: the name and number, the saved names, the memorials,
 the names recited at their ceremonies, the notes, and every message sent to them.
 
+A Doongerwadi's funeral record that named them as the family's contact keeps the
+death (the place's record, D8) but loses the contact's name and number.
+
 A ceremony that was performed is the mobed's history and a slip must still
 print, so a record that events or payments point at stays, called "Erased", with
 a number that can be nobody's. Only what says who they were goes. The one thing
@@ -27,6 +30,7 @@ from agyary.models import (
     CeremonyName,
     Customer,
     CustomerSavedName,
+    FuneralRecord,
     Machi,
     Memorial,
     Notification,
@@ -59,6 +63,7 @@ async def what_we_hold(db: AsyncSession, phone: str) -> dict:
         "events": await _count(db, Machi, Machi.customer_id.in_(records))
         + await _count(db, Booking, Booking.customer_id.in_(records)),
         "messages": await _count(db, Notification, _sent_to(phone, records)),
+        "funeral_records": await _count(db, FuneralRecord, FuneralRecord.family_contact_phone == phone),
     }
 
 
@@ -103,6 +108,15 @@ async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = N
     await db.execute(delete(Notification).where(_sent_to(phone, [i for i, _owner in rows])))
     for customer_id, _owner in rows:
         await _erase_record(db, customer_id)
+    # The family contact on a funeral record (D10). The column is required, so
+    # it is given a number that can be nobody's, as a kept behdin record is.
+    funeral = (await db.execute(
+        select(FuneralRecord.id).where(FuneralRecord.family_contact_phone == phone)
+    )).scalars().all()
+    for record_id in funeral:
+        await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
+            family_contact_name=ERASED, family_contact_phone=_no_ones_number(record_id),
+        ))
     for owner in {owner for _i, owner in rows if owner is not None}:
         await reminders.notify(
             db, owner, KIND_ERASED, "A family's details were erased",
