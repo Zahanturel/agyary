@@ -40,6 +40,7 @@ import { renderWaiting } from "./screens/waiting.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderAgyariLocation } from "./screens/agyari_location.js";
 import { renderManagerHome, renderManagerSettings } from "./screens/manager.js";
+import { renderRecordNew, renderRecordView, renderRecordEdit, renderRecordSend } from "./screens/manager_record.js";
 import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
@@ -55,6 +56,11 @@ route("#/waiting", renderWaiting);
 // none of the mobed app. The guard keeps a manager here and a mobed out.
 route("#/manager", renderManagerHome);
 route("#/manager/settings", renderManagerSettings, { parent: "#/manager" });
+// Recording a death and asking a fire temple (Step 4). "new" before :id.
+route("#/manager/record/new", renderRecordNew, { parent: "#/manager" });
+route("#/manager/record/:id", renderRecordView, { parent: "#/manager" });
+route("#/manager/record/:id/edit", renderRecordEdit, { parent: (p) => `#/manager/record/${p.id}` });
+route("#/manager/record/:id/send", renderRecordSend, { parent: (p) => `#/manager/record/${p.id}` });
 
 // `tab` puts the screen under a bottom tab and shows the tab bar. Every screen
 // has one except Settings (the menu and what opens from it), sign-in and

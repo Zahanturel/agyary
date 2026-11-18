@@ -20,10 +20,12 @@ async function timedFetch(url, opts) {
 /** Thrown for any non-2xx. `.detail` is the server's message where it sent
  *  a plain string one; `.status` lets callers branch (401, 409, 429...). */
 export class ApiError extends Error {
-  constructor(status, detail) {
+  constructor(status, detail, field = null) {
     super(detail);
     this.status = status;
     this.detail = detail;
+    // Which field of a form the server says is wrong (X-Field), or null.
+    this.field = field;
   }
 }
 
@@ -84,7 +86,7 @@ export async function api(path, opts = {}) {
       // handlers return.
       if (typeof body.detail === "string") detail = body.detail;
     } catch (e) { /* non-JSON body; the plain sentence it is */ }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, res.headers.get("X-Field"));
   }
   return res.status === 204 ? null : res.json();
 }
@@ -206,6 +208,18 @@ export const searchFuneralPlaces = (q) => get(`/funeral-places?q=${encodeURIComp
 export const joinFuneralPlace = (id) => post(`/funeral-places/${id}/join`, {});
 /** A manager's own place(s), for their home screen. */
 export const managerPlace = () => get("/manager/place");
+/** Recording a death and sending it to a fire temple (D10, Step 4). */
+export const managerDeathDay = (body) => post("/manager/death-day", body);
+export const managerRecords = (before) => get("/manager/records" + (before ? `?before=${before}` : ""));
+export const managerRecord = (id) => get(`/manager/records/${id}`);
+export const managerCreateRecord = (body) => post("/manager/records", body);
+export const managerUpdateRecord = (id, body) => put(`/manager/records/${id}`, body);
+export const managerSuggested = (id) => get(`/manager/records/${id}/agyaries`);
+export const managerSearchAgyaries = (q, placeId) =>
+  get(`/manager/agyaries/search?q=${encodeURIComponent(q || "")}${placeId ? `&place_id=${placeId}` : ""}`);
+export const managerSend = (id, agyaryId, familyAgreed) =>
+  post(`/manager/records/${id}/requests`, { agyary_id: agyaryId, family_agreed: familyAgreed });
+export const managerWithdraw = (requestId) => post(`/manager/requests/${requestId}/withdraw`, {});
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).

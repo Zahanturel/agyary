@@ -688,3 +688,6 @@ body.sheet-open { overflow: hidden; }
 /* Big enough to hit: the people using this are not at home with phones. */
 .loc-map.leaflet-container .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 26px; }
 .loc-map.leaflet-container .leaflet-control-attribution { font-size: 13px; }
+/* A fire temple a request cannot reach yet (nobody there in the app): shown, not tappable. */
+.search-result.unavailable { cursor: default; background: var(--ink-100); border-style: dashed; }
+.search-result.unavailable:hover { background: var(--ink-100); }

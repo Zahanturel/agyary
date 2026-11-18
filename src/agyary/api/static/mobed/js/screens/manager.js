@@ -7,7 +7,8 @@
  *  - Signing up: a brand-new account that said "I work at a Doongerwadi or
  *    prayer hall" picks its place from the ones the admin has added, and then
  *    waits for the admin's approval like a new mobed (D9).
- *  - Home, once approved: their place, and what comes next.
+ *  - Home, once approved: their place, "Record a death", and the deaths
+ *    recorded with where each request stands (manager_record.js has the rest).
  *  - Settings: name, text size, sign out, delete the account.
  *
  * A manager has none of the mobed app (no Machi, Calendar or Behdins tabs);
@@ -16,14 +17,16 @@
  */
 
 import {
-  searchFuneralPlaces, joinFuneralPlace, managerPlace, updateMyName, signOutOtherDevices, deleteMyAccount,
+  searchFuneralPlaces, joinFuneralPlace, managerPlace, managerRecords, updateMyName, signOutOtherDevices,
+  deleteMyAccount,
 } from "../api.js";
+import { recordState } from "./manager_record.js";
 import { state, saveSession, clearSession, forgetLastPhone } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, openSheet,
   getTextSize, setTextSize,
 } from "../ui.js";
-import { esc } from "../util.js";
+import { esc, gregLabel } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { signOut } from "../session.js";
 import { clearAllDrafts } from "../drafts.js";
@@ -173,21 +176,68 @@ export async function renderManagerHome() {
       </div>`;
     return;
   }
+  const anyOn = places.some(p => p.is_active);
   mainEl.innerHTML = places.map(p => `
     <div class="card">
       <h2>${esc(p.name)}</h2>
-      <div class="fact"><div class="fl">Kind</div><div class="fv">${esc(p.kind_label)}</div></div>
-      <div class="fact"><div class="fl">Town</div><div class="fv">${esc(p.city)}</div></div>
-      ${p.address ? `<div class="fact"><div class="fl">Address</div><div class="fv">${esc(p.address)}</div></div>` : ""}
-      ${p.run_by ? `<div class="fact"><div class="fl">Run by</div><div class="fv">${esc(p.run_by)}</div></div>` : ""}
+      <p class="meta" style="margin:0">${esc(placeLine(p))}${p.run_by ? ` - ${esc(p.run_by)}` : ""}</p>
       ${p.is_active ? "" : `<p class="meta" style="margin:10px 0 0">This place is turned off in Mobed Diary at the
         moment. Please get in touch if that is not right.</p>`}
     </div>`).join("") + `
+    ${anyOn ? `<div class="action-bar" style="margin:0 0 14px"><button type="button" id="mhRecord">Record a death</button></div>` : ""}
     <div class="card">
-      <h2>Coming next</h2>
-      <p class="meta" style="margin:0">Recording a death and sending the prayers to a fire temple come in the next
-        update of Mobed Diary. You will see them here.</p>
+      <h2>Deaths recorded</h2>
+      <div id="mhRecords"><p class="meta">Loading...</p></div>
     </div>`;
+  const rec = document.getElementById("mhRecord");
+  if (rec) rec.onclick = () => navigate("#/manager/record/new");
+  paintRecords(document.getElementById("mhRecords"), alive);
+}
+
+/** The records, newest first, each with where its request stands; "Show
+ *  older" adds the next page. */
+async function paintRecords(box, alive, before = null) {
+  let page;
+  try {
+    page = await managerRecords(before);
+  } catch (e) {
+    if (!alive()) return;
+    const failed = document.createElement("div");
+    failed.className = "load-failed";
+    failed.setAttribute("role", "alert");
+    failed.innerHTML = `<p><b></b></p><button class="small" type="button">Try again</button>`;
+    failed.querySelector("b").textContent = e.message;
+    failed.querySelector("button").onclick = () => { failed.remove(); paintRecords(box, alive, before); };
+    if (!before) box.replaceChildren(failed); else box.appendChild(failed);
+    return;
+  }
+  if (!alive()) return;
+  if (!before) box.innerHTML = "";
+  if (!page.records.length && !before) {
+    box.innerHTML = `<p class="meta" style="margin:0">None yet. Tap Record a death to ask a fire temple for the
+      prayers.</p>`;
+    return;
+  }
+  const older = box.querySelector("[data-older]");
+  if (older) older.remove();
+  box.insertAdjacentHTML("beforeend", page.records.map(r => `
+    <div class="search-result" data-rec="${r.id}">
+      <div><strong>${esc(r.prayed_name)}</strong></div>
+      <div class="addr">Died ${esc(gregLabel(r.death.date))}${r.geh_saarnu
+        ? ` · Geh-saarnu ${esc(gregLabel(r.geh_saarnu.date))}, ${esc(r.geh_saarnu.geh_name)}` : ""}</div>
+      <div style="margin-top:4px;font-size:var(--text-sm)">${esc(recordState(r))}</div>
+    </div>`).join("") + (page.more ? `<div data-older style="margin-top:4px">
+      <button type="button" class="ghost small">Show older</button></div>` : ""));
+  box.querySelectorAll("[data-rec]").forEach(row => {
+    row.onclick = () => navigate(`#/manager/record/${row.dataset.rec}`);
+  });
+  const more = box.querySelector("[data-older] button");
+  if (more) {
+    more.onclick = () => {
+      more.disabled = true;
+      paintRecords(box, alive, page.records[page.records.length - 1].id);
+    };
+  }
 }
 
 // --- Settings ---------------------------------------------------------------
