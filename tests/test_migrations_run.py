@@ -336,3 +336,43 @@ async def test_the_funeral_record_migration_holds_its_rules_and_comes_off_cleanl
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_funeral_accept_migration_holds_its_rule_and_comes_off_cleanly():
+    """b4c5d6e7f8a0: whether the accepter shared their name and number is kept
+    only on an accepted request; requests from before have neither it nor a
+    memorial; the downgrade takes both columns off and keeps the requests."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "a3b4c5d6e7f9"))
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES"
+                               " ('Manager', '+919000000001', 'funeral_manager'), ('Er. Asked', '+919000000002', 'mobed')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        send = ("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at, decided_at,"
+                " accepted_by_user_id) VALUES (1, 1, :s, now(), :d, :a)")
+        await _scratch_execute(send, {"s": "accepted", "d": AT, "a": 2})
+        await _scratch_execute(send, {"s": "waiting", "d": None, "a": None})
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute(
+            "SELECT accepter_shared_contact, memorial_id FROM funeral_requests ORDER BY id") == [(None, None)] * 2
+        await _scratch_execute("UPDATE funeral_requests SET accepter_shared_contact = true WHERE status = 'accepted'")
+        await _refused("UPDATE funeral_requests SET accepter_shared_contact = false WHERE status = 'waiting'", {},
+                       "a tick on a request nobody accepted")
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'funeral_requests'::regclass")
+        assert {"ck_funeral_requests_shared_contact", "fk_funeral_requests_memorial_id_memorials"} <= {n for (n,) in names}
+
+        _ok(_alembic("downgrade", "a3b4c5d6e7f9"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'funeral_requests'")
+        assert not {"accepter_shared_contact", "memorial_id"} & {c for (c,) in cols}
+        assert await _scratch_execute("SELECT status FROM funeral_requests ORDER BY id") == [("accepted",), ("waiting",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

@@ -3,6 +3,7 @@ from datetime import time as dt_time
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -135,10 +136,23 @@ class FuneralRequest(Base):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     decline_reason: Mapped[str | None] = mapped_column(String(200))
+    # Step 5: whether the person who accepted let the funeral place have their
+    # name and number (the tick, on by default). Set only on an accepted one;
+    # the manager sees the number only when it is True, and the WhatsApp
+    # messages from our number (Step 5b) read it too.
+    accepter_shared_contact: Mapped[bool | None] = mapped_column(Boolean)
+    # The memorial the accepter saved from this request, if they did. Theirs
+    # only: never shown to the funeral place (D2).
+    memorial_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("memorials.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (
         CheckConstraint(f"status IN ({sql_in(REQUEST_STATUSES)})", name="status"),
         CheckConstraint("(status = 'waiting') = (decided_at IS NULL)", name="decided"),
+        CheckConstraint(
+            "accepter_shared_contact IS NULL OR status IN ('accepted', 'taken')", name="shared_contact"
+        ),
         Index(
             "uq_funeral_requests_one_waiting", "funeral_record_id", unique=True,
             postgresql_where=text("status = 'waiting'"),
