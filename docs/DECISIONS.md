@@ -214,7 +214,18 @@ Decided, not built. The research, the sources and the full design are in
   numbers, and how the body goes. The app takes no side on cremation.
 - **Spellings in the app:** Doongerwadi, Dokhma, Bungli, Geh-saarnu, Uthamna, Chahrum, Sachkar,
   Paydast, Aramgah.
-- **No WhatsApp messages from our number** for any of this in Phase 2.
+- **No WhatsApp messages from our number** for any of this in Phase 2. **Changed 18 Nov 2026
+  (owner):** when someone accepts a request, a tick "Share my name and number" (on by default) lets
+  Mobed Diary's number send three Utility messages: to the manager (who accepted, name and
+  number), to the accepter (the funeral details and the family contact) and to the family (who will
+  pray, name and number). Safeguards, not optional: approved Meta templates only, sending switched
+  off until they are approved; the family is messaged only if the manager's tick also recorded the
+  family's agreement to hear from Mobed Diary; STOP, the pause switch, the caps and D9 (nothing
+  under an account that is not on) apply. Alongside, buttons that open the person's own WhatsApp
+  (the manager: Call / WhatsApp the accepter; the accepter: the family's chat with a short message
+  ready to edit) work without any template.
+- **Requests is a fourth bottom tab** for mobeds, beside Machi, Calendar and Behdins, with the
+  red count of requests waiting for them (changes D7's three tabs).
 
 ## Not decided yet
 
