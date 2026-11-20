@@ -157,6 +157,18 @@ class FuneralRequest(Base):
     # (services/prayer_timers.py). Set once, before anything is sent, so it is
     # never done twice; NULL when it has not run.
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # R3.1 step 4: the panthaky's first action on the "Who will pray" board
+    # (Ask everyone, I'll pray, a call's result) takes the request for the fire
+    # temple - when, and by whom. Set once, by a conditional update; there is
+    # no separate Accept. Then the safety net never fires for it.
+    taken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    taken_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # When the last place on the board filled and the request became all set
+    # (services/all_set.py). decided_at is set with it, as for any request
+    # that is no longer waiting.
+    all_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(f"status IN ({sql_in(REQUEST_STATUSES)})", name="status"),

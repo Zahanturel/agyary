@@ -558,3 +558,69 @@ async def test_the_safety_net_migration_adds_when_it_ran_and_comes_off_cleanly()
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_board_migration_holds_its_rules_and_comes_off_cleanly():
+    """c1d2e3f4a5b9 (R3.1 step 4): a request from before is not taken and not
+    all set, and may now be all set; a call-out answer from before reads
+    "whatsapp", and an answer comes by WhatsApp, the app, phone or "I'll pray"
+    only; who took it and who recorded an answer can go without taking the
+    request or the answer with them; the downgrade calls an all-set request
+    accepted and takes the columns off, keeping every row."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "b0c1d2e3f4a7"))
+        await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Er. Panthaky', '+919000000001'),"
+                               " ('Er. Asked', '+919000000002')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at)"
+                               " VALUES (1, 1, 'waiting', now())")
+        await _scratch_execute("INSERT INTO prayer_callouts (funeral_request_id, agyary_id, asked) VALUES (1, 1, 1)")
+        await _scratch_execute("INSERT INTO prayer_callout_answers (callout_id, user_id, name, phone, token)"
+                               " VALUES (1, 2, 'Er. Asked', '+919000000002', :t)", {"t": "t" * 24})
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute("SELECT status, taken_at, taken_by_user_id, all_set_at FROM funeral_requests") \
+            == [("waiting", None, None, None)]
+        assert await _scratch_execute("SELECT how, recorded_by_user_id FROM prayer_callout_answers") == [
+            ("whatsapp", None)]
+        await _scratch_execute("UPDATE funeral_requests SET taken_at = :at, taken_by_user_id = 1", {"at": AT})
+        await _refused("UPDATE funeral_requests SET status = 'all_set'", {}, "all set but still undecided")
+        await _scratch_execute("UPDATE funeral_requests SET status = 'all_set', all_set_at = :at, decided_at = :at",
+                               {"at": AT})
+        await _refused("UPDATE funeral_requests SET status = 'done'", {}, "an unknown state")
+        answer = ("INSERT INTO prayer_callout_answers (callout_id, user_id, name, phone, token, how, recorded_by_user_id)"
+                  " VALUES (1, 1, 'Er. Panthaky', '+919000000001', :t, :how, 1)")
+        for how in ("app", "phone", "self"):
+            await _scratch_execute("DELETE FROM prayer_callout_answers WHERE user_id = 1")
+            await _scratch_execute(answer, {"t": how * 8, "how": how})
+        await _refused(answer, {"t": "x" * 24, "how": "letter"}, "an unknown way")
+        await _refused("UPDATE prayer_callout_answers SET how = NULL", {}, "no way at all", needle="not-null")
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid IN ('funeral_requests'::regclass,"
+            " 'prayer_callout_answers'::regclass)")
+        assert {"ck_funeral_requests_status", "fk_funeral_requests_taken_by_user_id_users",
+                "ck_prayer_callout_answers_how", "fk_prayer_callout_answers_recorded_by_user_id_users"} <= {
+            n for (n,) in names}
+        await _scratch_execute("DELETE FROM users WHERE id = 1")
+        assert await _scratch_execute("SELECT taken_by_user_id FROM funeral_requests") == [(None,)]
+        assert await _scratch_execute("SELECT recorded_by_user_id FROM prayer_callout_answers ORDER BY id") == [
+            (None,), (None,)]
+
+        _ok(_alembic("downgrade", "b0c1d2e3f4a7"))
+        cols = {c for (c,) in await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name IN"
+            " ('funeral_requests', 'prayer_callout_answers')")}
+        assert not {"taken_at", "taken_by_user_id", "all_set_at", "how", "recorded_by_user_id"} & cols
+        assert await _scratch_execute("SELECT status FROM funeral_requests") == [("accepted",)]
+        assert len(await _scratch_execute("SELECT id FROM prayer_callout_answers")) == 2
+        await _refused("UPDATE funeral_requests SET status = 'all_set'", {}, "all set before this migration")
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

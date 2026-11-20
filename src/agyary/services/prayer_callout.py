@@ -69,6 +69,7 @@ from agyary.models.enums import (
     ACCOUNT_MOBED,
     CALLOUT_NO,
     CALLOUT_YES,
+    HOW_WHATSAPP,
     REQUEST_ACCEPTED,
     REQUEST_MODE_PANTHAKY_FIRST,
     REQUEST_TAKEN,
@@ -423,7 +424,8 @@ async def _ask(
         app = m["kind"] == "app"
         a = PrayerCalloutAnswer(callout_id=callout.id, user_id=m["id"] if app else None,
                                 contact_id=None if app else m["id"], name=m["name"][:NAME_MAX],
-                                phone=phones[m["id"]] if app else m["phone"], token=_new_token())
+                                phone=phones[m["id"]] if app else m["phone"], token=_new_token(),
+                                how=HOW_WHATSAPP)
         db.add(a)
         pairs.append((m, a))
     await db.flush()

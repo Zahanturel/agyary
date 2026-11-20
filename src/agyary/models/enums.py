@@ -73,10 +73,13 @@ DEATH_BY_DATE, DEATH_BY_ROJ_MAH = "date", "roj_mah"
 DEATH_GIVEN_BY = (DEATH_BY_DATE, DEATH_BY_ROJ_MAH)
 # A funeral record's request to one fire temple. "waiting" for an answer (one at a
 # time per record); "accepted" or "declined" by someone asked (Step 5);
-# "withdrawn" by the manager; "taken" is kept for Step 5's first-accept-wins.
+# "withdrawn" by the manager; "taken" is kept for Step 5's first-accept-wins (never
+# used). "all_set" (R3.1, 21 Nov 2026): every place on the "Who will pray" board
+# filled, so enough mobeds are going; requests from before keep their state (D8).
 REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_DECLINED = "waiting", "accepted", "declined"
-REQUEST_WITHDRAWN, REQUEST_TAKEN = "withdrawn", "taken"
-REQUEST_STATUSES = (REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_DECLINED, REQUEST_WITHDRAWN, REQUEST_TAKEN)
+REQUEST_WITHDRAWN, REQUEST_TAKEN, REQUEST_ALL_SET = "withdrawn", "taken", "all_set"
+REQUEST_STATUSES = (REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_DECLINED, REQUEST_WITHDRAWN, REQUEST_TAKEN,
+                    REQUEST_ALL_SET)
 # A mobed's access to the app, the owner's one switch per account (DECISIONS D9):
 # a new sign-up waits for an admin's approval, and an admin can turn anyone off and on.
 ACCESS_PENDING, ACCESS_ON, ACCESS_OFF = "pending", "on", "off"
@@ -135,6 +138,11 @@ RECIPIENT_TYPES = ("user", "customer", "family", "contact")
 # pray) or "no" (Not this time); no answer yet is NULL.
 CALLOUT_YES, CALLOUT_NO = "yes", "no"
 CALLOUT_ANSWERS = (CALLOUT_YES, CALLOUT_NO)
+# How a person on the board was asked and, once they answer, how the answer came
+# (R3.1): a WhatsApp button, in the app, by phone (the panthaky marked it after a
+# call), or "self" (the panthaky's own "I'll pray").
+HOW_WHATSAPP, HOW_APP, HOW_PHONE, HOW_SELF = "whatsapp", "app", "phone", "self"
+ANSWER_HOWS = (HOW_WHATSAPP, HOW_APP, HOW_PHONE, HOW_SELF)
 
 MESSAGE_DIRECTIONS = ("inbound", "outbound")
 
