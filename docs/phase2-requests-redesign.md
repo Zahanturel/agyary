@@ -203,6 +203,21 @@ their number goes to the family; the message should say both before they answer.
    standby's 30 minutes to answer is the lead's default, not yet the owner's.
 4. The Mobeds page is for panthakys only for now.
 
+## The lead's choices while building (the owner can change any of them)
+
+- **"4 hours before the Geh-saarnu"** is counted from the start of its geh, in IST: Havan
+  6:30 am, Rapithwin 12:30 pm, Uziran 3:30 pm (the Geh-saarnu is prayed only in these day gehs).
+  With no geh given, 6:30 am of that day; with no Geh-saarnu day, the Uthamna's day and time
+  (or 6:30 am); with neither, no "still short" alert.
+- **The Mobeds page shows numbers only of approved mobeds** (not of someone still waiting for
+  the admin's approval, not the panthaky's own), as D10 says "approved mobeds ... with their
+  numbers". Mobeds switched off or who replied STOP keep their number and Call / WhatsApp.
+- **A panthaky switched off after a request reached them:** the safety net (if set) still asks
+  everyone, since nobody else could act on it.
+- **Red counts:** a panthaky's Requests count is the open requests nobody has taken yet; an
+  app mobed's is the open requests they were asked and have not answered.
+- **A Yes is not told the details at once any more:** the details go to everyone at All set.
+
 ## Data changes
 
 - `agyaries.request_mode` (`everyone` | `panthaky_first`, default `everyone`) and
