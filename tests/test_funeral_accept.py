@@ -25,6 +25,7 @@ from sqlalchemy.pool import NullPool
 from agyary.api.routes import mobed as mobed_routes
 from agyary.core import config
 from agyary.models import (
+    Agyary,
     AppNotification,
     Booking,
     BookingMobed,
@@ -82,7 +83,7 @@ def _no_family(text: str) -> None:
 
 
 async def test_only_those_asked_see_it_and_not_the_family_until_they_accept(client, db, seeded, pushes):
-    _, _, rid = await _sent(client, db, seeded["agyary_id"])
+    mgr, _, rid = await _sent(client, db, seeded["agyary_id"])
     panthaky = await _as(client, PANTHAKY)
     assert (await client.get(f"{REQUESTS}/count", headers=panthaky)).json() == {"waiting": 1}
     got = await client.get(REQUESTS, headers=panthaky)
@@ -99,15 +100,26 @@ async def test_only_those_asked_see_it_and_not_the_family_until_they_accept(clie
     for text in (got.text, one.text):
         _no_family(text)
 
-    # The mobed at the same fire temple was not asked (a panthaky was): nothing.
+    # The mobed at the same fire temple is asked too, in the app (Everyone at once, R3.1 step 4),
+    # and sees it without the family.
     mobed = await _as(client, MOBED)
-    assert (await client.get(f"{REQUESTS}/count", headers=mobed)).json() == {"waiting": 0}
-    assert (await client.get(REQUESTS, headers=mobed)).json() == {"waiting": [], "earlier": []}
-    for method, path in (("GET", f"{REQUESTS}/{rid}"), ("POST", f"{REQUESTS}/{rid}/accept"),
-                         ("POST", f"{REQUESTS}/{rid}/decline")):
+    assert (await client.get(f"{REQUESTS}/count", headers=mobed)).json() == {"waiting": 1}
+    seen = await client.get(f"{REQUESTS}/{rid}", headers=mobed)
+    assert seen.status_code == 200 and "family_contact" not in seen.json()["request"]
+    _no_family(seen.text)
+
+    # In Come to me first the mobed is not asked (only the panthaky is): it does not exist for them.
+    goti = await db.get(Agyary, seeded["agyary_id"])
+    goti.request_mode = "panthaky_first"
+    await db.commit()
+    _, _, rid2 = await _sent(client, db, seeded["agyary_id"], mgr=mgr)
+    assert (await client.get(f"{REQUESTS}/count", headers=mobed)).json() == {"waiting": 1}
+    assert [q["id"] for q in (await client.get(REQUESTS, headers=mobed)).json()["waiting"]] == [rid]
+    for method, path in (("GET", f"{REQUESTS}/{rid2}"), ("POST", f"{REQUESTS}/{rid2}/accept"),
+                         ("POST", f"{REQUESTS}/{rid2}/decline")):
         r = await client.request(method, path, json={}, headers=mobed)
         assert r.status_code == 404, (method, path, r.text)
-    assert (await db.get(FuneralRequest, rid)).status == "waiting"
+    assert (await db.get(FuneralRequest, rid2)).status == "waiting"
 
 
 async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client, db, seeded, pushes):

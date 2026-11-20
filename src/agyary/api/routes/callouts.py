@@ -167,7 +167,7 @@ async def send_callout(request_id: int, payload: CalloutIn, db: AsyncSession = D
         sent = await prayer_callout.send(db, settings, user, request, [k[:24] for k in payload.who])
     except prayer_callout.CalloutError as exc:
         raise _error(exc) from exc
-    return {**await prayer_callout.view(db, settings, user, request), "asked_now": sent.asked}
+    return {**await prayer_callout.view(db, settings, user, request), "asked_now": sent}
 
 
 @router.post("/requests/{request_id}/callout/details-again")

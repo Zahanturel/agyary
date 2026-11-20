@@ -116,7 +116,8 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     assert await _tick(db, sent_at + timedelta(minutes=29, seconds=59)) == 0
     assert meta.sent == [] and (await _request(db, rid)).escalated_at is None
 
-    # Then everyone on the list who can be messaged, as at Send in Everyone at once.
+    # Then everyone on the list, as at Send in Everyone at once: the app mobed in the app
+    # (R3.1 step 4) and on WhatsApp, and the one added by hand on WhatsApp.
     at = sent_at + timedelta(minutes=30)
     assert await _tick(db, at) == 1
     assert _asked(meta) == sorted([MOBED, LISTED])
@@ -130,13 +131,16 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     (note,) = await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED)
     assert note.title == "All your mobeds were asked"
     assert note.body == ("Nobody had answered the request from Doongerwadi (test) for Behdin Rustom Jamshed in "
-                         "30 minutes, so Mobed Diary asked all your mobeds on WhatsApp. "
-                         "2 mobeds of Goti Adarian were asked on WhatsApp.")
+                         "30 minutes, so Mobed Diary asked all your mobeds. "
+                         "1 mobed of Goti Adarian was asked in the app, and 2 on WhatsApp.")
     assert note.link == f"#/requests/{rid}/callout" and note.agyary_id == aid
-    (push,) = pushes
+    request_push, push = pushes
+    assert request_push["to"] == [await _uid(db, MOBED)] and request_push["title"] == "A request for prayers"
+    (asked_in_app,) = await _notes(db, MOBED, "funeral_request")
+    assert asked_in_app.link == "#/requests"
     assert push["to"] == [await _uid(db, PANTHAKY)] and push["title"] == "All your mobeds were asked"
     assert push["body"] == ("Nobody had answered the request from Doongerwadi (test) in 30 minutes, "
-                            "so Mobed Diary asked all your mobeds on WhatsApp.")
+                            "so Mobed Diary asked all your mobeds.")
     assert push["url"] == f"/mobed#/requests/{rid}/callout"
     for text in (note.title, note.body, push["title"], push["body"]):
         assert FAMILY not in text and FAMILY[3:] not in text and "Test Family" not in text
@@ -148,7 +152,7 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     for later in (31, 60, 600):
         assert await _tick(db, sent_at + timedelta(minutes=later)) == 0
     assert meta.sent == [] and len(await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED)) == 1
-    assert len(pushes) == 1
+    assert len(pushes) == 2
 
 
 async def test_nothing_once_the_panthaky_acted_or_the_request_stopped_waiting(client, db, seeded, meta, pushes,
@@ -207,21 +211,36 @@ async def test_never_or_everyone_at_once_when_it_looks_does_nothing(client, db, 
 
 async def test_with_whatsapp_off_it_is_done_once_and_the_panthaky_told_why(client, db, seeded, meta, pushes):
     aid = seeded["agyary_id"]
-    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 15)
+    rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15)
     pushes.clear()
     at = sent_at + timedelta(minutes=15)
     assert await _tick(db, at) == 1
     assert meta.sent == [] and (await _request(db, rid)).escalated_at == at
+    # The app mobed is asked in the app all the same (R3.1 step 4).
     (note,) = await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED)
+    assert note.title == "All your mobeds were asked"
+    assert note.body == ("Nobody had answered the request from Doongerwadi (test) for Behdin Rustom Jamshed in "
+                         "15 minutes, so Mobed Diary asked all your mobeds. "
+                         f"1 mobed of Goti Adarian was asked in the app. {fw.OFF_WORDS}")
+    assert [p["to"] for p in pushes] == [[await _uid(db, MOBED)], [await _uid(db, PANTHAKY)]]
+    assert await _tick(db, at + timedelta(minutes=1)) == 0
+    assert len(await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED)) == 1 and len(pushes) == 2
+
+    # Nobody in the app to ask either: still done once, and the panthaky is told why.
+    await db.execute(update(User).where(User.phone == MOBED).values(access="off"))
+    await db.commit()
+    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 15, mgr)
+    pushes.clear()
+    at = sent_at + timedelta(minutes=15)
+    assert await _tick(db, at) == 1
+    note = (await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED))[-1]
     assert note.title == "Your mobeds could not be asked" and note.link == f"#/requests/{rid}"
     assert note.body == ("Nobody had answered the request from Doongerwadi (test) for Behdin Rustom Jamshed in "
-                         "15 minutes, so Mobed Diary tried to ask all your mobeds on WhatsApp. "
+                         "15 minutes, so Mobed Diary tried to ask all your mobeds. "
                          f"{fw.OFF_WORDS} Please open the request to find mobeds.")
     (push,) = pushes
     assert push["body"] == ("Nobody had answered the request from Doongerwadi (test) in 15 minutes, "
-                            "and Mobed Diary could not ask your mobeds on WhatsApp.")
-    assert await _tick(db, at + timedelta(minutes=1)) == 0
-    assert len(await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED)) == 1 and len(pushes) == 1
+                            "and Mobed Diary could not ask your mobeds.")
 
 
 async def test_nothing_goes_to_or_under_an_account_that_is_not_on(client, db, seeded, meta, pushes, live):
@@ -237,7 +256,9 @@ async def test_nothing_goes_to_or_under_an_account_that_is_not_on(client, db, se
     assert _asked(meta) == [MOBED]                     # not the account that is off, nor the panthaky
     body = [p["text"] for p in meta.templates("prayer_request_mobeds")[0]["template"]["components"][0]["parameters"]]
     assert body[5] == "Goti Adarian"                  # not under the panthaky who is off
-    assert await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED) == [] and pushes == []
+    assert await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED) == []
+    # Only the mobed asked is woken, with the request itself; not the panthaky who is off.
+    assert [(p["to"], p["title"]) for p in pushes] == [([await _uid(db, MOBED)], "A request for prayers")]
 
     # Nobody left who can be asked: still done once, and nobody asked.
     await db.execute(update(User).where(User.phone == MOBED).values(access="off"))

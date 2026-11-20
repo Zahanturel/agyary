@@ -196,27 +196,40 @@ async def test_it_goes_to_the_confirmed_panthakys_and_says_nothing_of_the_family
     assert r.status_code == 200, r.text
     assert r.json()["asked"] == 1
     (req,) = r.json()["record"]["requests"]
-    assert req["status"] == "waiting" and req["agyari"]["name"] == "Near Agyari (test)" and req["asked"] == 1
+    assert req["status"] == "waiting" and req["agyari"]["name"] == "Near Agyari (test)"
     assert r.json()["record"]["may_send"] is False and r.json()["record"]["may_edit"] is True
     row = await db.get(FuneralRequest, req["id"])
     assert row.family_share_agreed_at is not None and row.sent_by_user_id is not None
-    # Only the panthaky: the mobed there is not asked while a panthaky is.
-    assert await _sent_to(db, req["id"]) == [panthaky_user.id]
+    # Sent to the panthaky; in Everyone at once its mobeds are asked at once too, in the app
+    # (R3.1 step 4), with the same notice and phone notification.
+    mobed_user = await _user(db, "+919822200002")
+    assert await _sent_to(db, req["id"]) == sorted([panthaky_user.id, mobed_user.id]) and req["asked"] == 2
 
-    (note,) = await _notices(db, "funeral_request")
-    assert note.user_id == panthaky_user.id and note.link == "#/requests" and note.agyary_id == near.id
-    assert note.title == "A Doongerwadi asks for prayers"
-    assert note.body.startswith("Behdin Rustom Jamshed. Doongerwadi (test). Four days. Geh-saarnu: ")
-    assert "Havan geh" in note.body and "Uthamna: " in note.body and "4:00 pm" in note.body
-    assert "5 mobeds wanted" in note.body and "Asked of Near Agyari (test)" in note.body
-    (push,) = pushes
-    assert push["to"] == [panthaky_user.id] and push["url"] == "/mobed#/requests"
-    assert push["title"] == "A request for prayers"
-    assert push["body"] == "Doongerwadi (test) asks Near Agyari (test) for prayers."
+    notes = await _notices(db, "funeral_request")
+    assert [n.user_id for n in notes] == [panthaky_user.id, mobed_user.id]
+    for note in notes:
+        assert note.link == "#/requests" and note.agyary_id == near.id
+        assert note.title == "A Doongerwadi asks for prayers"
+        assert note.body.startswith("Behdin Rustom Jamshed. Doongerwadi (test). Four days. Geh-saarnu: ")
+        assert "Havan geh" in note.body and "Uthamna: " in note.body and "4:00 pm" in note.body
+        assert "5 mobeds wanted" in note.body and "Asked of Near Agyari (test)" in note.body
+    assert [p["to"] for p in pushes] == [[panthaky_user.id], [mobed_user.id]]
+    for push in pushes:
+        assert push["url"] == "/mobed#/requests" and push["title"] == "A request for prayers"
+        assert push["body"] == "Doongerwadi (test) asks Near Agyari (test) for prayers."
     # Never the family's name or number; on the lock screen not even the departed's name.
-    for text in (note.title, note.body, push["title"], push["body"]):
+    for text in [n.title + n.body for n in notes] + [p["title"] + p["body"] for p in pushes]:
         assert FAMILY not in text and FAMILY[3:] not in text and "Test Family" not in text, text
-    assert "Rustom" not in push["title"] + push["body"]
+    assert not any("Rustom" in p["title"] + p["body"] for p in pushes)
+
+    # In Come to me first, only the panthaky.
+    near.request_mode = "panthaky_first"
+    await db.commit()
+    r = await client.post(f"/api/mobed/manager/requests/{req['id']}/withdraw", headers=headers)
+    assert r.status_code == 200, r.text
+    r = await _send(client, headers, rec["id"], near.id)
+    assert r.status_code == 200 and r.json()["record"]["requests"][0]["asked"] == 1
+    assert await _sent_to(db, r.json()["record"]["requests"][0]["id"]) == [panthaky_user.id]
     # Nor in what the panthaky's app is given.
     seen = await client.get("/api/mobed/notifications", headers=auth(await sign_in(client, "+919822200001")))
     assert seen.status_code == 200 and "Behdin Rustom" in seen.text
@@ -264,8 +277,10 @@ async def test_one_waits_at_a_time_and_a_withdrawn_one_can_go_elsewhere(client, 
     r = await client.post(f"/api/mobed/manager/requests/{first['id']}/withdraw", headers=headers)
     assert r.status_code == 200, r.text
     assert r.json()["record"]["requests"][0]["status"] == "withdrawn" and r.json()["record"]["may_send"] is True
-    (gone,) = await _notices(db, "funeral_request_withdrawn")
-    assert gone.title == "A request for prayers was withdrawn" and "Behdin Rustom Jamshed" in gone.body
+    gone = await _notices(db, "funeral_request_withdrawn")
+    assert len(gone) == 2      # the panthaky, and the mobed asked in the app
+    for note in gone:
+        assert note.title == "A request for prayers was withdrawn" and "Behdin Rustom Jamshed" in note.body
     assert pushes[-1]["body"] == "Doongerwadi (test) withdrew its request to Near Agyari (test)."
     again = await client.post(f"/api/mobed/manager/requests/{first['id']}/withdraw", headers=headers)
     assert again.status_code == 409 and "no longer waiting" in again.json()["detail"]
@@ -282,13 +297,14 @@ async def test_a_change_while_waiting_reaches_those_asked_once(client, db, seede
     rec = await _record(client, headers)
     await _send(client, headers, rec["id"], near.id)
     r = await client.put(f"{RECORDS}/{rec['id']}", json=form(mobeds_wanted=7), headers=headers)
-    assert r.status_code == 200 and r.json()["told"] == 1
-    (changed,) = await _notices(db, "funeral_request_changed")
+    # The panthaky, and the mobed asked in the app (Everyone at once).
+    assert r.status_code == 200 and r.json()["told"] == 2
+    changed, _ = await _notices(db, "funeral_request_changed")
     assert "7 mobeds wanted" in changed.body and FAMILY[3:] not in changed.body
     assert pushes[-1]["body"] == "Doongerwadi (test) changed its request to Near Agyari (test)."
     # Saved again with nothing different: nobody is told twice.
     r = await client.put(f"{RECORDS}/{rec['id']}", json=form(mobeds_wanted=7), headers=headers)
-    assert r.json()["told"] == 0 and len(await _notices(db, "funeral_request_changed")) == 1
+    assert r.json()["told"] == 0 and len(await _notices(db, "funeral_request_changed")) == 2
 
 
 async def test_another_places_manager_cannot_send_or_withdraw(client, db, seeded, pushes):

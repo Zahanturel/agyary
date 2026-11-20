@@ -7,17 +7,20 @@ The safety net (step 2; DECISIONS D10, changed 21 Nov 2026): in Come to me
 first, a panthaky may choose "if I haven't acted in 15 min / 30 min / 1 hour,
 ask all our mobeds on WhatsApp" (Never is the default). Once that long has
 passed since a request was sent, if it is still waiting and the panthaky has
-not acted (prayer_callout.panthaky_acted), all the fire temple's mobeds are
-asked, as Everyone at once asks them at Send (prayer_callout.at_send), and the
-panthaky is told in the app and on their phone, with nothing about the family.
+not acted (prayer_callout.panthaky_acted: since R3.1 step 4 that includes
+taking it on the board), all the fire temple's mobeds are asked - in the app
+and on WhatsApp, as Everyone at once asks them at Send
+(prayer_callout.ask_everyone) - and the panthaky is told in the app and on
+their phone, with nothing about the family.
 
 - The setting is read as it is when the timer looks: a panthaky who switched
   to Everyone at once, or to Never, in the meantime is left to it.
 - Once: the request is claimed by a conditional update of escalated_at,
   committed before anything is sent (at most once, like the rest of the app's
-  sending). When nobody can be asked (WhatsApp off, nobody on the list) it is
-  still done, and the panthaky is told what happened.
-- D9: nothing is sent to or under an account that is not on (at_send's rule),
+  sending), and only while nobody has taken it on the board. When nobody can
+  be asked (nobody on the list who is not asked already, WhatsApp off and no
+  app mobed) it is still done, and the panthaky is told what happened.
+- D9: nothing is sent to or under an account that is not on (ask_everyone's rule),
   and only panthakys whose access is on are told. A panthaky switched off
   meanwhile does not hold the request back: nobody else could act on it.
 
@@ -66,6 +69,7 @@ async def _due(db: AsyncSession, now: datetime) -> list[tuple[int, int]]:
         select(FuneralRequest.id, FuneralRequest.sent_at, Agyary.request_escalate_minutes)
         .join(Agyary, Agyary.id == FuneralRequest.agyary_id)
         .where(FuneralRequest.status == REQUEST_WAITING, FuneralRequest.escalated_at.is_(None),
+               FuneralRequest.taken_at.is_(None),
                Agyary.request_mode == REQUEST_MODE_PANTHAKY_FIRST, Agyary.request_escalate_minutes.is_not(None))
         .order_by(FuneralRequest.sent_at, FuneralRequest.id)
     )).all()
@@ -73,13 +77,15 @@ async def _due(db: AsyncSession, now: datetime) -> list[tuple[int, int]]:
 
 
 async def _claim(db: AsyncSession, request_id: int, now: datetime) -> bool:
-    """Take this request for the safety net, once: only while it is waiting
-    and nobody has taken it yet. Committed before anything is sent, so a
-    second loop (or this one after a restart) finds it taken and does nothing."""
+    """Take this request for the safety net, once: only while it is waiting,
+    the safety net has not run for it, and the panthaky has not taken it on
+    the board (a board action holding the request waits here, then wins).
+    Committed before anything is sent, so a second loop (or this one after a
+    restart) finds it taken and does nothing."""
     claimed = (await db.execute(
         update(FuneralRequest)
         .where(FuneralRequest.id == request_id, FuneralRequest.escalated_at.is_(None),
-               FuneralRequest.status == REQUEST_WAITING)
+               FuneralRequest.status == REQUEST_WAITING, FuneralRequest.taken_at.is_(None))
         .values(escalated_at=now)
         .returning(FuneralRequest.id)
     )).scalar_one_or_none()
@@ -114,9 +120,10 @@ async def _ask_and_tell(db: AsyncSession, settings: Settings, request_id: int, a
     place = await db.get(FuneralPlace, record.funeral_place_id)
     place_name, departed, waited = place.name, fw.departed(record), minutes_words(minutes)
 
-    outcome = await prayer_callout.at_send(db, settings, request_id, now=now, client=client)
-    logger.warning("Safety net: request %s at fire temple %s, %d minutes without the panthaky acting: %s (%d asked)",
-                   request_id, agyary_id, minutes, outcome["state"], outcome["asked"])
+    outcome = await prayer_callout.ask_everyone(db, settings, request_id, now=now, client=client)
+    logger.warning("Safety net: request %s at fire temple %s, %d minutes without the panthaky acting: %s "
+                   "(%d in the app, %d on WhatsApp)", request_id, agyary_id, minutes, outcome["state"],
+                   outcome["asked_in_app"], outcome["asked"])
 
     # Read again: a call-out that broke rolls the session back.
     request = await db.get(FuneralRequest, request_id)
@@ -129,14 +136,13 @@ async def _ask_and_tell(db: AsyncSession, settings: Settings, request_id: int, a
     late = f"Nobody had answered the request from {place_name}"
     if outcome["state"] == "sent":
         title, link = ASKED_TITLE, f"#/requests/{request_id}/callout"
-        body = (f"{late} for {departed} in {waited}, so Mobed Diary asked all your mobeds on WhatsApp. "
-                f"{outcome['message']}")
-        push = f"{late} in {waited}, so Mobed Diary asked all your mobeds on WhatsApp."
+        body = f"{late} for {departed} in {waited}, so Mobed Diary asked all your mobeds. {outcome['message']}"
+        push = f"{late} in {waited}, so Mobed Diary asked all your mobeds."
     else:
         title, link = NOT_ASKED_TITLE, f"#/requests/{request_id}"
-        body = (f"{late} for {departed} in {waited}, so Mobed Diary tried to ask all your mobeds on WhatsApp. "
+        body = (f"{late} for {departed} in {waited}, so Mobed Diary tried to ask all your mobeds. "
                 f"{outcome['message']} Please open the request to find mobeds.")
-        push = f"{late} in {waited}, and Mobed Diary could not ask your mobeds on WhatsApp."
+        push = f"{late} in {waited}, and Mobed Diary could not ask your mobeds."
     for u in people:
         await reminders.notify(db, u.id, KIND_ESCALATED, title, body, link=link, agyary_id=agyary_id, now=now,
                                ttl=prayer_callout.NOTICE_TTL)
