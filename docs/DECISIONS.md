@@ -283,6 +283,20 @@ Decided, not built. The research, the sources and the full design are in
     confirmed panthakys see it; mobeds of other agyaries stay invisible.
   - New WhatsApp templates are needed for the all-set messages; sending stays off until Meta
     approves them, with STOP, the pause switch, the caps and D9 as before.
+  - **Answers of 21 Nov 2026 (second round):**
+    - The call-out is replaced by **`prayer_request_mobeds_v2`**, which also says that the details
+      come once enough mobeds are going and that a mobed's name and number go to the family.
+    - **"Still short"**: the panthaky is told **4 hours before the Geh-saarnu** if places are still
+      empty (at once if the request comes later than that).
+    - **Standbys and backing out:** a mobed who says Yes after the places are full is told "Enough
+      mobeds are going this time" and gets no details, but is **kept as a standby, in the order
+      they answered**. If a mobed going backs out ("I can't go any more" in the app, a button on
+      their WhatsApp details message, or the panthaky marking it), the place reopens, the first
+      standby is asked again, and the panthaky is told "<name> can't go; we have asked <standby>".
+      If that standby says no or does not answer in time, the next one is asked; when none is
+      left, the panthaky is told to find someone. The family is told the new names once the place
+      is filled again.
+    - **The Mobeds page is for panthakys only** for now.
 
 ## Not decided yet
 

@@ -67,9 +67,9 @@ One tap records it. (The app notices it is back on screen; nothing listens to th
 **WhatsApp from the app** opens the panthaky's own WhatsApp chat with that mobed and a short
 message ready to edit (no family details), the same as today's "Message the family" button.
 
-**Short near the time:** if places are still empty when the Geh-saarnu is near, the panthaky
-gets "Still 1 mobed short for <name>" with the board. **Confirm with who's going** closes it
-with fewer than wanted.
+**Short near the time:** if places are still empty **4 hours before the Geh-saarnu** (owner,
+21 Nov 2026; at once if the request comes later than that), the panthaky gets "Still 1 mobed
+short for <name>" with the board. **Confirm with who's going** closes it with fewer than wanted.
 
 **Taps, panthaky's side:**
 
@@ -86,7 +86,9 @@ with fewer than wanted.
 once:
 
 - The request reads **All set**. Later WhatsApp Yeses get "Thank you. Enough mobeds are going
-  this time." (inside the 24 hours, as today); app mobeds see "All set" on their card.
+  this time. If a place opens, we may ask you again." (inside the 24 hours, as today) and no
+  details; they are kept as **standbys** in the order they answered (below). App mobeds see
+  "All set" on their card.
 - **The family goes into the panthaky's own book and each praying app mobed's own book** (each
   private, D2; their own existing record of that number if they have one; reminders off, D4).
   The Geh-saarnu and Uthamna go on each one's calendar. The memorial is one tap away ("Make the
@@ -107,6 +109,24 @@ Templates 1-3 stop being used; template 4 (the call-out) stays, or is replaced b
 
 **The Doongerwadi's side** reads "Waiting at Goti Adarian", then "Finding mobeds: 1 of 2",
 then "All set" with the agyari, the panthaky's Call and WhatsApp, and the mobeds' names.
+
+## Standbys and backing out (owner, 21 Nov 2026)
+
+- **Standbys:** every Yes that comes after the places are full is kept, in the order it came,
+  and shown on the board under "Standby". They get no details (the "Enough mobeds" reply only).
+- **Backing out:** a mobed going can say they can no longer go: **"I can't go any more"** on
+  their request card in the app, or the **"I can't go any more"** quick-reply button on their
+  WhatsApp details message (template 6), or the panthaky marks it on the board for someone who
+  phoned. The place reopens at once.
+- **Then, by itself:** the first standby is asked again on WhatsApp (the call-out template, so
+  it works outside the 24 hours too), and the panthaky is told "Ervad A can't go; we have asked
+  Ervad B". If that standby says no, or has not answered in **30 minutes**, the next standby is
+  asked, and so on. With no standby left, the panthaky is told: "Ervad A can't go and nobody is
+  on standby: please find someone" with the board.
+- **Filled again:** the new mobed gets the details (template 6), the family gets the all-set
+  message again with the new names (template 5), and the panthaky and the Doongerwadi see the
+  new names. The mobed who backed out is not messaged again.
+- A request that was confirmed short can take standbys the same way when a place opens.
 
 ## The Mobeds page (in the panthaky's diary)
 
@@ -139,6 +159,8 @@ entered for that person (services/phone.py), never from free text.
 > going: **[mobeds with numbers]**. The panthaky is **[panthaky, number]**. Thank you for your
 > service.
 
+Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: backing out, see above).
+
 **7. To the panthaky: `prayers_all_set_panthaky`**
 > All mobeds are found for **[departed]** at **[place]**: **[mobeds with numbers]**.
 > Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact is
@@ -148,7 +170,7 @@ entered for that person (services/phone.py), never from free text.
 > The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. The
 > panthaky is **[panthaky, number]**, by phone or WhatsApp.
 
-**4 v2 (recommended, owner to confirm): `prayer_request_mobeds_v2`**
+**4 v2 (owner, 21 Nov 2026: yes, it replaces template 4): `prayer_request_mobeds_v2`**
 > A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:
 > **[day and geh]**. Uthamna: **[day and time]**. Please reply to tell **[panthaky's name]**
 > whether you can take it. If you can, you will get the details once enough mobeds are going,
@@ -157,16 +179,14 @@ entered for that person (services/phone.py), never from free text.
 Why 4 v2: under R3.1 a mobed who says Yes waits for the others before getting the details, and
 their number goes to the family; the message should say both before they answer.
 
-## Still to settle with the owner (before or during the build)
+## Settled with the owner (21 Nov 2026, second round)
 
-1. Template 4 v2 (above): replace the approved call-out with it, yes or no.
-2. "Still short" reminder: how long before the Geh-saarnu (suggested: 2 hours, and at once if
-   the Geh-saarnu is sooner than that).
-3. A mobed going who can no longer go: "I can't go any more" on their card (or the panthaky
-   taps it) reopens the place and tells the panthaky. Suggested for R3.1; WhatsApp-only mobeds
-   tell the panthaky by phone.
-4. Should every mobed (not only panthakys) have a Mobeds page of the colleagues they work
-   with? Not part of R3.1 unless the owner says so.
+1. Template 4 v2 replaces the approved call-out (template 4 keeps working until v2 is approved).
+2. "Still short": 4 hours before the Geh-saarnu.
+3. Backing out: standbys in the order they said Yes, asked again by themselves; the panthaky is
+   told at each step, and asked to find someone when none is left (section above). The
+   standby's 30 minutes to answer is the lead's default, not yet the owner's.
+4. The Mobeds page is for panthakys only for now.
 
 ## Data changes
 
@@ -177,7 +197,9 @@ their number goes to the family; the message should say both before they answer.
   Requests accepted before R3.1 keep their "accepted" state and read as they do today (D8).
 - `prayer_callout_answers`: `how` (`whatsapp` | `phone` | `self` | `app`) and who recorded it, so
   a place filled by phone or "I'll pray" is a row like a WhatsApp Yes (a call-out row is made
-  for the board if none exists). The check that a picked row said yes stays true.
+  for the board if none exists). The check that a picked row said yes stays true. Also
+  `backed_out_at` (and who marked it), and `reasked_at` for a standby asked again; standbys are
+  the Yes rows not picked, in `answered_at` order.
 - The family-in-book step runs for the panthaky and each praying app mobed at all set, through
   the existing accept code (one call per person, each in their own book).
 
@@ -197,6 +219,11 @@ their number goes to the family; the message should say both before they answer.
    one tap away, notices and pushes, Enough-mobeds texts; templates 5-8 behind
    FUNERAL_WHATSAPP_MODE. Tests: the family number reaches no one before all set; each book
    gets its own record only (D2); exactly once under two Yeses at the same moment.
+5b. **Standbys and backing out**: standbys in answer order, "I can't go any more" (app card,
+   WhatsApp button, panthaky's mark), asking the next standby by itself with the 30-minute
+   wait, the panthaky told at each step, the family told the new names. Tests: order kept;
+   a standby's late Yes after someone else filled the place changes nothing; the backed-out
+   mobed loses nothing else (their book keeps the family, D8).
 6. **The Doongerwadi's side**: Finding mobeds n of N, All set with the panthaky and names.
 7. **Old path retired**: the Accept button and the 19 Nov details-at-once go; old requests
    still read right. Docs: checklist, templates doc, STATUS.
