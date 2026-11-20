@@ -152,6 +152,11 @@ class FuneralRequest(Base):
     memorial_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("memorials.id", ondelete="SET NULL")
     )
+    # R3.1 step 2: when the safety net asked all the fire temple's mobeds on
+    # WhatsApp because the panthaky had not acted in Come to me first
+    # (services/prayer_timers.py). Set once, before anything is sent, so it is
+    # never done twice; NULL when it has not run.
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(f"status IN ({sql_in(REQUEST_STATUSES)})", name="status"),

@@ -12,7 +12,8 @@ the admin, on Settings -> Prayer requests.
 The minutes are kept whatever the way, so switching back keeps the panthaky's
 last choice; they matter only in "panthaky_first". Who may read or change it
 is prayer_callout.may_manage, checked by the route. Which way a request takes
-is way_for (step 2), read by prayer_callout.after_send at Send.
+is way_for (step 2), read by prayer_callout.after_send at Send; the safety
+net's timer is services/prayer_timers.py.
 """
 
 from __future__ import annotations

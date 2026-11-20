@@ -440,7 +440,8 @@ async def after_send(
     step 2; request_settings.way_for). Everyone at once - and any fire temple
     with no confirmed panthaky whose access is on - is the call-out now
     (at_send). Come to me first is nothing now: only the panthaky was told, and
-    they choose who to ask. Returns what the sender is told, as at_send does
+    they choose who to ask; if they set the safety net, services/prayer_timers.py
+    asks everyone later. Returns what the sender is told, as at_send does
     ({"state": "panthaky_first", ...} for Come to me first). Never raises."""
     from agyary.services import panthaky   # here: as in _at_send
 
@@ -460,6 +461,20 @@ async def after_send(
     return await at_send(db, settings, request_id, now=now, client=client)
 
 
+async def panthaky_acted(db: AsyncSession, request: FuneralRequest) -> bool:
+    """Whether the fire temple has done something with this request, for the
+    safety net (services/prayer_timers.py): it is no longer waiting (accepted,
+    declined, withdrawn), or a call-out exists for it (the panthaky asked on
+    WhatsApp by hand, or the mobeds were asked already). Step 4 adds the
+    board's first action (I'll pray, a mobed marked Going), which takes the
+    request: add it here, the one place the safety net asks."""
+    if request.status != REQUEST_WAITING:
+        return True
+    return (await db.execute(
+        select(PrayerCallout.id).where(PrayerCallout.funeral_request_id == request.id).limit(1)
+    )).first() is not None
+
+
 async def at_send(
     db: AsyncSession, settings: Settings, request_id: int, *, now: datetime | None = None,
     client: httpx.AsyncClient | None = None,
@@ -470,8 +485,10 @@ async def at_send(
     never a STOP'd number - except its confirmed panthakys (they have the
     request in the app, and the message asks the mobeds to answer them) and
     whoever sent it. Runs once a request is sent and committed in Everyone at
-    once (after_send). Returns what the sender is told: {"state", "asked",
-    "message"}. Never raises: sending a request cannot fail because of this."""
+    once (after_send), and in Come to me first when the safety net asks
+    everyone (services/prayer_timers.py). Returns what the sender is told:
+    {"state", "asked", "message"}. Never raises: sending a request cannot fail
+    because of this."""
     try:
         return await _at_send(db, settings, request_id, now=now or _now(), client=client)
     except Exception:   # noqa: BLE001 - the request is sent; this must not undo or fail it

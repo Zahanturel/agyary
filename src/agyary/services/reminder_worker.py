@@ -12,6 +12,11 @@ From ``reminders_send_hour`` IST until ``reminders_cutoff_hour`` it:
   - when sending is on, plans tomorrow's WhatsApp reminders and sends them.
 Past the cutoff it plans nothing and anything still unsent is given up on,
 because "tomorrow" is no longer true.
+
+On every tick, whatever the hour and before any of that, it runs the prayer
+requests' timers (services/prayer_timers.py: the safety net in Come to me
+first), in a step of their own: a failure there never stops the evening jobs,
+and theirs never stops the timers.
 """
 
 from __future__ import annotations
@@ -22,9 +27,9 @@ from datetime import datetime, timezone
 
 import httpx
 
-from agyary.core.config import get_settings
+from agyary.core.config import Settings, get_settings
 from agyary.core.database import async_session_factory
-from agyary.services import account, daily_report, reminder_sender, reminders
+from agyary.services import account, daily_report, prayer_timers, reminder_sender, reminders
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,23 @@ async def ping_heartbeat(*, ok: bool, client: httpx.AsyncClient | None = None) -
             await client.aclose()
 
 
+async def run_prayer_timers(
+    now: datetime, settings: Settings, client: httpx.AsyncClient | None, session_factory,
+) -> None:
+    """The prayer requests' timers, in their own session and their own step:
+    whatever goes wrong here is logged and rolled back, and the pass goes on."""
+    try:
+        async with session_factory() as db:
+            try:
+                await prayer_timers.run(db, now, settings, client)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
+    except Exception:
+        logger.exception("Prayer request timers failed")
+
+
 async def tick(
     now: datetime | None = None,
     client: httpx.AsyncClient | None = None,
@@ -64,12 +86,15 @@ async def tick(
     now = now or datetime.now(timezone.utc)
     report = reminder_sender.Report()
 
+    # Every minute, whatever the hour: before the evening's early return below.
+    await run_prayer_timers(now, settings, client, session_factory)
+
     hour = now.astimezone(reminder_sender.IST).hour
     in_window = settings.reminders_send_hour <= hour < settings.reminders_cutoff_hour
     sending = settings.reminders_send_mode != "off"
     report_window = settings.daily_report_hour <= hour < settings.daily_report_cutoff_hour
     if not in_window and not sending and not report_window:
-        return report            # nothing to do, and nothing worth opening a connection for
+        return report            # no evening job to do, and nothing more worth opening a connection for
 
     own_client = client is None and sending
     if sending and client is None:

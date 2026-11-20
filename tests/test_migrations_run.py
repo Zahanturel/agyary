@@ -527,3 +527,34 @@ async def test_the_request_settings_migration_holds_its_rules_and_comes_off_clea
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_safety_net_migration_adds_when_it_ran_and_comes_off_cleanly():
+    """b0c1d2e3f4a7 (R3.1 step 2): a request from before reads NULL (the safety
+    net has not run for it); it holds when the safety net ran; the downgrade
+    takes the column off and keeps the requests."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "a9b0c1d2e3f6"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at)"
+                               " VALUES (1, 1, 'waiting', now())")
+        _ok(_alembic("upgrade", "head"))
+        assert await _scratch_execute("SELECT escalated_at FROM funeral_requests") == [(None,)]
+        await _scratch_execute("UPDATE funeral_requests SET escalated_at = :at", {"at": AT})
+        assert await _scratch_execute("SELECT escalated_at FROM funeral_requests") == [(AT,)]
+
+        _ok(_alembic("downgrade", "a9b0c1d2e3f6"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'funeral_requests'")
+        assert "escalated_at" not in {c for (c,) in cols}
+        assert await _scratch_execute("SELECT status FROM funeral_requests") == [("waiting",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
