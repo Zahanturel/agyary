@@ -1,5 +1,6 @@
-"""A fire temple's own list of mobeds, and the panthaky's call-out to them on
-WhatsApp (DECISIONS D10, Phase 2 Step 5c; services/prayer_callout.py).
+"""A fire temple's own list of mobeds, the panthaky's call-out to them on
+WhatsApp (DECISIONS D10, Phase 2 Step 5c; services/prayer_callout.py), and how
+a prayer request reaches the fire temple (R3.1; services/request_settings.py).
 
 Mobed routes (get_current_user: signed in, switched on, and never a manager's
 account). Only a confirmed panthaky of that fire temple, or the admin, reaches
@@ -10,6 +11,8 @@ with that field's name in the X-Field header.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,13 +22,14 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, User
-from agyary.services import funeral_whatsapp, prayer_callout
+from agyary.services import funeral_whatsapp, prayer_callout, request_settings
 from agyary.services.phone import Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["callouts"])
 
 FIELD_HEADER = "X-Field"
 NO_LIST = "That list could not be found."
+NO_AGYARI = "That fire temple could not be found."
 NO_REQUEST = "That request could not be found."
 
 
@@ -34,10 +38,10 @@ def _error(exc: prayer_callout.CalloutError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=str(exc), headers=headers)
 
 
-async def _managed_agyary(db: AsyncSession, user: User, agyary_id: int) -> Agyary:
+async def _managed_agyary(db: AsyncSession, user: User, agyary_id: int, missing: str = NO_LIST) -> Agyary:
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active or not await prayer_callout.may_manage(db, get_settings(), user, agyary_id):
-        raise HTTPException(status_code=404, detail=NO_LIST)
+        raise HTTPException(status_code=404, detail=missing)
     return agyary
 
 
@@ -93,6 +97,36 @@ async def remove_our_mobed(agyary_id: int, contact_id: int, db: AsyncSession = D
         raise _error(exc) from exc
     await db.commit()
     return await _list(db, user, agyary)
+
+
+# --- How a prayer request reaches the fire temple (R3.1) --------------------------
+@router.get("/agyaries/{agyary_id}/request-settings")
+async def get_request_settings(agyary_id: int, db: AsyncSession = Depends(get_db),
+                               user: User = Depends(get_current_user)) -> dict:
+    """Everyone at once or Come to me first, and the safety net's minutes
+    (None is Never)."""
+    return request_settings.read(await _managed_agyary(db, user, agyary_id, NO_AGYARI))
+
+
+class RequestSettingsIn(BaseModel):
+    # Checked by request_settings.change, so a wrong value is said in plain
+    # words (a 400 naming the field), never as a 422.
+    mode: Any = None
+    escalate_minutes: Any = None
+
+
+@router.put("/agyaries/{agyary_id}/request-settings")
+async def put_request_settings(agyary_id: int, payload: RequestSettingsIn, db: AsyncSession = Depends(get_db),
+                               user: User = Depends(get_current_user)) -> dict:
+    """Both are saved as given: the minutes are kept under either way, and
+    matter only in Come to me first."""
+    agyary = await _managed_agyary(db, user, agyary_id, NO_AGYARI)
+    try:
+        saved = request_settings.change(agyary, user, mode=payload.mode, escalate_minutes=payload.escalate_minutes)
+    except request_settings.SettingsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc), headers={FIELD_HEADER: exc.field}) from exc
+    await db.commit()
+    return saved
 
 
 # --- The call-out on an accepted request ------------------------------------------
