@@ -47,6 +47,7 @@ from agyary.models.enums import (
     OBSEQUIES,
     OFFERED_CALENDARS,
     REQUEST_ACCEPTED,
+    REQUEST_ALL_SET,
     REQUEST_TAKEN,
     REQUEST_WAITING,
 )
@@ -75,7 +76,9 @@ MAX_MOBEDS = 20
 PAGE = 50
 
 # A request that has been accepted: the record is then the accepter's to use.
-ACCEPTED = (REQUEST_ACCEPTED, REQUEST_TAKEN)
+# All set (R3.1) is taken for good the same way: the record can no longer be
+# changed or sent elsewhere.
+ACCEPTED = (REQUEST_ACCEPTED, REQUEST_TAKEN, REQUEST_ALL_SET)
 
 
 class RecordError(ValueError):

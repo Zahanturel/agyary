@@ -22,17 +22,23 @@ list since), while the request is open. Since R3.1 (21 Nov 2026) that is the
 way Everyone at once; in Come to me first nothing goes at Send, and the
 panthaky chooses who to ask (after_send, request_settings.way_for).
 
-The first yeses go: up to the record's "mobeds wanted" (DEFAULT_WANTED if it
-gives none), each yes is one of those going and gets template 2 (the details,
-with the family's contact) at once, and the panthaky is told in the app and on
-their phone ("<name> is going"; nothing about the departed or the family on the
-lock screen). A later yes gets "Thank you. Enough mobeds are going this time."
-If the request is withdrawn or declined, each yes is told "This prayer request
-was withdrawn." - both plain text, so only inside WhatsApp's 24 hours from the
-answer; otherwise nothing is sent. This replaces the panthaky picking who goes
-(18 Nov): the panthaky's screen is a read-only list of who is going, who said
-yes and who said no, with "Send the details again" for someone going whose
-details did not go. Payment stays with the panthaky, outside the app.
+The "Who will pray" board (R3.1 step 4, owner 21 Nov 2026): every answer and
+every place is one row per person per request, whatever the channel - a
+WhatsApp button, "I can pray" / "Not this time" in the app, the panthaky's
+"I'll pray", or a mobed marked after a phone call - and the first answer of a
+person counts. ``fill`` is the one rule for a yes: up to the record's "mobeds
+wanted" (DEFAULT_WANTED if it gives none) each yes is a place, and the
+panthakys are told "<name> is going (1 of 2)" in the app and on their phones
+(nothing about the departed or the family on the lock screen); nobody is sent
+the details at a yes any more - they go only at All set (services/all_set.py,
+Step 5), which the last place filling calls. A later yes is a standby, told
+"Thank you. Enough mobeds are going this time. If a place opens, we may ask
+you again." If the request is withdrawn or declined, each yes is told "This
+prayer request was withdrawn." - both plain text, so only inside WhatsApp's 24
+hours from the answer; otherwise nothing is sent. A no answers only for the
+one who said it; at a fire temple with no panthaky, everyone asked saying no
+closes the request there (_after_no). Payment stays with the panthaky, outside
+the app.
 
 While FUNERAL_WHATSAPP_MODE is off the list can be built, nothing is sent, and
 the screens say the messages start once Meta approves them.
@@ -46,7 +52,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
@@ -69,11 +75,17 @@ from agyary.models.enums import (
     ACCOUNT_MOBED,
     CALLOUT_NO,
     CALLOUT_YES,
+    HOW_APP,
+    HOW_PHONE,
+    HOW_SELF,
     HOW_WHATSAPP,
     REQUEST_ACCEPTED,
+    REQUEST_ALL_SET,
+    REQUEST_DECLINED,
     REQUEST_MODE_PANTHAKY_FIRST,
     REQUEST_TAKEN,
     REQUEST_WAITING,
+    REQUEST_WITHDRAWN,
     ROLE_PANTHAKY,
 )
 from agyary.services import (
@@ -349,9 +361,11 @@ async def view(db: AsyncSession, settings: Settings, user: User, request: Funera
             "details": _state(details_n),
             "enough": _state(latest.get((fw.TYPE_ENOUGH, key))),
             "withdrawn_note": _state(latest.get((fw.TYPE_WITHDRAWN, key))),
-            # A mobed going whose details did not go (sending was paused, say).
-            "may_resend": going and a.details_sent_at is None and bool(a.phone) and not fw.went(details_n)
-                          and is_open(request),
+            # A mobed going whose details were tried and did not go (sending was
+            # paused, say), before R3.1. Since R3.1 nobody going is sent the
+            # details until All set, so there is nothing to send again.
+            "may_resend": going and a.details_sent_at is None and bool(a.phone) and details_n is not None
+                          and not fw.went(details_n) and is_open(request),
         })
     candidates = []
     if is_open(request):
@@ -604,7 +618,67 @@ async def send(
     return callout
 
 
-# --- An answer arrives (the webhook) ----------------------------------------------
+# --- The board's rows: one per person per request (R3.1 step 4) ---------------------
+
+async def _request_rows(db: AsyncSession, request_id: int) -> list[PrayerCalloutAnswer]:
+    """Every row of this request, whichever call-out it hangs on, oldest first."""
+    return list((await db.execute(
+        select(PrayerCalloutAnswer).join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .where(PrayerCallout.funeral_request_id == request_id).order_by(PrayerCalloutAnswer.id)
+        .execution_options(populate_existing=True)
+    )).scalars().all())
+
+
+def _find(rows: list[PrayerCalloutAnswer], key: str, phone: str | None) -> PrayerCalloutAnswer | None:
+    """This person's row on the request, if they have one: by who they are
+    ("u12", "c5"), or by their number (someone added by hand who has joined
+    the app since is the same person). The answered one first, if a request
+    from before R3.1 asked them twice."""
+    mine = [r for r in rows if _answer_key(r) == key or (phone and r.phone == phone)]
+    return next((r for r in mine if r.answer is not None), mine[-1] if mine else None)
+
+
+async def _callout_of(db: AsyncSession, request: FuneralRequest, *, sent_by_user_id: int | None,
+                      now: datetime) -> PrayerCallout:
+    """The request's call-out, which every row of its board hangs on; made
+    when the first person is asked or answers."""
+    callout = (await db.execute(
+        select(PrayerCallout).where(PrayerCallout.funeral_request_id == request.id).order_by(PrayerCallout.id).limit(1)
+    )).scalar_one_or_none()
+    if callout is None:
+        callout = PrayerCallout(funeral_request_id=request.id, agyary_id=request.agyary_id,
+                                sent_by_user_id=sent_by_user_id, sent_at=now, asked=0)
+        db.add(callout)
+        await db.flush()
+    return callout
+
+
+def _new_row(callout: PrayerCallout, *, name: str, phone: str | None, how: str, user_id: int | None = None,
+             contact_id: int | None = None) -> PrayerCalloutAnswer:
+    return PrayerCalloutAnswer(callout_id=callout.id, user_id=user_id, contact_id=contact_id, name=name[:NAME_MAX],
+                               phone=phone, token=_new_token(), how=how)
+
+
+async def _going(db: AsyncSession, request_id: int) -> int:
+    return (await db.execute(
+        select(func.count()).select_from(PrayerCalloutAnswer)
+        .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .where(PrayerCallout.funeral_request_id == request_id, PrayerCalloutAnswer.picked_at.is_not(None))
+    )).scalar_one()
+
+
+def closed_words(request: FuneralRequest, place_name: str) -> str:
+    """Why nothing more can be done with a request that is not waiting."""
+    if request.status == REQUEST_WITHDRAWN:
+        return f"{place_name} withdrew this request, so nothing more is needed for it."
+    if request.status == REQUEST_DECLINED:
+        return "This request was declined, so nothing more is needed for it."
+    if request.status == REQUEST_ALL_SET:
+        return "Enough mobeds are going for this request: it is all set."
+    return "This request is no longer waiting, so nothing more can be done with it here."
+
+
+# --- An answer arrives: on WhatsApp, in the app, by phone, or "I'll pray" ---------------
 
 def is_ours(payload: str | None) -> bool:
     return bool(payload) and payload.startswith(PAYLOAD_PREFIX)
@@ -616,34 +690,213 @@ async def record_answer(
 ) -> str:
     """A tap on "Yes, I can pray" or "Not this time". Only a well-formed token
     of a row that exists, from the number it was sent to, counts, and only the
-    first time. A yes is then one of those going, or thanked (see _after_yes).
-    Returns what happened, for the log (no numbers)."""
+    first answer of that person, whichever way it came (R3.1: an answer in the
+    app first makes this one "already answered"). A yes then goes through
+    ``fill``. Returns what happened, for the log (no numbers)."""
     now = now or _now()
     found = _PAYLOAD.match(payload or "")
     if not found:
         return "malformed"
     token, choice = found.groups()
     answer = (await db.execute(select(PrayerCalloutAnswer).where(PrayerCalloutAnswer.token == token)
-                               .with_for_update())).scalar_one_or_none()
+                               )).scalar_one_or_none()
     if answer is None:
         return "unknown token"
     if not _from_them(answer, from_phone, wa_user_id, await _asked_user_id(db, answer)):
         return f"answer {answer.id}: not from the number asked"
-    if answer.answer is not None:
-        return f"answer {answer.id}: already answered"
-    answer.answer = CALLOUT_YES if choice == "y" else CALLOUT_NO
-    answer.answered_at = now
-    # Kept first: whatever happens next, the answer stands.
-    await db.commit()
-    if answer.answer != CALLOUT_YES:
-        return f"answer {answer.id}: no"
-    try:
-        outcome = await _after_yes(db, settings, answer, now, client)
-    except Exception:   # noqa: BLE001 - the answer is kept; a message that did not go is said on the screen
-        logger.exception("After the yes of answer %s", answer.id)
-        await db.rollback()
-        outcome = "yes, but what follows failed"
+    request = await db.get(FuneralRequest, await _request_id(db, answer))
+    outcome = await _answer(db, settings, request, answer, choice == "y", how=HOW_WHATSAPP, by_user=None,
+                            now=now, client=client)
     return f"answer {answer.id}: {outcome}"
+
+
+async def _answer(
+    db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, yes: bool, *,
+    how: str, by_user: User | None, now: datetime, client: httpx.AsyncClient | None,
+) -> str:
+    """Record one person's answer on ``row``, if it is their first: the
+    request is locked first (every answer and place of a request waits here
+    for the one before), then the row. The answer is committed before anything
+    follows, so whatever happens next it stands. Returns what happened, for
+    the log; "already answered" when they had answered before."""
+    await db.refresh(request, with_for_update=True)
+    await db.refresh(row, with_for_update=True)
+    if row.answer is not None or any(
+        r.answer is not None for r in await _request_rows(db, request.id)
+        if r.id != row.id and _same_person(r, row)
+    ):
+        await db.commit()
+        return "already answered"
+    row.answer, row.answered_at, row.how = (CALLOUT_YES if yes else CALLOUT_NO), now, how
+    row.recorded_by_user_id = by_user.id if by_user is not None and how in (HOW_PHONE, HOW_SELF) else None
+    await db.commit()
+    try:
+        if yes:
+            return await fill(db, settings, request, row, how, by_user, now, client)
+        return await _after_no(db, settings, request, now=now)
+    except Exception:   # noqa: BLE001 - the answer is kept; what did not follow is on the board
+        logger.exception("After answer %s on request %s", row.id, request.id)
+        await db.rollback()
+        return ("yes" if yes else "no") + ", but what follows failed"
+
+
+def _same_person(a: PrayerCalloutAnswer, b: PrayerCalloutAnswer) -> bool:
+    return (_answer_key(a) is not None and _answer_key(a) == _answer_key(b)) or bool(a.phone and a.phone == b.phone)
+
+
+# What a mobed going, or on standby, is told in the app (owner, 21 Nov 2026).
+GOING_WORDS = "You are going. You will get the details once enough mobeds are going."
+HOW_WORDS = {HOW_WHATSAPP: "said yes on WhatsApp", HOW_APP: "said yes in the app", HOW_PHONE: "said yes on the phone"}
+
+
+def _said(row: PrayerCalloutAnswer, how: str, departed: str) -> str:
+    if how == HOW_SELF:
+        return f"{row.name} will pray for {departed}"
+    return f"{row.name} {HOW_WORDS.get(how, 'said yes')} for the prayers for {departed}"
+
+
+async def fill(
+    db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, how: str,
+    by_user: User | None, now: datetime, client: httpx.AsyncClient | None,
+) -> str:
+    """The one rule for a Yes (R3.1 step 4), whichever way it came: a WhatsApp
+    button, "I can pray" in the app, the panthaky's "I'll pray", or a mobed
+    marked Going after a call. ``row`` has said yes and is committed.
+
+    - The request withdrawn or declined: nothing fills; a WhatsApp Yes is told
+      "This prayer request was withdrawn." (inside the 24 hours it opened).
+    - A place free (``wanted`` places): the row is one of those going
+      (``picked_at``). Nobody is sent the details now - they go only at All
+      set (Step 5). The panthakys are told in the app and on their phones
+      "<name> is going (1 of 2)", with nothing about the family on the lock
+      screen; an app mobed going is told so in the app.
+    - The places full: the row stays a Yes without ``picked_at``, a standby,
+      in ``answered_at`` order (Step 5b asks them when a place opens). A
+      WhatsApp Yes gets the "Enough mobeds" text inside the 24 hours; an app
+      mobed the same words in the app.
+    - The last place filled: all_set.on_full, once.
+
+    Two Yeses at the same moment fill exactly the free places: the request is
+    locked while the places are counted. Commits. Returns what happened, for
+    the log."""
+    from agyary.services import all_set   # here: Step 5 makes all_set reach back into the books
+
+    await db.refresh(request, with_for_update=True)
+    await db.refresh(row)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    departed = fw.departed(record)
+    if request.status in (REQUEST_WITHDRAWN, REQUEST_DECLINED):
+        await db.commit()
+        if how == HOW_WHATSAPP and row.phone:
+            await fw.deliver(db, settings, [_text_send(row, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT)],
+                             now=now, client=client)
+        return "yes, to a closed request"
+    want, going = wanted(record), await _going(db, request.id)
+    skip = by_user.id if by_user is not None else None
+    if is_open(request) and going < want:
+        row.picked_at = now
+        await db.commit()
+        going += 1
+        await _tell_panthakys(
+            db, settings, request, row, KIND_GOING, f"{row.name} is going ({going} of {want})",
+            f"{_said(row, how, departed)}: {going} of {want} going.",
+            push="Open Mobed Diary to see who is going.", now=now, skip_user_id=skip)
+        if how != HOW_SELF:
+            await _tell_mobed(db, settings, request, row, "You are going to pray", GOING_WORDS, now=now)
+        await db.commit()
+        if going >= want and request.status == REQUEST_WAITING:
+            await all_set.on_full(db, settings, request, now=now, client=client)
+            return "yes, going, all set"
+        return "yes, going"
+
+    # A standby: kept, in the order they said yes.
+    await db.commit()
+    told = False
+    if how == HOW_WHATSAPP and row.phone:
+        sent = await fw.deliver(db, settings, [_text_send(row, request, fw.TYPE_ENOUGH, fw.ENOUGH_TEXT)],
+                                now=now, client=client)
+        told = any(fw.went(n) for n in sent)
+        if told:
+            row.enough_sent_at = now
+    told_words = {HOW_WHATSAPP: (", and were told so on WhatsApp." if told
+                                 else "; the WhatsApp reply to them could not be sent."),
+                  HOW_APP: ", and were told so in the app."}.get(how, ".")
+    await _tell_panthakys(
+        db, settings, request, row, KIND_YES, f"{row.name} also said yes",
+        f"{_said(row, how, departed)}. Enough mobeds are going, so they are on standby{told_words}",
+        push=None, now=now, skip_user_id=skip)
+    if how != HOW_SELF:
+        await _tell_mobed(db, settings, request, row, "Enough mobeds are going", fw.ENOUGH_TEXT, now=now)
+    await db.commit()
+    if request.status == REQUEST_WAITING and going >= want:
+        # Full, but not marked all set yet (it broke when the last place filled).
+        await all_set.on_full(db, settings, request, now=now, client=client)
+    return "yes, standby"
+
+
+async def _tell_mobed(db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer,
+                      title: str, body: str, *, now: datetime) -> None:
+    """An app mobed, about their own yes, in the app (D9: only an account that is on)."""
+    if not row.user_id:
+        return
+    user = await db.get(User, row.user_id)
+    if user is None or not user.is_active or not mobed_access.has_access(settings, user):
+        return
+    await reminders.notify(db, user.id, KIND_MY_YES, title, body, agyary_id=request.agyary_id, now=now,
+                           ttl=NOTICE_TTL)
+
+
+# When everyone asked at a fire temple with no panthaky said no (owner, 21 Nov 2026, third round).
+KIND_NOBODY = "funeral_request_nobody"
+
+
+async def _after_no(db: AsyncSession, settings: Settings, request: FuneralRequest, *, now: datetime) -> str:
+    """A no answers only for the one who said it. At a fire temple with no
+    confirmed panthaky (whose access is on), once everyone asked has said no -
+    every row of the request, and everyone the request reached in the app who
+    can still answer - the request closes as declined for it, and the funeral
+    place's managers (and the admin who sent it acting for the place) are told
+    "Nobody at <agyari> can take it", so they can send it elsewhere. A
+    panthaky decides for their fire temple ("We can't take this"), so where
+    there is one the request stays open. Once only: a conditional update."""
+    from agyary.services import funeral_answers, funeral_requests, panthaky
+
+    await db.refresh(request, with_for_update=True)
+    if request.status != REQUEST_WAITING or await panthaky.panthakys_of(db, settings, request.agyary_id):
+        await db.commit()
+        return "no"
+    rows = await _request_rows(db, request.id)
+    if not rows or any(r.answer != CALLOUT_NO for r in rows):
+        await db.commit()
+        return "no"
+    members = set((await db.execute(select(AgyaryUser.user_id).where(
+        AgyaryUser.agyary_id == request.agyary_id, AgyaryUser.is_active.is_(True)))).scalars())
+    said_no = {r.user_id for r in rows if r.user_id}
+    if any(u.id not in said_no and u.id in members and u.is_active and mobed_access.has_access(settings, u)
+           for u in await funeral_requests.asked(db, request)):
+        await db.commit()
+        return "no"
+    closed = (await db.execute(
+        update(FuneralRequest).where(FuneralRequest.id == request.id, FuneralRequest.status == REQUEST_WAITING)
+        .values(status=REQUEST_DECLINED, decided_at=now, decided_by_user_id=None).returning(FuneralRequest.id)
+    )).scalar_one_or_none()
+    await db.commit()
+    await db.refresh(request)
+    if closed is None:
+        return "no"
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    agyary = await db.get(Agyary, request.agyary_id)
+    title = f"Nobody at {agyary.name} can take it"
+    await funeral_answers._tell_managers(
+        db, settings, record, request, kind=KIND_NOBODY, title=title,
+        body=f"Everyone asked at {agyary.name} said they cannot pray for {fw.departed(record)}. "
+             "You can send it to another fire temple.",
+        push=(title, f"The request from {place.name}: you can send it to another fire temple."), now=now)
+    await db.commit()
+    logger.warning("Funeral request %s: everyone asked at fire temple %s said no, so it is declined there",
+                   request.id, agyary.id)
+    return "no, and nobody at the fire temple can take it"
 
 
 async def _asked_user_id(db: AsyncSession, answer: PrayerCalloutAnswer) -> str | None:
@@ -676,93 +929,20 @@ def _text_send(a: PrayerCalloutAnswer, request: FuneralRequest, kind: str, text:
                    refs={"request": request.id, "answer": a.id}, **_to(a))
 
 
-async def _after_yes(db: AsyncSession, settings: Settings, answer: PrayerCalloutAnswer, now: datetime,
-                     client: httpx.AsyncClient | None) -> str:
-    """The first yeses, up to the number wanted, go: they get message 2 (the
-    details and the family's contact) at once, and the panthaky is told who is
-    going. A later yes gets "Enough mobeds are going this time." (it has just
-    written, so WhatsApp's 24 hours are open). A yes to a request that was
-    withdrawn or declined meanwhile gets "This prayer request was withdrawn.\""""
-    callout = await db.get(PrayerCallout, answer.callout_id)
-    request = await db.get(FuneralRequest, callout.funeral_request_id)
-    # Yeses arriving together are counted one at a time.
-    await db.refresh(request, with_for_update=True)
-    record = await db.get(FuneralRecord, request.funeral_record_id)
-    place = await db.get(FuneralPlace, record.funeral_place_id)
-    if not is_open(request):
-        await db.commit()
-        if answer.phone:
-            await fw.deliver(db, settings, [_text_send(answer, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT)],
-                             now=now, client=client)
-        return "yes, to a closed request"
-    going = (await db.execute(
-        select(func.count()).select_from(PrayerCalloutAnswer)
-        .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
-        .where(PrayerCallout.funeral_request_id == request.id, PrayerCalloutAnswer.picked_at.is_not(None))
-    )).scalar_one()
-    departed = fw.departed(record)
-    if going < wanted(record):
-        answer.picked_at = now
-        await db.commit()
-        sent = False
-        if answer.phone:
-            rows = await fw.deliver(db, settings, [fw.details_send(
-                record, place, phone=answer.phone, agyary_id=request.agyary_id,
-                refs={"request": request.id, "answer": answer.id, "to": "going"}, **_to(answer))],
-                now=now, client=client)
-            sent = any(fw.went(n) for n in rows)
-            if sent:
-                answer.details_sent_at = now
-        details = ("The details and the family's contact were sent to them on WhatsApp." if sent
-                   else "The details could not be sent to them: open the request to send them again.")
-        await _tell_panthakys(
-            db, settings, request, answer, KIND_GOING, f"{answer.name} is going",
-            f"{answer.name} said yes on WhatsApp and goes to pray for {departed}. {details}",
-            push="Open Mobed Diary to see who is going.", now=now)
-        if answer.user_id:
-            await reminders.notify(
-                db, answer.user_id, KIND_MY_YES, "You are going to pray",
-                f"You said yes on WhatsApp for the prayers for {departed} at {place.name}. "
-                + ("The details and the family's contact are on WhatsApp." if sent
-                   else "The details have not reached you yet; the panthaky has been told."),
-                agyary_id=request.agyary_id, now=now, ttl=NOTICE_TTL)
-        await db.commit()
-        return "yes, going" + ("" if sent else " (details not sent)")
-
-    await db.commit()
-    told = False
-    if answer.phone:
-        rows = await fw.deliver(db, settings, [_text_send(answer, request, fw.TYPE_ENOUGH, fw.ENOUGH_TEXT)],
-                                now=now, client=client)
-        told = any(fw.went(n) for n in rows)
-        if told:
-            answer.enough_sent_at = now
-    await _tell_panthakys(
-        db, settings, request, answer, KIND_YES, f"{answer.name} also said yes",
-        f"{answer.name} said yes on WhatsApp for the prayers for {departed}. Enough mobeds are going, so "
-        + ("they were thanked." if told else "they were not needed; the thank-you could not be sent."),
-        push=None, now=now)
-    if answer.user_id:
-        await reminders.notify(
-            db, answer.user_id, KIND_MY_YES, "Enough mobeds are going",
-            f"You said yes on WhatsApp for the prayers for {departed}. Enough mobeds are going this time. Thank you.",
-            agyary_id=request.agyary_id, now=now, ttl=NOTICE_TTL)
-    await db.commit()
-    return "yes, enough are going"
-
-
 async def _tell_panthakys(
     db: AsyncSession, settings: Settings, request: FuneralRequest, answer: PrayerCalloutAnswer, kind: str,
-    title: str, body: str, *, push: str | None, now: datetime,
+    title: str, body: str, *, push: str | None, now: datetime, skip_user_id: int | None = None,
 ) -> None:
-    """Those the request went to in the app (its confirmed panthakys, or if it
-    had none, its mobeds), whose access is on: in the app, and with ``push`` on
-    their phones too. The lock screen says who, and nothing about the departed
-    or the family."""
-    from agyary.services import funeral_requests   # here: funeral_answers reads this module
+    """The fire temple's confirmed panthakys the request reached, whose access
+    is on (not the one who answered, nor the one who marked it): in the app,
+    and with ``push`` on their phones too. The lock screen says who, and
+    nothing about the departed or the family. A fire temple with no panthaky:
+    nobody (each mobed's card shows how many are going)."""
+    from agyary.services import funeral_requests, panthaky   # here: funeral_answers reads this module
 
+    confirmed = {p.id for p in await panthaky.panthakys_of(db, settings, request.agyary_id)}
     people = [u for u in await funeral_requests.asked(db, request)
-              if u.id != answer.user_id and u.is_active and mobed_access.has_access(settings, u)]
+              if u.id in confirmed and u.id not in (answer.user_id, skip_user_id)]
     link = f"#/requests/{request.id}/callout"
     for u in people:
         await reminders.notify(db, u.id, kind, title, body, link=link, agyary_id=request.agyary_id, now=now,
@@ -778,8 +958,10 @@ async def details_again(
     db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, *,
     now: datetime | None = None, client: httpx.AsyncClient | None = None,
 ) -> dict:
-    """Message 2 again to those going whose details did not go (sending was
-    paused, say); never twice to anyone. Returns {"tried", "sent"}."""
+    """Message 2 again to those going whose details were tried and did not go
+    (sending was paused, say, before R3.1); never twice to anyone, and never
+    to someone going whose details were never tried: since R3.1 step 4 they go
+    only at All set. Returns {"tried", "sent"}."""
     now = now or _now()
     if not is_open(request):
         raise CalloutError("This request is closed, so nothing more is sent for it.")
@@ -789,7 +971,7 @@ async def details_again(
     answered = await _answers(db, request.id, lock=True)
     latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=(fw.TYPE_DETAILS,)))
     due = [a for a, _ in answered if a.picked_at is not None and a.details_sent_at is None and a.phone
-           and not fw.went(latest.get((fw.TYPE_DETAILS, str(a.id))))]
+           and (fw.TYPE_DETAILS, str(a.id)) in latest and not fw.went(latest[(fw.TYPE_DETAILS, str(a.id))])]
     if not due:
         await db.commit()
         return {"tried": 0, "sent": 0}

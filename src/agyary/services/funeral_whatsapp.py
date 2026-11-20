@@ -6,14 +6,17 @@ Four approved Utility templates, and one short text reply:
 
   1  funeral_accepted_manager  to the funeral place's managers: who accepted
   2  prayer_details_mobed_v2   to the mobed who will pray: the details and the
-                               family's contact (the accepter, and each of the
-                               first mobeds to say yes to a call-out)
+                               family's contact (the accepter; and, before R3.1
+                               step 4, each of the first mobeds to say yes to a
+                               call-out - since then nobody going gets them
+                               before All set, Step 5)
   3  prayers_mobed_family      to the family: who will pray
   4  prayer_request_mobeds     the call-out to the agyari's mobeds, at once when
                                a request is sent (and again by the panthaky's
                                hand), with "Yes, I can pray" / "Not this time"
-     "Thank you. Enough mobeds are going this time."  plain text to a mobed who
-                               said yes once enough were going
+     "Thank you. Enough mobeds are going this time. If a place opens, we may
+     ask you again."           plain text to a mobed who said yes once enough
+                               were going (a standby, R3.1)
      "This prayer request was withdrawn."  plain text to a mobed who said yes,
                                when the request is withdrawn or declined
      Both texts go only inside the 24 hours the mobed's answer opened.
@@ -76,7 +79,7 @@ OFF_WORDS = "WhatsApp messages from Mobed Diary start once Meta approves them."
 NOT_SET_UP = "WhatsApp sending is not set up on this server."
 PAUSED = "All WhatsApp sending from Mobed Diary is paused at the moment."
 NOT_FIXED = "not fixed yet"
-ENOUGH_TEXT = "Thank you. Enough mobeds are going this time."
+ENOUGH_TEXT = "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again."
 WITHDRAWN_TEXT = "This prayer request was withdrawn."
 # WhatsApp's customer-service window: plain text may answer a person only this
 # long after their last message to us.

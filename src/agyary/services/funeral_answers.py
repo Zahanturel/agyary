@@ -62,6 +62,7 @@ from agyary.models.enums import (
     ACCOUNT_FUNERAL_MANAGER,
     GEH_NAMES,
     REQUEST_ACCEPTED,
+    REQUEST_ALL_SET,
     REQUEST_DECLINED,
     REQUEST_WAITING,
     REQUEST_WITHDRAWN,
@@ -303,6 +304,8 @@ async def _lock(db: AsyncSession, request: FuneralRequest) -> FuneralRecord:
 
 
 async def _not_waiting(db: AsyncSession, user: User, request: FuneralRequest, place: FuneralPlace) -> AnswerError:
+    if request.status == REQUEST_ALL_SET:
+        return AnswerError("Enough mobeds are going for this request: it is all set.")
     if request.status in funeral_records.ACCEPTED:
         if request.accepted_by_user_id == user.id:
             return AnswerError("You have already accepted this request.")

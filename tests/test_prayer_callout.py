@@ -268,44 +268,49 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     await _signed_tap(client, LISTED, f"pca:{kias.token}:y")
     assert (await _answers(db))[MOBED].answer is None and meta.sent == []
 
-    # The first yes goes: the details at once, and the panthaky is told.
+    # The first yes goes, and the panthaky is told; nobody is sent the details at a yes (R3.1:
+    # they go only at All set). One wanted, so the request is all set.
     pushes.clear()
     await _signed_tap(client, MOBED, f"pca:{kias.token}:y")
     await _signed_tap(client, MOBED, f"pca:{kias.token}:n")        # only the first tap counts
-    details = meta.templates("prayer_details_mobed_v2")
-    assert [m["to"] for m in details] == [MOBED]
-    body = [p["text"] for p in details[0]["template"]["components"][0]["parameters"]]
-    assert body[:2] == ["Behdin Rustom Jamshed", "Doongerwadi (test)"] and body[4:] == ["Test Family", FAMILY]
+    assert meta.sent == []
     kias = (await _answers(db))[MOBED]
-    assert kias.answer == "yes" and kias.picked_at is not None and kias.details_sent_at is not None
+    assert kias.answer == "yes" and kias.how == "whatsapp" and kias.picked_at is not None
+    assert kias.details_sent_at is None
     (going,) = await _notes(db, PANTHAKY, prayer_callout.KIND_GOING)
-    assert going.title == "Er. Pervez Kias is going" and "details" in going.body
+    assert going.title == "Er. Pervez Kias is going (1 of 1)"
+    assert going.body == "Er. Pervez Kias said yes on WhatsApp for the prayers for Behdin Rustom Jamshed: 1 of 1 going."
     assert going.link == f"#/requests/{rid}/callout"
     (push,) = pushes
-    assert push["title"] == "Er. Pervez Kias is going"
+    assert push["title"] == "Er. Pervez Kias is going (1 of 1)"
     assert "Rustom" not in push["body"] and "Family" not in push["body"]
     (mine,) = await _notes(db, MOBED, prayer_callout.KIND_MY_YES)
-    assert mine.title == "You are going to pray" and FAMILY not in mine.body
+    assert mine.title == "You are going to pray" and mine.body == prayer_callout.GOING_WORDS
+    row = await db.get(FuneralRequest, rid, populate_existing=True)
+    assert row.status == "all_set" and row.all_set_at is not None and row.decided_at == row.all_set_at
 
-    # Enough are going (one wanted): the next yes is thanked, in WhatsApp's window.
+    # Enough are going (one wanted): the next yes is a standby, thanked in WhatsApp's window.
     meta.sent.clear()
     await _signed_tap(client, LISTED, f"pca:{listed.token}:y")
     assert meta.templates("prayer_details_mobed_v2") == []
     (text,) = meta.texts()
-    assert text["to"] == LISTED and text["text"]["body"] == fw.ENOUGH_TEXT
+    assert text["to"] == LISTED and text["text"]["body"] == fw.ENOUGH_TEXT == (
+        "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again.")
     listed = (await _answers(db))[LISTED]
-    assert listed.picked_at is None and listed.enough_sent_at is not None
+    assert listed.answer == "yes" and listed.picked_at is None and listed.enough_sent_at is not None
     (also,) = await _notes(db, PANTHAKY, prayer_callout.KIND_YES)
-    assert also.title == "Er. Listed also said yes" and len(pushes) == 1     # no phone notification for it
+    assert also.title == "Er. Listed also said yes" and "standby" in also.body
+    assert len(pushes) == 1     # no phone notification for it
 
     view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
     people = {p["name"]: p for p in view["asked"]}
-    assert view["going"] == 1 and view["wanted"] == 1
-    assert people["Er. Pervez Kias"]["going"] and people["Er. Pervez Kias"]["details"]["state"] == "Sent"
+    assert view["going"] == 1 and view["wanted"] == 1 and view["open"] is False
+    assert people["Er. Pervez Kias"]["going"] and people["Er. Pervez Kias"]["details"] is None
     assert not people["Er. Pervez Kias"]["may_resend"]
     assert not people["Er. Listed"]["going"] and people["Er. Listed"]["enough"]["state"] == "Sent"
     page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
-    assert page["callout"] == {"asked": 2, "yes": 2, "going": 1, "wanted": 1}
+    assert page["status"] == "all_set" and page["callout"] == {"asked": 2, "yes": 2, "going": 1, "wanted": 1}
+    assert "family_contact" not in page
     for number in (PANTHAKY, MOBED, LISTED, FAMILY, STOPPED):
         assert number not in caplog.text and number.lstrip("+") not in caplog.text
 
@@ -325,29 +330,45 @@ async def test_two_go_when_nobody_said_how_many_and_after_accepting_too(client, 
     answers = await _answers(db)
     for phone in (SECOND, MOBED, LISTED):
         await _signed_tap(client, phone, f"pca:{answers[phone].token}:y")
-    assert sorted(m["to"] for m in meta.templates("prayer_details_mobed_v2")) == sorted([SECOND, MOBED])
+    # Nobody going is sent the details at a yes (R3.1); the third is a standby.
+    assert meta.templates("prayer_details_mobed_v2") == []
     assert [m["to"] for m in meta.texts()] == [LISTED]
+    answers = await _answers(db)
+    assert [p for p in (SECOND, MOBED, LISTED) if answers[p].picked_at] == [SECOND, MOBED]
     view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
     assert view["wanted"] == prayer_callout.DEFAULT_WANTED == 2 and view["going"] == 2
+    # Accepted the old way before R3.1: it keeps its state when its places fill (D8).
+    assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "accepted"
 
 
 async def test_details_that_did_not_go_can_be_sent_again_but_never_twice(client, db, seeded, meta, pushes, live):
+    from agyary.models import Notification
     from agyary.services import guardrails
 
     rid, _, _ = await _send(client, db, seeded["agyary_id"])
     panthaky = await _as(client, PANTHAKY)
     answer = (await _answers(db))[MOBED]
-    await guardrails.pause(db, config.get_settings(), "test pause")
-    await db.commit()
     meta.sent.clear()
     await _signed_tap(client, MOBED, f"pca:{answer.token}:y")
-    assert meta.sent == []
+    again = f"/api/mobed/requests/{rid}/callout/details-again"
+    # Going since R3.1: no details were tried, so there is nothing to send again before All set.
+    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
+    (person,) = view["asked"]
+    assert person["going"] and not person["may_resend"] and person["details"] is None
+    r = await client.post(again, headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"] == {"tried": 0, "sent": 0} and meta.sent == []
+
+    # One going from before R3.1 whose details were tried while sending was paused.
+    db.add(Notification(agyary_id=seeded["agyary_id"], recipient_phone=MOBED, recipient_type="user",
+                        recipient_id=answer.user_id, notification_type=fw.TYPE_DETAILS,
+                        template_name="prayer_details_mobed_v2", status="failed",
+                        error_message=f"Not sent: {fw.PAUSED}",
+                        template_params={"request": str(rid), "answer": str(answer.id), "to": "going"}))
+    await guardrails.pause(db, config.get_settings(), "test pause")
+    await db.commit()
     view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
     (person,) = view["asked"]
     assert person["going"] and person["may_resend"] and "paused" in person["details"]["why"]
-    (going,) = await _notes(db, PANTHAKY, prayer_callout.KIND_GOING)
-    assert "could not be sent" in going.body
-    again = f"/api/mobed/requests/{rid}/callout/details-again"
     r = await client.post(again, headers=panthaky)
     assert r.status_code == 409 and "paused" in r.json()["detail"]
     await guardrails.resume(db)
@@ -366,7 +387,8 @@ async def test_withdrawing_tells_those_who_said_yes_inside_24_hours(client, db, 
     panthaky = await _as(client, PANTHAKY)
     for name, phone in (("Er. Listed", LISTED), ("Er. Second", SECOND)):
         await client.post(_list(aid), json={"name": name, "phone": phone, "agreed": True}, headers=panthaky)
-    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=1)
+    # Three wanted: two yeses leave it waiting, so the place can withdraw it.
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=3)
     answers = await _answers(db)
     await _signed_tap(client, MOBED, f"pca:{answers[MOBED].token}:y")
     await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
