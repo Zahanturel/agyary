@@ -65,6 +65,7 @@ from agyary.models import (
 from agyary.models.enums import (
     ACCESS_OFF,
     ACCESS_ON,
+    ACCESS_PENDING,
     ACCOUNT_MOBED,
     CALLOUT_NO,
     CALLOUT_YES,
@@ -185,8 +186,12 @@ async def our_mobeds(
         member_phones.add(u.phone)
         why = ("this is you" if me is not None and u.id == me.id else
                "they replied STOP to Mobed Diary" if u.phone in stopped else _off_words(u, settings))
+        # Only an approved mobed's number (D10, 21 Nov 2026: "approved mobeds ... with their
+        # numbers"): not one still waiting for the admin, and not the panthaky's own.
+        shown = (with_numbers and not (me is not None and u.id == me.id)
+                 and mobed_access.effective(settings, u) != ACCESS_PENDING)
         out.append({"key": f"u{u.id}", "kind": "app", "id": u.id, "name": u.name,
-                    "phone": u.phone if with_numbers else None,
+                    "phone": u.phone if shown else None,
                     "stopped": u.phone in stopped, "is_me": me is not None and u.id == me.id,
                     "can_message": why is None, "why_not": why})
     for c in contacts:

@@ -90,9 +90,10 @@ async def test_a_confirmed_panthaky_and_the_admin_see_every_app_mobed_with_their
     assert r.status_code == 200, r.text
     page = r.json()
     app = {m["name"]: m for m in page["mobeds"] if m["kind"] == "app"}
+    # Approved mobeds' numbers only: not one waiting for the admin, nor the panthaky's own.
     assert {name: m["phone"] for name, m in app.items()} == {
-        "Er. Hormuz Dadachanji": PANTHAKY, "Er. Pervez Kias": MOBED, "Er. Switched Off": OFF,
-        "Er. Waiting": WAITING, "Er. Stopped": STOPPED,
+        "Er. Hormuz Dadachanji": None, "Er. Pervez Kias": MOBED, "Er. Switched Off": OFF,
+        "Er. Waiting": None, "Er. Stopped": STOPPED,
     }
     assert app["Er. Hormuz Dadachanji"]["is_me"] and app["Er. Hormuz Dadachanji"]["why_not"] == "this is you"
     assert app["Er. Pervez Kias"]["can_message"] and app["Er. Pervez Kias"]["why_not"] is None
@@ -107,7 +108,7 @@ async def test_a_confirmed_panthaky_and_the_admin_see_every_app_mobed_with_their
     r = await client.get(_page(aid), headers=await _as(client, ADMIN, "Test Admin"))
     assert r.status_code == 200, r.text
     assert {m["name"]: m["phone"] for m in r.json()["mobeds"]} == {
-        **{name: m["phone"] for name, m in app.items()}, "Er. Listed": LISTED}
+        **{name: m["phone"] for name, m in app.items()}, "Er. Hormuz Dadachanji": PANTHAKY, "Er. Listed": LISTED}
     assert not any(m["is_me"] for m in r.json()["mobeds"])
     # Nothing is sent by any of it.
     assert (await db.execute(select(Notification.id))).first() is None
@@ -160,7 +161,7 @@ async def test_mobeds_of_other_fire_temples_never_appear(client, db, seeded):
     # And the other way round: the other fire temple's panthaky sees only theirs.
     page = (await client.get(_page(ids["other"]), headers=await _as(client, OTHER_PANTHAKY))).json()
     assert {m["name"]: m["phone"] for m in page["mobeds"]} == {
-        "Er. Other Panthaky": OTHER_PANTHAKY, "Er. Other Mobed": OTHER_MOBED, "Er. Other Listed": OTHER_LISTED}
+        "Er. Other Panthaky": None, "Er. Other Mobed": OTHER_MOBED, "Er. Other Listed": OTHER_LISTED}
     # Nor can one fire temple's panthaky take a mobed off another's list.
     r = await client.delete(f"{_page(aid)}/{ids['contact']}", headers=await _as(client, PANTHAKY))
     assert r.status_code == 404
