@@ -48,6 +48,7 @@ import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
 import { renderCallout } from "./screens/callout.js";
 import { renderOurMobeds } from "./screens/our_mobeds.js";
+import { renderRequestSettings } from "./screens/request_settings.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
 import { paintActBanner } from "./acting.js";
 
@@ -136,6 +137,8 @@ route("#/requests/:id", renderRequest, { parent: "#/requests", tab: "requests" }
 // A confirmed panthaky asks the agyari's mobeds on WhatsApp (D10, Step 5c).
 route("#/requests/:id/callout", renderCallout, { parent: (p) => `#/requests/${p.id}`, tab: "requests" });
 route("#/our-mobeds", renderOurMobeds, { parent: "#/menu" });
+// How a request reaches the panthaky's fire temple (R3.1), from Settings.
+route("#/prayer-requests", renderRequestSettings, { parent: "#/menu" });
 
 // The calendar is home; anything unrecognised lands there.
 setNotFound(() => navigate("#/calendar", { replace: true }));

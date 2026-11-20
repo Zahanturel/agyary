@@ -244,6 +244,11 @@ export const declineRequest = (id, reason) => post(`/requests/${id}/decline`, { 
 export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
 export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });
 export const removeOurMobed = (aid, id) => del(`/agyaries/${aid}/our-mobeds/${id}`);
+/** How a prayer request reaches the fire temple (R3.1): mode "everyone" or "panthaky_first",
+ *  and the safety net's minutes (15, 30, 60; null is Never). Its confirmed panthakys and the admin. */
+export const getRequestSettings = (aid) => get(`/agyaries/${aid}/request-settings`);
+export const putRequestSettings = (aid, mode, escalateMinutes) =>
+  put(`/agyaries/${aid}/request-settings`, { mode, escalate_minutes: escalateMinutes });
 export const getCallout = (rid) => get(`/requests/${rid}/callout`);
 export const sendCallout = (rid, who) => post(`/requests/${rid}/callout`, { who });
 /** Message 2 again to those going whose details did not go (19 Nov 2026: the first yeses go). */
