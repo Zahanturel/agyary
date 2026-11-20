@@ -7,6 +7,10 @@ account). Only a confirmed panthaky of that fire temple, or the admin, reaches
 any of it; to everyone else - a mobed there, another fire temple's panthaky -
 it answers 404, as if it did not exist. What is wrong with one field is said
 with that field's name in the X-Field header.
+
+The "Who will pray" board on a request (R3.1 step 4): the board, Ask everyone,
+I'll pray, and a call's result, for the confirmed panthakys the request reached
+and the admin.
 """
 
 from __future__ import annotations
@@ -183,3 +187,75 @@ async def details_again(request_id: int, db: AsyncSession = Depends(get_db),
     except prayer_callout.CalloutError as exc:
         raise _error(exc) from exc
     return {**await prayer_callout.view(db, settings, user, request), "done": done}
+
+
+# --- The board: "Who will pray" (R3.1 step 4) ---------------------------------------
+# Only the fire temple's confirmed panthakys whom the request reached, and the
+# admin (prayer_callout.board_request); anyone else gets the same 404 as for a
+# request that does not exist. Every action takes the request for the fire
+# temple once; "We can't take this" is the decline route (routes/funeral.py).
+async def _board_request(db: AsyncSession, user: User, request_id: int):
+    request = await prayer_callout.board_request(db, get_settings(), user, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail=NO_REQUEST)
+    return request
+
+
+@router.get("/requests/{request_id}/board")
+async def board(request_id: int, db: AsyncSession = Depends(get_db),
+                user: User = Depends(get_current_user)) -> dict:
+    """The request (no family name or number), the way, who took it, the
+    places, the standbys, the Mobeds list with numbers and each one's state,
+    whether Ask everyone can ask anyone now, and whether WhatsApp is on."""
+    request = await _board_request(db, user, request_id)
+    return await prayer_callout.board(db, get_settings(), user, request)
+
+
+@router.post("/requests/{request_id}/ask-everyone")
+async def board_ask_everyone(request_id: int, db: AsyncSession = Depends(get_db),
+                             user: User = Depends(get_current_user)) -> dict:
+    """Everyone on the list not asked yet: in the app, and on WhatsApp where
+    they can be messaged. ``done`` says how many, or why not."""
+    request = await _board_request(db, user, request_id)
+    rate_limit.enforce_key(f"prayer_board:{user.id}", max_requests=60, window_seconds=3600)
+    settings = get_settings()
+    try:
+        done = await prayer_callout.ask_from_board(db, settings, user, request)
+    except prayer_callout.CalloutError as exc:
+        raise _error(exc) from exc
+    return {**await prayer_callout.board(db, settings, user, request), "done": done}
+
+
+@router.post("/requests/{request_id}/self")
+async def board_pray_myself(request_id: int, db: AsyncSession = Depends(get_db),
+                            user: User = Depends(get_current_user)) -> dict:
+    """The panthaky's "I'll pray": a place filled with them."""
+    request = await _board_request(db, user, request_id)
+    rate_limit.enforce_key(f"prayer_board:{user.id}", max_requests=60, window_seconds=3600)
+    settings = get_settings()
+    try:
+        done = await prayer_callout.pray_myself(db, settings, user, request)
+    except prayer_callout.CalloutError as exc:
+        raise _error(exc) from exc
+    return {**await prayer_callout.board(db, settings, user, request), "done": done}
+
+
+class CallResultIn(BaseModel):
+    # Checked by prayer_callout.call_result, so a wrong value is said in plain
+    # words (a 400 naming the field), never as a 422.
+    key: Any = None        # "u<user id>" or "c<contact id>", from the board's Mobeds list
+    result: Any = None     # "going", "not_going" or "no_answer"
+
+
+@router.post("/requests/{request_id}/call-result")
+async def board_call_result(request_id: int, payload: CallResultIn, db: AsyncSession = Depends(get_db),
+                            user: User = Depends(get_current_user)) -> dict:
+    """What a call to one of the fire temple's mobeds came to."""
+    request = await _board_request(db, user, request_id)
+    rate_limit.enforce_key(f"prayer_board:{user.id}", max_requests=60, window_seconds=3600)
+    settings = get_settings()
+    try:
+        done = await prayer_callout.call_result(db, settings, user, request, payload.key, payload.result)
+    except prayer_callout.CalloutError as exc:
+        raise _error(exc) from exc
+    return {**await prayer_callout.board(db, settings, user, request), "done": done}

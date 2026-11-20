@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -288,3 +289,230 @@ async def test_asking_everyone_asks_nobody_once_the_request_is_closed(client, db
     done = await prayer_callout.ask_everyone(db, config.get_settings(), rid)
     assert done["state"] == "closed" and "withdrew this request" in done["message"]
     assert pushes == [] and meta.sent == []
+
+
+# --- The board's routes ---------------------------------------------------------------
+
+def _b(rid, what=""):
+    return f"/api/mobed/requests/{rid}/board" if not what else f"/api/mobed/requests/{rid}/{what}"
+
+
+async def _first(client, db, aid, *, minutes=None, mgr=None, **changes) -> tuple[int, dict]:
+    """A request sent to Goti Adarian in Come to me first: only the panthaky has it."""
+    from tests.test_prayer_callout import _way
+
+    await _way(db, aid, "panthaky_first", minutes)
+    rid, res, mgr = await _send(client, db, aid, mgr, **changes)
+    assert res["callout"]["state"] == "panthaky_first"
+    return rid, mgr
+
+
+async def _uid(db, phone) -> int:
+    from agyary.models import User
+
+    return (await db.execute(select(User.id).where(User.phone == phone))).scalar_one()
+
+
+async def test_only_the_panthakys_it_reached_and_the_admin_reach_the_board(client, db, seeded, pushes, monkeypatch):
+    from sqlalchemy import update
+
+    from agyary.models import Agyary, AgyaryUser
+    from tests.funeral_helpers import agyari, member
+
+    monkeypatch.setenv("ADMIN_PHONES", ADMIN)
+    config.get_settings.cache_clear()
+    aid = seeded["agyary_id"]
+    goti = await db.get(Agyary, aid)
+    claimed = await member(db, goti, "+919822200112", name="Er. Says Panthaky")
+    await db.execute(update(AgyaryUser).where(AgyaryUser.user_id == claimed.id)
+                     .values(claimed_role="panthaky", claimed_at=datetime.now(timezone.utc)))
+    other = await agyari(db, "Other Agyari (test)", None)
+    await member(db, other, "+919822200099", role="panthaky", name="Er. Other Panthaky")
+    await db.commit()
+    rid, mgr = await _first(client, db, aid)
+    # A panthaky confirmed only after the request was sent: it did not reach them.
+    late = await member(db, goti, "+919822200113", role="panthaky", name="Er. Late Panthaky")
+    await db.commit()
+
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.get(_b(rid), headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert (await client.get(_b(rid), headers=await _as(client, ADMIN))).status_code == 200
+    actions = (("GET", _b(rid), None), ("POST", _b(rid, "ask-everyone"), {}), ("POST", _b(rid, "self"), {}),
+               ("POST", _b(rid, "call-result"), {"key": f"u{late.id}", "result": "no_answer"}))
+    for phone in (MOBED, "+919822200099", "+919822200112", "+919822200113"):
+        headers = await _as(client, phone)
+        for method, path, body in actions:
+            r = await client.request(method, path, json=body, headers=headers)
+            assert r.status_code == 404 and r.json()["detail"] == "That request could not be found.", (phone, path)
+    for method, path, body in actions:
+        r = await client.request(method, path, json=body, headers=mgr)
+        assert r.status_code == 403, (path, r.text)       # a manager's account reaches no mobed route
+        r = await client.request(method, path.replace(f"/{rid}/", "/99999/"), json=body, headers=panthaky)
+        assert r.status_code == 404, path                  # nor does a request that does not exist
+    assert (await _request(db, rid)).taken_at is None      # nothing anyone was refused took it
+
+
+async def test_the_board_shows_the_request_without_the_family_and_the_numbers_to_the_panthaky(
+    client, db, seeded, pushes,
+):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _listed(client, aid, panthaky, ("Er. Listed", LISTED))
+    rid, _ = await _first(client, db, aid, mobeds_wanted=2)
+    r = await client.get(_b(rid), headers=panthaky)
+    board = r.json()
+    assert FAMILY not in r.text and FAMILY[3:] not in r.text and "Test Family" not in r.text
+    assert board["prayed_name"] == "Behdin Rustom Jamshed" and board["place"]["name"] == "Doongerwadi (test)"
+    assert board["geh_saarnu"]["text"].endswith("Havan geh") and board["uthamna"]["time"] == "16:00"
+    assert board["mobeds_wanted"] == 2 and board["wanted"] == 2 and board["going"] == 0
+    assert board["way"] == "panthaky_first" and board["taken"] is None and board["status"] == "waiting"
+    assert board["places"] == [] and board["standbys"] == [] and board["may_pray"] is True
+    assert board["ask_everyone"] == {"can": True, "why_not": None}
+    assert board["whatsapp"] == {"on": False, "why_not": fw.OFF_WORDS}
+    by_name = {m["name"]: m for m in board["mobeds"]}
+    assert set(by_name) == {"Er. Pervez Kias", "Er. Listed"}           # not the panthaky themself
+    assert by_name["Er. Pervez Kias"]["phone"] == MOBED and by_name["Er. Listed"]["phone"] == LISTED
+    assert by_name["Er. Pervez Kias"]["state"] == "not_asked" and by_name["Er. Pervez Kias"]["can_ask"] is True
+    # WhatsApp is off: the one added by hand cannot be asked now, the app mobed can (in the app).
+    assert by_name["Er. Listed"]["state"] == "not_asked" and by_name["Er. Listed"]["can_ask"] is False
+
+
+async def test_ill_pray_fills_a_place_and_takes_the_request_once(client, db, seeded, pushes):
+    rid, _ = await _first(client, db, seeded["agyary_id"], mobeds_wanted=2)
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == "You are going: 1 of 2."
+    board = r.json()
+    assert [(p["name"], p["how"]) for p in board["places"]] == [("Er. Hormuz Dadachanji", "self")]
+    assert board["taken"]["by"] == "Er. Hormuz Dadachanji" and board["going"] == 1
+    (row,) = (await _answers(db)).values()
+    uid = row.user_id
+    assert row.answer == "yes" and row.how == "self" and row.recorded_by_user_id == uid and row.picked_at
+    request = await _request(db, rid)
+    assert request.taken_by_user_id == uid and request.status == "waiting"
+    r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "You are already going."
+    assert (await _request(db, rid)).taken_at == request.taken_at
+    # They are not told of their own place.
+    assert await _notes(db, PANTHAKY, prayer_callout.KIND_GOING) == []
+
+
+async def test_a_calls_result_going_not_going_or_no_answer(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _listed(client, aid, panthaky, ("Er. Listed", LISTED), ("Er. Second", SECOND))
+    rid, _ = await _first(client, db, aid, mobeds_wanted=2)
+    board = (await client.get(_b(rid), headers=panthaky)).json()
+    keys = {m["name"]: m["key"] for m in board["mobeds"]}
+    url = _b(rid, "call-result")
+
+    # No answer: nothing kept, but the panthaky has acted.
+    r = await client.post(url, json={"key": keys["Er. Listed"], "result": "no_answer"}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"]["message"] == "Noted: Er. Listed did not answer."
+    assert await _answers(db) == {} and (await _request(db, rid)).taken_at is not None
+    taken = (await _request(db, rid)).taken_at
+
+    # Not going: a no by phone.
+    r = await client.post(url, json={"key": keys["Er. Second"], "result": "not_going"}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"]["message"] == "Noted: Er. Second cannot pray this time."
+    second = (await _answers(db))[SECOND]
+    assert second.answer == "no" and second.how == "phone" and second.contact_id and second.recorded_by_user_id
+
+    # Going: a place, by phone; the app mobed is told in the app, nobody on WhatsApp.
+    pushes.clear()
+    r = await client.post(url, json={"key": keys["Er. Pervez Kias"], "result": "going"}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"]["message"] == "Er. Pervez Kias is going: 1 of 2."
+    kias = (await _answers(db))[MOBED]
+    assert kias.answer == "yes" and kias.how == "phone" and kias.picked_at and kias.recorded_by_user_id
+    assert [(p["name"], p["how"]) for p in r.json()["places"]] == [("Er. Pervez Kias", "phone")]
+    states = {m["name"]: m["state"] for m in r.json()["mobeds"]}
+    assert states == {"Er. Pervez Kias": "going", "Er. Listed": "not_asked", "Er. Second": "said_no"}
+    (mine,) = await _notes(db, MOBED, prayer_callout.KIND_MY_YES)
+    assert mine.body == prayer_callout.GOING_WORDS
+    assert meta.sent == [] and pushes == []        # the panthaky who marked it is not told of it
+    assert (await _request(db, rid)).taken_at == taken
+
+    # Their first answer counts: a second mark is "already answered".
+    r = await client.post(url, json={"key": keys["Er. Second"], "result": "going"}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Second has already said they cannot pray this time."
+    r = await client.post(url, json={"key": keys["Er. Pervez Kias"], "result": "not_going"}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Pervez Kias is already going."
+
+    # Someone not on the list, a wrong result, or the panthaky themself: refused in plain words.
+    me = await _uid(db, PANTHAKY)
+    for body, field in (({"key": "u99999", "result": "going"}, "key"), ({"key": "x1", "result": "going"}, "key"),
+                        ({"key": keys["Er. Listed"], "result": "maybe"}, "result"),
+                        ({"key": f"u{me}", "result": "going"}, "key")):
+        r = await client.post(url, json=body, headers=panthaky)
+        assert r.status_code == 400 and r.headers["X-Field"] == field, (body, r.text)
+
+
+async def test_ask_everyone_from_the_board_takes_it_and_then_has_nobody_left(client, db, seeded, pushes):
+    rid, _ = await _first(client, db, seeded["agyary_id"])
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_b(rid, "ask-everyone"), json={}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["asked_in_app"] == 1 and r.json()["taken"]["by"] == "Er. Hormuz Dadachanji"
+    assert r.json()["ask_everyone"]["can"] is False
+    assert {m["name"]: m["state"] for m in r.json()["mobeds"]} == {"Er. Pervez Kias": "asked_app"}
+    assert await _recipients(db, rid) == {PANTHAKY, MOBED}
+    r = await client.post(_b(rid, "ask-everyone"), json={}, headers=panthaky)
+    assert r.status_code == 409 and "asked already" in r.json()["detail"]
+
+
+async def test_every_board_action_takes_it_once_and_the_safety_net_then_never_fires(client, db, seeded, meta,
+                                                                                   pushes, live):
+    from datetime import timedelta
+
+    from agyary.models import Agyary, User
+    from agyary.services import prayer_timers
+    from tests.funeral_helpers import member
+
+    aid = seeded["agyary_id"]
+    second = await member(db, await db.get(Agyary, aid), "+919822200113", role="panthaky",
+                          name="Er. Second Panthaky")
+    await db.commit()
+    rid, _ = await _first(client, db, aid, minutes=15)
+    sent_at = (await _request(db, rid)).sent_at
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    settings = config.get_settings()
+    kias = await _uid(db, MOBED)
+
+    async def no_answer(user_id):
+        async with factory() as s:
+            user, request = await s.get(User, user_id), await s.get(FuneralRequest, rid)
+            return await prayer_callout.call_result(s, settings, user, request, f"u{kias}", "no_answer")
+
+    first = await _uid(db, PANTHAKY)
+    done = await asyncio.gather(no_answer(first), no_answer(second.id))
+    assert [d["outcome"] for d in done] == ["no answer", "no answer"]
+    request = await _request(db, rid)
+    assert request.taken_at is not None and request.taken_by_user_id in (first, second.id)
+    took = (request.taken_at, request.taken_by_user_id)
+    # Later actions do not take it again.
+    r = await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200, r.text
+    request = await _request(db, rid)
+    assert (request.taken_at, request.taken_by_user_id) == took
+    # The panthaky acted: the safety net never asks everyone.
+    meta.sent.clear()
+    assert await prayer_timers.run(db, sent_at + timedelta(minutes=30), settings, None) == 0
+    assert meta.sent == [] and (await _request(db, rid)).escalated_at is None
+
+
+async def test_once_all_set_the_board_reads_so_and_takes_no_more(client, db, seeded, pushes):
+    rid, _ = await _first(client, db, seeded["agyary_id"], mobeds_wanted=1)
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+    assert r.json()["done"]["message"] == "You are going. All the places are filled: it is all set."
+    board = r.json()
+    assert board["status"] == "all_set" and board["open"] is False and board["all_set_at"]
+    all_set_words = "Enough mobeds are going for this request: it is all set."
+    assert board["ask_everyone"] == {"can": False, "why_not": all_set_words}
+    assert FAMILY[3:] not in r.text and "Test Family" not in r.text
+    key = board["mobeds"][0]["key"]
+    for path, body in (("ask-everyone", {}), ("self", {}), ("call-result", {"key": key, "result": "going"})):
+        r = await client.post(_b(rid, path), json=body, headers=panthaky)
+        assert r.status_code == 409 and r.json()["detail"] == all_set_words, path

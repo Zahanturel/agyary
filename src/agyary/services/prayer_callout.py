@@ -1127,6 +1127,244 @@ async def _tell_panthakys(
                                      url="/mobed" + link, tag=f"callout-{kind}-{answer.id}")
 
 
+# --- The board: "Who will pray: n of N" (R3.1 step 4) --------------------------------
+
+async def board_request(db: AsyncSession, settings: Settings, user: User, request_id: int) -> FuneralRequest | None:
+    """The request, if this person may use its board: a confirmed panthaky of
+    the fire temple it was sent to whom the request reached, or the admin.
+    None otherwise (a 404, whatever the reason: a mobed, another fire
+    temple's panthaky, someone who only says they are the panthaky)."""
+    request = await db.get(FuneralRequest, request_id)
+    if request is None:
+        return None
+    if guardrails.is_admin(settings, user.phone):
+        return request
+    if not await is_confirmed_panthaky(db, request.agyary_id, user.id):
+        return None
+    reached = (await db.execute(select(FuneralRequestRecipient.user_id).where(
+        FuneralRequestRecipient.funeral_request_id == request.id, FuneralRequestRecipient.user_id == user.id,
+    ))).first()
+    return request if reached is not None else None
+
+
+# A person's state for this request, on the board's Mobeds list.
+NOT_ASKED, ASKED_APP, ASKED_WHATSAPP = "not_asked", "asked_app", "asked_whatsapp"
+SAID_NO, GOING, STANDBY = "said_no", "going", "standby"
+
+
+def _person(row: PrayerCalloutAnswer | None, latest: dict, in_app: bool) -> dict:
+    asked_n = latest.get((fw.TYPE_CALLOUT, str(row.id))) if row is not None else None
+    if row is not None and row.picked_at is not None:
+        state = GOING
+    elif row is not None and row.answer == CALLOUT_YES:
+        state = STANDBY
+    elif row is not None and row.answer == CALLOUT_NO:
+        state = SAID_NO
+    elif asked_n is not None:
+        state = ASKED_WHATSAPP
+    else:
+        state = ASKED_APP if in_app else NOT_ASKED
+    return {
+        "state": state, "in_app": in_app, "whatsapp": _state(asked_n),
+        "how": row.how if row is not None and row.answer is not None else None,
+        "answered_at": row.answered_at.isoformat() if row is not None and row.answered_at else None,
+    }
+
+
+def _place(row: PrayerCalloutAnswer, at: datetime | None) -> dict:
+    return {"key": _answer_key(row), "name": row.name, "how": row.how, "at": at.isoformat() if at else None}
+
+
+async def board(db: AsyncSession, settings: Settings, user: User, request: FuneralRequest) -> dict:
+    """The board, for board_request's people only: the request (no family
+    name or number), the way, who took it, the places and the standbys (in
+    the order they said yes), the fire temple's Mobeds list with their numbers
+    (as on the Mobeds page) and each one's state for this request, whether Ask
+    everyone would ask anyone now, and whether WhatsApp sending is on."""
+    await db.refresh(request)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    agyary = await db.get(Agyary, request.agyary_id)
+    rows = await _request_rows(db, request.id)
+    latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=fw.CALLOUT_TYPES))
+    reached = set((await db.execute(select(FuneralRequestRecipient.user_id).where(
+        FuneralRequestRecipient.funeral_request_id == request.id))).scalars())
+    places = sorted((r for r in rows if r.picked_at is not None), key=lambda r: (r.picked_at, r.id))
+    standbys = sorted((r for r in rows if r.answer == CALLOUT_YES and r.picked_at is None),
+                      key=lambda r: (r.answered_at, r.id))
+    waiting = request.status == REQUEST_WAITING
+    plan = await _plan(db, settings, request, agyary, by_user=user) if waiting else None
+    askable = ({m["key"] for m in plan.whatsapp} | {f"u{u.id}" for u in plan.new_recipients}
+               | {m["key"] for m, _ in plan.app_rows}) if plan is not None else set()
+    people = await our_mobeds(db, settings, agyary.id, me=user, with_numbers=True)
+    app_ids = [m["id"] for m in people if m["kind"] == "app"]
+    phones = dict((await db.execute(select(User.id, User.phone).where(User.id.in_(app_ids)))).all()) \
+        if app_ids else {}
+    mobeds = []
+    for m in people:
+        if m["is_me"]:
+            continue
+        app = m["kind"] == "app"
+        row = _find(rows, m["key"], phones.get(m["id"]) if app else m["phone"])
+        mobeds.append({**m, **_person(row, latest, app and m["id"] in reached), "can_ask": m["key"] in askable})
+    taker = await db.get(User, request.taken_by_user_id) if request.taken_by_user_id else None
+    if plan is None:
+        ask = {"can": False, "why_not": closed_words(request, place.name)}
+    else:
+        ask = {"can": plan.anything, "why_not": None if plan.anything else _nobody_words(agyary, plan)}
+    return {
+        "request_id": request.id,
+        "status": request.status,
+        "open": waiting,
+        "agyari": {"id": agyary.id, "name": agyary.name},
+        "prayed_name": fw.departed(record),
+        "place": {"name": place.name, "kind": place.kind, "city": place.city},
+        "geh_saarnu": {"date": record.geh_saarnu_date.isoformat(), "geh": record.geh_saarnu_geh,
+                       "text": fw.geh_saarnu_text(record)} if record.geh_saarnu_date else None,
+        "uthamna": {"date": record.uthamna_date.isoformat(),
+                    "time": record.uthamna_time.strftime("%H:%M") if record.uthamna_time else None,
+                    "text": fw.uthamna_text(record)} if record.uthamna_date else None,
+        "mobeds_wanted": record.mobeds_wanted,
+        "wanted": wanted(record),
+        "going": len(places),
+        "way": await request_settings.way_for(db, settings, agyary),
+        "taken": {"at": request.taken_at.isoformat(), "by": taker.name if taker else None}
+        if request.taken_at else None,
+        "all_set_at": request.all_set_at.isoformat() if request.all_set_at else None,
+        "places": [_place(r, r.picked_at) for r in places],
+        "standbys": [_place(r, r.answered_at) for r in standbys],
+        "mobeds": mobeds,
+        "ask_everyone": ask,
+        "may_pray": waiting and await is_confirmed_panthaky(db, agyary.id, user.id),
+        "whatsapp": await fw.status(db, settings),
+    }
+
+
+async def _lock_waiting(db: AsyncSession, request: FuneralRequest) -> None:
+    """The request locked for a board action, which only a waiting request takes."""
+    await db.refresh(request, with_for_update=True)
+    if request.status != REQUEST_WAITING:
+        record = await db.get(FuneralRecord, request.funeral_record_id)
+        place = await db.get(FuneralPlace, record.funeral_place_id)
+        raise CalloutError(closed_words(request, place.name))
+
+
+async def ask_from_board(
+    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, *, now: datetime | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> dict:
+    """The board's "Ask everyone": ask_everyone, taking the request. Refused in
+    plain words when it can ask nobody (and then nothing is taken)."""
+    done = await ask_everyone(db, settings, request.id, by_user=user, take=True, now=now, client=client)
+    if done["state"] in ("closed", "off", "not_now", "none") or done["message"] == ASK_FAILED:
+        raise CalloutError(done["message"])
+    return done
+
+
+def _already(name: str, row: PrayerCalloutAnswer, *, me: bool = False) -> str:
+    if row.picked_at is not None:
+        return "You are already going." if me else f"{name} is already going."
+    if row.answer == CALLOUT_YES:
+        return "You are on standby already." if me else f"{name} already said yes and is on standby."
+    return "You have already answered for yourself." if me else f"{name} has already said they cannot pray this time."
+
+
+def _done_words(row: PrayerCalloutAnswer, request: FuneralRequest, going: int, want: int, *, me: bool) -> str:
+    who = "You are" if me else f"{row.name} is"
+    if row.picked_at is None:
+        return f"Enough mobeds are going already, so {'you are' if me else row.name + ' is'} on standby."
+    if request.status == REQUEST_ALL_SET:
+        return f"{who} going. All the places are filled: it is all set."
+    return f"{who} going: {going} of {want}."
+
+
+async def pray_myself(
+    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, *, now: datetime | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> dict:
+    """The panthaky's "I'll pray": their own row, a yes "self", through
+    ``fill``; it takes the request. Only a confirmed panthaky of the fire
+    temple (an admin who is not one has no place to fill)."""
+    now = now or _now()
+    if not await is_confirmed_panthaky(db, request.agyary_id, user.id):
+        raise CalloutError("Only the fire temple's panthaky can fill a place from here.")
+    await _lock_waiting(db, request)
+    row = _find(await _request_rows(db, request.id), f"u{user.id}", user.phone)
+    if row is not None and row.answer is not None:
+        raise CalloutError(_already(user.name, row, me=True))
+    if row is None:
+        callout = await _callout_of(db, request, sent_by_user_id=user.id, now=now)
+        row = _new_row(callout, name=user.name, phone=user.phone, how=HOW_SELF, user_id=user.id)
+        db.add(row)
+        await db.flush()
+    await take_request(db, request, user, now)
+    outcome = await _answer(db, settings, request, row, True, how=HOW_SELF, by_user=user, now=now, client=client)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    await db.refresh(request)
+    await db.refresh(row)
+    logger.info("Request %s: user %s will pray (%s)", request.id, user.id, outcome)
+    return {"outcome": outcome,
+            "message": _done_words(row, request, await _going(db, request.id), wanted(record), me=True)}
+
+
+CALL_RESULTS = ("going", "not_going", "no_answer")
+_KEY = re.compile(r"^[uc][0-9]{1,18}$")
+
+
+async def call_result(
+    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, key, result, *,
+    now: datetime | None = None, client: httpx.AsyncClient | None = None,
+) -> dict:
+    """What a phone call to one of the fire temple's mobeds came to, marked
+    by the panthaky when back in the app: "going" (a yes by phone, recorded
+    by them, through ``fill``), "not_going" (a no by phone), or "no_answer"
+    (nothing kept). Any of them takes the request. Only someone on the fire
+    temple's list, and only their first answer (an answer on WhatsApp or in
+    the app first is "already answered")."""
+    now = now or _now()
+    if result not in CALL_RESULTS:
+        raise CalloutError("Please say whether they are going, not going, or did not answer.", status=400,
+                           field="result")
+    if not isinstance(key, str) or not _KEY.match(key):
+        raise CalloutError("That mobed could not be found on the list. Please open the board again.", status=400,
+                           field="key")
+    await _lock_waiting(db, request)
+    agyary = await db.get(Agyary, request.agyary_id)
+    m = next((m for m in await our_mobeds(db, settings, agyary.id, me=user) if m["key"] == key), None)
+    if m is None:
+        raise CalloutError(f"That mobed is not on {agyary.name}'s list. Please open the board again.", status=400,
+                           field="key")
+    if m["is_me"]:
+        raise CalloutError("That is you: tap I'll pray to fill a place yourself.", status=400, field="key")
+    if result == "no_answer":
+        await take_request(db, request, user, now)
+        await db.commit()
+        logger.info("Request %s: user %s called %s, no answer", request.id, user.id, key)
+        return {"outcome": "no answer", "message": f"Noted: {m['name']} did not answer."}
+    app = m["kind"] == "app"
+    phone = (await db.get(User, m["id"])).phone if app else m["phone"]
+    row = _find(await _request_rows(db, request.id), key, phone)
+    if row is not None and row.answer is not None:
+        raise CalloutError(_already(m["name"], row))
+    if row is None:
+        callout = await _callout_of(db, request, sent_by_user_id=user.id, now=now)
+        row = _new_row(callout, name=m["name"], phone=phone, how=HOW_PHONE, user_id=m["id"] if app else None,
+                       contact_id=None if app else m["id"])
+        db.add(row)
+        await db.flush()
+    await take_request(db, request, user, now)
+    yes = result == "going"
+    outcome = await _answer(db, settings, request, row, yes, how=HOW_PHONE, by_user=user, now=now, client=client)
+    logger.info("Request %s: user %s marked %s %s by phone (%s)", request.id, user.id, key, result, outcome)
+    if not yes:
+        return {"outcome": outcome, "message": f"Noted: {m['name']} cannot pray this time."}
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    await db.refresh(request)
+    await db.refresh(row)
+    return {"outcome": outcome,
+            "message": _done_words(row, request, await _going(db, request.id), wanted(record), me=False)}
+
+
 # --- Afterwards -------------------------------------------------------------------
 
 async def details_again(
