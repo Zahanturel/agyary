@@ -22,6 +22,9 @@ from agyary.models.enums import (
     BEHDIN_LANGUAGES,
     CALENDAR_SYSTEMS,
     LOCATION_SOURCES,
+    REQUEST_ESCALATE_MINUTES,
+    REQUEST_MODE_EVERYONE,
+    REQUEST_MODES,
     sql_in,
 )
 
@@ -33,6 +36,13 @@ LOCATION_CHECK = (
     "(latitude IS NULL AND longitude IS NULL AND location_source IS NULL)"
     " OR (latitude IS NOT NULL AND longitude IS NOT NULL AND location_source IS NOT NULL"
     " AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)"
+)
+
+# Never (NULL), or one of the safety net's times. The migration (a9b0c1d2e3f6)
+# uses this same text.
+ESCALATE_CHECK = (
+    "request_escalate_minutes IS NULL OR request_escalate_minutes IN"
+    f" ({', '.join(str(m) for m in REQUEST_ESCALATE_MINUTES)})"
 )
 
 
@@ -81,6 +91,16 @@ class Agyary(Base):
     )
     location_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # How a prayer request from a funeral place reaches this fire temple (D10,
+    # changed 21 Nov 2026; R3.1), chosen on Settings -> Prayer requests by its
+    # confirmed panthaky or the admin: "everyone" (every mobed on its list is
+    # asked on WhatsApp at Send) or "panthaky_first" (only the panthaky is
+    # told). The safety net: if the panthaky has not acted in this many minutes
+    # (15, 30 or 60), all its mobeds are asked; NULL is Never, the default. The
+    # minutes are kept whatever the mode, and matter only in "panthaky_first".
+    request_mode: Mapped[str] = mapped_column(String(20), server_default=REQUEST_MODE_EVERYONE)
+    request_escalate_minutes: Mapped[int | None] = mapped_column(SmallInteger)
+
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -93,6 +113,8 @@ class Agyary(Base):
         CheckConstraint(f"status IN ({sql_in(AGYARY_STATUSES)})", name="status"),
         CheckConstraint(f"location_source IN ({sql_in(LOCATION_SOURCES)})", name="location_source"),
         CheckConstraint(LOCATION_CHECK, name="location"),
+        CheckConstraint(f"request_mode IN ({sql_in(REQUEST_MODES)})", name="request_mode"),
+        CheckConstraint(ESCALATE_CHECK, name="request_escalate_minutes"),
         Index(
             "uq_agyaries_wa_phone_number_id",
             "wa_phone_number_id",

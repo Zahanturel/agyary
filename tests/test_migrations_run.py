@@ -495,3 +495,35 @@ async def test_the_funeral_book_migration_holds_its_rules_and_comes_off_cleanly(
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_request_settings_migration_holds_its_rules_and_comes_off_cleanly():
+    """a9b0c1d2e3f6 (R3.1, 21 Nov 2026): a fire temple from before reads
+    "everyone" and Never; the way is "everyone" or "panthaky_first", the safety
+    net Never or 15, 30 or 60 minutes, under either way; the downgrade takes
+    both columns off and keeps the fire temples."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "f8a9b0c1d2e5"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        _ok(_alembic("upgrade", "head"))
+        assert await _scratch_execute("SELECT request_mode, request_escalate_minutes FROM agyaries") == [
+            ("everyone", None)]
+        change = "UPDATE agyaries SET request_mode = :m, request_escalate_minutes = :e"
+        for ok in ({"m": "panthaky_first", "e": 15}, {"m": "panthaky_first", "e": 60},
+                   {"m": "everyone", "e": 30}, {"m": "panthaky_first", "e": None}):
+            await _scratch_execute(change, ok)
+        for bad in ({"m": "whoever", "e": None}, {"m": "panthaky_first", "e": 45}, {"m": "everyone", "e": 0}):
+            await _refused(change, bad, bad)
+        await _refused("UPDATE agyaries SET request_mode = NULL", {}, "no way at all", needle="not-null")
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'agyaries'::regclass")
+        assert {"ck_agyaries_request_mode", "ck_agyaries_request_escalate_minutes"} <= {n for (n,) in names}
+
+        _ok(_alembic("downgrade", "f8a9b0c1d2e5"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'agyaries'")
+        assert not {"request_mode", "request_escalate_minutes"} & {c for (c,) in cols}
+        assert await _scratch_execute("SELECT name FROM agyaries") == [("Agyari (test)",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

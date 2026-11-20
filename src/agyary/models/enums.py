@@ -39,6 +39,16 @@ AGYARY_STATUSES = ("unclaimed", "active")
 LOCATION_TOWN, LOCATION_PIN = "town", "pin"
 LOCATION_SOURCES = (LOCATION_TOWN, LOCATION_PIN)
 
+# How a prayer request from a funeral place reaches a fire temple (DECISIONS D10,
+# changed 21 Nov 2026; R3.1), set by its confirmed panthaky or the admin:
+# "everyone" - every mobed on its list is asked on WhatsApp at Send (the default,
+# and what was live before) - or "panthaky_first" - only the panthaky is told.
+# The safety net in "panthaky_first": after this many minutes without the
+# panthaky acting, all its mobeds are asked; none (NULL) is Never, the default.
+REQUEST_MODE_EVERYONE, REQUEST_MODE_PANTHAKY_FIRST = "everyone", "panthaky_first"
+REQUEST_MODES = (REQUEST_MODE_EVERYONE, REQUEST_MODE_PANTHAKY_FIRST)
+REQUEST_ESCALATE_MINUTES = (15, 30, 60)
+
 USER_ROLES = ("panthaky", "mobed", "caretaker")
 # What an account is (DECISIONS D10): a mobed's (or panthaky's), or a Doongerwadi
 # or prayer hall manager's. One kind per person. Every account from before this
