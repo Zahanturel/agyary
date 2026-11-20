@@ -250,6 +250,39 @@ Decided, not built. The research, the sources and the full design are in
     to that funeral place. Recording a death picks the family from it and suggests their agyari.
 - **Requests is a fourth bottom tab** for mobeds, beside Machi, Calendar and Behdins, with the
   red count of requests waiting for them (changes D7's three tabs).
+- **Changed 21 Nov 2026 (owner, during the guided run): the panthaky chooses how requests reach
+  their agyari, and nothing is confirmed until enough mobeds are going.** Design and build steps:
+  `docs/phase2-requests-redesign.md` (release R3.1). Not built yet; until it is, the 19 Nov rules
+  above stay live.
+  - **Two ways, set once by the panthaky** (Settings -> Prayer requests): **Everyone at once** (the
+    WhatsApp call-out goes at Send, as on 19 Nov) or **Come to me first** (only the panthaky is
+    told; they ask everyone on WhatsApp with one tap, call or WhatsApp single mobeds from the app,
+    or say "I'll pray"). An agyari whose panthaky has not chosen, or that has no panthaky in the
+    app, is "Everyone at once".
+  - **Safety net, off unless the panthaky turns it on:** in "Come to me first", the panthaky may
+    set "if I haven't acted in 15 min / 30 min / 1 hour, ask all our mobeds on WhatsApp". The
+    default is **Never**.
+  - **One "Who will pray: n of N" board** on the request, the same in both ways. A place fills by
+    a WhatsApp Yes, by "I'll pray", or by the panthaky marking a mobed "Going" after a call. The
+    panthaky's first action takes the request for the agyari: there is no separate Accept.
+    "We can't take this" declines.
+  - **All set, automatically, when the places are full** (or when the panthaky taps "Confirm with
+    who's going" if short). Only then does anyone get the family's contact, and then everyone is
+    connected at once: the family gets the mobeds' and the panthaky's names and numbers with the
+    times; each mobed going gets the family's contact, the place and times, the panthaky and the
+    other mobeds going; the panthaky gets who is going and the family's contact; the Doongerwadi
+    gets the agyari, the panthaky's contact and the mobeds' names. This replaces "the first Yeses
+    get the details at once" and "the family number only to the one who accepted": the family
+    agreed to share with that agyari, and these are the people praying for it.
+  - **The family goes into the panthaky's own book and each praying app mobed's own book**
+    (each private, D2; reminders off, D4), with the days on each one's calendar and the memorial
+    one tap away.
+  - **A "Mobeds" page in the panthaky's diary:** the agyari's approved mobeds in the app appear on
+    it by themselves, with their numbers, and the panthaky adds others by name and number (with
+    the consent tick, as for "Our mobeds"). Each has Call and WhatsApp buttons. Only that agyari's
+    confirmed panthakys see it; mobeds of other agyaries stay invisible.
+  - New WhatsApp templates are needed for the all-set messages; sending stays off until Meta
+    approves them, with STOP, the pause switch, the caps and D9 as before.
 
 ## Not decided yet
 

@@ -11,6 +11,10 @@ working in this checkout, and each is checked before the next starts.
   - **R1:** Step 1 (agyari locations) + Step 2 ("mobed or panthaky" claim).
   - **R2:** Step 3 (Doongerwadis and managers: sign-up, the owner's approval, admin counts).
   - **R3:** Steps 4-5 (record a death, send to an agyari, the Requests tab, accept).
+  - **R3.1 (owner, 21 Nov 2026):** the panthaky chooses how requests reach their agyari
+    (everyone at once, or to the panthaky first), one "Who will pray" board, and "All set" that
+    connects everyone once enough mobeds are going. Design and steps:
+    `docs/phase2-requests-redesign.md`.
   - **R4:** the behdin (family) side. To be discussed with the owner before anything is planned.
   - The owner is asked before each push.
 - **Location:** a map to drop a pin (Leaflet with OpenStreetMap, free), **"I'm at the agyari now"**

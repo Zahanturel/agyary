@@ -1,0 +1,206 @@
+# R3.1: how a prayer request reaches an agyari (redesign)
+
+The owner's idea of 21 Nov 2026, raised during the guided run of Phase 2, and the answers to
+the questions that followed. The decisions are recorded in `docs/DECISIONS.md` (D10, "Changed
+21 Nov 2026"). Not built yet: until it is, the 19 Nov rules stay live (the call-out at Send,
+the first Yeses get the details, the panthaky accepts separately).
+
+## Why
+
+Today two things run side by side and do not meet. The panthaky taps Accept in the app (the
+family goes into their book, the family is told *the panthaky* will pray), while the mobeds
+answer Yes on WhatsApp and the first ones get the family's details. The family can be told the
+wrong person, the panthaky has nothing to do when the WhatsApp call-out already found mobeds,
+and a panthaky who would rather phone their mobeds has no way to do it from the app.
+
+The owner's rule: **a request is confirmed only when enough mobeds are going, and at that moment
+everyone is connected**: the family, the mobeds, the panthaky and the Doongerwadi.
+
+The aim for the design: the fewest taps, nothing to look for, quick and satisfying to use
+(a board that fills, one clear "All set"), and never a request that waits on one person
+unless the panthaky chose that. No pressure tricks: these are funerals.
+
+Patterns this borrows (well-known ways other apps solve "find N people fast"): on-call paging
+(tell one person first, move on to the next after a set time), shift filling and volunteer
+call-outs (ask everyone, the first N to say yes go, the rest are told it is covered), and
+"call, then come back and record the outcome" from sales and support apps.
+
+## The two ways (set by the panthaky)
+
+**Settings -> Prayer requests** (confirmed panthakys only; the admin can set it too):
+
+- **Everyone at once** (the default, and what is live today). The moment the Doongerwadi sends,
+  every mobed on the agyari's Mobeds page who can be messaged gets the WhatsApp "Can you pray?"
+  (template 4). The panthaky has the request in the app with the board already filling. If the
+  mobeds fill it, the panthaky taps nothing: they get "All set".
+- **Come to me first.** Only the panthaky is told (in the app and on their phone). On the
+  request they choose how to find mobeds. Below it, the **safety net**:
+  "If I haven't acted in: Never / 15 min / 30 min / 1 hour, ask all our mobeds on WhatsApp".
+  **Never is the default** (owner): the panthaky turns it on themselves if they want it.
+
+An agyari with no confirmed panthaky in the app is always "Everyone at once": the request goes
+to its approved mobeds in the app, and each can tap "I'll pray" (the same as a WhatsApp Yes).
+
+## The board: "Who will pray"
+
+One screen, the request's own page, the same in both ways. From the top:
+
+1. **The request**: the departed's prayed name, the Doongerwadi, Geh-saarnu (day and geh),
+   Uthamna (day and time). No family name or number until all set.
+2. **"Who will pray: 1 of 2"** with a place per mobed wanted, each empty or showing a name and
+   how it filled (WhatsApp Yes / by phone / I'll pray). It updates by itself while open.
+3. **Actions** (one tap each):
+   - **Ask everyone on WhatsApp** (greyed with the reason when WhatsApp is off, or already asked);
+   - **I'll pray** (fills a place with the panthaky);
+   - the **Mobeds list** under it: each mobed with **Call**, **WhatsApp** and **Going**, and
+     their state (asked, said yes, said no, not asked).
+4. **We can't take this** (a small link at the bottom; reason optional): the request is
+   declined for this agyari and the Doongerwadi can send it elsewhere.
+
+**The panthaky's first action takes the request** for the agyari (there is no separate Accept
+button): Ask everyone, I'll pray, or marking someone Going.
+
+**Calling from the app:** Call opens the phone's dialler. When the panthaky comes back to the
+app, a sheet asks **"Is Ervad A going?"** with **Going** / **Not this time** / **No answer**.
+One tap records it. (The app notices it is back on screen; nothing listens to the call.)
+
+**WhatsApp from the app** opens the panthaky's own WhatsApp chat with that mobed and a short
+message ready to edit (no family details), the same as today's "Message the family" button.
+
+**Short near the time:** if places are still empty when the Geh-saarnu is near, the panthaky
+gets "Still 1 mobed short for <name>" with the board. **Confirm with who's going** closes it
+with fewer than wanted.
+
+**Taps, panthaky's side:**
+
+| | Today | R3.1 |
+|---|---|---|
+| Everyone at once, mobeds answer | Open, Accept, Accept on the sheet, memorial form | Nothing: "All set" arrives |
+| Come to me first, ask on WhatsApp | (not possible) | Open the notification, Ask everyone |
+| Come to me first, phone a mobed | (not possible) | Open, Call, back, Going |
+| Come to me first, pray myself | (not possible) | Open, I'll pray |
+
+## All set
+
+**Automatically when the last place fills** (owner), or on "Confirm with who's going". Then, at
+once:
+
+- The request reads **All set**. Later WhatsApp Yeses get "Thank you. Enough mobeds are going
+  this time." (inside the 24 hours, as today); app mobeds see "All set" on their card.
+- **The family goes into the panthaky's own book and each praying app mobed's own book** (each
+  private, D2; their own existing record of that number if they have one; reminders off, D4).
+  The Geh-saarnu and Uthamna go on each one's calendar. The memorial is one tap away ("Make the
+  memorial", filled in) on each one's request card: no form is forced open.
+- In-app notices and a phone notification to the panthaky, each praying app mobed and the
+  Doongerwadi: "All set: Ervad A and Ervad B are going for <prayed name>". The lock screen shows
+  no family details.
+- WhatsApp (when live, approved templates only, consent and STOP as today):
+
+| To | What they learn | Template |
+|---|---|---|
+| The family | who will pray (names, numbers), the agyari, the times, the panthaky (name, number) | 5 `prayers_all_set_family` |
+| Each mobed going | the departed, place, times, the family's contact, the mobeds going, the panthaky | 6 `prayer_details_mobed_v3` |
+| The panthaky | the departed, place, times, who is going, the family's contact | 7 `prayers_all_set_panthaky` |
+| The Doongerwadi's managers | the agyari, the mobeds' names, the panthaky (name, number) | 8 `funeral_accepted_manager_v2` |
+
+Templates 1-3 stop being used; template 4 (the call-out) stays, or is replaced by 4 v2 (below).
+
+**The Doongerwadi's side** reads "Waiting at Goti Adarian", then "Finding mobeds: 1 of 2",
+then "All set" with the agyari, the panthaky's Call and WhatsApp, and the mobeds' names.
+
+## The Mobeds page (in the panthaky's diary)
+
+"Our mobeds" becomes **Mobeds**, a page of the panthaky's diary (Menu -> Mobeds):
+
+- **In Mobed Diary:** the agyari's approved mobeds whose access is on, listed by themselves,
+  **with their numbers** (owner, 21 Nov 2026), Call and WhatsApp buttons.
+- **Added by me:** mobeds the panthaky adds by name and number, with the tick that they agreed
+  to get WhatsApp messages from Mobed Diary about prayers (as today); Call, WhatsApp, Remove.
+  "Import from contacts" inside the add form, as for behdins.
+- A mobed who replied STOP shows "Replied STOP: not asked on WhatsApp", still callable.
+- Only that agyari's confirmed panthakys (and the admin) see it. Mobeds of other agyaries stay
+  invisible; a mobed's behdins are never shown (D2).
+
+## Template drafts (for the owner to submit when R3.1 is built)
+
+Utility, English, Meta's rules (no blank at the start or end, no two blanks side by side, short).
+Blanks that hold several people are filled by the server, e.g. "Ervad A (+91 98xxxxxx01),
+Ervad B (+91 98xxxxxx02)"; their numbers come only from sign-in numbers or numbers a panthaky
+entered for that person (services/phone.py), never from free text.
+
+**5. To the family: `prayers_all_set_family`**
+> The prayers for **[departed]** will be offered by **[mobeds with numbers]** of **[agyari]**.
+> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, the panthaky is
+> **[panthaky, number]**. May the ruvan of the departed attain Garothman Behesht.
+
+**6. To each mobed going: `prayer_details_mobed_v3`**
+> You will pray for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
+> **[day and time]**. The family's contact is **[family name]**, **[family number]**. Mobeds
+> going: **[mobeds with numbers]**. The panthaky is **[panthaky, number]**. Thank you for your
+> service.
+
+**7. To the panthaky: `prayers_all_set_panthaky`**
+> All mobeds are found for **[departed]** at **[place]**: **[mobeds with numbers]**.
+> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact is
+> **[family name]**, **[family number]**.
+
+**8. To the Doongerwadi: `funeral_accepted_manager_v2`**
+> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. The
+> panthaky is **[panthaky, number]**, by phone or WhatsApp.
+
+**4 v2 (recommended, owner to confirm): `prayer_request_mobeds_v2`**
+> A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:
+> **[day and geh]**. Uthamna: **[day and time]**. Please reply to tell **[panthaky's name]**
+> whether you can take it. If you can, you will get the details once enough mobeds are going,
+> and your name and number will be shared with the family.
+
+Why 4 v2: under R3.1 a mobed who says Yes waits for the others before getting the details, and
+their number goes to the family; the message should say both before they answer.
+
+## Still to settle with the owner (before or during the build)
+
+1. Template 4 v2 (above): replace the approved call-out with it, yes or no.
+2. "Still short" reminder: how long before the Geh-saarnu (suggested: 2 hours, and at once if
+   the Geh-saarnu is sooner than that).
+3. A mobed going who can no longer go: "I can't go any more" on their card (or the panthaky
+   taps it) reopens the place and tells the panthaky. Suggested for R3.1; WhatsApp-only mobeds
+   tell the panthaky by phone.
+4. Should every mobed (not only panthakys) have a Mobeds page of the colleagues they work
+   with? Not part of R3.1 unless the owner says so.
+
+## Data changes
+
+- `agyaries.request_mode` (`everyone` | `panthaky_first`, default `everyone`) and
+  `agyaries.request_escalate_minutes` (null = Never; 15, 30, 60). Migration with `op.f()` checks.
+- `funeral_requests`: a new state **all_set** after **waiting**; `taken_at` / `taken_by_user_id`
+  (the panthaky's first action), `all_set_at`, `confirmed_short` (true when confirmed with fewer).
+  Requests accepted before R3.1 keep their "accepted" state and read as they do today (D8).
+- `prayer_callout_answers`: `how` (`whatsapp` | `phone` | `self` | `app`) and who recorded it, so
+  a place filled by phone or "I'll pray" is a row like a WhatsApp Yes (a call-out row is made
+  for the board if none exists). The check that a picked row said yes stays true.
+- The family-in-book step runs for the panthaky and each praying app mobed at all set, through
+  the existing accept code (one call per person, each in their own book).
+
+## Build steps (one helper each, small commits, owner's yes before the push)
+
+1. **Settings -> Prayer requests**: the two ways and the safety net; migration; admin can set
+   it. Tests: only a confirmed panthaky (or admin) may change it; defaults.
+2. **Routing at Send by the way chosen**, and the safety-net timer in the existing background
+   loop (asks everyone once, if the panthaky has not acted). Tests: each way; timer fires once,
+   never when Never; nothing under an account that is not on (D9).
+3. **The Mobeds page**: app mobeds with numbers, added ones, Call / WhatsApp, import from
+   contacts. Tests: only that agyari's confirmed panthakys; no other agyari's mobeds.
+4. **The board** on the request: places, Ask everyone, I'll pray, Call / WhatsApp / Going, the
+   "Is X going?" sheet on return, We can't take this, live refresh. The first action takes it.
+   Tests: first action takes it once (two panthakys at once); Going by phone fills a place.
+5. **All set**: automatic when full, Confirm with who's going, both books, calendars, memorial
+   one tap away, notices and pushes, Enough-mobeds texts; templates 5-8 behind
+   FUNERAL_WHATSAPP_MODE. Tests: the family number reaches no one before all set; each book
+   gets its own record only (D2); exactly once under two Yeses at the same moment.
+6. **The Doongerwadi's side**: Finding mobeds n of N, All set with the panthaky and names.
+7. **Old path retired**: the Accept button and the 19 Nov details-at-once go; old requests
+   still read right. Docs: checklist, templates doc, STATUS.
+8. **Templates**: the owner submits 5-8 (and 4 v2 if chosen) in WhatsApp Manager, with help.
+
+Then one browser walk-through of both ways on a scratch database (:8011), and a live test
+with the owner's own numbers only before any real agyari uses it.
