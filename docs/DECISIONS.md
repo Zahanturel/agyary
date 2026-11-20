@@ -297,6 +297,21 @@ Decided, not built. The research, the sources and the full design are in
       left, the panthaky is told to find someone. The family is told the new names once the place
       is filled again.
     - **The Mobeds page is for panthakys only** for now.
+  - **Answers of 21 Nov 2026 (third round):**
+    - **App mobeds answer in the app too.** The agyari's mobeds who use Mobed Diary get the request
+      in their Requests tab and as a phone notification, and can tap "I can pray" or "Not this
+      time" there as well as on WhatsApp; whichever answer comes first counts. In "Come to me
+      first" they see it only once the panthaky asks everyone (or the safety net does).
+    - **No panthaky in the app:** a mobed's "Not this time" answers only for them. The request stays
+      open for the others; when everyone asked has said no, it closes and the Doongerwadi is told
+      "Nobody at <agyari> can take it" so they can send it elsewhere. (This settles the old
+      follow-up "should one decline close a request for the whole agyari".) A confirmed panthaky's
+      "We can't take this" still closes it for the agyari.
+    - **No answer for an hour:** if nobody at the agyari has done anything with a request for 1
+      hour, the Doongerwadi is told "No answer yet from <agyari>" with "Send to another agyari".
+      The request stays open there until the Doongerwadi withdraws it.
+    - **If the panthaky's own account is switched off after a request reached them**, the safety
+      net (if set) still asks everyone, since nobody else could act (lead's choice, step 2).
 
 ## Not decided yet
 

@@ -40,6 +40,21 @@ call-outs (ask everyone, the first N to say yes go, the rest are told it is cove
 
 An agyari with no confirmed panthaky in the app is always "Everyone at once": the request goes
 to its approved mobeds in the app, and each can tap "I'll pray" (the same as a WhatsApp Yes).
+There, a mobed's "Not this time" answers only for them (owner, 21 Nov 2026, third round): the
+request closes only when everyone asked has said no, and the Doongerwadi is then told "Nobody at
+<agyari> can take it".
+
+**App mobeds answer in the app too** (owner, third round): the agyari's mobeds who use Mobed
+Diary get the request in their Requests tab (red count) and as a phone notification at the same
+moment as the WhatsApp call-out, with **I can pray** / **Not this time**. Whichever answer comes
+first, app or WhatsApp, counts; the other then reads as already answered. In "Come to me first"
+they get nothing until the panthaky asks everyone (or the safety net does). Their card shows no
+family details until All set.
+
+**No answer for an hour** (owner, third round): if nobody at the agyari has done anything with a
+request for 1 hour after it was sent, the Doongerwadi is told in the app and on their phone "No
+answer yet from <agyari>", with **Send to another agyari** on the record. The request stays open
+at that agyari until the Doongerwadi withdraws it. Told once per request.
 
 ## The board: "Who will pray"
 
