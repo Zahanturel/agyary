@@ -100,8 +100,8 @@ export async function renderMenu() {
         ` : ""}
       </div>
       ${agyary ? `<div style="margin-top:10px"><button class="secondary small" id="mEditLocation">Edit location</button></div>
-        ${agyary.role === "panthaky" ? `<div style="margin-top:10px"><button class="secondary small" id="mOurMobeds">Our mobeds</button>
-          <p class="meta" style="margin:4px 0 0">The mobeds you can ask on WhatsApp whether they can pray.</p></div>
+        ${agyary.role === "panthaky" ? `<div style="margin-top:10px"><button class="secondary small" id="mMobeds">Mobeds</button>
+          <p class="meta" style="margin:4px 0 0">The mobeds you work with: call them, message them, or ask them on WhatsApp whether they can pray.</p></div>
           <div style="margin-top:10px"><button class="secondary small" id="mPrayerRequests">Prayer requests</button>
           <p class="meta" style="margin:4px 0 0">How a request from a Doongerwadi or prayer hall reaches you.</p></div>` : ""}
         <div id="mClaimBox">${claimHtml(agyary)}</div>` : ""}
@@ -302,8 +302,8 @@ export async function renderMenu() {
 
   const editLocation = document.getElementById("mEditLocation");
   if (editLocation) editLocation.onclick = () => navigate("#/fire-temple/location");
-  const ourMobedsBtn = document.getElementById("mOurMobeds");
-  if (ourMobedsBtn) ourMobedsBtn.onclick = () => navigate("#/our-mobeds");
+  const mobedsBtn = document.getElementById("mMobeds");
+  if (mobedsBtn) mobedsBtn.onclick = () => navigate("#/mobeds");
   const prayerRequestsBtn = document.getElementById("mPrayerRequests");
   if (prayerRequestsBtn) prayerRequestsBtn.onclick = () => navigate("#/prayer-requests");
   document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");

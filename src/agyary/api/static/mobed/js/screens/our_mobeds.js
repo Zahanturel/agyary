@@ -1,17 +1,21 @@
 "use strict";
 
 /**
- * "Our mobeds" (DECISIONS D10, Phase 2 Step 5c): the fire temple's own list of
- * mobeds that a confirmed panthaky can ask on WhatsApp whether they can pray.
- * Reached from Settings and from the call-out screen.
+ * Mobeds (DECISIONS D10, changed 21 Nov 2026; R3.1 step 3; "Our mobeds"
+ * before): the mobeds a confirmed panthaky works with, to call, message, or ask
+ * on WhatsApp whether they can pray. Reached from Settings and from the
+ * call-out screen, at #/mobeds (the old #/our-mobeds leads here too).
  *
- *  - The fire temple's mobeds in the app are on it already (their number is not
- *    shown). Mobeds added by hand show their number, who added them and when.
+ *  - In Mobed Diary: the fire temple's mobeds in the app, on it by themselves,
+ *    each with their number and Call and WhatsApp (not on the panthaky's own row).
+ *  - Added by me: mobeds added by hand, with their number, who added them,
+ *    Call, WhatsApp and Remove.
  *  - Adding one: name and number (with Import from contacts, as on the Add
  *    behdin form, where the phone allows it) and the required tick that they
  *    agreed to get WhatsApp messages from Mobed Diary about prayers.
- *  - Who replied STOP, or is switched off, says so: they are never asked.
- *  - Remove takes a hand-added mobed off the list.
+ *  - Who replied STOP, or is switched off or waiting, says so: they are never
+ *    asked by Mobed Diary, but Call and WhatsApp stay, since those are the
+ *    panthaky's own phone and WhatsApp (a plain chat, nothing typed for them).
  *
  * Only that fire temple's confirmed panthakys (and the admin) see any of it.
  */
@@ -24,25 +28,39 @@ import { navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { canPickContacts, pickContacts, fillFromContact } from "../behdin_add.js";
 
-function personHtml(m) {
-  const lines = [];
-  if (m.kind === "app") lines.push(m.is_me ? "You" : "Uses Mobed Diary");
-  else {
-    lines.push(esc(m.phone));
-    if (m.added_by) lines.push(`Added by ${esc(m.added_by)}`);
-  }
-  const state = m.stopped ? "Replied STOP: not asked on WhatsApp"
-    : !m.can_message && !m.is_me ? `Not asked: ${m.why_not}` : "";
-  return `<div class="search-result" data-key="${esc(m.key)}" style="overflow-wrap:anywhere">
-      <strong>${esc(m.name)}</strong>
-      ${lines.map(l => `<div class="addr">${l}</div>`).join("")}
-      ${state ? `<div class="meta"><b>${esc(state)}</b></div>` : ""}
-      ${m.kind === "contact" ? `<button type="button" class="ghost small" data-remove="${m.id}"
-        style="margin-top:6px">Remove</button>` : ""}
+/** Call and WhatsApp from the panthaky's own phone, as on a request
+ *  (requests.js): the WhatsApp one opens a plain chat. Not on their own row. */
+function reachHtml(m) {
+  if (m.is_me || !m.phone) return "";
+  const digits = String(m.phone).replace(/\D/g, "");
+  return `<div class="row" style="margin-top:8px">
+      <a class="button secondary" href="tel:${esc(m.phone)}" aria-label="Call ${esc(m.name)}">Call</a>
+      <a class="button secondary" href="https://wa.me/${esc(digits)}" target="_blank" rel="noopener"
+        aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
     </div>`;
 }
 
-export async function renderOurMobeds() {
+function personHtml(m) {
+  const lines = [];
+  if (m.is_me) lines.push("You");
+  else {
+    if (m.phone) lines.push(esc(m.phone));
+    if (m.kind === "app") lines.push("Uses Mobed Diary");
+    else if (m.added_by) lines.push(`Added by ${esc(m.added_by)}`);
+  }
+  const state = m.stopped ? "Replied STOP: not asked on WhatsApp"
+    : !m.can_message && !m.is_me ? `Not asked: ${m.why_not}` : "";
+  return `<div class="search-result" data-key="${esc(m.key)}" style="overflow-wrap:anywhere;cursor:default">
+      <strong>${esc(m.name)}</strong>
+      ${lines.map(l => `<div class="addr">${l}</div>`).join("")}
+      ${state ? `<div class="meta"><b>${esc(state)}</b></div>` : ""}
+      ${reachHtml(m)}
+      ${m.kind === "contact" ? `<button type="button" class="ghost small" data-remove="${m.id}"
+        style="margin-top:8px">Remove</button>` : ""}
+    </div>`;
+}
+
+export async function renderMobeds() {
   chrome(true);
   refreshHeader();
   showFab(false);
@@ -55,8 +73,8 @@ export async function renderOurMobeds() {
     got = await ourMobeds(agyary.id);
   } catch (e) {
     if (!alive()) return;
-    if (e.status === 404) return screenFailed("Only the panthaky of the fire temple can see its list of mobeds.");
-    return screenFailed("Couldn't load your mobeds: " + e.message, renderOurMobeds);
+    if (e.status === 404) return screenFailed("Only the panthaky of the fire temple can see its mobeds.");
+    return screenFailed("Couldn't load your mobeds: " + e.message, renderMobeds);
   }
   if (!alive()) return;
   draw(agyary, got);
@@ -66,9 +84,10 @@ function draw(agyary, got) {
   const app = got.mobeds.filter(m => m.kind === "app");
   const added = got.mobeds.filter(m => m.kind === "contact");
   mainEl.innerHTML = `
-    <h2 style="margin:0 0 4px">Our mobeds</h2>
-    <p class="meta" style="margin:0 0 12px">The mobeds of ${esc(got.agyari.name)} you can ask on WhatsApp whether
-      they can pray, when a Doongerwadi's request is accepted. Only the panthaky sees this list.</p>
+    <h2 style="margin:0 0 4px">Mobeds</h2>
+    <p class="meta" style="margin:0 0 12px">The mobeds of ${esc(got.agyari.name)} you work with: call them, message
+      them, or ask them on WhatsApp whether they can pray. Call and WhatsApp use your own phone. Only the panthaky
+      sees this page.</p>
     ${got.whatsapp.on ? "" : `<div class="card"><p class="meta" style="margin:0">${esc(got.whatsapp.why_not)}
       You can build the list now.</p></div>`}
     <div class="card">
@@ -76,7 +95,7 @@ function draw(agyary, got) {
       ${app.length ? app.map(personHtml).join("") : `<p class="meta" style="margin:0">Nobody else here uses Mobed Diary yet.</p>`}
     </div>
     <div class="card">
-      <h2>Added by hand</h2>
+      <h2>Added by me</h2>
       ${added.length ? added.map(personHtml).join("") : `<p class="meta" style="margin:0">Nobody yet.</p>`}
       <div class="action-bar"><button type="button" id="omAdd">Add a mobed</button></div>
     </div>`;

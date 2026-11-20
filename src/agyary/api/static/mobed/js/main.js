@@ -47,7 +47,7 @@ import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
 import { renderCallout } from "./screens/callout.js";
-import { renderOurMobeds } from "./screens/our_mobeds.js";
+import { renderMobeds } from "./screens/our_mobeds.js";
 import { renderRequestSettings } from "./screens/request_settings.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
 import { paintActBanner } from "./acting.js";
@@ -136,7 +136,10 @@ route("#/requests", renderRequests, { tab: "requests" });
 route("#/requests/:id", renderRequest, { parent: "#/requests", tab: "requests" });
 // A confirmed panthaky asks the agyari's mobeds on WhatsApp (D10, Step 5c).
 route("#/requests/:id/callout", renderCallout, { parent: (p) => `#/requests/${p.id}`, tab: "requests" });
-route("#/our-mobeds", renderOurMobeds, { parent: "#/menu" });
+// The panthaky's Mobeds page (R3.1), from Settings. It was "Our mobeds": the old
+// address (a bookmark, an old link) leads to the same page.
+route("#/mobeds", renderMobeds, { parent: "#/menu" });
+route("#/our-mobeds", () => navigate("#/mobeds", { replace: true }));
 // How a request reaches the panthaky's fire temple (R3.1), from Settings.
 route("#/prayer-requests", renderRequestSettings, { parent: "#/menu" });
 

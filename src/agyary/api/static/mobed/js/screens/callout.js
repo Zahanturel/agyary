@@ -11,7 +11,7 @@
  *    "Send the details again" is there only for someone going whose details
  *    did not go (sending was paused, say).
  *  - Said yes after enough were going: thanked ("Enough mobeds are going").
- *  - Ask on WhatsApp: those on "Our mobeds" not asked yet for this request
+ *  - Ask on WhatsApp: those on the Mobeds page not asked yet for this request
  *    (someone added since). Nobody is asked twice.
  *
  * The message has no family details. While the messages are not switched on
@@ -111,13 +111,13 @@ function draw(id, v) {
       ${v.candidates.length ? v.candidates.map(candidateHtml).join("")
         : `<p class="meta" style="margin:0">Nobody is on your list yet besides you.</p>`}
       <div class="action-bar">
-        <button type="button" class="secondary" id="coList">Our mobeds</button>
+        <button type="button" class="secondary" id="coList">Mobeds</button>
         <button type="button" id="coSend" ${askable ? "" : "disabled"}>Ask on WhatsApp</button>
       </div>
     </div>` : ""}`;
 
   const list = document.getElementById("coList");
-  if (list) list.onclick = () => navigate("#/our-mobeds");
+  if (list) list.onclick = () => navigate("#/mobeds");
   const send = document.getElementById("coSend");
   if (send) {
     send.onclick = async (ev) => {
