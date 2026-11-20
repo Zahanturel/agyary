@@ -152,7 +152,8 @@ async def test_only_a_confirmed_panthaky_or_the_admin_sees_the_list(client, db, 
     assert r.status_code == 200, r.text
     names = {m["name"]: m for m in r.json()["mobeds"]}
     assert names["Er. Pervez Kias"]["kind"] == "app" and names["Er. Pervez Kias"]["can_message"]
-    assert names["Er. Pervez Kias"]["phone"] is None          # an app mobed's number is not shown
+    # The Mobeds page shows an app mobed's number (owner, 21 Nov 2026; tests/test_mobeds_page.py).
+    assert names["Er. Pervez Kias"]["phone"] == MOBED
     assert names["Er. Hormuz Dadachanji"]["is_me"] and not names["Er. Hormuz Dadachanji"]["can_message"]
     assert r.json()["whatsapp"] == {"on": False, "why_not": fw.OFF_WORDS}
 

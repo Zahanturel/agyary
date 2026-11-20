@@ -46,10 +46,13 @@ async def _managed_agyary(db: AsyncSession, user: User, agyary_id: int, missing:
 
 
 async def _list(db: AsyncSession, user: User, agyary: Agyary) -> dict:
+    """The Mobeds page. Only ever called with an ``agyary`` from
+    _managed_agyary, so the app mobeds' numbers reach only that fire temple's
+    confirmed panthakys and the admin (owner, 21 Nov 2026)."""
     settings = get_settings()
     return {
         "agyari": {"id": agyary.id, "name": agyary.name},
-        "mobeds": await prayer_callout.our_mobeds(db, settings, agyary.id, me=user),
+        "mobeds": await prayer_callout.our_mobeds(db, settings, agyary.id, me=user, with_numbers=True),
         "whatsapp": await funeral_whatsapp.status(db, settings),
         "consent_words": prayer_callout.CONSENT_WORDS,
     }
@@ -58,8 +61,9 @@ async def _list(db: AsyncSession, user: User, agyary: Agyary) -> dict:
 @router.get("/agyaries/{agyary_id}/our-mobeds")
 async def our_mobeds(agyary_id: int, db: AsyncSession = Depends(get_db),
                      user: User = Depends(get_current_user)) -> dict:
-    """The fire temple's mobeds: those in the app and those added by hand,
-    each saying whether they can be messaged (a STOP, an account switched off)."""
+    """The Mobeds page: the fire temple's mobeds in the app and those added by
+    hand, each with their number and saying whether they can be messaged (a
+    STOP, an account switched off or waiting)."""
     return await _list(db, user, await _managed_agyary(db, user, agyary_id))
 
 

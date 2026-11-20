@@ -1,11 +1,14 @@
 """A fire temple's own list of mobeds, and the panthaky's call-out to them on
 WhatsApp (DECISIONS D10, the owner's idea of 18 Nov 2026; Phase 2 Step 5c).
 
-The list ("Our mobeds"): the fire temple's mobeds in the app, worked out from
-their memberships (never copied), and the mobeds a confirmed panthaky added by
-name and number, each with the tick that they agreed to get WhatsApp messages
-from Mobed Diary about prayers. Only that fire temple's confirmed panthakys and
-the admin see or change it (D2's spirit): to anyone else it does not exist.
+The list (the Mobeds page, "Our mobeds" before R3.1): the fire temple's mobeds
+in the app, worked out from their memberships (never copied), and the mobeds a
+confirmed panthaky added by name and number, each with the tick that they
+agreed to get WhatsApp messages from Mobed Diary about prayers. Only that fire
+temple's confirmed panthakys and the admin see or change it (D2's spirit): to
+anyone else it does not exist. Since R3.1 step 3 the page shows the app
+mobeds' numbers too, so the panthaky can call them or open a WhatsApp chat
+from their own phone; nothing else shows those numbers (our_mobeds).
 
 The call-out goes at Send (owner, 19 Nov 2026): when a funeral place sends a
 request to a fire temple, everyone on its list who can be messaged (not
@@ -143,9 +146,17 @@ def _off_words(user: User, settings: Settings) -> str | None:
     return "they are waiting for the admin's approval"
 
 
-async def our_mobeds(db: AsyncSession, settings: Settings, agyary_id: int, *, me: User | None = None) -> list[dict]:
+async def our_mobeds(
+    db: AsyncSession, settings: Settings, agyary_id: int, *, me: User | None = None, with_numbers: bool = False,
+) -> list[dict]:
     """Everyone on the fire temple's list, app mobeds first, then those added
-    by hand; each says whether they can be messaged now and, if not, why."""
+    by hand; each says whether they can be messaged now and, if not, why.
+
+    An app mobed's own number is given only with ``with_numbers``, which only
+    the Mobeds page passes (owner, 21 Nov 2026): its route lets in only the
+    fire temple's confirmed panthakys and the admin (routes/callouts.py,
+    _managed_agyary). Everywhere else - the call-out screen, the call-out
+    itself - it stays None."""
     members = (await db.execute(
         select(User).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
             AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
@@ -174,7 +185,8 @@ async def our_mobeds(db: AsyncSession, settings: Settings, agyary_id: int, *, me
         member_phones.add(u.phone)
         why = ("this is you" if me is not None and u.id == me.id else
                "they replied STOP to Mobed Diary" if u.phone in stopped else _off_words(u, settings))
-        out.append({"key": f"u{u.id}", "kind": "app", "id": u.id, "name": u.name, "phone": None,
+        out.append({"key": f"u{u.id}", "kind": "app", "id": u.id, "name": u.name,
+                    "phone": u.phone if with_numbers else None,
                     "stopped": u.phone in stopped, "is_me": me is not None and u.id == me.id,
                     "can_message": why is None, "why_not": why})
     for c in contacts:
