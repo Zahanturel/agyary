@@ -454,9 +454,11 @@ async def send_request(
 ) -> dict:
     """Send the record to one fire temple: its confirmed panthakys, or if none,
     its mobeds whose access is on. Refused without the family's agreement, with
-    nobody there to reach, or while another request waits. Once it is sent, the
-    fire temple's mobeds are asked on WhatsApp (``callout``: what happened, or
-    why nothing was sent); that never makes the send fail."""
+    nobody there to reach, or while another request waits. Once it is sent, by
+    the fire temple's way (R3.1): in Everyone at once its mobeds are asked on
+    WhatsApp; in Come to me first only the panthaky is told, and chooses who to
+    ask. ``callout`` says which, what happened, or why nothing was sent; that
+    never makes the send fail."""
     user = acting.user
     record = await _own_record(db, acting, record_id)
     if not payload.family_agreed:
@@ -472,7 +474,7 @@ async def send_request(
         raise _send_error(exc) from exc
     asked = len(await funeral_requests.asked(db, request))
     await db.commit()
-    callout = await prayer_callout.at_send(db, get_settings(), request.id)
+    callout = await prayer_callout.after_send(db, get_settings(), request.id)
     # Read again: a failure in sending rolls the session back, which forgets it.
     await db.refresh(record)
     return {**await _record_response(db, record), "asked": asked, "callout": callout}

@@ -15,7 +15,9 @@ can pray - template 4, with no family details. Each mobed asked has an answer
 row with an unguessable token, which is all the quick-reply buttons carry. The
 first tap counts; later ones change nothing. A mobed is asked once per request;
 the panthaky can ask again by hand those not asked yet (someone added to the
-list since), while the request is open.
+list since), while the request is open. Since R3.1 (21 Nov 2026) that is the
+way Everyone at once; in Come to me first nothing goes at Send, and the
+panthaky chooses who to ask (after_send, request_settings.way_for).
 
 The first yeses go: up to the record's "mobeds wanted" (DEFAULT_WANTED if it
 gives none), each yes is one of those going and gets template 2 (the details,
@@ -64,6 +66,7 @@ from agyary.models.enums import (
     CALLOUT_NO,
     CALLOUT_YES,
     REQUEST_ACCEPTED,
+    REQUEST_MODE_PANTHAKY_FIRST,
     REQUEST_TAKEN,
     REQUEST_WAITING,
     ROLE_PANTHAKY,
@@ -73,6 +76,7 @@ from agyary.services import (
     guardrails,
     mobed_access,
     reminders,
+    request_settings,
     template_text,
     web_push,
 )
@@ -422,16 +426,51 @@ async def _ask(
     return callout
 
 
+def panthaky_first_words(agyary: Agyary, panthakys: list[User]) -> str:
+    """What the sender is told after Send in Come to me first."""
+    who = "panthaky" if len(panthakys) == 1 else "panthakys"
+    return f"Sent to the {who} of {agyary.name}. They choose who to ask."
+
+
+async def after_send(
+    db: AsyncSession, settings: Settings, request_id: int, *, now: datetime | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> dict:
+    """Once a request is sent and committed, by the fire temple's way (R3.1
+    step 2; request_settings.way_for). Everyone at once - and any fire temple
+    with no confirmed panthaky whose access is on - is the call-out now
+    (at_send). Come to me first is nothing now: only the panthaky was told, and
+    they choose who to ask. Returns what the sender is told, as at_send does
+    ({"state": "panthaky_first", ...} for Come to me first). Never raises."""
+    from agyary.services import panthaky   # here: as in _at_send
+
+    try:
+        request = await db.get(FuneralRequest, request_id)
+        agyary = await db.get(Agyary, request.agyary_id)
+        if await request_settings.way_for(db, settings, agyary) == REQUEST_MODE_PANTHAKY_FIRST:
+            panthakys = await panthaky.panthakys_of(db, settings, agyary.id)
+            logger.info("Request %s: Come to me first at fire temple %s, so no call-out at sending",
+                        request.id, agyary.id)
+            return {"state": "panthaky_first", "asked": 0, "message": panthaky_first_words(agyary, panthakys)}
+    except Exception:   # noqa: BLE001 - the request is sent; this must not undo or fail it
+        logger.exception("Finding the way of request %s failed", request_id)
+        await db.rollback()
+        return {"state": "failed", "asked": 0,
+                "message": "The mobeds could not be asked on WhatsApp. The panthaky can ask them from the request."}
+    return await at_send(db, settings, request_id, now=now, client=client)
+
+
 async def at_send(
     db: AsyncSession, settings: Settings, request_id: int, *, now: datetime | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> dict:
-    """Once a request is sent and committed (owner, 19 Nov 2026): template 4 at
-    once to everyone on the fire temple's list who can be messaged - its app
-    mobeds whose access is on and the mobeds added by hand with the consent
-    tick, never a STOP'd number - except its confirmed panthakys (they have the
+    """The call-out to everyone (owner, 19 Nov 2026): template 4 at once to
+    everyone on the fire temple's list who can be messaged - its app mobeds
+    whose access is on and the mobeds added by hand with the consent tick,
+    never a STOP'd number - except its confirmed panthakys (they have the
     request in the app, and the message asks the mobeds to answer them) and
-    whoever sent it. Returns what the sender is told: {"state", "asked",
+    whoever sent it. Runs once a request is sent and committed in Everyone at
+    once (after_send). Returns what the sender is told: {"state", "asked",
     "message"}. Never raises: sending a request cannot fail because of this."""
     try:
         return await _at_send(db, settings, request_id, now=now or _now(), client=client)

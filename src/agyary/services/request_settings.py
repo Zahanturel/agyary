@@ -11,16 +11,25 @@ the admin, on Settings -> Prayer requests.
 
 The minutes are kept whatever the way, so switching back keeps the panthaky's
 last choice; they matter only in "panthaky_first". Who may read or change it
-is prayer_callout.may_manage, checked by the route. Sending a request by the
-way chosen, and the safety net's timer, are step 2.
+is prayer_callout.may_manage, checked by the route. Which way a request takes
+is way_for (step 2), read by prayer_callout.after_send at Send.
 """
 
 from __future__ import annotations
 
 import logging
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from agyary.core.config import Settings
 from agyary.models import Agyary, User
-from agyary.models.enums import REQUEST_ESCALATE_MINUTES, REQUEST_MODE_EVERYONE, REQUEST_MODES
+from agyary.models.enums import (
+    REQUEST_ESCALATE_MINUTES,
+    REQUEST_MODE_EVERYONE,
+    REQUEST_MODE_PANTHAKY_FIRST,
+    REQUEST_MODES,
+)
+from agyary.services import panthaky
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +49,19 @@ class SettingsError(ValueError):
 def read(agyary: Agyary) -> dict:
     return {"mode": agyary.request_mode or REQUEST_MODE_EVERYONE,
             "escalate_minutes": agyary.request_escalate_minutes}
+
+
+async def way_for(db: AsyncSession, settings: Settings, agyary: Agyary) -> str:
+    """Which way a request to ``agyary`` takes now: "panthaky_first" only when
+    its panthaky chose Come to me first and it has a confirmed panthaky whose
+    access is on (panthaky.panthakys_of: someone to choose who to ask);
+    otherwise "everyone", whatever the setting (D10, 21 Nov 2026: a fire
+    temple with no panthaky in the app is Everyone at once)."""
+    if (agyary.request_mode or REQUEST_MODE_EVERYONE) != REQUEST_MODE_PANTHAKY_FIRST:
+        return REQUEST_MODE_EVERYONE
+    if not await panthaky.panthakys_of(db, settings, agyary.id):
+        return REQUEST_MODE_EVERYONE
+    return REQUEST_MODE_PANTHAKY_FIRST
 
 
 def change(agyary: Agyary, user: User, *, mode: object, escalate_minutes: object) -> dict:

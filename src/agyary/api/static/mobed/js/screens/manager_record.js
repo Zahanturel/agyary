@@ -811,12 +811,17 @@ function confirmSend(rec, a) {
     }
     sheet.close();
     const n = res.asked;
-    // What the WhatsApp call-out to its mobeds did, or why nothing went (19 Nov 2026).
     const wa = res.callout || {};
-    const waWords = wa.state === "off" || wa.state === "not_now"
-      ? `${wa.message} So no mobed was asked on WhatsApp.` : (wa.message || "");
-    (wa.state === "failed" ? flashError : flashInfo)(
-      `Sent to ${a.name}. ${n} ${n === 1 ? "person there was" : "people there were"} told in the app. ${waWords}`.trim());
+    if (wa.state === "panthaky_first") {
+      // Come to me first (R3.1): only the panthaky was told, and nobody was asked on WhatsApp.
+      flashInfo(wa.message);
+    } else {
+      // What the WhatsApp call-out to its mobeds did, or why nothing went (19 Nov 2026).
+      const waWords = wa.state === "off" || wa.state === "not_now"
+        ? `${wa.message} So no mobed was asked on WhatsApp.` : (wa.message || "");
+      (wa.state === "failed" ? flashError : flashInfo)(
+        `Sent to ${a.name}. ${n} ${n === 1 ? "person there was" : "people there were"} told in the app. ${waWords}`.trim());
+    }
     returnTo(managerHash(`/record/${rec.id}`));
   };
 }

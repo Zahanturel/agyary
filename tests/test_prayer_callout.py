@@ -28,9 +28,18 @@ import pytest
 from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import AppNotification, FuneralRequest, PrayerCalloutAnswer, ReminderOptOut, User
+from agyary.models import (
+    Agyary,
+    AgyaryUser,
+    AppNotification,
+    FuneralRequest,
+    PrayerCallout,
+    PrayerCalloutAnswer,
+    ReminderOptOut,
+    User,
+)
 from agyary.services import funeral_whatsapp as fw
-from agyary.services import prayer_callout
+from agyary.services import prayer_callout, request_settings
 from tests.conftest import WA_APP_SECRET, sign_in
 from tests.funeral_helpers import FAMILY, agyari, auth, form, manager, member
 
@@ -401,3 +410,120 @@ async def test_a_call_out_that_breaks_never_stops_the_request(client, db, seeded
     assert res["callout"]["state"] == "failed" and "could not be asked" in res["callout"]["message"]
     assert res["record"]["requests"][0]["status"] == "waiting" and res["asked"] == 1
     assert (await db.get(FuneralRequest, rid)).status == "waiting"
+
+
+# --- R3.1 step 2: the way the panthaky chose, at Send ------------------------------
+
+async def _way(db, agyary_id: int, mode: str, minutes: int | None = None) -> None:
+    a = await db.get(Agyary, agyary_id)
+    a.request_mode, a.request_escalate_minutes = mode, minutes
+    await db.commit()
+
+
+async def _callouts(db) -> list[PrayerCallout]:
+    return list((await db.execute(select(PrayerCallout))).scalars())
+
+
+async def test_the_way_is_come_to_me_first_only_with_a_confirmed_panthaky_whose_access_is_on(db, seeded):
+    settings = config.get_settings()
+    goti = await db.get(Agyary, seeded["agyary_id"])
+    assert await request_settings.way_for(db, settings, goti) == "everyone"      # the default
+    await _way(db, goti.id, "panthaky_first", 30)
+    assert await request_settings.way_for(db, settings, goti) == "panthaky_first"
+    # Only mobeds there, or one who says they are the panthaky but is not confirmed:
+    # Everyone at once, whatever the setting.
+    only = await agyari(db, "Mobeds Only Agyari (test)", None)
+    only.request_mode = "panthaky_first"
+    await member(db, only, "+919822200111")
+    claimed = await member(db, only, "+919822200112")
+    await db.execute(update(AgyaryUser).where(AgyaryUser.user_id == claimed.id)
+                     .values(claimed_role="panthaky", claimed_at=datetime.now(timezone.utc)))
+    await db.commit()
+    assert await request_settings.way_for(db, settings, only) == "everyone"
+    # The panthaky's access switched off (D9): nobody there to choose, so Everyone at once.
+    await db.execute(update(User).where(User.phone == PANTHAKY).values(access="off"))
+    await db.commit()
+    assert await request_settings.way_for(db, settings, goti) == "everyone"
+
+
+async def test_everyone_at_once_keeps_the_call_out_at_send(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    await _way(db, aid, "everyone", 15)          # the minutes matter only in Come to me first
+    rid, res, _ = await _send(client, db, aid)
+    assert res["callout"] == {"state": "sent", "asked": 1, "message": "1 mobed of Goti Adarian was asked on WhatsApp."}
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds")] == [MOBED]
+    assert len(await _callouts(db)) == 1
+
+
+async def test_come_to_me_first_tells_only_the_panthaky_and_asks_nobody_at_send(client, db, seeded, meta, pushes,
+                                                                               live):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_list(aid), json={"name": "Er. Listed", "phone": LISTED, "agreed": True}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    await _way(db, aid, "panthaky_first", 30)
+    rid, res, _ = await _send(client, db, aid)
+    # The manager's screen says so, and never that mobeds were asked.
+    assert res["callout"] == {"state": "panthaky_first", "asked": 0,
+                              "message": "Sent to the panthaky of Goti Adarian. They choose who to ask."}
+    assert res["asked"] == 1 and res["record"]["requests"][0]["status"] == "waiting"
+    assert meta.sent == [] and await _callouts(db) == [] and await _answers(db) == {}
+    # The request reaches the confirmed panthaky, as before.
+    (note,) = await _notes(db, PANTHAKY, "funeral_request")
+    assert "Goti Adarian" in note.body
+    assert await _notes(db, MOBED, "funeral_request") == []
+    assert [p["to"] for p in pushes] == [[(await db.execute(select(User.id).where(User.phone == PANTHAKY))).scalar_one()]]
+    # The panthaky chooses who to ask: everyone on the list is still there to ask.
+    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
+    assert view["asked"] == [] and {c["name"] for c in view["candidates"] if c["may_ask"]} == {
+        "Er. Pervez Kias", "Er. Listed"}
+    key = next(c["key"] for c in view["candidates"] if c["name"] == "Er. Pervez Kias")
+    r = await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": [key]}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["asked_now"] == 1
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds")] == [MOBED]
+
+
+async def test_come_to_me_first_with_two_panthakys_says_panthakys(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    await member(db, await db.get(Agyary, aid), "+919822200113", role="panthaky", name="Er. Second Panthaky")
+    await _way(db, aid, "panthaky_first")
+    _, res, _ = await _send(client, db, aid)
+    assert res["callout"]["message"] == "Sent to the panthakys of Goti Adarian. They choose who to ask."
+    assert res["asked"] == 2 and meta.sent == []
+
+
+async def test_come_to_me_first_with_no_confirmed_panthaky_on_is_everyone_at_once(client, db, seeded, meta, pushes,
+                                                                                 live):
+    # A fire temple of mobeds only: the request reaches them, and they are asked on WhatsApp at once.
+    only = await agyari(db, "Mobeds Only Agyari (test)", None)
+    only.request_mode, only.request_escalate_minutes = "panthaky_first", 15
+    await member(db, only, "+919822200111", name="Er. Only One")
+    await member(db, only, "+919822200112", name="Er. Only Two")
+    await db.commit()
+    _, res, mgr = await _send(client, db, only.id)
+    assert res["asked"] == 2
+    assert res["callout"] == {"state": "sent", "asked": 2,
+                              "message": "2 mobeds of Mobeds Only Agyari (test) were asked on WhatsApp."}
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds")) == ["+919822200111", "+919822200112"]
+
+    # Goti Adarian, Come to me first, with its only panthaky switched off (D9): the same.
+    meta.sent.clear()
+    await _way(db, seeded["agyary_id"], "panthaky_first", 15)
+    await db.execute(update(User).where(User.phone == PANTHAKY).values(access="off"))
+    await db.commit()
+    _, res, _ = await _send(client, db, seeded["agyary_id"], mgr)
+    assert res["callout"]["state"] == "sent" and res["callout"]["asked"] == 1
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds")] == [MOBED]
+    body = [p["text"] for p in meta.templates("prayer_request_mobeds")[0]["template"]["components"][0]["parameters"]]
+    assert body[5] == "Goti Adarian"      # nothing under the account that is off
+
+
+async def test_a_way_that_cannot_be_read_never_stops_the_request(client, db, seeded, meta, pushes, live,
+                                                                monkeypatch):
+    async def boom(*a, **kw):
+        raise RuntimeError("something unexpected")
+
+    monkeypatch.setattr(request_settings, "way_for", boom)
+    rid, res, _ = await _send(client, db, seeded["agyary_id"])
+    assert res["callout"]["state"] == "failed" and "could not be asked" in res["callout"]["message"]
+    assert (await db.get(FuneralRequest, rid)).status == "waiting" and meta.sent == []
