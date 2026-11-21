@@ -658,3 +658,38 @@ async def test_with_no_panthaky_a_yes_keeps_it_open_whatever_the_others_say(clie
     assert await _notes(db, "+919822200112", prayer_callout.KIND_GOING) == []
     card = (await client.get(f"{REQUESTS}/{rid}", headers=two)).json()["request"]
     assert card["places"] == {"going": 1, "wanted": 2} and card["my_answer"]["state"] == "said_no"
+
+
+# --- The red count on the Requests tab --------------------------------------------------
+
+async def _count(client, headers) -> int:
+    return (await client.get(f"{REQUESTS}/count", headers=headers)).json()["waiting"]
+
+
+async def test_the_red_count_is_what_waits_for_each_one(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    panthaky, mobed = await _as(client, PANTHAKY), await _as(client, MOBED)
+    # Everyone at once: the panthaky until they take it; the mobed until they answer, either way.
+    rid, _, mgr = await _send(client, db, aid)
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 1)
+    await _signed_tap(client, MOBED, f"pca:{(await _answers(db))[MOBED].token}:n")
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 0)
+    assert (await client.post(_b(rid, "self"), json={}, headers=panthaky)).status_code == 200
+    assert (await _request(db, rid)).status == "waiting"          # five wanted: still finding mobeds
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (0, 0)
+
+    # An answer in the app counts the same.
+    rid2, _, _ = await _send(client, db, aid, mgr)
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 1)
+    assert (await client.post(f"{REQUESTS}/{rid2}/answer", json={"answer": "yes"}, headers=mobed)).status_code == 200
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 0)
+    assert (await client.post(f"/api/mobed/manager/requests/{rid2}/withdraw", headers=mgr)).status_code == 200
+    assert await _count(client, panthaky) == 0
+
+    # Come to me first: only the panthaky's, until a call's result (even "no answer") takes it.
+    rid3, _ = await _first(client, db, aid, mgr=mgr)
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 0)
+    key = f"u{await _uid(db, MOBED)}"
+    r = await client.post(_b(rid3, "call-result"), json={"key": key, "result": "no_answer"}, headers=panthaky)
+    assert r.status_code == 200
+    assert (await _count(client, panthaky), await _count(client, mobed)) == (0, 0)

@@ -40,7 +40,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem
@@ -49,12 +49,15 @@ from agyary.messaging import booking_service
 from agyary.messaging.geh_times import GEH_START_TIMES, IST, machi_ceremony_datetime
 from agyary.models import (
     Agyary,
+    AgyaryUser,
     FuneralPlace,
     FuneralPlaceManager,
     FuneralRecord,
     FuneralRequest,
     FuneralRequestRecipient,
     Memorial,
+    PrayerCallout,
+    PrayerCalloutAnswer,
     Service,
     User,
 )
@@ -66,6 +69,7 @@ from agyary.models.enums import (
     REQUEST_DECLINED,
     REQUEST_WAITING,
     REQUEST_WITHDRAWN,
+    ROLE_PANTHAKY,
 )
 from agyary.services import (
     behdin_directory,
@@ -121,11 +125,26 @@ def _asked(user_id: int):
 
 
 async def waiting_count(db: AsyncSession, user_id: int) -> int:
-    """How many requests are waiting for an answer from this person."""
+    """The red count on the Requests tab: how many requests wait for this
+    person (R3.1 step 4). For a confirmed panthaky of the fire temple, its
+    waiting requests nobody has taken on the board yet (Ask everyone, I'll
+    pray, a call's result). For anyone else it reached - an app mobed - its
+    waiting requests they have not answered, in the app or on WhatsApp."""
+    panthaky_at = select(AgyaryUser.agyary_id).where(
+        AgyaryUser.user_id == user_id, AgyaryUser.role == ROLE_PANTHAKY, AgyaryUser.is_active.is_(True))
+    answered = (
+        select(PrayerCallout.funeral_request_id)
+        .join(PrayerCalloutAnswer, PrayerCalloutAnswer.callout_id == PrayerCallout.id)
+        .where(PrayerCalloutAnswer.answer.is_not(None),
+               or_(PrayerCalloutAnswer.user_id == user_id,
+                   PrayerCalloutAnswer.phone == select(User.phone).where(User.id == user_id).scalar_subquery()))
+    )
     return (
         await db.execute(
             select(func.count()).select_from(FuneralRequest)
-            .where(FuneralRequest.id.in_(_asked(user_id)), FuneralRequest.status == REQUEST_WAITING)
+            .where(FuneralRequest.id.in_(_asked(user_id)), FuneralRequest.status == REQUEST_WAITING,
+                   or_(and_(FuneralRequest.agyary_id.in_(panthaky_at), FuneralRequest.taken_at.is_(None)),
+                       and_(FuneralRequest.agyary_id.not_in(panthaky_at), FuneralRequest.id.not_in(answered))))
         )
     ).scalar_one()
 
