@@ -56,8 +56,11 @@ function when(iso) {
   return day === todayIst() ? istHm(iso) : `${gregLabel(day)}, ${istHm(iso)}`;
 }
 
-/** One request's state, in words: "Waiting at X since 10:42" and the like. */
+/** One request's state, in words, as the server says it (R3.1 step 6): "Waiting at X",
+ *  "Finding mobeds at X: 1 of 2 going", "All set at X: Er. A and Er. B are going" and the
+ *  like. The rest is for a server from before those words. */
 export function requestState(q) {
+  if (q.headline) return q.headline;
   const where = q.agyari ? q.agyari.name : "the fire temple";
   if (q.status === "waiting") return `Waiting at ${where} since ${when(q.sent_at)}`;
   if (q.status === "accepted" || q.status === "taken") {
@@ -543,23 +546,60 @@ export async function renderRecordEdit({ id }) {
 
 // --- The record ---------------------------------------------------------------------
 
+/** A number with Call and WhatsApp from the manager's own phone, a short message ready to edit. */
+function reachHtml(rec, name, phone, idPrefix) {
+  const me = state.user ? state.user.name : "";
+  const place = rec.funeral_place ? rec.funeral_place.name : "";
+  const text = `Namaste ${name}, about the prayers for ${rec.prayed_name} - ${[me, place].filter(Boolean).join(", ")}.`;
+  const digits = phone.replace(/\D/g, "");
+  return `
+    <p style="margin:6px 0 0"><a class="tel" href="tel:${esc(phone)}">${esc(phone)}</a></p>
+    <div class="row tight" style="margin-top:8px;flex-wrap:wrap">
+      <a class="button small secondary" id="${idPrefix}Call" href="tel:${esc(phone)}">Call</a>
+      <a class="button small secondary" id="${idPrefix}Wa" target="_blank" rel="noopener"
+        href="https://wa.me/${esc(digits)}?text=${esc(encodeURIComponent(text))}">WhatsApp</a>
+    </div>`;
+}
+
 /** Who accepted, and a way to reach them only if they shared their number. */
 function accepterHtml(rec, q) {
   if (!q || !q.accepter_phone) {
     return q ? `<p class="meta" style="margin:4px 0 0">They did not share their number. You can reach them through
       ${esc(q.agyari ? q.agyari.name : "the fire temple")}.</p>` : "";
   }
-  const me = state.user ? state.user.name : "";
-  const place = rec.funeral_place ? rec.funeral_place.name : "";
-  const text = `Namaste ${q.accepted_by}, about the prayers for ${rec.prayed_name} - ${[me, place].filter(Boolean).join(", ")}.`;
-  const digits = q.accepter_phone.replace(/\D/g, "");
-  return `
-    <p style="margin:6px 0 0"><a class="tel" href="tel:${esc(q.accepter_phone)}">${esc(q.accepter_phone)}</a></p>
-    <div class="row tight" style="margin-top:8px;flex-wrap:wrap">
-      <a class="button small secondary" id="mrCall" href="tel:${esc(q.accepter_phone)}">Call</a>
-      <a class="button small secondary" id="mrWa" target="_blank" rel="noopener"
-        href="https://wa.me/${esc(digits)}?text=${esc(encodeURIComponent(text))}">WhatsApp</a>
-    </div>`;
+  return reachHtml(rec, q.accepted_by, q.accepter_phone, "mr");
+}
+
+/** All set (R3.1): the panthaky the family went to, with Call and WhatsApp. With no confirmed
+ *  panthaky in the app the headline's names are all there is. */
+function panthakysHtml(rec, q) {
+  const heads = q.panthakys || [];
+  if (!heads.length) {
+    return `<p class="meta" style="margin:4px 0 0">${esc(q.agyari ? q.agyari.name : "The fire temple")} has no
+      panthaky in Mobed Diary, so the mobeds going are all there is to know.</p>`;
+  }
+  return heads.map((p, i) => `
+    <div style="margin-top:10px">
+      <p style="margin:0">The panthaky: <b>${esc(p.name)}</b></p>
+      ${p.phone ? reachHtml(rec, p.name, p.phone, `mrHead${i}`) : ""}
+    </div>`).join("");
+}
+
+/** What else to say under a request's words, by where it stands. */
+function standingHtml(rec, q) {
+  if (q.stage === "all_set") return panthakysHtml(rec, q);
+  if (q.stage === "accepted") return accepterHtml(rec, q);
+  if (q.status !== "waiting") return "";
+  const where = q.agyari ? q.agyari.name : "the fire temple";
+  const lines = [`Sent ${esc(when(q.sent_at))}.`];
+  if (q.stage === "reopened") {
+    lines.push("Someone going can no longer go, so their place is being filled.");
+  } else if (q.no_answer_told_at) {
+    lines.push(`Nobody at ${esc(where)} has answered in an hour. You can send it to another agyari.`);
+  } else if (q.stage === "waiting" || q.stage === "panthaky_first") {
+    lines.push("You see here when they answer.");
+  }
+  return `<p class="meta" style="margin:4px 0 0">${lines.join(" ")}</p>`;
 }
 
 function fact(label, value) {
@@ -574,8 +614,13 @@ export async function renderRecordView({ id }) {
   const alive = navGuard();
   const rec = await fetchRecord(id, () => renderRecordView({ id }));
   if (!rec || !alive()) return;
+  drawRecord(rec, alive);
+}
+
+function drawRecord(rec, alive) {
   const waiting = rec.requests.find(q => q.status === "waiting");
-  const taken = rec.requests.find(q => q.status === "accepted" || q.status === "taken");
+  const latest = rec.requests[0];
+  const placeOn = !!(rec.funeral_place && rec.funeral_place.is_active);
   const death = rec.death;
   mainEl.innerHTML = `
     <div class="card">
@@ -597,9 +642,7 @@ export async function renderRecordView({ id }) {
     <div class="card">
       <h2>Prayers</h2>
       <p style="margin:4px 0 0"><b>${esc(recordState(rec))}</b></p>
-      ${taken ? accepterHtml(rec, taken) : ""}
-      ${waiting ? `<p class="meta" style="margin:4px 0 0">${waiting.asked} ${waiting.asked === 1 ? "person was" : "people were"}
-        told. You see here when they answer.</p>` : ""}
+      ${latest ? standingHtml(rec, latest) : ""}
       ${rec.requests.length > 1 ? `<div style="margin-top:10px">${rec.requests.slice(1).map(q =>
         `<p class="meta" style="margin:2px 0">${esc(requestState(q))}</p>`).join("")}</div>` : ""}
       <div class="action-bar">
