@@ -714,11 +714,15 @@ async def test_the_red_count_is_what_waits_for_each_one(client, db, seeded, meta
     # Everyone at once: the panthaky until they take it; the mobed until they answer, either way.
     rid, _, mgr = await _send(client, db, aid)
     assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 1)
+    # The list says the same to the panthaky ("Waiting for you"); a mobed has their own answer.
+    assert [q["taken"] for q in (await client.get(REQUESTS, headers=panthaky)).json()["waiting"]] == [False]
+    assert "taken" not in (await client.get(REQUESTS, headers=mobed)).json()["waiting"][0]
     await _signed_tap(client, MOBED, f"pca:{(await _answers(db))[MOBED].token}:n")
     assert (await _count(client, panthaky), await _count(client, mobed)) == (1, 0)
     assert (await client.post(_b(rid, "self"), json={}, headers=panthaky)).status_code == 200
     assert (await _request(db, rid)).status == "waiting"          # five wanted: still finding mobeds
     assert (await _count(client, panthaky), await _count(client, mobed)) == (0, 0)
+    assert (await client.get(f"{REQUESTS}/{rid}", headers=panthaky)).json()["request"]["taken"] is True
 
     # An answer in the app counts the same.
     rid2, _, _ = await _send(client, db, aid, mgr)

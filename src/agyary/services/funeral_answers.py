@@ -308,6 +308,9 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
         # and who is going, while the request still wants mobeds (19 Nov 2026).
         item["may_call_out"] = False
         if is_panthaky:
+            # Whether the board's first action has taken it for the fire temple: the
+            # Requests list's "Waiting for you", counted as the red count counts it.
+            item["taken"] = q.taken_at is not None
             callout = await prayer_callout.summary(db, q)
             if prayer_callout.is_open(q) or callout["asked"]:
                 item.update(may_call_out=True, callout=callout,
