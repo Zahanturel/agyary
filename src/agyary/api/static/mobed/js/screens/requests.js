@@ -674,6 +674,11 @@ function boardCardHtml(view) {
           <button type="button" id="rqAsk" ${ask.can ? "" : "disabled"}>Ask everyone</button>
         </div>
         ${ask.can ? "" : `<p class="meta" style="margin:6px 0 0">${esc(ask.why_not || "There is nobody more to ask now.")}</p>`}
+        ${b.may_confirm_short ? `
+          <button type="button" class="secondary" id="rqShort" style="width:100%;margin-top:12px">Confirm with
+            who's going</button>
+          <p class="meta" style="margin:6px 0 0">If nobody else can come, the prayers can go ahead with ${b.going} of
+            ${b.wanted}.</p>` : ""}
         <p class="meta" style="margin:10px 0 0">The family's name and number are not shown until enough mobeds are
           going.</p>` : ""}
     </div>`;
@@ -757,6 +762,7 @@ function paintBoard(view) {
   const on = (sel, fn) => { const el = area.querySelector(sel); if (el) el.onclick = fn; };
   on("#rqAsk", (ev) => act(view, ev.currentTarget, () => boardAskEveryone(view.id)));
   on("#rqSelf", (ev) => act(view, ev.currentTarget, () => boardPrayMyself(view.id)));
+  on("#rqShort", () => confirmShort(view));
   on("#rqCantTake", () => confirmDecline(q, view.alive));
   on("#rqMobedsPage", () => { useFireTempleOf(q); navigate("#/mobeds"); });
   const mobed = (key) => view.b.mobeds.find(m => m.key === key);
@@ -990,6 +996,58 @@ function askGoing(view, m) {
       showInfo(done.message || "Noted.");
     };
   });
+}
+
+// --- Confirm with who's going (R3.1 step 5) --------------------------------------------
+
+/** Fewer than wanted are going and nobody else can come: all set with those going, after a
+ *  sheet that says what follows. Then the board as the server has it; a refusal (it filled
+ *  or closed meanwhile) is said in the server's words over the board read again. */
+function confirmShort(view) {
+  const { b } = view;
+  const sheet = openSheet({
+    title: `Confirm with ${b.going} of ${b.wanted} going?`,
+    html: `
+      <p style="margin-top:0">Everyone is told and the family's contact is shared with those going.</p>
+      <p class="meta" style="margin:0 0 8px">${esc(goingWords(b.places.map(p => p.name)))}.</p>
+      <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
+      <div class="stack">
+        <button type="button" data-yes>Confirm with who's going</button>
+        <button type="button" class="ghost" data-no>Not yet</button>
+      </div>`,
+  });
+  const body = sheet.body;
+  body.querySelector("[data-no]").onclick = sheet.close;
+  const yes = body.querySelector("[data-yes]");
+  yes.onclick = async () => {
+    if (yes.disabled) return;
+    yes.disabled = true;
+    body.querySelector("[data-msg]").textContent = "";
+    view.acting = true;
+    const seq = ++view.seq;
+    let res;
+    try {
+      res = await boardConfirmShort(view.id);
+    } catch (e) {
+      view.acting = false;
+      if (!here(view)) return;
+      if (e.status === 400 || e.status === 404 || e.status === 409) {
+        sheet.close();
+        return refused(view, e);
+      }
+      // No signal, or a passing failure: said where they are looking, to tap again.
+      yes.disabled = false;
+      body.querySelector("[data-msg]").textContent = e.message;
+      return;
+    }
+    view.acting = false;
+    sheet.close();
+    if (!here(view)) return;
+    const { done = {}, ...nb } = res;
+    showBoard(view, nb, seq);
+    refreshRequestCount();
+    showInfo(done.message || "All set.");
+  };
 }
 
 // --- We can't take this ---------------------------------------------------------------
