@@ -516,3 +516,145 @@ async def test_once_all_set_the_board_reads_so_and_takes_no_more(client, db, see
     for path, body in (("ask-everyone", {}), ("self", {}), ("call-result", {"key": key, "result": "going"})):
         r = await client.post(_b(rid, path), json=body, headers=panthaky)
         assert r.status_code == 409 and r.json()["detail"] == all_set_words, path
+
+
+# --- App mobeds answer in the app too, and a fire temple with no panthaky ----------------
+
+REQUESTS = "/api/mobed/requests"
+
+
+async def test_an_app_mobed_answers_in_the_app_and_the_first_answer_counts_across_channels(
+    client, db, seeded, meta, pushes, live,
+):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _listed(client, aid, panthaky, ("Er. Listed", LISTED))
+    rid, res, _ = await _send(client, db, aid, mobeds_wanted=2)
+    assert res["callout"]["asked_in_app"] == 1 and res["callout"]["asked"] == 2
+    mobed = await _as(client, MOBED)
+
+    # The card: the prayers, n of N going, their own answer; no family, nobody else's number.
+    card = await client.get(f"{REQUESTS}/{rid}", headers=mobed)
+    assert card.status_code == 200
+    q = card.json()["request"]
+    assert q["places"] == {"going": 0, "wanted": 2}
+    assert q["my_answer"] == {"state": "asked", "answer": None, "how": None, "may_answer": True}
+    for number in (FAMILY, PANTHAKY, LISTED):
+        assert number not in card.text and number[3:] not in card.text
+    assert "Test Family" not in card.text and "callout" not in q
+
+    # "I can pray": a place, how "app"; told so in the app, and the panthaky is told.
+    pushes.clear()
+    meta.sent.clear()
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=mobed)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == prayer_callout.GOING_WORDS
+    assert r.json()["request"]["my_answer"]["state"] == "going" and r.json()["request"]["places"]["going"] == 1
+    row = (await _answers(db))[MOBED]
+    assert row.answer == "yes" and row.how == "app" and row.picked_at is not None
+    (going,) = await _notes(db, PANTHAKY, prayer_callout.KIND_GOING)
+    assert going.title == "Er. Pervez Kias is going (1 of 2)" and "in the app" in going.body
+    assert meta.sent == []        # no details, and no WhatsApp text for an answer in the app
+
+    # Their WhatsApp button afterwards changes nothing; nor does a second answer in the app.
+    await _signed_tap(client, MOBED, f"pca:{row.token}:n")
+    assert (await _answers(db))[MOBED].answer == "yes" and meta.sent == []
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "no"}, headers=mobed)
+    assert r.status_code == 409 and r.json()["detail"] == "You have already said yes: you are going."
+
+    # The other way round: a no on WhatsApp first, then the app.
+    listed = (await _answers(db))[LISTED]
+    await _signed_tap(client, LISTED, f"pca:{listed.token}:n")
+    assert (await _answers(db))[LISTED].answer == "no"
+
+    # A wrong answer, the panthaky, or someone it did not reach: refused.
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "maybe"}, headers=mobed)
+    assert r.status_code == 400 and r.headers["X-Field"] == "answer"
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == prayer_callout.PANTHAKY_USES_BOARD
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=await _as(client, SECOND))
+    assert r.status_code == 404
+    # The old Accept is for the panthaky here: a mobed answers for themselves.
+    r = await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=mobed)
+    assert r.status_code == 409 and "The panthaky of Goti Adarian takes this request" in r.json()["detail"]
+    assert (await _request(db, rid)).status == "waiting"
+
+
+async def test_a_mobeds_not_this_time_answers_only_for_them_and_a_late_yes_is_a_standby(client, db, seeded,
+                                                                                        pushes):
+    rid, _, mgr = await _send(client, db, seeded["agyary_id"], mobeds_wanted=1)
+    mobed = await _as(client, MOBED)
+    # The old Decline, used by a mobed, now means "not this time" for them only.
+    r = await client.post(f"{REQUESTS}/{rid}/decline", json={"reason": "away"}, headers=mobed)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == prayer_callout.NO_WORDS
+    assert r.json()["request"]["status"] == "waiting" and r.json()["request"]["my_answer"]["state"] == "said_no"
+    request = await _request(db, rid)
+    assert request.status == "waiting" and request.decline_reason is None
+    # The panthaky's "We can't take this" still closes it for the fire temple.
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(f"{REQUESTS}/{rid}/decline", json={"reason": None}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["request"]["status"] == "declined"
+
+    # All set: a late "I can pray" is a standby, told so in the app.
+    rid, _, _ = await _send(client, db, seeded["agyary_id"], mgr, mobeds_wanted=1)
+    assert (await client.post(_b(rid, "self"), json={}, headers=panthaky)).status_code == 200
+    assert (await _request(db, rid)).status == "all_set"
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=mobed)
+    assert r.status_code == 200 and r.json()["done"]["message"] == fw.ENOUGH_TEXT
+    assert r.json()["request"]["my_answer"]["state"] == "standby"
+    note = (await _notes(db, MOBED, prayer_callout.KIND_MY_YES))[-1]
+    assert note.title == "Enough mobeds are going" and note.body == fw.ENOUGH_TEXT
+
+
+async def test_with_no_panthaky_one_no_leaves_it_open_and_when_all_say_no_the_doongerwadi_is_told(
+    client, db, seeded, pushes,
+):
+    from agyary.models import AppNotification
+    from tests.funeral_helpers import agyari, member
+
+    only = await agyari(db, "Mobeds Only Agyari (test)", None)
+    await member(db, only, "+919822200111", name="Er. Only One")
+    await member(db, only, "+919822200112", name="Er. Only Two")
+    await db.commit()
+    rid, res, mgr = await _send(client, db, only.id)
+    assert res["asked"] == 2 and res["callout"]["asked_in_app"] == 0      # both had it from Send
+    one, two = await _as(client, "+919822200111"), await _as(client, "+919822200112")
+
+    pushes.clear()
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "no"}, headers=one)
+    assert r.status_code == 200 and r.json()["request"]["status"] == "waiting"
+    assert (await client.get(f"{REQUESTS}/count", headers=two)).json() == {"waiting": 1}
+    assert pushes == []
+    # The last no, by the old Decline: closed for that fire temple, and the Doongerwadi is told.
+    r = await client.post(f"{REQUESTS}/{rid}/decline", json={}, headers=two)
+    assert r.status_code == 200, r.text
+    request = await _request(db, rid)
+    assert request.status == "declined" and request.decided_by_user_id is None and request.decided_at
+    (note,) = (await db.execute(select(AppNotification).where(
+        AppNotification.kind == prayer_callout.KIND_NOBODY))).scalars().all()
+    assert note.title == "Nobody at Mobeds Only Agyari (test) can take it"
+    assert note.link == f"#/manager/record/{request.funeral_record_id}"
+    (push,) = pushes
+    assert push["title"] == "Nobody at Mobeds Only Agyari (test) can take it"
+    assert "Rustom" not in push["body"] and FAMILY[3:] not in push["body"]
+    got = (await client.get(f"/api/mobed/manager/records/{request.funeral_record_id}", headers=mgr)).json()["record"]
+    assert got["may_send"] is True and got["requests"][0]["status"] == "declined"
+
+
+async def test_with_no_panthaky_a_yes_keeps_it_open_whatever_the_others_say(client, db, seeded, pushes):
+    from tests.funeral_helpers import agyari, member
+
+    only = await agyari(db, "Mobeds Only Agyari (test)", None)
+    await member(db, only, "+919822200111", name="Er. Only One")
+    await member(db, only, "+919822200112", name="Er. Only Two")
+    await db.commit()
+    rid, _, _ = await _send(client, db, only.id, mobeds_wanted=2)
+    one, two = await _as(client, "+919822200111"), await _as(client, "+919822200112")
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=one)).status_code == 200
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "no"}, headers=two)).status_code == 200
+    assert (await _request(db, rid)).status == "waiting"
+    # Nobody at a fire temple with no panthaky is told of each yes; their cards show the count.
+    assert await _notes(db, "+919822200112", prayer_callout.KIND_GOING) == []
+    card = (await client.get(f"{REQUESTS}/{rid}", headers=two)).json()["request"]
+    assert card["places"] == {"going": 1, "wanted": 2} and card["my_answer"]["state"] == "said_no"

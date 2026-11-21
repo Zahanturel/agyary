@@ -74,6 +74,7 @@ from agyary.services import (
     funeral_whatsapp,
     guardrails,
     mobed_access,
+    panthaky,
     prayer_callout,
     mobed_dashboard,
     reminders,
@@ -279,10 +280,15 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
                 # The WhatsApp messages from our number on accepting (Step 5b).
                 "whatsapp": await funeral_whatsapp.summary(db, None, q),
             })
+        # How many are going of how many (R3.1 step 4); and for an app mobed (not
+        # a confirmed panthaky, who has the board) their own answer, never anyone
+        # else's name or number.
+        is_panthaky = await prayer_callout.is_confirmed_panthaky(db, q.agyary_id, user.id)
+        item.update(await prayer_callout.card(db, q, user, mine=not is_panthaky))
         # A confirmed panthaky of the fire temple sees who was asked on WhatsApp
         # and who is going, while the request still wants mobeds (19 Nov 2026).
         item["may_call_out"] = False
-        if await prayer_callout.is_confirmed_panthaky(db, q.agyary_id, user.id):
+        if is_panthaky:
             callout = await prayer_callout.summary(db, q)
             if prayer_callout.is_open(q) or callout["asked"]:
                 item.update(may_call_out=True, callout=callout,
@@ -462,6 +468,13 @@ async def accept(
     says why not."""
     now = now or datetime.now(timezone.utc)
     record, place, agyary = await _answerable(db, user, request)
+    # Since R3.1 step 4 the fire temple's app mobeds are asked in the app too, and
+    # a mobed there answers for themselves only: where there is a confirmed
+    # panthaky, they take the request, and nobody else is given the family here.
+    if (not await prayer_callout.is_confirmed_panthaky(db, agyary.id, user.id)
+            and await panthaky.panthakys_of(db, settings, agyary.id)):
+        raise AnswerError(f"The panthaky of {agyary.name} takes this request. "
+                          "Please answer with I can pray or Not this time.")
     request.status = REQUEST_ACCEPTED
     request.accepted_by_user_id = user.id
     request.decided_by_user_id = user.id

@@ -546,7 +546,10 @@ class _Plan:
 
     @property
     def anything(self) -> bool:
-        return bool(self.new_recipients or self.app_rows or self.whatsapp)
+        """Whether someone would be asked: in the app (the request reaching
+        them now) or on WhatsApp. A row for someone the request reached
+        already is only bookkeeping."""
+        return bool(self.new_recipients or self.whatsapp)
 
 
 async def _plan(db: AsyncSession, settings: Settings, request: FuneralRequest, agyary: Agyary, *,
@@ -678,7 +681,7 @@ async def _ask_everyone(db, settings, request_id, *, by_user, take, now, client)
         logger.info("Request %s: nobody more at fire temple %s to ask (%s)", request.id, agyary.id, state)
         return {"state": state, "asked": 0, "asked_in_app": 0, "message": _nobody_words(agyary, plan)}
 
-    if take and by_user is not None:
+    if take and by_user is not None and (plan.new_recipients or whatsapp):
         await take_request(db, request, by_user, now)
     sent_by = by_user.id if by_user is not None else request.sent_by_user_id
     callout = await _callout_of(db, request, sent_by_user_id=sent_by, now=now)
@@ -714,9 +717,17 @@ async def _ask_everyone(db, settings, request_id, *, by_user, take, now, client)
     logger.warning("Request %s: everyone at fire temple %s asked%s: %d in the app, %d of %d on WhatsApp",
                    request.id, agyary.id, f" by user {by_user.id}" if by_user is not None else "", in_app, went,
                    len(whatsapp))
-    return {"state": "sent" if in_app or went else "failed", "asked": went, "asked_in_app": in_app,
-            "message": _asked_words(agyary, in_app, went, len(whatsapp) - went,
-                                    plan.why_not_whatsapp if not whatsapp else None)}
+    why = plan.why_not_whatsapp
+    if in_app or went:
+        state, message = "sent", _asked_words(agyary, in_app, went, len(whatsapp) - went, None if whatsapp else why)
+    elif whatsapp:
+        state, message = "failed", _asked_words(agyary, 0, 0, len(whatsapp), None)
+    else:
+        # Only rows for people the request had reached at Send (a fire temple
+        # with no panthaky): nobody new was asked.
+        state = ("off" if not fw.mode_on(settings) else "not_now") if why else "none"
+        message = _nobody_words(agyary, plan)
+    return {"state": state, "asked": went, "asked_in_app": in_app, "message": message}
 
 
 async def ask_everyone_now(db: AsyncSession, settings: Settings, request: FuneralRequest,
@@ -1194,8 +1205,8 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
                       key=lambda r: (r.answered_at, r.id))
     waiting = request.status == REQUEST_WAITING
     plan = await _plan(db, settings, request, agyary, by_user=user) if waiting else None
-    askable = ({m["key"] for m in plan.whatsapp} | {f"u{u.id}" for u in plan.new_recipients}
-               | {m["key"] for m, _ in plan.app_rows}) if plan is not None else set()
+    askable = set() if plan is None else (
+        {m["key"] for m in plan.whatsapp} | {f"u{u.id}" for u in plan.new_recipients})
     people = await our_mobeds(db, settings, agyary.id, me=user, with_numbers=True)
     app_ids = [m["id"] for m in people if m["kind"] == "app"]
     phones = dict((await db.execute(select(User.id, User.phone).where(User.id.in_(app_ids)))).all()) \
@@ -1363,6 +1374,88 @@ async def call_result(
     await db.refresh(row)
     return {"outcome": outcome,
             "message": _done_words(row, request, await _going(db, request.id), wanted(record), me=False)}
+
+
+# --- App mobeds answer in the app too (owner, 21 Nov 2026, third round) ---------------
+
+PANTHAKY_USES_BOARD = "As the panthaky, please answer on the request's board: I'll pray, or We can't take this."
+NO_WORDS = "Noted: you cannot pray this time."
+
+
+def _mine_already(row: PrayerCalloutAnswer) -> str:
+    if row.picked_at is not None:
+        return "You have already said yes: you are going."
+    if row.answer == CALLOUT_YES:
+        return "You have already said yes: you are on standby."
+    return "You have already said you cannot pray this time."
+
+
+async def answer_in_app(
+    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, choice, *,
+    now: datetime | None = None, client: httpx.AsyncClient | None = None,
+) -> dict:
+    """An app mobed's "I can pray" (yes) or "Not this time" (no) on their
+    request card: their own row, how "app", and only their first answer,
+    whichever way it came (a WhatsApp tap first makes this "already
+    answered", and the other way round). A yes goes through ``fill``; a no
+    answers only for them (_after_no). Only someone the request reached
+    (the caller checks: funeral_answers.get_for_user) who is not a confirmed
+    panthaky of the fire temple - they use the board - and is still there,
+    while the request is waiting, or all set (a yes is then a standby)."""
+    from agyary.services import mobed_dashboard   # here: as the rest of the app's answering
+
+    now = now or _now()
+    if choice not in (CALLOUT_YES, CALLOUT_NO):
+        raise CalloutError("Please answer I can pray or Not this time.", status=400, field="answer")
+    if await is_confirmed_panthaky(db, request.agyary_id, user.id):
+        raise CalloutError(PANTHAKY_USES_BOARD)
+    await db.refresh(request, with_for_update=True)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    if request.status not in (REQUEST_WAITING, REQUEST_ALL_SET):
+        place = await db.get(FuneralPlace, record.funeral_place_id)
+        raise CalloutError(closed_words(request, place.name))
+    agyary = await db.get(Agyary, request.agyary_id)
+    if not agyary.is_active or not await mobed_dashboard.is_active_member(db, agyary.id, user.id):
+        raise CalloutError(f"You are no longer at {agyary.name} in Mobed Diary, so you cannot answer for it.")
+    row = _find(await _request_rows(db, request.id), f"u{user.id}", user.phone)
+    if row is not None and row.answer is not None:
+        raise CalloutError(_mine_already(row))
+    if row is None:
+        callout = await _callout_of(db, request, sent_by_user_id=request.sent_by_user_id, now=now)
+        row = _new_row(callout, name=user.name, phone=user.phone, how=HOW_APP, user_id=user.id)
+        db.add(row)
+        await db.flush()
+    yes = choice == CALLOUT_YES
+    outcome = await _answer(db, settings, request, row, yes, how=HOW_APP, by_user=user, now=now, client=client)
+    logger.info("Request %s: user %s answered in the app (%s)", request.id, user.id, outcome)
+    await db.refresh(row)
+    if outcome == "already answered":
+        message = _mine_already(row)
+    elif not yes:
+        message = NO_WORDS
+    else:
+        message = GOING_WORDS if row.picked_at is not None else fw.ENOUGH_TEXT
+    return {"outcome": outcome, "message": message}
+
+
+async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: bool) -> dict:
+    """For a person's own request card (funeral_answers.serialize): how many
+    are going of how many, and with ``mine`` (an app mobed, not a panthaky)
+    their own answer and where they stand - asked, going, standby, or said no
+    - and whether they can still answer. Never anyone else's name or number."""
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    rows = await _request_rows(db, request.id)
+    out = {"places": {"going": sum(1 for r in rows if r.picked_at is not None), "wanted": wanted(record)}}
+    if mine:
+        row = _find(rows, f"u{user.id}", user.phone)
+        answered = row is not None and row.answer is not None
+        state = ("asked" if not answered else GOING if row.picked_at is not None
+                 else STANDBY if row.answer == CALLOUT_YES else SAID_NO)
+        out["my_answer"] = {
+            "state": state, "answer": row.answer if answered else None, "how": row.how if answered else None,
+            "may_answer": not answered and request.status in (REQUEST_WAITING, REQUEST_ALL_SET),
+        }
+    return out
 
 
 # --- Afterwards -------------------------------------------------------------------

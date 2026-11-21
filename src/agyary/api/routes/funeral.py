@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, time
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -587,15 +588,56 @@ async def accept_request(
     }
 
 
+class AnswerIn(BaseModel):
+    # "yes" (I can pray) or "no" (Not this time). Checked by
+    # prayer_callout.answer_in_app, so a wrong value is said in plain words
+    # (a 400 naming the field), never as a 422.
+    answer: Any = None
+
+
+def _callout_error(exc: prayer_callout.CalloutError) -> HTTPException:
+    headers = {FIELD_HEADER: exc.field} if exc.field else None
+    return HTTPException(status_code=exc.status, detail=str(exc), headers=headers)
+
+
+async def _answer_in_app(db: AsyncSession, user: User, request: FuneralRequest, answer) -> dict:
+    try:
+        done = await prayer_callout.answer_in_app(db, get_settings(), user, request, answer)
+    except prayer_callout.CalloutError as exc:
+        raise _callout_error(exc) from exc
+    await db.refresh(request)
+    await db.refresh(user)
+    return {"request": await _one(db, user, request), "done": done}
+
+
+@router.post("/requests/{request_id}/answer")
+async def answer_request(
+    request_id: int, payload: AnswerIn, db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """An app mobed's "I can pray" or "Not this time" (R3.1, owner 21 Nov
+    2026): only someone the request reached who is not the fire temple's
+    confirmed panthaky (they use the board), and only their first answer,
+    whichever way it came. ``done`` says where they stand."""
+    rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
+    request = await _asked_request(db, user, request_id)
+    return await _answer_in_app(db, user, request, payload.answer)
+
+
 @router.post("/requests/{request_id}/decline")
 async def decline_request(
     request_id: int, payload: DeclineIn, db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """Decline for the fire temple, with an optional short reason for the
-    manager, who can then ask another fire temple."""
+    """A confirmed panthaky's "We can't take this": declined for the fire
+    temple, with an optional short reason for the manager, who can then ask
+    another fire temple. Anyone else the request reached says "Not this time"
+    for themselves only (owner, 21 Nov 2026, third round): the same as
+    answering no, and the request stays open for the others."""
     rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
     request = await _asked_request(db, user, request_id)
+    if not await prayer_callout.is_confirmed_panthaky(db, request.agyary_id, user.id):
+        return await _answer_in_app(db, user, request, "no")
     try:
         await funeral_answers.decline(db, get_settings(), user, request, reason=payload.reason)
     except funeral_answers.AnswerError as exc:
