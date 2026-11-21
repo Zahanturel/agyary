@@ -337,20 +337,20 @@ const STANDBY_WORDS = "Thank you. Enough mobeds are going this time. If a place 
 
 /** An app mobed's own request, in a few words, for the list and the page. */
 function myHeadline(q) {
-  const state = q.my_answer.state;
+  const mine = q.my_answer.state;
   if (q.status === "all_set") {
-    return state === "going" ? "All set: you are going" : state === "standby" ? "All set: you are on standby" : "All set";
+    return mine === "going" ? "All set: you are going" : mine === "standby" ? "All set: you are on standby" : "All set";
   }
-  return { going: "You are going", standby: "Standby", said_no: "You said not this time" }[state]
+  return { going: "You are going", standby: "Standby", said_no: "You said not this time" }[mine]
     || "Asked: can you pray?";
 }
 
 /** Where they stand, in a sentence. */
 function myWords(q) {
-  const state = q.my_answer.state;
-  if (state === "going") return q.status === "all_set" ? "Enough mobeds are going, and you are one of them." : GOING_WORDS;
-  if (state === "standby") return STANDBY_WORDS;
-  if (state === "said_no") return "You said not this time. Nothing more is needed from you.";
+  const mine = q.my_answer.state;
+  if (mine === "going") return q.status === "all_set" ? "Enough mobeds are going, and you are one of them." : GOING_WORDS;
+  if (mine === "standby") return STANDBY_WORDS;
+  if (mine === "said_no") return "You said not this time. Nothing more is needed from you.";
   return q.status === "all_set"
     ? "Enough mobeds are going already. If you can pray too, you are kept on standby in case a place opens."
     : "If you can pray, you will get the details once enough mobeds are going, and your name and number will be "
@@ -424,7 +424,7 @@ async function openBoard(id, q, alive) {
   }
   if (!alive()) return;
   // `seq` counts every read and action, so an answer that arrives after a newer one is dropped.
-  const view = { id: b.request_id, q, b, alive, seq: 0, reading: false, acting: false, timer: null, liveError: "" };
+  const view = { id: b.request_id, q, b, alive, seq: 0, reading: 0, acting: false, timer: null, liveError: "" };
   onScreen = view;
   mainEl.innerHTML = `${boardFactsHtml(view)}<div id="rqBoard"></div>`;
   paintBoard(view);
@@ -643,14 +643,14 @@ async function refused(view, e, btn = null) {
     return showError(e.message);
   }
   showError(e.message);
-  if (e.status === 409 || e.status === 400) return readBoard(view);
   if (btn) btn.disabled = false;
+  if (e.status === 409 || e.status === 400) return readBoard(view);
 }
 
-/** Read the board again now. A failure is said on the board, and the next read tries again. */
+/** Read the board again now (a read already on its way is then dropped: `seq`). A failure
+ *  is said on the board, and the next read tries again. */
 async function readBoard(view) {
-  if (view.reading) return;
-  view.reading = true;
+  view.reading += 1;
   const seq = ++view.seq;
   try {
     const b = await requestBoard(view.id);
@@ -663,16 +663,13 @@ async function readBoard(view) {
     }
   } catch (e) {
     if (seq === view.seq && here(view)) {
-      if (e.status === 404) {
-        view.reading = false;
-        return renderRequest({ id: view.id });
-      }
+      if (e.status === 404) return renderRequest({ id: view.id });
       view.liveError = "Could not check for new answers just now. Trying again.";
       const line = document.getElementById("rqLive");
       if (line) line.textContent = view.liveError;
     }
   } finally {
-    view.reading = false;
+    view.reading -= 1;
   }
 }
 
@@ -690,7 +687,7 @@ async function tick(view) {
   view.timer = null;
   if (!here(view) || view.b.status !== "waiting" || document.hidden) return;
   // Never two at once, and not while a tap is being answered: its answer is the board.
-  if (!view.acting) await readBoard(view);
+  if (!view.acting && !view.reading) await readBoard(view);
   if (here(view) && !view.timer) keepLive(view);
 }
 
