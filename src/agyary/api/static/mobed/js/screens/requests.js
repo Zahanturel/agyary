@@ -1,33 +1,32 @@
 "use strict";
 
 /**
- * The Requests tab (DECISIONS D10 and its 18 Nov amendment; Phase 2 Step 5): a
- * Doongerwadi or prayer hall asks this mobed's fire temple for the prayers.
+ * The Requests tab (DECISIONS D10, changed 21 Nov 2026; docs/phase2-requests-redesign.md;
+ * R3.1 step 4): a Doongerwadi or prayer hall asks this mobed's fire temple for the prayers.
  *
- *  - The list: what waits for their answer (the departed's prayed name, the
- *    place, four days or one, the Geh-saarnu and Uthamna, mobeds
- *    wanted, which fire temple it was sent to, when), and "Earlier": accepted
- *    (by whom), declined, withdrawn.
- *  - One request: Accept (with the tick "Share my name and number", on) or
- *    Decline (with an optional reason). The family's name and number are not
- *    shown until this mobed accepts, and then only to them.
- *  - Accepting puts the family in their own Behdins and the prayers on their
- *    calendar, and opens the memorial form filled in, to check and save. The
- *    request then shows the family's contact with "Message the family on
- *    WhatsApp" (their own WhatsApp, a message ready to change) and "Call".
- *
- * With the share tick, accepting can also send WhatsApp messages from Mobed
- * Diary's own number (Step 5b, once Meta approves them): what went, or why not,
- * is said after accepting and on the request. A confirmed panthaky sees here
- * how many of the agyari's mobeds were asked on WhatsApp when the request came
- * and how many are going, and opens who is going (screens/callout.js).
+ *  - The list: what waits (the departed's prayed name, the place, four days or one, the
+ *    Geh-saarnu and Uthamna, mobeds wanted, which fire temple it was sent to, when), and
+ *    "Earlier": accepted (by whom), declined, withdrawn.
+ *  - A request's page, for a confirmed panthaky the request reached and for the admin: the
+ *    "Who will pray: n of N" board. The prayers without the family's name or number; a place
+ *    per mobed wanted, filled or open, and the standbys in the order they said yes; Ask
+ *    everyone and I'll pray, one tap each; the fire temple's mobeds, each with where they
+ *    stand for this request and Call and WhatsApp from the panthaky's own phone (a message
+ *    ready to edit, no family details); and "We can't take this" at the very bottom (the
+ *    panthaky's decline, reason optional). The panthaky's first action takes the request
+ *    for the fire temple: there is no Accept any more. While it waits and is on screen, the
+ *    board is read again every 10 seconds. All set reads so, with the places; Step 5 adds
+ *    the family's contact and "Make the memorial" in the place left for them.
+ *  - A request accepted the old way (before R3.1) reads as it did (D8): for the one who
+ *    accepted, the family's contact with "Message the family on WhatsApp" and "Call", and
+ *    their own behdin and memorial.
  */
 
-import { myRequests, myRequest, acceptRequest, declineRequest } from "../api.js";
-import { state, saveSession } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, flashInfo, flashError,
-} from "../ui.js";
+  myRequests, myRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself,
+} from "../api.js";
+import { state, saveSession } from "../state.js";
+import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet } from "../ui.js";
 import { esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
@@ -55,8 +54,8 @@ function uthamnaText(u) {
   return u.time ? `${gregLabel(u.date)}, ${clock(u.time)}` : `${gregLabel(u.date)} (time not given)`;
 }
 
-function placeText(q) {
-  const p = q.funeral_place;
+/** A funeral place: {name, kind_label?, city}. */
+function placeText(p) {
   // "Doongerwadi" once: the kind only when the name does not already say it.
   const kind = p.kind_label && !p.name.toLowerCase().includes(p.kind_label.toLowerCase()) ? p.kind_label : "";
   const town = p.city && !p.name.toLowerCase().includes(p.city.toLowerCase()) ? p.city : "";
@@ -70,6 +69,7 @@ function stateText(q) {
   }
   if (q.status === "declined") return q.declined_by_me ? "Declined by you" : q.declined_by ? `Declined by ${q.declined_by}` : "Declined";
   if (q.status === "withdrawn") return `Withdrawn by ${q.funeral_place.name}`;
+  if (q.status === "all_set") return "All set";
   return "Waiting for an answer";
 }
 
@@ -79,7 +79,7 @@ function fact(label, value) {
 
 function factsHtml(q) {
   return `
-    ${fact("Place", esc(placeText(q)))}
+    ${fact("Place", esc(placeText(q.funeral_place)))}
     ${fact("Died", `${esc(gregLabel(q.death.date))}<br><span class="meta">${esc(q.death.label)}</span>`)}
     ${fact("Obsequies", esc(q.obsequies_label))}
     ${fact("Geh-saarnu", esc(gehSaarnuText(q.geh_saarnu)))}
@@ -93,7 +93,7 @@ function factsHtml(q) {
 function waitingCardHtml(q) {
   return `<div class="card search-result req-card" data-rid="${q.id}">
       <h2>${esc(q.prayed_name)}</h2>
-      <p class="meta" style="margin:0">${esc(placeText(q))}</p>
+      <p class="meta" style="margin:0">${esc(placeText(q.funeral_place))}</p>
       <p style="margin:6px 0 0">${esc(q.obsequies_label)}${q.mobeds_wanted
         ? ` · ${q.mobeds_wanted} mobed${q.mobeds_wanted === 1 ? "" : "s"} wanted` : ""}</p>
       <p style="margin:2px 0 0">Geh-saarnu: ${esc(gehSaarnuText(q.geh_saarnu))}</p>
@@ -127,7 +127,7 @@ export async function renderRequests() {
   mainEl.innerHTML = `
     <h2 style="margin:0 0 4px">Requests</h2>
     <p class="meta" style="margin:0 0 12px">When a Doongerwadi or prayer hall asks your fire temple for the prayers,
-      it is here. The family's name and number are shown to the one who accepts.</p>
+      it is here. The family's name and number are not shown until enough mobeds are going.</p>
     ${got.waiting.length ? got.waiting.map(waitingCardHtml).join("")
       : `<div class="card"><p style="margin:0">Nothing is waiting for you.</p></div>`}
     ${got.earlier.length ? `<h2 style="margin:20px 0 8px">Earlier</h2>
@@ -138,6 +138,30 @@ export async function renderRequests() {
 }
 
 // --- One request ------------------------------------------------------------------
+
+/** Statuses that have a board on the page; the others read as before. */
+const BOARD = new Set(["waiting", "all_set"]);
+
+export async function renderRequest({ id }) {
+  chrome(true);
+  refreshHeader();
+  showFab(false);
+  loading();
+  const alive = navGuard();
+  let q = null;
+  try {
+    q = (await myRequest(id)).request;
+  } catch (e) {
+    if (!alive()) return;
+    // A 404 may still be the admin, whom a request never reaches: they have its board only.
+    if (e.status !== 404) return screenFailed("Couldn't open the request: " + e.message, () => renderRequest({ id }));
+  }
+  if (!alive()) return;
+  // funeral_answers.serialize gives `my_answer` only to someone the request reached who is
+  // not the fire temple's confirmed panthaky: the panthaky (and the admin) have the board.
+  if (q && (q.my_answer || !BOARD.has(q.status))) return drawRequest(q, alive);
+  return openBoard(id, q, alive);
+}
 
 function waLink(phone, text) {
   const digits = String(phone || "").replace(/\D/g, "");
@@ -208,21 +232,9 @@ function calloutCardHtml(q) {
     </div>`;
 }
 
-export async function renderRequest({ id }) {
-  chrome(true);
-  refreshHeader();
-  showFab(false);
-  loading();
-  const alive = navGuard();
-  let q;
-  try {
-    q = (await myRequest(id)).request;
-  } catch (e) {
-    if (!alive()) return;
-    if (e.status === 404) return screenFailed("That request could not be found.");
-    return screenFailed("Couldn't open the request: " + e.message, () => renderRequest({ id }));
-  }
-  if (!alive()) return;
+/** The page as it was before R3.1: a request accepted the old way, declined or withdrawn
+ *  (and, until the next steps, an app mobed's). */
+function drawRequest(q, alive) {
   const waiting = q.status === "waiting";
   mainEl.innerHTML = `
     ${q.accepted_by_me ? familyCardHtml(q) : ""}
@@ -233,19 +245,11 @@ export async function renderRequest({ id }) {
       ${q.decline_reason ? `<p class="meta" style="margin:4px 0 0">Your reason: ${esc(q.decline_reason)}</p>` : ""}
       ${!waiting && !q.accepted_by_me ? `<p class="meta" style="margin:4px 0 0">Nothing more is needed from you.</p>` : ""}
       <div style="margin-top:10px">${factsHtml(q)}</div>
-      ${waiting ? `<p class="meta" style="margin:10px 0 0">The family's name and number are shown to the one who
-        accepts. The first to accept takes it.</p>
-      <div class="action-bar">
-        <button type="button" class="secondary" id="rqDecline">Decline</button>
-        <button type="button" id="rqAccept">Accept</button>
-      </div>` : ""}
     </div>
-    ${q.may_call_out ? calloutCardHtml(q) : ""}`;
+    ${q.may_call_out && !waiting ? calloutCardHtml(q) : ""}`;
 
   const on = (sel, fn) => { const el = document.getElementById(sel); if (el) el.onclick = fn; };
   on("rqCallout", () => navigate(`#/requests/${q.id}/callout`));
-  on("rqAccept", () => confirmAccept(q));
-  on("rqDecline", () => confirmDecline(q));
   if (!q.accepted_by_me) return;
   const msg = document.getElementById("rqMsg");
   const wa = document.getElementById("rqWa");
@@ -272,85 +276,301 @@ function openMemorialForm(q, customerId) {
   navigate(`#/behdins/${customerId}/memorials/new`);
 }
 
-/** After an answer the request may have been taken by someone else meanwhile:
- *  the page is drawn again, and what happened is said over it. */
-async function redrawSaying(q, message, isError) {
+/** After an answer the request may have changed meanwhile: the page is drawn again, and
+ *  what happened is said over it. Nothing, if the mobed has gone to another screen. */
+async function redrawSaying(q, message, isError, alive) {
+  if (!alive()) return;
   await renderRequest({ id: q.id });
   refreshRequestCount();
   (isError ? showError : showInfo)(message);
 }
 
-function acceptedWords(res) {
-  const q = res.request;
-  const words = [`Accepted. ${q.family_contact.name} is in your Behdins, with reminders off.`];
-  const put = res.events.map(e => e.what);
-  if (put.length) words.push(`${put.join(" and ")} ${put.length === 1 ? "is" : "are"} on your calendar.`);
-  res.events.filter(e => e.time_guessed).forEach(e =>
-    words.push(`No time was given for the ${e.what}: it is at ${clock(e.time)}; change it when you know.`));
-  res.events.filter(e => e.conflict).forEach(e => words.push(`You already have something at the time of the ${e.what}.`));
-  res.skipped.forEach(s => words.push(`The ${s.what} is not on your calendar: ${s.why}`));
-  return words.join(" ");
+// --- The board: "Who will pray" (R3.1) ----------------------------------------------
+
+// How a place was filled, in a word or two.
+const HOW = { whatsapp: "On WhatsApp", app: "In the app", phone: "By phone", self: "I'll pray" };
+const SAID_HOW = { whatsapp: "on WhatsApp", app: "in the app", phone: "on the phone", self: "" };
+// While it waits and is on screen, the board is read again this often.
+const LIVE_MS = 10000;
+
+function myKey() {
+  return state.user ? `u${state.user.id}` : "";
 }
 
-/** What to add about Mobed Diary's own WhatsApp messages after accepting. */
-function whatsappWords(wa) {
-  if (!wa || wa.state === "not_shared") return { text: "" };
-  if (wa.state === "off") return { text: `${wa.message} Nothing was sent from Mobed Diary's WhatsApp.` };
-  return { text: wa.message || "", error: wa.state === "failed" };
+/** Read the board, and draw the page around it. `q` is the request as the panthaky was
+ *  asked it (null for the admin, whom it never reached). */
+async function openBoard(id, q, alive) {
+  let b;
+  try {
+    b = await requestBoard(id);
+  } catch (e) {
+    if (!alive()) return;
+    // No longer theirs to answer (no longer the panthaky there, say): the page as it reads to them.
+    if (e.status === 404) return q ? drawRequest(q, alive) : screenFailed("That request could not be found.");
+    return screenFailed("Couldn't open the request: " + e.message, () => renderRequest({ id }));
+  }
+  if (!alive()) return;
+  // `seq` counts every read and action, so an answer that arrives after a newer one is dropped.
+  const view = { id: b.request_id, q, b, alive, seq: 0, reading: false, acting: false, timer: null, liveError: "" };
+  mainEl.innerHTML = `${boardFactsHtml(view)}<div id="rqBoard"></div>`;
+  paintBoard(view);
+  keepLive(view);
 }
 
-function confirmAccept(q) {
-  const place = q.funeral_place.name;
-  const sheet = openSheet({
-    title: `Accept the prayers for ${q.prayed_name}?`,
-    html: `
-      <p class="meta" style="margin-top:0">For ${esc(q.agyari.name)}. Once you accept:</p>
-      <ul class="meta" style="margin:0 0 10px;padding-left:20px">
-        <li>The family's contact goes into your Behdins, with reminders off until you ask them.</li>
-        <li>The Geh-saarnu and the Uthamna go on your calendar.</li>
-        <li>The memorial form opens, filled in, for you to check and save.</li>
-      </ul>
-      <div class="check-row" id="rqShareRow"><input type="checkbox" id="rqShare" checked>
-        <label for="rqShare">Share my name and number with ${esc(place)}</label></div>
-      <p class="meta" style="margin:4px 0 0">So they can call you about the prayers. Untick it and they see only your
-        name and fire temple.</p>
-      <p class="meta" data-msg role="alert" style="margin:6px 0 0"></p>
-      <div class="stack" style="margin-top:12px">
-        <button type="button" data-yes>Accept</button>
-        <button type="button" class="ghost" data-no>Cancel</button>
-      </div>`,
-  });
-  const body = sheet.body;
-  body.querySelector("[data-no]").onclick = sheet.close;
-  body.querySelector("[data-yes]").onclick = async (ev) => {
-    const btn = ev.currentTarget;
-    if (btn.disabled) return;
-    btn.disabled = true;
-    body.querySelector("[data-msg]").textContent = "";
-    let res;
-    try {
-      res = await acceptRequest(q.id, body.querySelector("#rqShare").checked);
-    } catch (e) {
-      if (e.status === 409 || e.status === 404) {
-        // Taken, withdrawn or declined meanwhile: say so over the page as it is now.
-        sheet.close();
-        return redrawSaying(q, e.message, true);
-      }
-      btn.disabled = false;
-      body.querySelector("[data-msg]").textContent = e.message;   // in the sheet, where they are looking
-      return;
+/** The prayers, as the board gives them: never the family's name or number. */
+function boardFactsHtml({ q, b }) {
+  const facts = q ? factsHtml(q) : `
+    ${fact("Place", esc(placeText(b.place)))}
+    ${fact("Geh-saarnu", esc(b.geh_saarnu ? b.geh_saarnu.text : "Not given"))}
+    ${fact("Uthamna", esc(b.uthamna ? b.uthamna.text : "Not given"))}
+    ${fact("Sent to", esc(b.agyari.name))}`;
+  return `<div class="card">
+      <h2>${esc(b.prayed_name)}</h2>
+      <div style="margin-top:6px">${facts}</div>
+    </div>`;
+}
+
+/** Where the board stands, under its heading. */
+function boardStateText(b) {
+  if (b.status === "all_set") return "Enough mobeds are going.";
+  if (b.status === "waiting") {
+    if (b.taken) return b.taken.by ? `Finding mobeds: ${b.taken.by} has taken this on.` : "Finding mobeds.";
+    return b.way === "panthaky_first"
+      ? "Waiting for you. Only you were told: ask everyone, call a mobed, or pray yourself."
+      : "Waiting for you. Your mobeds were asked when it came, and the first to say yes fill the places.";
+  }
+  if (b.status === "declined") return "Declined: nothing more is needed for it.";
+  if (b.status === "withdrawn") return `Withdrawn by ${b.place.name}: nothing more is needed for it.`;
+  return "Accepted.";
+}
+
+function slotsHtml(b) {
+  const me = myKey();
+  const out = b.places.map(p => `<div class="wp-slot"><b>${esc(p.name)}${p.key === me ? " (you)" : ""}</b>
+      <span class="meta">${esc(HOW[p.how] || "")}</span></div>`);
+  for (let i = b.places.length; i < b.wanted; i += 1) out.push(`<div class="wp-slot open">Open place</div>`);
+  return out.join("");
+}
+
+function standbysHtml(b) {
+  if (!b.standbys.length) return "";
+  const me = myKey();
+  return `<p style="margin:14px 0 4px"><b>Standby, in order</b></p>
+    <ol style="margin:0;padding-left:28px">${b.standbys.map(s => `<li>${esc(s.name)}${s.key === me ? " (you)" : ""}
+      ${HOW[s.how] ? `<span class="meta">· ${esc(HOW[s.how])}</span>` : ""}</li>`).join("")}</ol>`;
+}
+
+function boardCardHtml(view) {
+  const { b } = view;
+  const waiting = b.status === "waiting";
+  const me = myKey();
+  // "I'll pray" only for the fire temple's confirmed panthaky, and not twice.
+  const self = waiting && b.may_pray && !b.places.concat(b.standbys).some(p => p.key === me);
+  const ask = b.ask_everyone || { can: false, why_not: null };
+  return `<div class="card">
+      <h2>${b.status === "all_set" ? "All set" : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
+      <p class="meta" style="margin:0">${esc(boardStateText(b))}</p>
+      <p class="meta" id="rqLive" role="status" style="margin:4px 0 0">${esc(view.liveError)}</p>
+      ${slotsHtml(b)}
+      ${standbysHtml(b)}
+      ${waiting ? `
+        <div class="action-bar">
+          ${self ? `<button type="button" class="secondary" id="rqSelf">I'll pray</button>` : ""}
+          <button type="button" id="rqAsk" ${ask.can ? "" : "disabled"}>Ask everyone</button>
+        </div>
+        ${ask.can ? "" : `<p class="meta" style="margin:6px 0 0">${esc(ask.why_not || "There is nobody more to ask now.")}</p>`}
+        <p class="meta" style="margin:10px 0 0">The family's name and number are not shown until enough mobeds are
+          going.</p>` : ""}
+    </div>`;
+}
+
+/** Where one of the fire temple's mobeds stands for this request. */
+function mobedStateText(m) {
+  if (m.state === "going") return "Going";
+  if (m.state === "standby") return "Standby";
+  if (m.state === "said_no") return `Said no${SAID_HOW[m.how] ? ` ${SAID_HOW[m.how]}` : ""}`;
+  if (m.state === "asked_whatsapp") {
+    const wa = m.whatsapp;
+    return `Asked on WhatsApp${wa ? `: ${wa.state}${wa.why ? ` (${wa.why})` : ""}` : ""}${m.in_app ? ", and in the app" : ""}`;
+  }
+  if (m.state === "asked_app") return "Asked in the app";
+  return "Not asked yet";
+}
+
+/** What the panthaky's own WhatsApp opens with, to one of their mobeds: no family details. */
+function askText(b) {
+  return [
+    `A prayer request has come to ${b.agyari.name} for ${b.prayed_name} at ${b.place.name}.`,
+    b.geh_saarnu ? `Geh-saarnu: ${b.geh_saarnu.text}.` : "",
+    b.uthamna ? `Uthamna: ${b.uthamna.text}.` : "",
+    "Can you pray?",
+  ].filter(Boolean).join(" ");
+}
+
+function mobedRowHtml(b, m) {
+  const notes = [];
+  if (m.phone) notes.push(esc(m.phone));
+  if (m.stopped) notes.push("Replied STOP: not asked on WhatsApp");
+  else if (!m.can_message && m.why_not) notes.push(`Not asked on WhatsApp: ${esc(m.why_not)}`);
+  // Call and WhatsApp use the panthaky's own phone, so only someone whose number is shown.
+  const reach = m.phone ? `<div class="row" style="margin-top:8px">
+      <a class="button secondary" href="tel:${esc(m.phone)}" data-call="${esc(m.key)}"
+        aria-label="Call ${esc(m.name)}">Call</a>
+      <a class="button secondary" href="${esc(waLink(m.phone, askText(b)))}" target="_blank" rel="noopener"
+        data-chat="${esc(m.key)}" aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
+    </div>` : "";
+  return `<div class="fact">
+      <div><b>${esc(m.name)}</b></div>
+      <div class="meta"><b>${esc(mobedStateText(m))}</b></div>
+      ${notes.map(n => `<div class="meta">${n}</div>`).join("")}
+      ${reach}
+    </div>`;
+}
+
+function mobedsCardHtml(view) {
+  const { b, q } = view;
+  return `<div class="card">
+      <h2>Mobeds</h2>
+      <p class="meta" style="margin:0 0 4px">Call or message one of your mobeds from your own phone.</p>
+      ${b.mobeds.length ? b.mobeds.map(m => mobedRowHtml(b, m)).join("") : `
+        <p style="margin:8px 0 0">Nobody else is on ${esc(b.agyari.name)}'s list of mobeds yet.</p>
+        ${q ? `<button type="button" class="ghost small" id="rqMobedsPage" style="margin-top:8px">Open the Mobeds
+          page</button>` : ""}`}
+    </div>`;
+}
+
+/** The board and what goes with it, drawn again from `view.b`. */
+function paintBoard(view) {
+  const area = document.getElementById("rqBoard");
+  if (!area) return;
+  const { b, q } = view;
+  const waiting = b.status === "waiting";
+  view.drawn = JSON.stringify(b);
+  area.innerHTML = `${boardCardHtml(view)}
+    ${b.status === "all_set" ? `<div id="rqAllSetMore"></div>` : ""}
+    ${waiting ? mobedsCardHtml(view) : ""}
+    ${waiting && q ? `<p style="margin:20px 0 0;text-align:center">
+      <button type="button" class="ghost small" id="rqCantTake">We can't take this</button></p>` : ""}`;
+  // Step 5: the family's contact and "Make the memorial" go in #rqAllSetMore.
+
+  const on = (sel, fn) => { const el = area.querySelector(sel); if (el) el.onclick = fn; };
+  on("#rqAsk", (ev) => act(view, ev.currentTarget, () => boardAskEveryone(view.id)));
+  on("#rqSelf", (ev) => act(view, ev.currentTarget, () => boardPrayMyself(view.id)));
+  on("#rqCantTake", () => confirmDecline(q, view.alive));
+  on("#rqMobedsPage", () => { useFireTempleOf(q); navigate("#/mobeds"); });
+}
+
+/** A board read or action has answered: drawn, unless something newer has been asked since. */
+function showBoard(view, b, seq) {
+  if (seq !== view.seq || !view.alive()) return;
+  view.b = b;
+  view.liveError = "";
+  paintBoard(view);
+  keepLive(view);
+}
+
+/** One board action: one tap, the button held while it runs; then the board as the server
+ *  has it now, and what happened in words. */
+async function act(view, btn, call) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  view.acting = true;
+  const seq = ++view.seq;
+  let res;
+  try {
+    res = await call();
+  } catch (e) {
+    view.acting = false;
+    if (view.alive()) refused(view, e, btn);
+    return;
+  }
+  view.acting = false;
+  if (!view.alive()) return;
+  const { done = {}, ...b } = res;
+  showBoard(view, b, seq);
+  refreshRequestCount();
+  (done.state === "failed" ? showError : showInfo)(done.message || "Done.");
+}
+
+/** An action the server refused, in its own words, over the board as it is now. A failure
+ *  to reach the server leaves the button to try again. */
+async function refused(view, e, btn = null) {
+  if (e.status === 404) {
+    // No longer theirs (or no longer there): the page as it reads to them now.
+    await renderRequest({ id: view.id });
+    return showError(e.message);
+  }
+  showError(e.message);
+  if (e.status === 409 || e.status === 400) return readBoard(view);
+  if (btn) btn.disabled = false;
+}
+
+/** Read the board again now. A failure is said on the board, and the next read tries again. */
+async function readBoard(view) {
+  if (view.reading) return;
+  view.reading = true;
+  const seq = ++view.seq;
+  try {
+    const b = await requestBoard(view.id);
+    if (seq === view.seq && view.alive() && JSON.stringify(b) === view.drawn) {
+      view.liveError = "";
+      const line = document.getElementById("rqLive");
+      if (line) line.textContent = "";
+    } else {
+      showBoard(view, b, seq);
     }
-    sheet.close();
-    refreshRequestCount();
-    const wa = whatsappWords(res.whatsapp);
-    (wa.error ? flashError : flashInfo)([acceptedWords(res), wa.text].filter(Boolean).join(" "));
-    openMemorialForm(res.request, res.customer_id);
-  };
+  } catch (e) {
+    if (seq === view.seq && view.alive()) {
+      if (e.status === 404) {
+        view.reading = false;
+        return renderRequest({ id: view.id });
+      }
+      view.liveError = "Could not check for new answers just now. Trying again.";
+      const line = document.getElementById("rqLive");
+      if (line) line.textContent = view.liveError;
+    }
+  } finally {
+    view.reading = false;
+  }
 }
 
-function confirmDecline(q) {
+// --- Live: the board read again while it waits and is on screen ---------------------
+
+let onScreen = null;   // the board being shown, for the page coming back into view
+
+function keepLive(view) {
+  onScreen = view;
+  clearTimeout(view.timer);
+  view.timer = null;
+  if (!view.alive() || view.b.status !== "waiting" || document.hidden) return;
+  view.timer = setTimeout(() => tick(view), LIVE_MS);
+}
+
+async function tick(view) {
+  clearTimeout(view.timer);
+  view.timer = null;
+  if (!view.alive() || view.b.status !== "waiting" || document.hidden) return;
+  // Never two at once, and not while a tap is being answered: its answer is the board.
+  if (!view.acting) await readBoard(view);
+  if (view.alive() && !view.timer) keepLive(view);
+}
+
+document.addEventListener("visibilitychange", () => {
+  const view = onScreen;
+  if (!view || !view.alive()) return;
+  if (document.hidden) {
+    clearTimeout(view.timer);
+    view.timer = null;
+  } else if (view.b.status === "waiting") {
+    tick(view);
+  }
+});
+
+// --- We can't take this ---------------------------------------------------------------
+
+function confirmDecline(q, alive) {
   const sheet = openSheet({
-    title: `Decline the request for ${q.prayed_name}?`,
+    title: `Can't take the prayers for ${q.prayed_name}?`,
     html: `
       <p class="meta" style="margin-top:0">${esc(q.funeral_place.name)} is told that ${esc(q.agyari.name)} cannot
         take it, and can ask another fire temple. It is then closed for everyone asked here.</p>
@@ -358,7 +578,7 @@ function confirmDecline(q) {
       <textarea id="rqReason" rows="2" maxlength="200" placeholder="e.g. No mobed free on that day"></textarea>
       <p class="meta" data-msg role="alert" style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">
-        <button type="button" class="danger" data-yes>Decline</button>
+        <button type="button" class="danger" data-yes>We can't take this</button>
         <button type="button" class="ghost" data-no>Keep it</button>
       </div>`,
   });
@@ -376,12 +596,12 @@ function confirmDecline(q) {
       if (e.field === "reason") return flagProblems(body, [{ target: "#rqReason", message: e.message }]);
       if (e.status === 409 || e.status === 404) {
         sheet.close();
-        return redrawSaying(q, e.message, true);
+        return redrawSaying(q, e.message, true, alive);
       }
       body.querySelector("[data-msg]").textContent = e.message;
       return;
     }
     sheet.close();
-    redrawSaying(q, `Declined. ${q.funeral_place.name} is told and can ask another fire temple.`, false);
+    redrawSaying(q, `Declined. ${q.funeral_place.name} is told and can ask another fire temple.`, false, alive);
   };
 }

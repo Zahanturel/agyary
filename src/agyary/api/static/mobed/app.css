@@ -701,6 +701,11 @@ body.sheet-open { overflow: hidden; }
 /* Big enough to hit: the people using this are not at home with phones. */
 .loc-map.leaflet-container .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 26px; }
 .loc-map.leaflet-container .leaflet-control-attribution { font-size: 13px; }
+/* The "Who will pray" board on a request (requests.js): a place per mobed wanted, filled or open. */
+.wp-slot { border: 2px solid var(--primary); border-radius: var(--radius-md); background: var(--primary-tint);
+  padding: var(--space-3) var(--space-4); margin-top: var(--space-2); }
+.wp-slot b { display: block; font-size: var(--text-md); }
+.wp-slot.open { border-style: dashed; border-color: var(--border); background: transparent; color: var(--muted); }
 /* A fire temple a request cannot reach yet (nobody there in the app): shown, not tappable. */
 .search-result.unavailable { cursor: default; background: var(--ink-100); border-style: dashed; }
 .search-result.unavailable:hover { background: var(--ink-100); }

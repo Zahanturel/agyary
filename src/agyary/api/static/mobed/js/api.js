@@ -238,8 +238,16 @@ export const managerRemoveFromBook = (id) => del(asManager(`/manager/behdins/${i
 export const myRequestCount = () => get("/requests/count");
 export const myRequests = () => get("/requests");
 export const myRequest = (id) => get(`/requests/${id}`);
-export const acceptRequest = (id, shareContact) => post(`/requests/${id}/accept`, { share_contact: shareContact });
+/** A confirmed panthaky's "We can't take this" (for anyone else the server takes it as Not this time). */
 export const declineRequest = (id, reason) => post(`/requests/${id}/decline`, { reason: reason || null });
+/** The "Who will pray" board on a request (R3.1): for the fire temple's confirmed panthakys
+ *  the request reached, and the admin. Each action answers with the board as it is now and
+ *  `done`, what happened in words. */
+export const requestBoard = (rid) => get(`/requests/${rid}/board`);
+export const boardAskEveryone = (rid) => post(`/requests/${rid}/ask-everyone`, {});
+export const boardPrayMyself = (rid) => post(`/requests/${rid}/self`, {});
+// key: "u<user id>" or "c<contact id>" from the board's mobeds; result: "going", "not_going" or "no_answer".
+export const boardCallResult = (rid, key, result) => post(`/requests/${rid}/call-result`, { key, result });
 /** A fire temple's own list of mobeds, and the panthaky's call-out on WhatsApp (D10, Step 5c). */
 export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
 export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });
