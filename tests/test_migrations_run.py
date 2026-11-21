@@ -677,3 +677,79 @@ async def test_the_all_set_migration_holds_its_rules_and_comes_off_cleanly():
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_standby_migration_holds_its_rules_and_comes_off_cleanly():
+    """e3f4a5b6c7d1 (R3.1 step 5b): an answer from before has not backed out and
+    was never asked again; only someone going can back out, and who marked it
+    can go without taking the answer; a re-ask has its own unguessable token
+    (one per row, never another's) with when it was asked, one answer of yes or
+    no with when, and when it moved on - none of them without being asked; the
+    downgrade takes it all off, keeping every row, someone who backed out then
+    reading as not going."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "d2e3f4a5b6c0"))
+        await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Er. Panthaky', '+919000000001'),"
+                               " ('Er. Going', '+919000000002'), ('Er. Standby', '+919000000003')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at)"
+                               " VALUES (1, 1, 'waiting', now())")
+        await _scratch_execute("INSERT INTO prayer_callouts (funeral_request_id, agyary_id, asked) VALUES (1, 1, 2)")
+        answer = ("INSERT INTO prayer_callout_answers (callout_id, user_id, name, phone, token, answer, answered_at,"
+                  " picked_at) VALUES (1, :u, :n, :p, :t, 'yes', :at, :picked)")
+        await _scratch_execute(answer, {"u": 2, "n": "Er. Going", "p": "+919000000002", "t": "g" * 24, "at": AT,
+                                        "picked": AT})
+        await _scratch_execute(answer, {"u": 3, "n": "Er. Standby", "p": "+919000000003", "t": "s" * 24, "at": AT,
+                                        "picked": None})
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute(
+            "SELECT backed_out_at, backed_out_by_user_id, reask_token, reasked_at, reask_answer, reask_answered_at,"
+            " reask_passed_at FROM prayer_callout_answers ORDER BY id") == [(None,) * 7, (None,) * 7]
+        going, standby = "WHERE user_id = 2", "WHERE user_id = 3"
+        await _refused(f"UPDATE prayer_callout_answers SET backed_out_at = :at {standby}", {"at": AT},
+                       "backing out without going")
+        await _scratch_execute(f"UPDATE prayer_callout_answers SET backed_out_at = :at, backed_out_by_user_id = 1"
+                               f" {going}", {"at": AT})
+        await _refused(f"UPDATE prayer_callout_answers SET reask_token = :t {standby}", {"t": "r" * 24},
+                       "a token without being asked")
+        await _refused(f"UPDATE prayer_callout_answers SET reask_answer = 'yes', reask_answered_at = :at {standby}",
+                       {"at": AT}, "an answer without being asked")
+        await _refused(f"UPDATE prayer_callout_answers SET reask_passed_at = :at {standby}", {"at": AT},
+                       "moving on without asking")
+        await _scratch_execute(f"UPDATE prayer_callout_answers SET reask_token = :t, reasked_at = :at {standby}",
+                               {"t": "r" * 24, "at": AT})
+        await _refused(f"UPDATE prayer_callout_answers SET reask_answer = 'maybe', reask_answered_at = :at {standby}",
+                       {"at": AT}, "an unknown answer")
+        await _refused(f"UPDATE prayer_callout_answers SET reask_answer = 'no' {standby}", {}, "an answer with no time")
+        await _scratch_execute(f"UPDATE prayer_callout_answers SET reask_answer = 'no', reask_answered_at = :at,"
+                               f" reask_passed_at = :at {standby}", {"at": AT})
+        await _refused(f"UPDATE prayer_callout_answers SET reask_token = :t, reasked_at = :at {going}",
+                       {"t": "r" * 24, "at": AT}, "one re-ask token on two rows", needle="unique")
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'prayer_callout_answers'::regclass")
+        assert {"uq_prayer_callout_answers_reask_token", "fk_prayer_callout_answers_backed_out_by_user_id_users",
+                "ck_prayer_callout_answers_backed_out_was_going", "ck_prayer_callout_answers_reasked",
+                "ck_prayer_callout_answers_reask_answer", "ck_prayer_callout_answers_reask_answered",
+                "ck_prayer_callout_answers_reask_answer_asked",
+                "ck_prayer_callout_answers_reask_passed_asked"} <= {n for (n,) in names}
+        await _scratch_execute("DELETE FROM users WHERE id = 1")
+        assert await _scratch_execute(f"SELECT backed_out_by_user_id FROM prayer_callout_answers {going}") == [(None,)]
+
+        _ok(_alembic("downgrade", "d2e3f4a5b6c0"))
+        cols = {c for (c,) in await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'prayer_callout_answers'")}
+        assert not {"backed_out_at", "backed_out_by_user_id", "reask_token", "reasked_at", "reask_answer",
+                    "reask_answered_at", "reask_passed_at"} & cols
+        assert await _scratch_execute("SELECT user_id, answer, picked_at FROM prayer_callout_answers ORDER BY id") == [
+            (2, "yes", None), (3, "yes", None)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

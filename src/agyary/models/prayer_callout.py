@@ -93,7 +93,17 @@ class PrayerCalloutAnswer(Base):
     were asked until they answer, then how the answer came (a WhatsApp button,
     in the app, by phone, or "self"); ``recorded_by_user_id`` is the panthaky
     who marked a phone answer or "I'll pray". A Yes with ``picked_at`` is a
-    place; a Yes without it is a standby, in ``answered_at`` order."""
+    place; a Yes without it is a standby, in ``answered_at`` order.
+
+    Since R3.1 step 5b (owner, 21 Nov 2026), someone going can say they can no
+    longer go: ``backed_out_at`` (and ``backed_out_by_user_id``, who said so in
+    the app: they, or the panthaky marking it; empty for a WhatsApp tap). They
+    keep ``picked_at`` as history but no longer hold a place, nor are they a
+    standby. A standby asked again when a place opens has a fresh unguessable
+    ``reask_token`` (the re-ask's buttons carry it, never ``token``) and
+    ``reasked_at``; their first answer to it is ``reask_answer`` /
+    ``reask_answered_at``; ``reask_passed_at`` is when the asking moved on past
+    them (their no, or 30 minutes without an answer), set once."""
 
     __tablename__ = "prayer_callout_answers"
 
@@ -119,6 +129,16 @@ class PrayerCalloutAnswer(Base):
     recorded_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
+    # R3.1 step 5b: backing out, and a standby asked again (see the docstring).
+    backed_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    backed_out_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reask_token: Mapped[str | None] = mapped_column(String(40), unique=True)
+    reasked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reask_answer: Mapped[str | None] = mapped_column(String(5))
+    reask_answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reask_passed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(f"answer IN ({sql_in(CALLOUT_ANSWERS)})", name="answer"),
@@ -126,6 +146,12 @@ class PrayerCalloutAnswer(Base):
         CheckConstraint("(answer IS NULL) = (answered_at IS NULL)", name="answered"),
         CheckConstraint("picked_at IS NULL OR answer = 'yes'", name="picked_said_yes"),
         CheckConstraint("contact_id IS NULL OR user_id IS NULL", name="one_kind"),
+        CheckConstraint("backed_out_at IS NULL OR picked_at IS NOT NULL", name="backed_out_was_going"),
+        CheckConstraint("(reask_token IS NULL) = (reasked_at IS NULL)", name="reasked"),
+        CheckConstraint(f"reask_answer IN ({sql_in(CALLOUT_ANSWERS)})", name="reask_answer"),
+        CheckConstraint("(reask_answer IS NULL) = (reask_answered_at IS NULL)", name="reask_answered"),
+        CheckConstraint("reask_answer IS NULL OR reasked_at IS NOT NULL", name="reask_answer_asked"),
+        CheckConstraint("reask_passed_at IS NULL OR reasked_at IS NOT NULL", name="reask_passed_asked"),
         UniqueConstraint("callout_id", "phone", name="uq_prayer_callout_answers_callout_phone"),
         Index("idx_prayer_callout_answers_callout", "callout_id"),
     )
