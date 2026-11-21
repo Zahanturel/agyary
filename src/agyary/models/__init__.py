@@ -13,7 +13,7 @@ from agyary.models.ceremony_name import CeremonyName
 from agyary.models.customer import AgyaryCustomer, Customer, CustomerSavedName, ReminderOptOut
 from agyary.models.funeral_book import FuneralBehdin
 from agyary.models.funeral_place import FuneralPlace, FuneralPlaceManager
-from agyary.models.funeral_record import FuneralRecord, FuneralRequest, FuneralRequestRecipient
+from agyary.models.funeral_record import FuneralRecord, FuneralRequest, FuneralRequestBook, FuneralRequestRecipient
 from agyary.models.login_otp import LoginOtp
 from agyary.models.machi import Machi
 from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
@@ -46,6 +46,7 @@ __all__ = [
     "FuneralPlaceManager",
     "FuneralRecord",
     "FuneralRequest",
+    "FuneralRequestBook",
     "FuneralRequestRecipient",
     "LoginOtp",
     "Machi",

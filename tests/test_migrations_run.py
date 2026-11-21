@@ -624,3 +624,56 @@ async def test_the_board_migration_holds_its_rules_and_comes_off_cleanly():
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_all_set_migration_holds_its_rules_and_comes_off_cleanly():
+    """d2e3f4a5b6c0 (R3.1 step 5): a request from before is not confirmed short
+    and was never told it is short; one book per person per request, which goes
+    with the request or the person's account, while the record or the memorial
+    going leaves it empty; the downgrade takes it all off, keeping the requests."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "c1d2e3f4a5b9"))
+        await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Er. Panthaky', '+919000000001'),"
+                               " ('Er. Going', '+919000000002')")
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at)"
+                               " VALUES (1, 1, 'waiting', now())")
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute("SELECT confirmed_short, short_alert_at FROM funeral_requests") == [(False, None)]
+        await _scratch_execute("UPDATE funeral_requests SET confirmed_short = true, short_alert_at = :at", {"at": AT})
+        await _refused("UPDATE funeral_requests SET confirmed_short = NULL", {}, "no answer", needle="not-null")
+        await _scratch_execute("INSERT INTO customers (owner_user_id, name, phone) VALUES (2, 'Family', '+919000000009')")
+        book = "INSERT INTO funeral_request_books (funeral_request_id, user_id, customer_id, is_panthaky) VALUES (1, :u, :c, :p)"
+        await _scratch_execute(book, {"u": 1, "c": None, "p": True})
+        await _scratch_execute(book, {"u": 2, "c": 1, "p": False})
+        await _refused(book, {"u": 2, "c": 1, "p": False}, "a second book for one person", needle="unique")
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'funeral_request_books'::regclass")
+        assert {"pk_funeral_request_books", "uq_funeral_request_books_request_user",
+                "fk_funeral_request_books_funeral_request_id_funeral_requests",
+                "fk_funeral_request_books_user_id_users", "fk_funeral_request_books_customer_id_customers",
+                "fk_funeral_request_books_memorial_id_memorials"} <= {n for (n,) in names}
+        # The family's record going (an erasure) leaves the book empty; the account going takes it.
+        await _scratch_execute("DELETE FROM customers WHERE id = 1")
+        assert await _scratch_execute("SELECT user_id, customer_id FROM funeral_request_books ORDER BY user_id") == [
+            (1, None), (2, None)]
+        await _scratch_execute("DELETE FROM users WHERE id = 1")
+        assert await _scratch_execute("SELECT user_id FROM funeral_request_books") == [(2,)]
+
+        _ok(_alembic("downgrade", "c1d2e3f4a5b9"))
+        cols = {c for (c,) in await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'funeral_requests'")}
+        assert not {"confirmed_short", "short_alert_at"} & cols
+        assert await _scratch_execute("SELECT to_regclass('funeral_request_books')") == [(None,)]
+        assert await _scratch_execute("SELECT status FROM funeral_requests") == [("waiting",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

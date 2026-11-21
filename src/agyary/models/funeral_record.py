@@ -13,6 +13,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Time,
+    UniqueConstraint,
     func,
     text,
 )
@@ -169,6 +170,13 @@ class FuneralRequest(Base):
     # (services/all_set.py). decided_at is set with it, as for any request
     # that is no longer waiting.
     all_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # R3.1 step 5: True when the panthaky made it all set with fewer mobeds
+    # going than wanted ("Confirm with who's going").
+    confirmed_short: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    # When the panthakys (or, with none, the funeral place's managers) were told
+    # "Still 1 mobed short", 4 hours before the Geh-saarnu
+    # (services/prayer_timers.py). Set once, before anyone is told.
+    short_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(f"status IN ({sql_in(REQUEST_STATUSES)})", name="status"),
@@ -201,3 +209,40 @@ class FuneralRequestRecipient(Base):
     notified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("idx_funeral_request_recipients_user", "user_id"),)
+
+
+class FuneralRequestBook(Base):
+    """Whose own book a request put the family in at All set (R3.1 step 5;
+    DECISIONS D10, changed 21 Nov 2026): the panthaky who took it (or, if
+    nobody did, each confirmed panthaky it reached) and each app mobed going,
+    once per person. Their own record of the family's number (D2), and the
+    memorial they made from the request, if they did - each person's own,
+    never shown to anyone else, nor to the funeral place. A request accepted
+    the old way before R3.1 keeps its single funeral_requests.memorial_id
+    instead (D8).
+
+    ``is_panthaky``: their book was set up as the request's panthaky, so the
+    family and the mobeds are told they are the panthaky. The row goes with
+    that person's account; the record and the memorial may go on their own
+    (a family's erasure), leaving it empty."""
+
+    __tablename__ = "funeral_request_books"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    funeral_request_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("funeral_requests.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    customer_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("customers.id", ondelete="SET NULL")
+    )
+    memorial_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("memorials.id", ondelete="SET NULL")
+    )
+    is_panthaky: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("funeral_request_id", "user_id", name="uq_funeral_request_books_request_user"),
+        Index("idx_funeral_request_books_user", "user_id"),
+    )
