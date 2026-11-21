@@ -25,13 +25,13 @@ import json
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import AppNotification, FuneralRequest, User
+from agyary.models import Agyary, AppNotification, FuneralRequest, User
 from agyary.services import funeral_records
-from tests.funeral_helpers import agyari, form, manager, member
-from tests.test_prayer_callout import ADMIN, MOBED, PANTHAKY, _as, _way
+from tests.funeral_helpers import MUMBAI, agyari, form, manager, member
+from tests.test_prayer_callout import ADMIN, LIVE, MOBED, PANTHAKY, _as, _way
 
 RECORDS = "/api/mobed/manager/records"
 REQUESTS = "/api/mobed/requests"
@@ -252,3 +252,51 @@ async def test_declined_nobody_withdrawn_and_accepted_the_old_way(client, db, se
     assert (q["stage"], q["headline"]) == ("accepted", f"Accepted by {HEAD} of Goti Adarian")
     assert q["accepted_by"] == HEAD and q["accepter_phone"] == PANTHAKY
     assert q["going"] is None and q["going_names"] == [] and q["panthakys"] == []
+
+
+# --- The fire temples to choose from say their way ---------------------------------------
+
+ROW_KEYS = {"id", "name", "city", "address", "km", "location_source", "reach", "way", "may_send", "preferred"}
+
+
+async def test_the_agyari_rows_say_the_way_and_nothing_else(client, db, seeded, pushes, monkeypatch):
+    aid = seeded["agyary_id"]
+    await db.execute(update(Agyary).where(Agyary.id == aid).values(
+        latitude=MUMBAI[0] + 0.01, longitude=MUMBAI[1], location_source="pin"))
+    only = await agyari(db, "Mobeds Only Agyari (test)", (MUMBAI[0] + 0.02, MUMBAI[1]))
+    await member(db, only, ONLY, name="Er. Only One")
+    empty = await agyari(db, "Empty Agyari (test)", (MUMBAI[0] + 0.03, MUMBAI[1]))
+    await db.commit()
+    mgr, _ = await manager(client, db)
+    rec = (await client.post(RECORDS, json=form(), headers=mgr)).json()["record"]
+
+    async def rows() -> tuple[dict, dict]:
+        near = (await client.get(f"{RECORDS}/{rec['id']}/agyaries", headers=mgr)).json()
+        found = (await client.get("/api/mobed/manager/agyaries/search?q=Agyari", headers=mgr)).json()
+        assert near["whatsapp_on"] == found["whatsapp_on"]
+        by_name = {a["name"]: a for a in near["agyaries"]}
+        assert {a["name"]: a["way"] for a in found["agyaries"]} == {n: a["way"] for n, a in by_name.items()
+                                                                    if n in {a["name"] for a in found["agyaries"]}}
+        for a in near["agyaries"] + found["agyaries"]:
+            assert set(a) == ROW_KEYS
+        return {n: a["way"] for n, a in by_name.items()}, near
+
+    ways, near = await rows()
+    assert ways == {"Goti Adarian": "everyone", "Mobeds Only Agyari (test)": "everyone", "Empty Agyari (test)": None}
+    assert near["whatsapp_on"] is False
+
+    # Come to me first, with a safety net: only the way shows, never the minutes.
+    await _way(db, aid, "panthaky_first", 30)
+    await _way(db, only.id, "panthaky_first", 15)          # no panthaky there: everyone at once
+    await _way(db, empty.id, "panthaky_first")
+    ways, near = await rows()
+    assert ways == {"Goti Adarian": "panthaky_first", "Mobeds Only Agyari (test)": "everyone",
+                    "Empty Agyari (test)": None}
+    assert "30" not in json.dumps([a for a in near["agyaries"] if a["name"] == "Goti Adarian"])
+
+    # WhatsApp sending live: said so for the sheet.
+    for key, value in LIVE.items():
+        monkeypatch.setenv(key, value)
+    config.get_settings.cache_clear()
+    _, near = await rows()
+    assert near["whatsapp_on"] is True

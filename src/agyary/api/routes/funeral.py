@@ -429,7 +429,9 @@ async def search_agyaries_for_manager(
         place = acting.places[0] if acting.places else None
     if place is None:
         raise HTTPException(status_code=404, detail="That place could not be found.")
-    return {"agyaries": await funeral_requests.search(db, get_settings(), place, q, preferred_id)}
+    settings = get_settings()
+    return {"agyaries": await funeral_requests.search(db, settings, place, q, preferred_id),
+            "whatsapp_on": await funeral_requests.whatsapp_on(db, settings)}
 
 
 # ---------------------------------------------------------------------------

@@ -31,8 +31,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, FuneralRequestRecipient, User
-from agyary.models.enums import GEH_NAMES, REQUEST_WAITING, REQUEST_WITHDRAWN
-from agyary.services import funeral_records, mobed_access, mobed_dashboard, panthaky, reminders, web_push
+from agyary.models.enums import (
+    GEH_NAMES,
+    REQUEST_MODE_EVERYONE,
+    REQUEST_MODE_PANTHAKY_FIRST,
+    REQUEST_WAITING,
+    REQUEST_WITHDRAWN,
+)
+from agyary.services import (
+    funeral_records,
+    mobed_access,
+    mobed_dashboard,
+    panthaky,
+    reminders,
+    request_settings,
+    web_push,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +74,25 @@ def _distance(place: FuneralPlace, agyary: Agyary) -> float | None:
     return km(place.latitude, place.longitude, agyary.latitude, agyary.longitude)
 
 
+async def _way(db: AsyncSession, settings: Settings, agyary: Agyary, reach: str) -> str | None:
+    """How a request would reach it now (request_settings.way_for), for the
+    sheet before Send to say what happens; None where nobody is in the app.
+    Only the way: never the safety net's minutes, nor who is there."""
+    if reach == panthaky.REACH_NOBODY:
+        return None
+    if (agyary.request_mode or REQUEST_MODE_EVERYONE) != REQUEST_MODE_PANTHAKY_FIRST:
+        return REQUEST_MODE_EVERYONE
+    return await request_settings.way_for(db, settings, agyary)
+
+
+async def whatsapp_on(db: AsyncSession, settings: Settings) -> bool:
+    """Whether mobeds asked at Send would be asked on WhatsApp too, or only in
+    the app (sending off, not set up or paused)."""
+    from agyary.services import funeral_whatsapp   # here: it reads funeral_records, as this does
+
+    return (await funeral_whatsapp.status(db, settings))["on"]
+
+
 async def _rows(
     db: AsyncSession, settings: Settings, place: FuneralPlace, agyaries: list[Agyary], preferred_id: int | None,
 ) -> list[dict]:
@@ -73,6 +106,9 @@ async def _rows(
             # "town": only the town's position is known yet, so the distance is rough.
             "location_source": a.location_source,
             "reach": reach[a.id],
+            # "everyone" (its mobeds are asked at once) or "panthaky_first" (its panthaky
+            # chooses who to ask); None with nobody in the app (R3.1 step 6).
+            "way": await _way(db, settings, a, reach[a.id]),
             "may_send": reach[a.id] != panthaky.REACH_NOBODY,
             "preferred": a.id == preferred_id,
         })
@@ -109,6 +145,7 @@ async def suggested(
         "place_has_position": _has_position(place),
         "near_km": NEAR_KM,
         "agyaries": await _rows(db, settings, place, agyaries, preferred_id),
+        "whatsapp_on": await whatsapp_on(db, settings),
     }
 
 
