@@ -35,7 +35,10 @@ from agyary.models import (
     FuneralPlace,
     FuneralRecord,
     FuneralRequest,
+    FuneralRequestBook,
     FuneralRequestRecipient,
+    PrayerCallout,
+    PrayerCalloutAnswer,
     User,
 )
 from agyary.models.enums import (
@@ -48,8 +51,11 @@ from agyary.models.enums import (
     OFFERED_CALENDARS,
     REQUEST_ACCEPTED,
     REQUEST_ALL_SET,
+    REQUEST_DECLINED,
+    REQUEST_MODE_PANTHAKY_FIRST,
     REQUEST_TAKEN,
     REQUEST_WAITING,
+    REQUEST_WITHDRAWN,
 )
 from agyary.services import memorials, template_text
 from agyary.services.phone import _validate_phone
@@ -355,9 +361,153 @@ def _when(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+# --- Where a request stands, as the funeral place sees it (R3.1 step 6) ---------------
+# DECISIONS D10, changed 21 Nov 2026: "Waiting at Goti Adarian", then "Finding
+# mobeds: 1 of 2", then "All set" with the agyari, the panthaky's Call and
+# WhatsApp, and the mobeds' names. The place learns how many are going while it
+# waits, and only at All set who (by name) and the panthaky's contact: never a
+# mobed's number, nor anyone's before All set (D2's spirit; a record is the
+# place's own, so its family is not news to it).
+STAGE_WAITING = "waiting"                 # nobody at the fire temple has done anything yet
+STAGE_PANTHAKY_FIRST = "panthaky_first"   # the same, in Come to me first: only the panthaky has it
+STAGE_FINDING = "finding"                 # taken on the board, or someone answered: n of N going
+STAGE_REOPENED = "reopened"               # all set once; someone going can no longer go (step 5b)
+STAGE_ALL_SET = "all_set"
+STAGE_DECLINED = "declined"               # the panthaky's "We can't take this" (or the old Decline)
+STAGE_NOBODY = "nobody"                   # no panthaky in the app, and everyone asked said no
+STAGE_WITHDRAWN = "withdrawn"
+STAGE_ACCEPTED = "accepted"               # accepted the old way, before R3.1 (D8: reads as it did)
+
+
+def _join(names: list[str]) -> str:
+    if not names:
+        return "The mobeds"
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def headline(stage: str, where: str, *, going: int = 0, wanted: int = 0, names: list[str] | None = None,
+             confirmed_short: bool = False, panthakys: int = 1, accepted_by: str | None = None,
+             reason: str | None = None) -> str:
+    """The request's state in words, for the record and the list of records."""
+    if stage == STAGE_PANTHAKY_FIRST:
+        return f"Sent to the {'panthaky' if panthakys == 1 else 'panthakys'} of {where}"
+    if stage == STAGE_FINDING:
+        return f"Finding mobeds at {where}: {going} of {wanted} going"
+    if stage == STAGE_REOPENED:
+        return f"A place has opened at {where}: {going} of {wanted} going"
+    if stage == STAGE_ALL_SET:
+        names = names or []
+        words = f"All set at {where}: {_join(names)} {'is' if len(names) == 1 else 'are'} going"
+        return words + (f" (confirmed with {going} of {wanted})" if confirmed_short else "")
+    if stage == STAGE_DECLINED:
+        return f"Declined by {where}" + (f": {reason}" if reason else "")
+    if stage == STAGE_NOBODY:
+        return f"Nobody at {where} can take it"
+    if stage == STAGE_WITHDRAWN:
+        return f"Withdrawn from {where}"
+    if stage == STAGE_ACCEPTED:
+        return f"Accepted by {accepted_by} of {where}" if accepted_by else f"Accepted at {where}"
+    return f"Waiting at {where}"
+
+
+async def _standing(
+    db: AsyncSession, requests: list[FuneralRequest], records: dict[int, FuneralRecord], agyaries: dict,
+    accepters: dict,
+) -> dict[int, dict]:
+    """Each request's stage, its words and what the place may know of it now."""
+    from agyary.core.config import get_settings
+    from agyary.services import panthaky, prayer_callout, request_settings   # here: they read this module's
+
+    ids = [q.id for q in requests]
+    if not ids:
+        return {}
+    rows: dict[int, list[PrayerCalloutAnswer]] = {i: [] for i in ids}
+    for rid, answer in (await db.execute(
+        select(PrayerCallout.funeral_request_id, PrayerCalloutAnswer)
+        .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .where(PrayerCallout.funeral_request_id.in_(ids)).order_by(PrayerCalloutAnswer.id)
+    )).all():
+        rows[rid].append(answer)
+    called = set((await db.execute(
+        select(PrayerCallout.funeral_request_id).where(PrayerCallout.funeral_request_id.in_(ids))
+    )).scalars())
+    # At All set only: the panthaky (or panthakys) the family went to, with their number.
+    all_set_ids = [q.id for q in requests if q.status == REQUEST_ALL_SET]
+    heads: dict[int, list[dict]] = {i: [] for i in all_set_ids}
+    if all_set_ids:
+        for rid, user in (await db.execute(
+            select(FuneralRequestBook.funeral_request_id, User).join(User, User.id == FuneralRequestBook.user_id)
+            .where(FuneralRequestBook.funeral_request_id.in_(all_set_ids), FuneralRequestBook.is_panthaky.is_(True))
+            .order_by(FuneralRequestBook.id)
+        )).all():
+            if user.is_active:
+                heads[rid].append({"name": user.name, "phone": user.phone})
+
+    settings = get_settings()
+    first: dict[int, tuple[bool, int]] = {}     # agyari id -> (Come to me first now, how many panthakys)
+
+    async def way(agyary: Agyary) -> tuple[bool, int]:
+        if agyary.id not in first:
+            if (agyary.request_mode or "") != REQUEST_MODE_PANTHAKY_FIRST:
+                first[agyary.id] = (False, 0)
+            else:
+                chosen = await request_settings.way_for(db, settings, agyary) == REQUEST_MODE_PANTHAKY_FIRST
+                first[agyary.id] = (chosen, len(await panthaky.panthakys_of(db, settings, agyary.id)))
+        return first[agyary.id]
+
+    out = {}
+    for q in requests:
+        agyary = agyaries.get(q.agyary_id)
+        where = agyary.name if agyary else "the fire temple"
+        going = sorted((a for a in rows[q.id] if prayer_callout.holds_place(a)), key=lambda a: (a.picked_at, a.id))
+        wanted = prayer_callout.wanted(records[q.funeral_record_id])
+        touched = q.taken_at is not None or any(a.answer is not None for a in rows[q.id]) or bool(going)
+        names, panthakys, n_heads = [], [], 1
+        if q.status == REQUEST_ALL_SET:
+            stage, names, panthakys = STAGE_ALL_SET, [a.name for a in going], heads[q.id]
+        elif q.status == REQUEST_WAITING and q.all_set_at is not None:
+            stage = STAGE_REOPENED
+        elif q.status == REQUEST_WAITING and touched:
+            stage = STAGE_FINDING
+        elif q.status == REQUEST_WAITING:
+            stage = STAGE_WAITING
+            # Come to me first: only the panthaky has it, until they ask (or the safety net does).
+            if agyary is not None and q.id not in called and q.escalated_at is None:
+                chosen, n_heads = await way(agyary)
+                if chosen:
+                    stage = STAGE_PANTHAKY_FIRST
+        elif q.status == REQUEST_DECLINED:
+            # Closed with nobody deciding: no panthaky in the app, and everyone asked said no.
+            stage = STAGE_DECLINED if q.decided_by_user_id is not None else STAGE_NOBODY
+        elif q.status == REQUEST_WITHDRAWN:
+            stage = STAGE_WITHDRAWN
+        else:
+            stage = STAGE_ACCEPTED
+        out[q.id] = {
+            "stage": stage,
+            "headline": headline(stage, where, going=len(going), wanted=wanted, names=names,
+                                 confirmed_short=bool(q.confirmed_short), panthakys=n_heads,
+                                 accepted_by=_accepter(accepters, q)[0], reason=q.decline_reason),
+            # How many are going of how many wanted: what the board shows, without who.
+            "going": len(going) if stage in (STAGE_FINDING, STAGE_REOPENED, STAGE_ALL_SET) else None,
+            "wanted": wanted,
+            # Only once it is all set: who is going (names only) and the panthaky's contact.
+            "going_names": names,
+            "panthakys": panthakys,
+            "confirmed_short": stage == STAGE_ALL_SET and bool(q.confirmed_short),
+            # When the place was told nobody had answered in an hour, while that is still so.
+            "no_answer_told_at": _when(q.no_answer_alert_at)
+            if stage in (STAGE_WAITING, STAGE_PANTHAKY_FIRST) else None,
+            # Withdrawn (to send it to another fire temple) while it waits, reopened too.
+            "may_withdraw": q.status == REQUEST_WAITING,
+        }
+    return out
+
+
 async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict]:
     """Records as their place's managers see them, family contact included,
-    each with its requests (newest first) and what can be done with it now."""
+    each with its requests (newest first) and what can be done with it now:
+    where each stands in words (R3.1 step 6, _standing)."""
     ids = [r.id for r in records]
     by_record = await requests_of(db, ids)
     requests = [q for qs in by_record.values() for q in qs]
@@ -390,6 +540,7 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
             select(FuneralPlace).where(FuneralPlace.id.in_({r.funeral_place_id for r in records}))
         )).scalars()
     } if records else {}
+    standing = await _standing(db, requests, {r.id: r for r in records}, agyaries, accepters)
 
     def agyari(aid: int | None) -> dict | None:
         a = agyaries.get(aid) if aid else None
@@ -438,6 +589,7 @@ async def serialize(db: AsyncSession, records: list[FuneralRecord]) -> list[dict
                     "accepter_phone": _accepter(accepters, q)[1],
                     "decline_reason": q.decline_reason, "asked": asked.get(q.id, 0),
                     "sent_by_admin": q.sent_by_user_id in by_admin,
+                    **standing[q.id],
                 }
                 for q in qs
             ],
