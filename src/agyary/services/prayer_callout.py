@@ -1157,7 +1157,10 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
     from agyary.services import all_set   # here: all_set reads this module's readers
     from agyary.services import standbys as standbys_   # here: standbys reads this module
 
+    # Read again, both: after a tap, something that broke after it was done (telling
+    # everyone it is all set, say) rolled the session back, which forgets them.
     await db.refresh(request)
+    await db.refresh(user)
     record = await db.get(FuneralRecord, request.funeral_record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
     agyary = await db.get(Agyary, request.agyary_id)
@@ -1279,6 +1282,7 @@ async def pray_myself(
     ``fill``; it takes the request. Only a confirmed panthaky of the fire
     temple (an admin who is not one has no place to fill)."""
     now = now or _now()
+    user_id = user.id   # what follows may roll the session back, which forgets the account
     if not await is_confirmed_panthaky(db, request.agyary_id, user.id):
         raise CalloutError("Only the fire temple's panthaky can fill a place from here.")
     await _lock_waiting(db, request)
@@ -1295,7 +1299,7 @@ async def pray_myself(
     record = await db.get(FuneralRecord, request.funeral_record_id)
     await db.refresh(request)
     await db.refresh(row)
-    logger.info("Request %s: user %s will pray (%s)", request.id, user.id, outcome)
+    logger.info("Request %s: user %s will pray (%s)", request.id, user_id, outcome)
     return {"outcome": outcome,
             "message": _done_words(row, request, await _going(db, request.id), wanted(record), me=True)}
 
@@ -1319,6 +1323,7 @@ async def confirm_short(
     from agyary.services import all_set   # here: all_set reads this module
 
     now = now or _now()
+    user_id = user.id   # what follows may roll the session back, which forgets the account
     await _lock_waiting(db, request)
     record = await db.get(FuneralRecord, request.funeral_record_id)
     want, going = wanted(record), await _going(db, request.id)
@@ -1326,10 +1331,10 @@ async def confirm_short(
         raise CalloutError(SHORT_NOBODY)
     short = going < want
     await take_request(db, request, user, now)
-    made = await all_set.on_full(db, settings, request, now=now, client=client, short=short, by_user_id=user.id)
+    made = await all_set.on_full(db, settings, request, now=now, client=client, short=short, by_user_id=user_id)
     if not made:
         raise CalloutError(SHORT_FAILED)
-    logger.warning("Request %s: user %s confirmed with %d of %d going", request.id, user.id, going, want)
+    logger.warning("Request %s: user %s confirmed with %d of %d going", request.id, user_id, going, want)
     return {"outcome": "all set" + (", short" if short else ""),
             "message": f"All set with {going} of {want} going." if short
             else "All the places are filled: it is all set."}
@@ -1355,6 +1360,8 @@ async def call_result(
     "not_going" for someone who had said no already is noted quietly, the
     same as the first time (step 5)."""
     now = now or _now()
+    # What follows may roll the session back, which forgets the account and the request.
+    user_id, request_id = user.id, request.id
     if result not in CALL_RESULTS:
         raise CalloutError("Please say whether they are going, not going, or did not answer.", status=400,
                            field="result")
@@ -1398,18 +1405,18 @@ async def call_result(
     await take_request(db, request, user, now)
     outcome = await _answer(db, settings, request, row, yes, how=HOW_PHONE, by_user=user, now=now, client=client,
                             over_no=yes)
+    await db.refresh(request)
+    await db.refresh(row)
     if outcome == "already answered":
         # A yes of theirs on another row (someone asked twice before R3.1): left as it is.
-        theirs = [r for r in await _request_rows(db, request.id) if _same_person(r, row) and r.answer == CALLOUT_YES]
+        theirs = [r for r in await _request_rows(db, request_id) if _same_person(r, row) and r.answer == CALLOUT_YES]
         raise CalloutError(_already(m["name"], theirs[0] if theirs else row))
-    logger.info("Request %s: user %s marked %s %s by phone (%s)", request.id, user.id, key, result, outcome)
+    logger.info("Request %s: user %s marked %s %s by phone (%s)", request_id, user_id, key, result, outcome)
     if not yes:
         return {"outcome": outcome, "message": f"Noted: {m['name']} cannot pray this time."}
     record = await db.get(FuneralRecord, request.funeral_record_id)
-    await db.refresh(request)
-    await db.refresh(row)
     return {"outcome": outcome,
-            "message": _done_words(row, request, await _going(db, request.id), wanted(record), me=False)}
+            "message": _done_words(row, request, await _going(db, request_id), wanted(record), me=False)}
 
 
 # --- App mobeds answer in the app too (owner, 21 Nov 2026, third round) ---------------
@@ -1445,6 +1452,8 @@ async def answer_in_app(
     from agyary.services import mobed_dashboard, standbys   # here: as the rest of the app's answering
 
     now = now or _now()
+    # What follows may roll the session back, which forgets the account and the request.
+    user_id, request_id = user.id, request.id
     if choice not in (CALLOUT_YES, CALLOUT_NO):
         raise CalloutError("Please answer I can pray or Not this time.", status=400, field="answer")
     if await is_confirmed_panthaky(db, request.agyary_id, user.id):
@@ -1462,7 +1471,7 @@ async def answer_in_app(
         # A standby asked again when a place opened (step 5b): this answers that.
         done = await standbys.answer_reask_in_app(db, settings, user, request, row, choice == CALLOUT_YES, now=now,
                                                   client=client)
-        logger.info("Request %s: user %s answered being asked again in the app (%s)", request.id, user.id,
+        logger.info("Request %s: user %s answered being asked again in the app (%s)", request_id, user_id,
                     done["outcome"])
         return done
     if row is not None and row.answer is not None:
@@ -1474,7 +1483,7 @@ async def answer_in_app(
         await db.flush()
     yes = choice == CALLOUT_YES
     outcome = await _answer(db, settings, request, row, yes, how=HOW_APP, by_user=user, now=now, client=client)
-    logger.info("Request %s: user %s answered in the app (%s)", request.id, user.id, outcome)
+    logger.info("Request %s: user %s answered in the app (%s)", request_id, user_id, outcome)
     await db.refresh(row)
     if outcome == "already answered":
         message = _mine_already(row)

@@ -218,13 +218,17 @@ async def test_the_daily_limit_stops_sends_and_tells_the_admins(client, db, seed
     assert len(alerts) == 1
 
 
-@pytest.mark.parametrize("failure", ["timeout", "refused"])
+@pytest.mark.parametrize("failure", ["timeout", "refused", "crash"])
 async def test_all_set_never_fails_because_a_send_fails(client, db, seeded, meta, pushes, live, monkeypatch, failure):
     rid = await _sent(client, db, seeded["agyary_id"], mobeds_wanted=1)
     if failure == "timeout":
         meta.fail = httpx.ReadTimeout("slow")
-    else:
+    elif failure == "refused":
         meta.status = 400
+    else:
+        async def boom(*a, **kw):
+            raise RuntimeError("something unexpected")
+        monkeypatch.setattr(fw, "deliver", boom)
     body = await _pray(client, rid)
     assert body["status"] == "all_set" and [p["name"] for p in body["places"]] == ["Er. Hormuz Dadachanji"]
     assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "all_set"
@@ -235,6 +239,8 @@ async def test_all_set_never_fails_because_a_send_fails(client, db, seeded, meta
         # A template Meta will not take pauses everything, as for reminders.
         assert rows and all(n.status == "failed" for n in rows)
         assert await guardrails.paused_reason(db)
+    if failure == "crash":
+        assert rows == []
 
 
 async def test_a_name_that_breaks_the_rules_is_not_sent_and_says_why(client, db, seeded, meta, pushes, live):

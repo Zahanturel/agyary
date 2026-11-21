@@ -471,6 +471,7 @@ async def back_out_in_app(
     the route checks). Returns {"outcome", "message"}; refusals are
     CalloutErrors."""
     now = now or _now()
+    user_id = user.id   # what follows may roll the session back, which forgets the account
     row = pc._find(await pc._request_rows(db, request.id), f"u{user.id}", user.phone)
     tell = await who_hears(db, request, settings)
     if row is None or row.answer is None:
@@ -490,7 +491,7 @@ async def back_out_in_app(
         told = "A mobed on standby has been asked to take your place."
     else:
         told = ""
-    logger.info("Request %s: user %s can't go any more, in the app", request.id, user.id)
+    logger.info("Request %s: user %s can't go any more, in the app", request.id, user_id)
     return {"outcome": "backed out", "message": " ".join(w for w in ("Noted: you can't go.", told) if w)}
 
 
@@ -560,14 +561,15 @@ async def mark_cant_go(
            or (mine[-1] if mine else None))
     if row is None:
         raise AlreadyOut("That mobed is not going for this request. Please open the board again.")
-    me = row.user_id == user.id
+    user_id = user.id   # what follows may roll the session back, which forgets the account
+    me = row.user_id == user_id
     name = row.name
     words = _Words(already="You have already said you can't go." if me else f"{name} has already said they can't go.",
                    not_going=f"{'You are' if me else name + ' is'} not going for this request.",
                    begun=BOARD_BEGUN)
     opened = await _back_out(db, settings, request, row, by_user=user, words=words, now=now, client=client,
                              take_by=user, skip_user_id=user.id)
-    logger.info("Request %s: user %s marked %s can't go", request.id, user.id, key)
+    logger.info("Request %s: user %s marked %s can't go", request.id, user_id, key)
     return {"outcome": "backed out",
             "message": " ".join(w for w in (f"Noted: {'you' if me else name} can't go.", _asked_words(opened)) if w)}
 

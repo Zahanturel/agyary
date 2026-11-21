@@ -896,3 +896,43 @@ async def test_confirming_takes_it_so_the_family_goes_to_the_panthaky_who_confir
     books = await _books(db, rid)
     assert set(books) == {SECOND_PANTHAKY, MOBED} and books[SECOND_PANTHAKY].is_panthaky
     assert r.json()["all_set"]["panthakys"] == [{"name": "Er. Second Panthaky", "phone": SECOND_PANTHAKY, "is_me": True}]
+
+
+async def test_a_tap_still_answers_when_what_follows_it_breaks(client, db, seeded, pushes, monkeypatch):
+    """Something breaking after the tap's work is done - telling everyone it is all set,
+    or after someone can't go - rolls the session back; the tap still answers with the
+    board or card read again, and what it did stands (never a failure on screen for it)."""
+    from agyary.services import standbys
+
+    async def boom(*a, **kw):
+        raise RuntimeError("something unexpected")
+
+    monkeypatch.setattr(all_set, "_tell", boom)
+    monkeypatch.setattr(standbys, "place_opened", boom)
+    aid = seeded["agyary_id"]
+    tomorrow = (funeral_records.today_ist() + timedelta(days=1)).isoformat()
+    panthaky, mobed = await _as(client, PANTHAKY), await _as(client, MOBED)
+    hormuz, kias = await _user(db, PANTHAKY), await _user(db, MOBED)
+    # I'll pray, then Can't go on the board.
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=1, geh_saarnu_date=tomorrow)
+    r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
+    r = await client.post(_b(rid, "cant-go"), json={"key": f"u{hormuz.id}"}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["status"] == "waiting", r.text
+    # A call's Going.
+    rid2, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    r = await client.post(_b(rid2, "call-result"), json={"key": f"u{kias.id}", "result": "going"}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
+    # Confirm with who's going.
+    rid3, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=2)
+    assert (await client.post(_b(rid3, "self"), json={}, headers=panthaky)).status_code == 200
+    r = await client.post(_b(rid3, "confirm-short"), json={}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
+    # An app mobed's I can pray, then their I can't go any more.
+    rid4, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1, geh_saarnu_date=tomorrow)
+    r = await client.post(f"{REQUESTS}/{rid4}/answer", json={"answer": "yes"}, headers=mobed)
+    assert r.status_code == 200 and r.json()["request"]["status"] == "all_set", r.text
+    r = await client.post(f"{REQUESTS}/{rid4}/back-out", headers=mobed)
+    assert r.status_code == 200 and r.json()["request"]["status"] == "waiting", r.text
+    assert [(await _request(db, i)).status for i in (rid, rid2, rid3, rid4)] == [
+        "waiting", "all_set", "all_set", "waiting"]
