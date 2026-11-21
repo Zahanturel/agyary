@@ -438,3 +438,43 @@ async def test_two_loops_at_the_same_moment_tell_once(client, db, seeded, pushes
                                     prayer_timers.no_answer(two, at, settings))
     assert sorted(done) == [0, 1]
     assert len(await _notes(db, MANAGER)) == 1
+
+
+# --- Send to another agyari ----------------------------------------------------------------
+
+async def test_send_to_another_withdraws_and_the_record_goes_again(client, db, seeded, pushes):
+    aid = seeded["agyary_id"]
+    other = await agyari(db, "Other Agyari (test)", None)
+    await member(db, other, ONLY, name="Er. Only One")
+    await db.commit()
+    rid, record_id, mgr = await _send(client, db, aid)
+    r = await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["may_send"] is True and rec["requests"][0]["headline"] == "Withdrawn from Goti Adarian"
+    # Those asked are told it is no longer needed.
+    assert [n.title for n in await _notes(db, PANTHAKY, "funeral_request_withdrawn")] == [
+        "A request for prayers was withdrawn"]
+    r = await client.post(f"{RECORDS}/{record_id}/requests", headers=mgr,
+                          json={"agyary_id": other.id, "family_agreed": True, "family_whatsapp_agreed": True})
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert [q["headline"] for q in rec["requests"]] == ["Waiting at Other Agyari (test)", "Withdrawn from Goti Adarian"]
+
+    # A request open again (someone going backed out) can go elsewhere too.
+    rid2, record2, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    await _yes(client, rid2)
+    assert (await _request(db, rid2)).status == "all_set"
+    # Once all set it is no longer waiting: refused in plain words.
+    r = await client.post(f"/api/mobed/manager/requests/{rid2}/withdraw", headers=mgr)
+    assert r.status_code == 409 and r.json()["detail"] == ("This request is no longer waiting, so there is nothing "
+                                                           "to withdraw.")
+    r = await client.post(f"{REQUESTS}/{rid2}/back-out", headers=await _as(client, MOBED))
+    assert r.status_code == 200, r.text
+    assert (await _latest(client, record2, mgr))["stage"] == "reopened"
+    r = await client.post(f"/api/mobed/manager/requests/{rid2}/withdraw", headers=mgr)
+    assert r.status_code == 200, r.text
+    assert r.json()["record"]["may_send"] is True
+    r = await client.post(f"{RECORDS}/{record2}/requests", headers=mgr,
+                          json={"agyary_id": other.id, "family_agreed": True, "family_whatsapp_agreed": True})
+    assert r.status_code == 200, r.text

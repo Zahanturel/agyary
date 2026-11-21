@@ -646,7 +646,8 @@ function drawRecord(rec, alive) {
       ${rec.requests.length > 1 ? `<div style="margin-top:10px">${rec.requests.slice(1).map(q =>
         `<p class="meta" style="margin:2px 0">${esc(requestState(q))}</p>`).join("")}</div>` : ""}
       <div class="action-bar">
-        ${waiting ? `<button type="button" class="secondary" id="mrWithdraw">Withdraw</button>` : ""}
+        ${waiting && placeOn ? `<button type="button" class="secondary" id="mrElsewhere">Send to another agyari</button>` : ""}
+        ${waiting ? `<button type="button" class="ghost" id="mrWithdraw">Withdraw</button>` : ""}
         ${rec.may_send ? `<button type="button" id="mrSend">${rec.requests.length ? "Send to another fire temple"
           : "Send to a fire temple"}</button>` : ""}
         ${rec.may_edit ? `<button type="button" class="ghost" id="mrEdit">Change</button>` : ""}
@@ -658,6 +659,51 @@ function drawRecord(rec, alive) {
   on("mrSend", () => navigate(managerHash(`/record/${rec.id}/send`)));
   on("mrEdit", () => navigate(managerHash(`/record/${rec.id}/edit`)));
   on("mrWithdraw", () => confirmWithdraw(rec, waiting));
+  on("mrElsewhere", () => confirmElsewhere(rec, waiting, alive));
+}
+
+/** "Send to another agyari" (R3.1 step 6): a sheet first, then the request is withdrawn there
+ *  (those asked are told it is no longer needed) and Ask a fire temple opens. A refusal (it is
+ *  all set by now, say) is said over the record read again; no signal is said in the sheet, to
+ *  tap again. */
+function confirmElsewhere(rec, q, alive) {
+  const where = q.agyari ? q.agyari.name : "the fire temple";
+  const sheet = openSheet({
+    title: `Withdraw the request from ${where} and send it to another?`,
+    html: `
+      <p style="margin-top:0">The people asked at ${esc(where)} are told it is no longer needed. Then you choose
+        another fire temple.</p>
+      <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
+      <div class="stack">
+        <button type="button" data-yes>Withdraw and choose another</button>
+        <button type="button" class="ghost" data-no>Keep it waiting</button>
+      </div>`,
+  });
+  const body = sheet.body;
+  body.querySelector("[data-no]").onclick = sheet.close;
+  const yes = body.querySelector("[data-yes]");
+  yes.onclick = async () => {
+    if (yes.disabled) return;
+    yes.disabled = true;
+    body.querySelector("[data-msg]").textContent = "";
+    try {
+      await managerWithdraw(q.id);
+    } catch (e) {
+      if (!alive()) return;
+      if (e.status === 400 || e.status === 404 || e.status === 409) {
+        sheet.close();
+        await renderRecordView({ id: rec.id });
+        return showError(e.message);
+      }
+      yes.disabled = false;
+      body.querySelector("[data-msg]").textContent = e.message;
+      return;
+    }
+    sheet.close();
+    if (!alive()) return;
+    flashInfo(`Withdrawn from ${where}. Now choose another fire temple to ask.`);
+    navigate(managerHash(`/record/${rec.id}/send`));
+  };
 }
 
 function confirmWithdraw(rec, q) {
