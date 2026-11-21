@@ -250,6 +250,8 @@ export const boardAskEveryone = (rid) => post(`/requests/${rid}/ask-everyone`, {
 export const boardPrayMyself = (rid) => post(`/requests/${rid}/self`, {});
 // key: "u<user id>" or "c<contact id>" from the board's mobeds; result: "going", "not_going" or "no_answer".
 export const boardCallResult = (rid, key, result) => post(`/requests/${rid}/call-result`, { key, result });
+/** "Confirm with who's going" (R3.1 step 5): all set with fewer than wanted. */
+export const boardConfirmShort = (rid) => post(`/requests/${rid}/confirm-short`, {});
 /** A fire temple's own list of mobeds, and the panthaky's call-out on WhatsApp (D10, Step 5c). */
 export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
 export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });

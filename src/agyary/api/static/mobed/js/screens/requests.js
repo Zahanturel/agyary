@@ -17,11 +17,17 @@
  *    ready to edit, no family details); and "We can't take this" at the very bottom (the
  *    panthaky's decline, reason optional). The panthaky's first action takes the request
  *    for the fire temple: there is no Accept any more. While it waits and is on screen, the
- *    board is read again every 10 seconds. All set reads so, with the places; Step 5 adds
- *    the family's contact and "Make the memorial" in the place left for them.
+ *    board is read again every 10 seconds. While someone is going and places are still
+ *    empty, "Confirm with who's going" (a sheet first) makes it all set with fewer.
  *  - A request's page, for an app mobed of the fire temple it reached: the prayers (no family
  *    details, nobody else's number), "1 of 2 going", where they stand, and I can pray / Not
  *    this time until they have answered, here or on WhatsApp (the first answer counts).
+ *  - All set (R3.1 step 5), for those it put the family in the book of (the panthaky on the
+ *    board, a going app mobed on their card; the server's `all_set`): "All set: 2 going"
+ *    (or confirmed with fewer), the family's contact with Call and WhatsApp (a message ready
+ *    to edit), who is praying and the panthaky with Call and WhatsApp, and the memorial one
+ *    tap away (Make or Open the memorial, Open in Behdins). Everyone else asked reads who is
+ *    going (the board's names, or for an app mobed the count), never a contact.
  *  - A request accepted the old way (before R3.1) reads as it did (D8): for the one who
  *    accepted, the family's contact with "Message the family on WhatsApp" and "Call", and
  *    their own behdin and memorial.
@@ -29,10 +35,12 @@
 
 import {
   myRequests, myRequest, answerRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself,
-  boardCallResult,
+  boardCallResult, boardConfirmShort,
 } from "../api.js";
 import { state, saveSession } from "../state.js";
-import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet } from "../ui.js";
+import {
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, toTop,
+} from "../ui.js";
 import { esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
@@ -100,12 +108,23 @@ function factsHtml(q) {
  *  the board's first action takes it (as the red count counts it), then "Finding mobeds: 1 of
  *  2"; for an app mobed their own answer; "All set"; and the old states as they were. */
 function standsText(q) {
+  if (q.status === "all_set") return allSetStands(q);
   if (q.my_answer) return BOARD.has(q.status) ? myHeadline(q) : stateText(q);
   if (q.status === "waiting") {
     const n = q.places || { going: 0, wanted: 0 };
     return q.taken === false ? "Waiting for you" : `Finding mobeds: ${n.going} of ${n.wanted}`;
   }
   return stateText(q);
+}
+
+/** An all-set request in a few words: "All set: 2 going", and whether this person is one of
+ *  them or on standby. */
+function allSetStands(q) {
+  const a = q.all_set;
+  const n = a ? a.going.length : (q.places || { going: 0 }).going;
+  const mine = q.my_answer ? q.my_answer.state : "";
+  const me = mine === "going" || (a && a.going.some(g => g.is_me));
+  return `All set: ${n} going${me ? ", including you" : mine === "standby" ? ", you are on standby" : ""}`;
 }
 
 function waitingCardHtml(q) {
@@ -122,9 +141,14 @@ function waitingCardHtml(q) {
 }
 
 function earlierRowHtml(q) {
+  // All set, with the family in their book and no memorial made from it yet: a hint that
+  // it is one tap away on the request.
+  const a = q.status === "all_set" ? q.all_set : null;
+  const hint = a && a.customer_id && !a.memorial_id;
   return `<div class="search-result" data-rid="${q.id}">
       <div><strong>${esc(q.prayed_name)}</strong></div>
       <div class="addr">${q.status === "withdrawn" ? "" : `${esc(q.funeral_place.name)} · `}${esc(standsText(q))}</div>
+      ${hint ? `<div class="meta">You can make the memorial</div>` : ""}
     </div>`;
 }
 
