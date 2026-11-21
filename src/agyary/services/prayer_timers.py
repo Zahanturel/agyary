@@ -189,20 +189,24 @@ def short_alert_at(geh_saarnu_date: date | None, geh: int | None, uthamna_date: 
 
 async def _short_due(db: AsyncSession, now: datetime) -> list[int]:
     """The waiting requests not told yet whose time has come. Only those whose
-    first day is no later than 4 hours from now are read: a handful."""
+    first day is no later than 4 hours from now are read: a handful. A request
+    whose prayers have already begun (or passed, e.g. an old test record left
+    waiting) is never told: "still short" helps only before the prayers."""
+    today = now.astimezone(IST).date()
     latest = (now.astimezone(IST) + SHORT_BEFORE).date()
+    first_day = func.coalesce(FuneralRecord.geh_saarnu_date, FuneralRecord.uthamna_date)
     rows = (await db.execute(
         select(FuneralRequest.id, FuneralRecord.geh_saarnu_date, FuneralRecord.geh_saarnu_geh,
                FuneralRecord.uthamna_date, FuneralRecord.uthamna_time)
         .join(FuneralRecord, FuneralRecord.id == FuneralRequest.funeral_record_id)
         .where(FuneralRequest.status == REQUEST_WAITING, FuneralRequest.short_alert_at.is_(None),
-               func.coalesce(FuneralRecord.geh_saarnu_date, FuneralRecord.uthamna_date) <= latest)
+               first_day <= latest, first_day >= today)
         .order_by(FuneralRequest.sent_at, FuneralRequest.id)
     )).all()
     out = []
     for rid, gs_date, geh, ut_date, ut_time in rows:
         at = short_alert_at(gs_date, geh, ut_date, ut_time)
-        if at is not None and at <= now:
+        if at is not None and at <= now < at + SHORT_BEFORE:
             out.append(rid)
     return out
 

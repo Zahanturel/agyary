@@ -784,20 +784,24 @@ async def test_still_short_tells_the_panthaky_once_four_hours_before_the_geh_saa
 async def test_still_short_at_once_when_the_request_comes_later_and_never_when_full_or_without_days(
     client, db, seeded, pushes,
 ):
+    from datetime import datetime, time
+
     from sqlalchemy import update
 
     from agyary.models import FuneralRecord
     from agyary.services import prayer_timers
 
     aid = seeded["agyary_id"]
-    # A Geh-saarnu whose 4 hours had begun before the request came: told at the first tick.
+    # A Geh-saarnu whose 4 hours had begun before anyone looked (the request came late): told at
+    # the first tick, as long as the prayers have not begun.
     rid, _, mgr = await _send(client, db, aid, mobeds_wanted=2)
     record_id = (await _request(db, rid)).funeral_record_id
-    yesterday = funeral_records.today_ist() - timedelta(days=1)
-    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(geh_saarnu_date=yesterday))
+    tomorrow = funeral_records.today_ist() + timedelta(days=1)
+    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
+        geh_saarnu_date=tomorrow, geh_saarnu_geh=2))
     await db.commit()
     sent_at = (await _request(db, rid)).sent_at
-    assert await _short_tick(db, sent_at + timedelta(seconds=30)) == 1
+    assert await _short_tick(db, datetime.combine(tomorrow, time(11, 30), tzinfo=prayer_timers.IST)) == 1
     (note,) = await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)
     assert note.title == "Still 2 mobeds short for Behdin Rustom Jamshed"
     assert note.body.endswith("Ask everyone, call a mobed, or pray yourself.")
@@ -812,6 +816,17 @@ async def test_still_short_at_once_when_the_request_comes_later_and_never_when_f
     assert await _short_tick(db, far) == 0
     assert (await _request(db, rid2)).short_alert_at is None and (await _request(db, rid3)).short_alert_at is None
 
+    # Prayers that have already begun or passed (an old record left waiting): never, even untold.
+    rid4, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    record4 = (await _request(db, rid4)).funeral_record_id
+    yesterday = funeral_records.today_ist() - timedelta(days=1)
+    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record4).values(
+        geh_saarnu_date=yesterday, geh_saarnu_geh=1))
+    await db.commit()
+    assert await _short_tick(db, sent_at + timedelta(seconds=30)) == 0
+    assert await _short_tick(db, datetime.combine(tomorrow, time(12, 31), tzinfo=prayer_timers.IST)) == 0
+    assert (await _request(db, rid4)).short_alert_at is None
+
 
 async def test_with_no_confirmed_panthaky_the_funeral_place_is_told(client, db, seeded, pushes):
     from agyary.models import AppNotification
@@ -824,8 +839,10 @@ async def test_with_no_confirmed_panthaky_the_funeral_place_is_told(client, db, 
     rid, _, _ = await _send(client, db, only.id, mobeds_wanted=2)
     sent_at = (await _request(db, rid)).sent_at
     pushes.clear()
-    # The form's Geh-saarnu is today, Havan: due from 2:30 am today, before or after the request.
-    assert await _short_tick(db, max(sent_at, datetime_today_ist(2, 30))) == 1
+    # The form's Geh-saarnu is today, Havan (6:30 am): due from 2:30 am, and only until it begins.
+    # A fixed time in that window, so the test does not depend on the hour it runs at.
+    assert sent_at is not None
+    assert await _short_tick(db, datetime_today_ist(3, 0)) == 1
     (note,) = await _notes_of(db, MANAGER, prayer_timers.KIND_STILL_SHORT)
     assert note.title == "Still 2 mobeds short at Mobeds Only Agyari (test) for Behdin Rustom Jamshed"
     assert note.body.startswith("0 of 2 mobeds are going from Mobeds Only Agyari (test) for Behdin Rustom Jamshed")
@@ -850,7 +867,7 @@ async def test_two_loops_at_the_same_moment_tell_once(client, db, seeded, pushes
     from agyary.services import prayer_timers
 
     rid, _, _ = await _send(client, db, seeded["agyary_id"], mobeds_wanted=2)
-    at = max((await _request(db, rid)).sent_at, datetime_today_ist(2, 30))
+    at = datetime_today_ist(3, 0)     # inside today's Havan window: from 2:30 until 6:30 am
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
     settings = config.get_settings()
     async with factory() as one, factory() as two:
