@@ -400,3 +400,70 @@ async def test_with_no_geh_saarnu_day_only_the_uthamna_goes_on_the_calendars(cli
     for b in books.values():
         bookings = (await db.execute(select(Booking).where(Booking.customer_id == b.customer_id))).scalars().all()
         assert [(await db.get(Service, x.service_id)).name for x in bookings] == ["Uthamna"]
+
+
+# --- Everyone is told ------------------------------------------------------------------
+
+async def _notes_of(db, phone, kind=all_set.KIND_ALL_SET):
+    from agyary.models import AppNotification
+
+    user = await _user(db, phone)
+    return list((await db.execute(select(AppNotification).where(
+        AppNotification.user_id == user.id, AppNotification.kind == kind).order_by(AppNotification.id))).scalars())
+
+
+async def test_the_panthakys_the_mobeds_going_and_the_managers_are_told_without_the_family_on_the_lock_screen(
+    client, db, seeded, meta, pushes, live,
+):
+    from tests.funeral_helpers import MANAGER
+
+    aid = seeded["agyary_id"]
+    goti = await db.get(Agyary, aid)
+    await member(db, goti, SECOND_PANTHAKY, role="panthaky", name="Er. Second Panthaky")
+    await db.commit()
+    panthaky = await _as(client, PANTHAKY)
+    await _way(db, aid, "panthaky_first")
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=2)
+    # The panthaky takes it with I'll pray; the app mobed is marked going after a call: all set.
+    kias = await _user(db, MOBED)
+    assert (await client.post(_b(rid, "self"), json={}, headers=panthaky)).status_code == 200
+    pushes.clear()
+    r = await client.post(_b(rid, "call-result"), json={"key": f"u{kias.id}", "result": "going"}, headers=panthaky)
+    assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
+
+    title = "All set: Er. Hormuz Dadachanji and Er. Pervez Kias are going for Behdin Rustom Jamshed"
+    said = "Er. Hormuz Dadachanji and Er. Pervez Kias are going for Behdin Rustom Jamshed."
+    (mine,) = await _notes_of(db, PANTHAKY)
+    assert mine.title == title and mine.link == f"#/requests/{rid}"
+    assert mine.body == f"{said} The family's contact and everyone going are on the request from Doongerwadi (test)."
+    (other,) = await _notes_of(db, SECOND_PANTHAKY)
+    assert other.body == f"{said} The request from Doongerwadi (test) is all set. Nothing more is needed from you."
+    (going,) = await _notes_of(db, MOBED)
+    assert going.body == (f"{said} You are going. The family's contact, the panthaky and everyone going are on "
+                          "your request card.")
+    (place,) = await _notes_of(db, MANAGER)
+    assert place.title == title and place.link.startswith("#/manager/record/")
+    assert place.body == f"Goti Adarian: {said} The panthaky is Er. Hormuz Dadachanji."
+    for note in (mine, other, going, place):
+        _no_family(note.title + note.body)
+
+    # On their phones: who and where, never the departed or the family. The panthaky who marked
+    # the last place sees it on screen, so their phone is not woken.
+    told = [p for p in pushes if p["title"] == "All set"]
+    hormuz, second = await _user(db, PANTHAKY), await _user(db, SECOND_PANTHAKY)
+    to_mobeds, to_place = told
+    assert to_mobeds["to"] == sorted([second.id, kias.id]) and to_mobeds["url"] == f"/mobed#/requests/{rid}"
+    assert to_mobeds["body"] == "Er. Hormuz Dadachanji and Er. Pervez Kias are going for the request from Doongerwadi (test)."
+    assert to_place["body"] == "Er. Hormuz Dadachanji and Er. Pervez Kias are going from Goti Adarian."
+    for p in told:
+        _no_family(p["body"])
+        assert "Rustom" not in p["body"] and hormuz.id not in p["to"]
+    assert mgr
+
+
+def test_a_long_title_still_fits():
+    names = [f"Er. A Very Long Mobed Name Number {i}" for i in range(5)]
+    title = all_set.fit_title(f"All set: {all_set.going_words(names)} for Behdin Rustom Jamshed",
+                              "All set: 5 mobeds are going for Behdin Rustom Jamshed", "All set: enough mobeds are going")
+    assert title == "All set: 5 mobeds are going for Behdin Rustom Jamshed"
+    assert len(all_set.fit_title("x" * 200, "y" * 130)) == all_set.TITLE_MAX

@@ -58,7 +58,17 @@ from agyary.models import (
     User,
 )
 from agyary.models.enums import REQUEST_ALL_SET, REQUEST_WAITING
-from agyary.services import funeral_answers, funeral_requests, mobed_access, mobed_dashboard, panthaky
+from agyary.services import (
+    funeral_answers,
+    funeral_requests,
+    mobed_access,
+    mobed_dashboard,
+    panthaky,
+    prayer_callout,
+    reminders,
+    web_push,
+)
+from agyary.services import funeral_whatsapp as fw
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +79,14 @@ def _now() -> datetime:
 
 async def on_full(
     db: AsyncSession, settings: Settings, request: FuneralRequest, *, now: datetime | None = None,
-    client: httpx.AsyncClient | None = None, short: bool = False,
+    client: httpx.AsyncClient | None = None, short: bool = False, by_user_id: int | None = None,
 ) -> bool:
     """The request's places are all filled (or, with ``short``, the panthaky
     confirmed it with those going): mark it all set and set up the books,
-    once. Commits. Returns whether this call made it all set (False if it
-    already was, is no longer waiting, or the books could not be set up, when
-    it stays waiting)."""
+    once; then tell everyone (``by_user_id``, whose tap made it so, sees it on
+    screen, so their phone is not woken). Commits. Returns whether this call
+    made it all set (False if it already was, is no longer waiting, or the
+    books could not be set up, when it stays waiting)."""
     now = now or _now()
     values = {"status": REQUEST_ALL_SET, "all_set_at": now, "decided_at": now}
     if short:
@@ -102,6 +113,12 @@ async def on_full(
     await db.refresh(request)
     logger.warning("Funeral request %s is all set at fire temple %s%s: %d book(s)", request_id, request.agyary_id,
                    " (confirmed short)" if short else "", len(books))
+    try:
+        await _tell(db, settings, request_id, now, by_user_id=by_user_id)
+    except Exception:   # noqa: BLE001 - it is all set and the books are made; this must not undo it
+        logger.exception("Telling everyone that request %s is all set failed", request_id)
+        await db.rollback()
+    await db.refresh(request)
     return True
 
 
@@ -249,3 +266,91 @@ async def contacts_for(db: AsyncSession, request: FuneralRequest, user: User) ->
         "memorial_id": mine.memorial_id,
         "memorial_prefill": funeral_answers.memorial_prefill(record),
     }
+
+
+# --- Everyone is told ----------------------------------------------------------------
+
+KIND_ALL_SET = "funeral_request_all_set"
+NOTICE_TTL = funeral_requests.NOTICE_TTL
+NOTHING_MORE = "Nothing more is needed from you."
+
+
+def join_names(names: list[str]) -> str:
+    """Names as words: Er. A; Er. A and Er. B; Er. A, Er. B and Er. C."""
+    if not names:
+        return "The mobeds"
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def going_words(names: list[str]) -> str:
+    """Er. A is going; Er. A and Er. B are going."""
+    return f"{join_names(names)} {'is' if len(names) == 1 else 'are'} going"
+
+
+def mobeds(n: int) -> str:
+    return f"{n} mobed{'' if n == 1 else 's'}"
+
+
+# An in-app notice's title holds this many characters (app_notifications.title).
+TITLE_MAX = 120
+
+
+def fit_title(*choices: str) -> str:
+    """The first of ``choices`` that fits a notice's title (names and the
+    departed's name can be long; the body always has them in full)."""
+    return next((c for c in choices if len(c) <= TITLE_MAX), choices[-1][:TITLE_MAX])
+
+
+async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: datetime, *,
+                by_user_id: int | None) -> None:
+    """In the app and on their phones: the fire temple's confirmed panthakys
+    the request reached, each app mobed whose book it is, and the funeral
+    place's managers (and the admin who sent it acting for the place, as for
+    any answer). "All set: Er. A and Er. B are going for <prayed name>"; the
+    lock screen says who and the place, and nothing about the departed or the
+    family. D9: only accounts that are on."""
+    request = await db.get(FuneralRequest, request_id)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    agyary = await db.get(Agyary, request.agyary_id)
+    going = [g["name"] for g in await going_people(db, request_id)]
+    prayed = fw.departed(record)
+    title = fit_title(f"All set: {going_words(going)} for {prayed}",
+                      f"All set: {mobeds(len(going))} {'is' if len(going) == 1 else 'are'} going for {prayed}",
+                      "All set: enough mobeds are going")
+    said = f"{going_words(going)} for {prayed}" + (
+        f", {len(going)} of {prayer_callout.wanted(record)} wanted: the panthaky confirmed with who is going."
+        if request.confirmed_short else ".")
+    books = {b.user_id: b for b in (await db.execute(select(FuneralRequestBook).where(
+        FuneralRequestBook.funeral_request_id == request_id))).scalars()}
+    confirmed = {p.id for p in await panthaky.panthakys_of(db, settings, agyary.id)}
+    told: dict[int, str] = {}
+    for u in await funeral_requests.asked(db, request):
+        if u.id in confirmed:
+            told[u.id] = (f"{said} The family's contact and everyone going are on the request from {place.name}."
+                          if u.id in books else f"{said} The request from {place.name} is all set. {NOTHING_MORE}")
+    for uid in books:
+        if uid not in told:
+            user = await db.get(User, uid)
+            if user is not None and user.is_active and mobed_access.has_access(settings, user):
+                told[uid] = (f"{said} You are going. The family's contact, the panthaky and everyone going "
+                             "are on your request card.")
+    link = f"#/requests/{request_id}"
+    for uid, body in told.items():
+        await reminders.notify(db, uid, KIND_ALL_SET, title, body, link=link, agyary_id=agyary.id, now=now,
+                               ttl=NOTICE_TTL)
+    await db.commit()
+    woken = [uid for uid in told if uid != by_user_id]
+    if woken:
+        await web_push.send_to_users(db, settings, woken, title="All set",
+                                     body=f"{going_words(going)} for the request from {place.name}.",
+                                     url="/mobed" + link, tag=f"funeral-all-set-{request_id}")
+    panthakys = await request_panthakys(db, request_id)
+    who = (f" The panthaky is {join_names([p.name for p in panthakys])}." if len(panthakys) == 1 else
+           f" The panthakys are {join_names([p.name for p in panthakys])}." if panthakys else "")
+    await funeral_answers._tell_managers(
+        db, settings, record, request, kind=KIND_ALL_SET, title=title,
+        body=f"{agyary.name}: {said}{who}",
+        push=("All set", f"{going_words(going)} from {agyary.name}."), now=now,
+    )
+    await db.commit()

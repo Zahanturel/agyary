@@ -997,7 +997,7 @@ async def fill(
             await _tell_mobed(db, settings, request, row, "You are going to pray", GOING_WORDS, now=now)
         await db.commit()
         if going >= want and request.status == REQUEST_WAITING:
-            await all_set.on_full(db, settings, request, now=now, client=client)
+            await all_set.on_full(db, settings, request, now=now, client=client, by_user_id=skip)
             return "yes, going, all set"
         return "yes, going"
 
@@ -1022,7 +1022,7 @@ async def fill(
     await db.commit()
     if request.status == REQUEST_WAITING and going >= want:
         # Full, but not marked all set yet (it broke when the last place filled).
-        await all_set.on_full(db, settings, request, now=now, client=client)
+        await all_set.on_full(db, settings, request, now=now, client=client, by_user_id=skip)
     return "yes, standby"
 
 
