@@ -17,13 +17,17 @@
  *    for the fire temple: there is no Accept any more. While it waits and is on screen, the
  *    board is read again every 10 seconds. All set reads so, with the places; Step 5 adds
  *    the family's contact and "Make the memorial" in the place left for them.
+ *  - A request's page, for an app mobed of the fire temple it reached: the prayers (no family
+ *    details, nobody else's number), "1 of 2 going", where they stand, and I can pray / Not
+ *    this time until they have answered, here or on WhatsApp (the first answer counts).
  *  - A request accepted the old way (before R3.1) reads as it did (D8): for the one who
  *    accepted, the family's contact with "Message the family on WhatsApp" and "Call", and
  *    their own behdin and memorial.
  */
 
 import {
-  myRequests, myRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself, boardCallResult,
+  myRequests, myRequest, answerRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself,
+  boardCallResult,
 } from "../api.js";
 import { state, saveSession } from "../state.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet } from "../ui.js";
@@ -158,10 +162,15 @@ export async function renderRequest({ id }) {
     if (e.status !== 404) return screenFailed("Couldn't open the request: " + e.message, () => renderRequest({ id }));
   }
   if (!alive()) return;
-  // funeral_answers.serialize gives `my_answer` only to someone the request reached who is
-  // not the fire temple's confirmed panthaky: the panthaky (and the admin) have the board.
-  if (q && (q.my_answer || !BOARD.has(q.status))) return drawRequest(q, alive);
+  if (q && (q.my_answer || !BOARD.has(q.status))) return drawFor(q, alive);
   return openBoard(id, q, alive);
+}
+
+/** The page of a request as it stands for this person. funeral_answers.serialize gives
+ *  `my_answer` only to an app mobed the request reached (not the fire temple's confirmed
+ *  panthaky, who has the board with the admin): they answer for themselves. */
+function drawFor(q, alive) {
+  return q.my_answer && BOARD.has(q.status) ? drawAnswerCard(q, alive) : drawRequest(q, alive);
 }
 
 function waLink(phone, text) {
@@ -234,7 +243,7 @@ function calloutCardHtml(q) {
 }
 
 /** The page as it was before R3.1: a request accepted the old way, declined or withdrawn
- *  (and, until the next steps, an app mobed's). */
+ *  (and a request an app mobed can no longer answer). */
 function drawRequest(q, alive) {
   const waiting = q.status === "waiting";
   mainEl.innerHTML = `
@@ -284,6 +293,75 @@ async function redrawSaying(q, message, isError, alive) {
   await renderRequest({ id: q.id });
   refreshRequestCount();
   (isError ? showError : showInfo)(message);
+}
+
+// --- An app mobed it reached: I can pray / Not this time (R3.1) -----------------------
+
+// As the server words them (prayer_callout.GOING_WORDS, funeral_whatsapp.ENOUGH_TEXT).
+const GOING_WORDS = "You are going. You will get the details once enough mobeds are going.";
+const STANDBY_WORDS = "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again.";
+
+/** An app mobed's own request, in a few words, for the list and the page. */
+function myHeadline(q) {
+  const state = q.my_answer.state;
+  if (q.status === "all_set") {
+    return state === "going" ? "All set: you are going" : state === "standby" ? "All set: you are on standby" : "All set";
+  }
+  return { going: "You are going", standby: "Standby", said_no: "You said not this time" }[state]
+    || "Asked: can you pray?";
+}
+
+/** Where they stand, in a sentence. */
+function myWords(q) {
+  const state = q.my_answer.state;
+  if (state === "going") return q.status === "all_set" ? "Enough mobeds are going, and you are one of them." : GOING_WORDS;
+  if (state === "standby") return STANDBY_WORDS;
+  if (state === "said_no") return "You said not this time. Nothing more is needed from you.";
+  return q.status === "all_set"
+    ? "Enough mobeds are going already. If you can pray too, you are kept on standby in case a place opens."
+    : "If you can pray, you will get the details once enough mobeds are going, and your name and number will be "
+      + "shared with the family.";
+}
+
+/** The prayers (never the family's name or number, nor anyone else's number), how many are
+ *  going, where they stand, and their answer while they have not given one. */
+function drawAnswerCard(q, alive) {
+  const n = q.places || { going: 0, wanted: 0 };
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>${esc(q.prayed_name)}</h2>
+      <p style="margin:0"><b>${esc(myHeadline(q))}</b></p>
+      <p style="margin:4px 0 0">${n.going} of ${n.wanted} going</p>
+      <div style="margin-top:10px">${factsHtml(q)}</div>
+      <p style="margin:10px 0 0">${esc(myWords(q))}</p>
+      ${q.my_answer.may_answer ? `<div class="action-bar">
+        <button type="button" class="secondary" id="rqNo">Not this time</button>
+        <button type="button" id="rqYes">I can pray</button>
+      </div>` : ""}
+    </div>`;
+  const yes = document.getElementById("rqYes");
+  const no = document.getElementById("rqNo");
+  if (yes) yes.onclick = () => answer(q, "yes", [yes, no], alive);
+  if (no) no.onclick = () => answer(q, "no", [yes, no], alive);
+}
+
+async function answer(q, choice, buttons, alive) {
+  if (buttons.some(b => b.disabled)) return;
+  buttons.forEach(b => { b.disabled = true; });
+  let res;
+  try {
+    res = await answerRequest(q.id, choice);
+  } catch (e) {
+    if (!alive()) return;
+    // Answered meanwhile (on WhatsApp, say), or closed: said over the page as it is now.
+    if (e.status === 400 || e.status === 404 || e.status === 409) return redrawSaying(q, e.message, true, alive);
+    buttons.forEach(b => { b.disabled = false; });
+    return showError(e.message);
+  }
+  if (!alive()) return;
+  refreshRequestCount();
+  drawFor(res.request, alive);
+  showInfo(res.done.message);
 }
 
 // --- The board: "Who will pray" (R3.1) ----------------------------------------------

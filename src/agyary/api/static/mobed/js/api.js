@@ -238,6 +238,8 @@ export const managerRemoveFromBook = (id) => del(asManager(`/manager/behdins/${i
 export const myRequestCount = () => get("/requests/count");
 export const myRequests = () => get("/requests");
 export const myRequest = (id) => get(`/requests/${id}`);
+/** An app mobed's own answer to a request that reached them (R3.1): "yes" (I can pray) or "no" (Not this time). */
+export const answerRequest = (id, answer) => post(`/requests/${id}/answer`, { answer });
 /** A confirmed panthaky's "We can't take this" (for anyone else the server takes it as Not this time). */
 export const declineRequest = (id, reason) => post(`/requests/${id}/decline`, { reason: reason || null });
 /** The "Who will pray" board on a request (R3.1): for the fire temple's confirmed panthakys
