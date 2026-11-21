@@ -211,6 +211,8 @@ export async function renderRequest({ id }) {
  *  `my_answer` only to an app mobed the request reached (not the fire temple's confirmed
  *  panthaky, who has the board with the admin): they answer for themselves. */
 function drawFor(q, alive) {
+  // All set, and the family is in their book (a going app mobed): the contacts and the memorial.
+  if (q.status === "all_set" && q.all_set) return drawAllSet(q);
   return q.my_answer && BOARD.has(q.status) ? drawAnswerCard(q, alive) : drawRequest(q, alive);
 }
 
@@ -323,14 +325,13 @@ function drawRequest(q, alive) {
   const wa = document.getElementById("rqWa");
   msg.addEventListener("input", () => { wa.href = waLink(q.family_contact.phone, msg.value.trim()); });
   on("rqMemorial", () => navigate(`#/memorial/${q.memorial_id}`));
-  on("rqMakeMemorial", () => openMemorialForm(q, q.customer_id));
+  on("rqMakeMemorial", () => openMemorialForm(requestCtx(q), q.customer_id, q.memorial_prefill));
   on("rqBehdin", () => { useFireTempleOf(q); navigate(`#/behdins/${q.customer_id}`); });
 }
 
 /** The behdin and their events are at the request's fire temple: the screens
  *  that follow work in that one. (Almost every mobed has only one.) */
-function useFireTempleOf(q) {
-  const aid = q.agyari.id;
+function useFireTemple(aid) {
   if (aid !== state.currentAgyaryId && (state.user.agyaries || []).some(a => a.id === aid)) {
     state.currentAgyaryId = aid;
     saveSession();
@@ -338,9 +339,20 @@ function useFireTempleOf(q) {
   }
 }
 
-function openMemorialForm(q, customerId) {
-  useFireTempleOf(q);
-  memorialFromRequest(customerId, { id: q.id, place: q.funeral_place.name, prefill: q.memorial_prefill });
+function useFireTempleOf(q) {
+  useFireTemple(q.agyari.id);
+}
+
+/** What the memorial form needs to know of the request it is made from. */
+function requestCtx(q) {
+  return { rid: q.id, aid: q.agyari.id, place: q.funeral_place.name };
+}
+
+/** The memorial form for their own record of the family, filled in from the request; the
+ *  memorial saved is linked to the request (their own book's row, at All set). */
+function openMemorialForm({ rid, aid, place }, customerId, prefill) {
+  useFireTemple(aid);
+  memorialFromRequest(customerId, { id: rid, place, prefill });
   navigate(`#/behdins/${customerId}/memorials/new`);
 }
 
@@ -362,9 +374,7 @@ const STANDBY_WORDS = "Thank you. Enough mobeds are going this time. If a place 
 /** An app mobed's own request, in a few words, for the list and the page. */
 function myHeadline(q) {
   const mine = q.my_answer.state;
-  if (q.status === "all_set") {
-    return mine === "going" ? "All set: you are going" : mine === "standby" ? "All set: you are on standby" : "All set";
-  }
+  if (q.status === "all_set") return allSetStands(q);
   return { going: "You are going", standby: "Standby", said_no: "You said not this time" }[mine]
     || "Asked: can you pray?";
 }
@@ -382,7 +392,9 @@ function myWords(q) {
 }
 
 /** The prayers (never the family's name or number, nor anyone else's number), how many are
- *  going, where they stand, and their answer while they have not given one. */
+ *  going, where they stand, and their answer while they have not given one. Once all set,
+ *  for someone it did not put the family in the book of (they said no, a standby, asked
+ *  late), the headline says how many are going: their card has nobody's name. */
 function drawAnswerCard(q, alive) {
   const n = q.places || { going: 0, wanted: 0 };
   mainEl.innerHTML = `
@@ -419,7 +431,138 @@ async function answer(q, choice, buttons, alive) {
   if (!alive()) return;
   refreshRequestCount();
   drawFor(res.request, alive);
+  // Their yes made it all set: a new page (the family's contact, who is praying), from its top.
+  if (res.request.status === "all_set" && res.request.all_set) toTop();
   showInfo(res.done.message);
+}
+
+// --- All set: the family's contact and everyone praying (R3.1 step 5) ------------------
+// Only from the server's `all_set`, which it gives only to those it put the family in the
+// book of, and only once it is all set.
+
+// How each one going said yes, as the server words it (prayer_callout.HOW_WORDS).
+const SAID_YES = {
+  whatsapp: "Said yes on WhatsApp", app: "Said yes in the app", phone: "Said yes on the phone", self: "The panthaky",
+};
+
+/** Names as words: A; A and B; A, B and C (as the server joins them). */
+function joinNames(names) {
+  if (names.length < 2) return names[0] || "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** "Er. A is going", "Er. A and Er. B are going". */
+function goingWords(names) {
+  return names.length ? `${joinNames(names)} ${names.length === 1 ? "is" : "are"} going` : "Enough mobeds are going";
+}
+
+/** Under "All set: 2 going": every place filled, or confirmed with fewer. */
+function allSetLine(going, wanted, short) {
+  return short ? `Confirmed with ${going} of ${wanted} going.` : "All the places are filled.";
+}
+
+/** A WhatsApp chat with someone, from this person's own phone, with nothing typed. */
+function waChat(phone) {
+  return `https://wa.me/${String(phone || "").replace(/\D/g, "")}`;
+}
+
+/** One person praying, or the panthaky: their name, how, their number, and Call and
+ *  WhatsApp from this person's own phone - not for themselves, nor without a number. */
+function prayerHtml(name, phone, isMe, note) {
+  const reach = phone && !isMe;
+  return `<div class="fact">
+      <div><b>${esc(name)}${isMe ? " (you)" : ""}</b></div>
+      ${note ? `<div class="meta">${esc(note)}</div>` : ""}
+      ${reach ? `<div class="meta">${esc(phone)}</div>
+        <div class="row" style="margin-top:8px">
+          <a class="button secondary" href="tel:${esc(phone)}" aria-label="Call ${esc(name)}">Call</a>
+          <a class="button secondary" href="${esc(waChat(phone))}" target="_blank" rel="noopener"
+            aria-label="WhatsApp ${esc(name)}">WhatsApp</a>
+        </div>` : ""}
+    </div>`;
+}
+
+/** The family's contact, with Call and their own WhatsApp opening a message ready to edit. */
+function allSetFamilyHtml(a, prayed) {
+  const c = a.family_contact;
+  const msg = a.family_message || "";
+  return `<div class="card">
+      <h2>The family of ${esc(prayed)}</h2>
+      ${fact("Family contact", `${esc(c.name)}<br><a class="tel" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`)}
+      <label for="rqAsMsg" style="margin-top:10px">Message to the family</label>
+      <textarea id="rqAsMsg" rows="7" maxlength="1000">${esc(msg)}</textarea>
+      <p class="meta" style="margin:6px 0 0">Change it as you like. It opens in your own WhatsApp, ready to send.</p>
+      <div class="row" style="margin-top:10px">
+        <a class="button" id="rqAsWa" href="${esc(waLink(c.phone, msg))}" target="_blank" rel="noopener">WhatsApp
+          the family</a>
+        <a class="button secondary" href="tel:${esc(c.phone)}">Call the family</a>
+      </div>
+    </div>`;
+}
+
+/** Everyone going, in the order the places filled, then the panthaky. `extra` goes under
+ *  them (the board's standbys). */
+function allSetPrayingHtml(a, extra = "") {
+  const heads = a.panthakys || [];
+  return `<div class="card">
+      <h2>Who is praying</h2>
+      ${a.going.map(g => prayerHtml(g.name, g.phone, g.is_me, SAID_YES[g.how] || "")).join("")}
+      ${heads.length ? `<p style="margin:14px 0 0"><b>${heads.length === 1 ? "The panthaky" : "The panthakys"}</b></p>
+        ${heads.map(p => prayerHtml(p.name, p.phone, p.is_me, "")).join("")}` : ""}
+      ${extra}
+    </div>`;
+}
+
+/** Their own record of the family and the memorial, one tap away: the page's one action bar. */
+function allSetBookHtml(a) {
+  const main = a.memorial_id ? `<button type="button" id="rqAsMemorial">Open the memorial</button>`
+    : a.customer_id ? `<button type="button" id="rqAsMakeMemorial">Make the memorial</button>` : "";
+  const behdin = a.customer_id
+    ? `<button type="button" class="secondary" id="rqAsBehdin">Open in Behdins</button>` : "";
+  return `<div class="card">
+      <h2>In your book</h2>
+      <p class="meta" style="margin:0">${a.customer_id
+        ? "The family's contact is in your Behdins, with reminders off until you ask them."
+        : "The family's contact is no longer in your Behdins."}</p>
+      ${a.customer_id && !a.memorial_id ? `<p class="meta" style="margin:4px 0 0">Make the memorial starts the
+        form with the name and the date of death, for you to check.</p>` : ""}
+      ${main || behdin ? `<div class="action-bar">${behdin}${main}</div>` : ""}
+    </div>`;
+}
+
+/** The family, who is praying, and the book, in that order. */
+function allSetMoreHtml(a, prayed, extra = "") {
+  return `${allSetFamilyHtml(a, prayed)}${allSetPrayingHtml(a, extra)}${allSetBookHtml(a)}`;
+}
+
+/** The All set buttons, drawn in `root`. `ctx` is the request: {rid, aid, place}. */
+function wireAllSet(root, a, ctx) {
+  const msg = root.querySelector("#rqAsMsg");
+  const wa = root.querySelector("#rqAsWa");
+  if (msg && wa) msg.addEventListener("input", () => { wa.href = waLink(a.family_contact.phone, msg.value.trim()); });
+  const on = (sel, fn) => { const el = root.querySelector(sel); if (el) el.onclick = fn; };
+  on("#rqAsMemorial", () => { useFireTemple(ctx.aid); navigate(`#/memorial/${a.memorial_id}`); });
+  on("#rqAsMakeMemorial", () => openMemorialForm(ctx, a.customer_id, a.memorial_prefill));
+  on("#rqAsBehdin", () => { useFireTemple(ctx.aid); navigate(`#/behdins/${a.customer_id}`); });
+}
+
+/** All set, on the card of a going app mobed (or anyone else it put the family in the book
+ *  of who has no board): the prayers with "All set: 2 going", then the family, who is
+ *  praying and the memorial. */
+function drawAllSet(q) {
+  const a = q.all_set;
+  const n = a.going.length;
+  const wanted = (q.places || { wanted: n }).wanted;
+  const me = a.going.some(g => g.is_me);
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>${esc(q.prayed_name)}</h2>
+      <p style="margin:0"><b>${esc(`All set: ${n} going`)}</b></p>
+      <p style="margin:4px 0 0">${esc(allSetLine(n, wanted, a.confirmed_short))}${me ? " You are going." : ""}</p>
+      <div style="margin-top:10px">${factsHtml(q)}</div>
+    </div>
+    ${allSetMoreHtml(a, q.prayed_name)}`;
+  wireAllSet(mainEl, a, requestCtx(q));
 }
 
 // --- The board: "Who will pray" (R3.1) ----------------------------------------------
