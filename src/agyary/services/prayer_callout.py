@@ -120,11 +120,12 @@ CONSENT_WORDS = "They agreed to get WhatsApp messages from Mobed Diary about pra
 # call-out (template 4), and "pca:<token>:x" - "I can't go any more" - on the
 # details at All set (template 6, R3.1 step 5), where <token> is the same
 # unguessable token of that person's row on the request (prayer_callout_answers.
-# token). Step 5b answers the "x"; until then it is read as not one of ours
-# (record_answer: "malformed") and changes nothing.
+# token). Step 5b answers the "x" (services/standbys.py: backing out); a standby
+# asked again when a place opens gets the call-out with "y" / "n" on a fresh
+# token of its own (prayer_callout_answers.reask_token), never this one.
 PAYLOAD_PREFIX = "pca:"
 BACK_OUT = "x"
-_PAYLOAD = re.compile(r"^pca:([A-Za-z0-9_-]{20,40}):([yn])$")
+_PAYLOAD = re.compile(r"^pca:([A-Za-z0-9_-]{20,40}):([ynx])$")
 
 
 def back_out_payload(row: PrayerCalloutAnswer) -> str:
@@ -365,7 +366,7 @@ async def view(db: AsyncSession, settings: Settings, user: User, request: Funera
     for a, _ in answered:
         key = str(a.id)
         details_n = latest.get((fw.TYPE_DETAILS, key))
-        going = a.picked_at is not None
+        going = holds_place(a)
         people.append({
             "id": a.id, "name": a.name, "kind": "app" if a.user_id else "contact",
             "asked": _state(latest.get((fw.TYPE_CALLOUT, key))),
@@ -412,8 +413,8 @@ async def summary(db: AsyncSession, request: FuneralRequest) -> dict:
     answered = await _answers(db, request.id)
     return {
         "asked": len(answered),
-        "yes": sum(1 for a, _ in answered if a.answer == CALLOUT_YES),
-        "going": sum(1 for a, _ in answered if a.picked_at is not None),
+        "yes": sum(1 for a, _ in answered if a.answer == CALLOUT_YES and not backed_out(a)),
+        "going": sum(1 for a, _ in answered if holds_place(a)),
         "wanted": wanted(record),
     }
 
@@ -856,11 +857,30 @@ def _new_row(callout: PrayerCallout, *, name: str, phone: str | None, how: str, 
                                phone=phone, token=_new_token(), how=how)
 
 
+def holds_place(row: PrayerCalloutAnswer) -> bool:
+    """Going: picked for a place, and not backed out since (step 5b)."""
+    return row.picked_at is not None and row.backed_out_at is None
+
+
+def is_standby(row: PrayerCalloutAnswer) -> bool:
+    """A yes kept for when a place opens: never picked (someone who backed out
+    is neither going nor a standby)."""
+    return row.answer == CALLOUT_YES and row.picked_at is None
+
+
+def backed_out(row: PrayerCalloutAnswer) -> bool:
+    return row.backed_out_at is not None
+
+
+# The SQL of holds_place, for counting.
+HOLDS_PLACE = (PrayerCalloutAnswer.picked_at.is_not(None), PrayerCalloutAnswer.backed_out_at.is_(None))
+
+
 async def _going(db: AsyncSession, request_id: int) -> int:
     return (await db.execute(
         select(func.count()).select_from(PrayerCalloutAnswer)
         .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
-        .where(PrayerCallout.funeral_request_id == request_id, PrayerCalloutAnswer.picked_at.is_not(None))
+        .where(PrayerCallout.funeral_request_id == request_id, *HOLDS_PLACE)
     )).scalar_one()
 
 
@@ -885,11 +905,16 @@ async def record_answer(
     db: AsyncSession, settings: Settings, payload: str, from_phone: str | None, *, wa_user_id: str | None = None,
     now: datetime | None = None, client: httpx.AsyncClient | None = None,
 ) -> str:
-    """A tap on "Yes, I can pray" or "Not this time". Only a well-formed token
-    of a row that exists, from the number it was sent to, counts, and only the
-    first answer of that person, whichever way it came (R3.1: an answer in the
-    app first makes this one "already answered"). A yes then goes through
-    ``fill``. Returns what happened, for the log (no numbers)."""
+    """A tap on "Yes, I can pray" or "Not this time" (the call-out), or on "I
+    can't go any more" (the details at All set, step 5b). Only a well-formed
+    token of a row that exists, from the number it was sent to, counts, and
+    only the first answer of that person, whichever way it came (R3.1: an
+    answer in the app first makes this one "already answered"). A yes then
+    goes through ``fill``; "I can't go any more" through
+    standbys.back_out_on_whatsapp. Returns what happened, for the log (no
+    numbers)."""
+    from agyary.services import standbys   # here: standbys reads this module
+
     now = now or _now()
     found = _PAYLOAD.match(payload or "")
     if not found:
@@ -902,9 +927,13 @@ async def record_answer(
     if not _from_them(answer, from_phone, wa_user_id, await _asked_user_id(db, answer)):
         return f"answer {answer.id}: not from the number asked"
     request = await db.get(FuneralRequest, await _request_id(db, answer))
-    outcome = await _answer(db, settings, request, answer, choice == "y", how=HOW_WHATSAPP, by_user=None,
-                            now=now, client=client)
-    return f"answer {answer.id}: {outcome}"
+    answer_id = answer.id   # what follows may roll the session back, which forgets it
+    if choice == BACK_OUT:
+        outcome = await standbys.back_out_on_whatsapp(db, settings, request, answer, now=now, client=client)
+    else:
+        outcome = await _answer(db, settings, request, answer, choice == "y", how=HOW_WHATSAPP, by_user=None,
+                                now=now, client=client)
+    return f"answer {answer_id}: {outcome}"
 
 
 async def _answer(
@@ -1105,10 +1134,12 @@ async def _after_no(db: AsyncSession, settings: Settings, request: FuneralReques
 
 
 async def _asked_user_id(db: AsyncSession, answer: PrayerCalloutAnswer) -> str | None:
-    """The WhatsApp username id the call-out was delivered to, if Meta gave one."""
-    rows = await fw.rows_for(db, request_id=await _request_id(db, answer), kinds=(fw.TYPE_CALLOUT,))
+    """The WhatsApp username id the call-out (or, since step 5b, the details
+    with "I can't go any more" on them) was delivered to, if Meta gave one."""
+    rows = await fw.rows_for(db, request_id=await _request_id(db, answer),
+                             kinds=(fw.TYPE_CALLOUT, fw.TYPE_ALL_SET_DETAILS))
     for n in rows:
-        if n.template_params.get("answer") == str(answer.id):
+        if n.template_params.get("answer") == str(answer.id) and n.recipient_user_id:
             return n.recipient_user_id
     return None
 
@@ -1137,24 +1168,26 @@ def _text_send(a: PrayerCalloutAnswer, request: FuneralRequest, kind: str, text:
 async def _tell_panthakys(
     db: AsyncSession, settings: Settings, request: FuneralRequest, answer: PrayerCalloutAnswer, kind: str,
     title: str, body: str, *, push: str | None, now: datetime, skip_user_id: int | None = None,
-) -> None:
+    push_title: str | None = None, link: str | None = None,
+) -> list[User]:
     """The fire temple's confirmed panthakys the request reached, whose access
     is on (not the one who answered, nor the one who marked it): in the app,
     and with ``push`` on their phones too. The lock screen says who, and
     nothing about the departed or the family. A fire temple with no panthaky:
-    nobody (each mobed's card shows how many are going)."""
+    nobody (each mobed's card shows how many are going). Returns who was told."""
     from agyary.services import funeral_requests, panthaky   # here: funeral_answers reads this module
 
     confirmed = {p.id for p in await panthaky.panthakys_of(db, settings, request.agyary_id)}
     people = [u for u in await funeral_requests.asked(db, request)
               if u.id in confirmed and u.id not in (answer.user_id, skip_user_id)]
-    link = f"#/requests/{request.id}/callout"
+    link = link or f"#/requests/{request.id}/callout"
     for u in people:
         await reminders.notify(db, u.id, kind, title, body, link=link, agyary_id=request.agyary_id, now=now,
                                ttl=NOTICE_TTL)
     if push and people:
-        await web_push.send_to_users(db, settings, [u.id for u in people], title=title, body=push,
+        await web_push.send_to_users(db, settings, [u.id for u in people], title=push_title or title, body=push,
                                      url="/mobed" + link, tag=f"callout-{kind}-{answer.id}")
+    return people
 
 
 # --- The board: "Who will pray: n of N" (R3.1 step 4) --------------------------------
@@ -1180,11 +1213,15 @@ async def board_request(db: AsyncSession, settings: Settings, user: User, reques
 # A person's state for this request, on the board's Mobeds list.
 NOT_ASKED, ASKED_APP, ASKED_WHATSAPP = "not_asked", "asked_app", "asked_whatsapp"
 SAID_NO, GOING, STANDBY = "said_no", "going", "standby"
+# Was going, and can no longer go (step 5b): "Can't go".
+BACKED_OUT = "backed_out"
 
 
 def _person(row: PrayerCalloutAnswer | None, latest: dict, in_app: bool) -> dict:
     asked_n = latest.get((fw.TYPE_CALLOUT, str(row.id))) if row is not None else None
-    if row is not None and row.picked_at is not None:
+    if row is not None and backed_out(row):
+        state = BACKED_OUT
+    elif row is not None and row.picked_at is not None:
         state = GOING
     elif row is not None and row.answer == CALLOUT_YES:
         state = STANDBY
@@ -1205,6 +1242,28 @@ def _place(row: PrayerCalloutAnswer, at: datetime | None) -> dict:
     return {"key": _answer_key(row), "name": row.name, "how": row.how, "at": at.isoformat() if at else None}
 
 
+# Someone going can back out while the request is waiting or all set (step 5b).
+MAY_BACK_OUT = (REQUEST_WAITING, REQUEST_ALL_SET)
+
+
+def prayers_begun(record: FuneralRecord, now: datetime) -> bool:
+    """Whether the prayers have begun (prayer_timers.prayers_begin): from then
+    on nobody going can back out in the app. With no days given, never."""
+    from agyary.services import prayer_timers   # here: prayer_timers reads this module
+
+    start = prayer_timers.record_begins(record)
+    return start is not None and now >= start
+
+
+def may_back_out(request: FuneralRequest, record: FuneralRecord, now: datetime) -> bool:
+    return request.status in MAY_BACK_OUT and not prayers_begun(record, now)
+
+
+def reopened(request: FuneralRequest) -> bool:
+    """All set once, and waiting again because someone going backed out (step 5b)."""
+    return request.status == REQUEST_WAITING and request.all_set_at is not None
+
+
 async def board(db: AsyncSession, settings: Settings, user: User, request: FuneralRequest) -> dict:
     """The board, for board_request's people only: the request (no family
     name or number), the way, who took it, the places and the standbys (in
@@ -1223,9 +1282,9 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
     latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=fw.CALLOUT_TYPES))
     reached = set((await db.execute(select(FuneralRequestRecipient.user_id).where(
         FuneralRequestRecipient.funeral_request_id == request.id))).scalars())
-    places = sorted((r for r in rows if r.picked_at is not None), key=lambda r: (r.picked_at, r.id))
-    standbys = sorted((r for r in rows if r.answer == CALLOUT_YES and r.picked_at is None),
-                      key=lambda r: (r.answered_at, r.id))
+    places = sorted((r for r in rows if holds_place(r)), key=lambda r: (r.picked_at, r.id))
+    standbys = sorted((r for r in rows if is_standby(r)), key=lambda r: (r.answered_at, r.id))
+    gone = sorted((r for r in rows if backed_out(r)), key=lambda r: (r.backed_out_at, r.id))
     waiting = request.status == REQUEST_WAITING
     plan = await _plan(db, settings, request, agyary, by_user=user) if waiting else None
     askable = set() if plan is None else (
@@ -1265,8 +1324,14 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
         "taken": {"at": request.taken_at.isoformat(), "by": taker.name if taker else None}
         if request.taken_at else None,
         "all_set_at": request.all_set_at.isoformat() if request.all_set_at else None,
+        # All set once, waiting again: someone going backed out (step 5b).
+        "reopened": reopened(request),
         "places": [_place(r, r.picked_at) for r in places],
         "standbys": [_place(r, r.answered_at) for r in standbys],
+        # Those who were going and can no longer go: "Can't go" (step 5b).
+        "backed_out": [_place(r, r.backed_out_at) for r in gone],
+        # Whether a place's "Can't go" can be marked now: not once the prayers have begun.
+        "may_back_out": may_back_out(request, record, _now()),
         "mobeds": mobeds,
         "ask_everyone": ask,
         "may_pray": waiting and await is_confirmed_panthaky(db, agyary.id, user.id),
@@ -1303,6 +1368,8 @@ async def ask_from_board(
 
 
 def _already(name: str, row: PrayerCalloutAnswer, *, me: bool = False) -> str:
+    if backed_out(row):
+        return "You have said you can't go." if me else f"{name} has said they can't go."
     if row.picked_at is not None:
         return "You are already going." if me else f"{name} is already going."
     if row.answer == CALLOUT_YES:
@@ -1467,6 +1534,8 @@ NO_WORDS = "Noted: you cannot pray this time."
 
 
 def _mine_already(row: PrayerCalloutAnswer) -> str:
+    if backed_out(row):
+        return "You have said you can't go any more."
     if row.picked_at is not None:
         return "You have already said yes: you are going."
     if row.answer == CALLOUT_YES:
@@ -1530,18 +1599,26 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
     are going of how many, and with ``mine`` (an app mobed, not a panthaky)
     their own answer and where they stand - asked, going, standby, or said no
     - and whether they can still answer. Never anyone else's name or number."""
+    from agyary.services import standbys   # here: standbys reads this module
+
     record = await db.get(FuneralRecord, request.funeral_record_id)
     rows = await _request_rows(db, request.id)
-    out = {"places": {"going": sum(1 for r in rows if r.picked_at is not None), "wanted": wanted(record)}}
+    out = {"places": {"going": sum(1 for r in rows if holds_place(r)), "wanted": wanted(record)},
+           "reopened": reopened(request)}
     if mine:
         row = _find(rows, f"u{user.id}", user.phone)
         answered = row is not None and row.answer is not None
-        state = ("asked" if not answered else GOING if row.picked_at is not None
+        state = ("asked" if not answered else BACKED_OUT if backed_out(row) else GOING if row.picked_at is not None
                  else STANDBY if row.answer == CALLOUT_YES else SAID_NO)
         out["my_answer"] = {
             "state": state, "answer": row.answer if answered else None, "how": row.how if answered else None,
             "may_answer": not answered and request.status in (REQUEST_WAITING, REQUEST_ALL_SET),
+            # "I can't go any more" (step 5b): someone going, before the prayers begin.
+            "may_back_out": state == GOING and may_back_out(request, record, _now()),
         }
+        if state in (GOING, BACKED_OUT):
+            # Who "Tell <panthaky or fire temple> you can't go?" names.
+            out["my_answer"]["tell"] = await standbys.who_hears(db, request)
     return out
 
 
@@ -1563,7 +1640,7 @@ async def details_again(
         raise CalloutError(why)
     answered = await _answers(db, request.id, lock=True)
     latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=(fw.TYPE_DETAILS,)))
-    due = [a for a, _ in answered if a.picked_at is not None and a.details_sent_at is None and a.phone
+    due = [a for a, _ in answered if holds_place(a) and a.details_sent_at is None and a.phone
            and (fw.TYPE_DETAILS, str(a.id)) in latest and not fw.went(latest[(fw.TYPE_DETAILS, str(a.id))])]
     if not due:
         await db.commit()
@@ -1591,14 +1668,15 @@ async def after_closed(
     """Once a request is withdrawn or declined and that is committed: each
     mobed who said yes is told "This prayer request was withdrawn." - only
     inside WhatsApp's 24 hours from their answer; after that nothing can be
-    sent, and nothing is. Returns how many went. Never raises."""
+    sent, and nothing is. Not someone who said they can't go any more: nothing
+    else is sent to them (step 5b). Returns how many went. Never raises."""
     now = now or _now()
     try:
         request = await db.get(FuneralRequest, request_id)
         answered = await _answers(db, request_id)
         done = _latest(await fw.rows_for(db, request_id=request_id, kinds=(fw.TYPE_WITHDRAWN,)))
         sends = [_text_send(a, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT) for a, _ in answered
-                 if a.answer == CALLOUT_YES and a.phone and fw.in_window(a.answered_at, now)
+                 if a.answer == CALLOUT_YES and not backed_out(a) and a.phone and fw.in_window(a.answered_at, now)
                  and (fw.TYPE_WITHDRAWN, str(a.id)) not in done]
         rows = await fw.deliver(db, settings, sends, now=now, client=client)
         went = sum(1 for n in rows if fw.went(n))

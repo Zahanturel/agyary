@@ -10,7 +10,8 @@ with that field's name in the X-Field header.
 
 The "Who will pray" board on a request (R3.1 step 4): the board, Ask everyone,
 I'll pray, and a call's result, for the confirmed panthakys the request reached
-and the admin; and (step 5) "Confirm with who's going".
+and the admin; (step 5) "Confirm with who's going"; and (step 5b) "Can't go" on
+a place, for a mobed going who phoned to say they can no longer go.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, User
-from agyary.services import funeral_whatsapp, prayer_callout, request_settings
+from agyary.services import funeral_whatsapp, prayer_callout, request_settings, standbys
 from agyary.services.phone import Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["callouts"])
@@ -260,6 +261,26 @@ class CallResultIn(BaseModel):
     # words (a 400 naming the field), never as a 422.
     key: Any = None        # "u<user id>" or "c<contact id>", from the board's Mobeds list
     result: Any = None     # "going", "not_going" or "no_answer"
+
+
+class CantGoIn(BaseModel):
+    # Checked by standbys.mark_cant_go, so a wrong value is said in plain words.
+    key: Any = None        # the place's "u<user id>" or "c<contact id>", from the board's places
+
+
+@router.post("/requests/{request_id}/cant-go")
+async def board_cant_go(request_id: int, payload: CantGoIn, db: AsyncSession = Depends(get_db),
+                        user: User = Depends(get_current_user)) -> dict:
+    """The board's "Can't go" on a place (R3.1 step 5b), for a mobed going
+    who phoned to say they can no longer go: their place opens again."""
+    request = await _board_request(db, user, request_id)
+    rate_limit.enforce_key(f"prayer_board:{user.id}", max_requests=60, window_seconds=3600)
+    settings = get_settings()
+    try:
+        done = await standbys.mark_cant_go(db, settings, user, request, payload.key)
+    except prayer_callout.CalloutError as exc:
+        raise _error(exc) from exc
+    return {**await prayer_callout.board(db, settings, user, request), "done": done}
 
 
 @router.post("/requests/{request_id}/call-result")

@@ -63,6 +63,7 @@ from agyary.services import (
     funeral_whatsapp,
     guardrails,
     prayer_callout,
+    standbys,
 )
 
 router = APIRouter(prefix="/api/mobed", tags=["funeral"])
@@ -622,6 +623,26 @@ async def answer_request(
     rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
     request = await _asked_request(db, user, request_id)
     return await _answer_in_app(db, user, request, payload.answer)
+
+
+@router.post("/requests/{request_id}/back-out")
+async def back_out_of_request(
+    request_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user),
+) -> dict:
+    """ "I can't go any more" (R3.1 step 5b): someone going, the request
+    reached them, can no longer go. Their place opens again, the panthaky is
+    told, and the family stays in their own book. Refused in plain words for
+    someone not going, a request that is closed, and once the prayers have
+    begun. ``done`` says what happened."""
+    rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
+    request = await _asked_request(db, user, request_id)
+    try:
+        done = await standbys.back_out_in_app(db, get_settings(), user, request)
+    except prayer_callout.CalloutError as exc:
+        raise _callout_error(exc) from exc
+    await db.refresh(request)
+    await db.refresh(user)
+    return {"request": await _one(db, user, request), "done": done}
 
 
 @router.post("/requests/{request_id}/decline")

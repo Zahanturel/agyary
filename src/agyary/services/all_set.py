@@ -136,11 +136,13 @@ async def on_full(
 # --- Whose book --------------------------------------------------------------------
 
 async def _going_rows(db: AsyncSession, request_id: int) -> list[PrayerCalloutAnswer]:
-    """The places on the board, in the order they filled."""
+    """The places on the board, in the order they filled: never someone who
+    said they can't go any more (step 5b)."""
     return list((await db.execute(
         select(PrayerCalloutAnswer).join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
-        .where(PrayerCallout.funeral_request_id == request_id, PrayerCalloutAnswer.picked_at.is_not(None))
+        .where(PrayerCallout.funeral_request_id == request_id, *prayer_callout.HOLDS_PLACE)
         .order_by(PrayerCalloutAnswer.picked_at, PrayerCalloutAnswer.id)
+        .execution_options(populate_existing=True)
     )).scalars().all())
 
 
@@ -242,6 +244,16 @@ async def going_people(db: AsyncSession, request_id: int) -> list[dict]:
     return out
 
 
+async def _backed_out(db: AsyncSession, request_id: int, user_id: int) -> bool:
+    """Whether this account was going for the request and said they can't go
+    any more, and is not going again since."""
+    rows = (await db.execute(
+        select(PrayerCalloutAnswer).join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .where(PrayerCallout.funeral_request_id == request_id, PrayerCalloutAnswer.user_id == user_id)
+    )).scalars().all()
+    return any(prayer_callout.backed_out(r) for r in rows) and not any(prayer_callout.holds_place(r) for r in rows)
+
+
 async def request_panthakys(db: AsyncSession, request_id: int) -> list[User]:
     """Those whose book was set up as the request's panthaky."""
     return list((await db.execute(
@@ -258,11 +270,14 @@ async def contacts_for(db: AsyncSession, request: FuneralRequest, user: User) ->
     accepted the old way), the panthaky, everyone going (with numbers where
     known), their own record of the family and the memorial they made from
     it, and the memorial form's fields. None for anyone else, and for everyone
-    before All set."""
+    before All set. Nor for a mobed who said they can't go any more (step 5b):
+    the family stays in their book (D8), and nothing more is given them."""
     if request.all_set_at is None:
         return None
     mine = await book_of(db, request.id, user.id)
     if mine is None:
+        return None
+    if not mine.is_panthaky and await _backed_out(db, request.id, user.id):
         return None
     record = await db.get(FuneralRecord, request.funeral_record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
@@ -345,8 +360,10 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
         if u.id in confirmed:
             told[u.id] = (f"{said} The family's contact and everyone going are on the request from {place.name}."
                           if u.id in books else f"{said} The request from {place.name} is all set. {NOTHING_MORE}")
+    going_ids = {g["row"].user_id for g in await going_people(db, request_id) if g["row"].user_id}
     for uid in books:
-        if uid not in told:
+        # The app mobeds going; never someone who said they can't go any more (step 5b).
+        if uid not in told and uid in going_ids:
             user = await db.get(User, uid)
             if user is not None and user.is_active and mobed_access.has_access(settings, user):
                 told[uid] = (f"{said} You are going. The family's contact, the panthaky and everyone going "

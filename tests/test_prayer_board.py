@@ -594,7 +594,8 @@ async def test_an_app_mobed_answers_in_the_app_and_the_first_answer_counts_acros
     assert card.status_code == 200
     q = card.json()["request"]
     assert q["places"] == {"going": 0, "wanted": 2}
-    assert q["my_answer"] == {"state": "asked", "answer": None, "how": None, "may_answer": True}
+    assert q["my_answer"] == {"state": "asked", "answer": None, "how": None, "may_answer": True,
+                              "may_back_out": False}
     for number in (FAMILY, PANTHAKY, LISTED):
         assert number not in card.text and number[3:] not in card.text
     assert "Test Family" not in card.text and "callout" not in q

@@ -174,17 +174,30 @@ GEH_SAARNU_STARTS = {1: time(6, 30), 2: time(12, 30), 3: time(15, 30)}
 DAY_START = time(6, 30)
 
 
+def prayers_begin(geh_saarnu_date: date | None, geh: int | None, uthamna_date: date | None,
+                  uthamna_time: time | None) -> datetime | None:
+    """When the prayers begin, for a record's days: the start of the
+    Geh-saarnu's geh in IST (6:30 am with no geh), else the Uthamna's day and
+    time (6:30 am with no time), else None. "Still short" is due 4 hours
+    before; backing out is refused from then on (step 5b)."""
+    if geh_saarnu_date is not None:
+        return datetime.combine(geh_saarnu_date, GEH_SAARNU_STARTS.get(geh, DAY_START), tzinfo=IST)
+    if uthamna_date is not None:
+        return datetime.combine(uthamna_date, uthamna_time or DAY_START, tzinfo=IST)
+    return None
+
+
+def record_begins(record: FuneralRecord) -> datetime | None:
+    """prayers_begin for a funeral record."""
+    return prayers_begin(record.geh_saarnu_date, record.geh_saarnu_geh, record.uthamna_date, record.uthamna_time)
+
+
 def short_alert_at(geh_saarnu_date: date | None, geh: int | None, uthamna_date: date | None,
                    uthamna_time: time | None) -> datetime | None:
     """When "still short" is due for a record's days (see the module's
     docstring), or None when it has neither day."""
-    if geh_saarnu_date is not None:
-        start = datetime.combine(geh_saarnu_date, GEH_SAARNU_STARTS.get(geh, DAY_START), tzinfo=IST)
-    elif uthamna_date is not None:
-        start = datetime.combine(uthamna_date, uthamna_time or DAY_START, tzinfo=IST)
-    else:
-        return None
-    return start - SHORT_BEFORE
+    start = prayers_begin(geh_saarnu_date, geh, uthamna_date, uthamna_time)
+    return None if start is None else start - SHORT_BEFORE
 
 
 async def _short_due(db: AsyncSession, now: datetime) -> list[int]:

@@ -31,7 +31,10 @@ At All set (R3.1 step 5, services/all_set.py), instead of 1-3:
                                were going (a standby, R3.1)
      "This prayer request was withdrawn."  plain text to a mobed who said yes,
                                when the request is withdrawn or declined
-     Both texts go only inside the 24 hours the mobed's answer opened.
+     "Thank you for letting us know. The panthaky has been told."  plain text
+                               to a tap on "I can't go any more" (step 5b), or
+                               why it cannot be done (the prayers have begun)
+     These texts go only inside the 24 hours the mobed's answer or tap opened.
 
 Everything here is off until FUNERAL_WHATSAPP_MODE=live (once Meta has approved
 the templates): while it is off nothing is sent and the app says so. Live, every
@@ -88,7 +91,10 @@ TYPE_ALL_SET_DETAILS = "prayer_details_mobed_v3"
 TYPE_ALL_SET_PANTHAKY = "prayers_all_set_panthaky"
 TYPE_ALL_SET_MANAGER = "funeral_accepted_manager_v2"
 ALL_SET_TYPES = (TYPE_ALL_SET_FAMILY, TYPE_ALL_SET_DETAILS, TYPE_ALL_SET_PANTHAKY, TYPE_ALL_SET_MANAGER)
-TYPES = (TYPE_MANAGER, TYPE_DETAILS, TYPE_FAMILY, TYPE_CALLOUT, TYPE_ENOUGH, TYPE_WITHDRAWN, *ALL_SET_TYPES)
+# R3.1 step 5b: the plain text answering a tap on "I can't go any more".
+TYPE_BACKED_OUT = "prayer_backed_out_reply"
+TYPES = (TYPE_MANAGER, TYPE_DETAILS, TYPE_FAMILY, TYPE_CALLOUT, TYPE_ENOUGH, TYPE_WITHDRAWN, *ALL_SET_TYPES,
+         TYPE_BACKED_OUT)
 # What a call-out's screen reads, per mobed asked.
 CALLOUT_TYPES = (TYPE_CALLOUT, TYPE_DETAILS, TYPE_ENOUGH, TYPE_WITHDRAWN)
 TEXT_TEMPLATE = "text"   # template_name of the plain text reply
@@ -99,6 +105,10 @@ PAUSED = "All WhatsApp sending from Mobed Diary is paused at the moment."
 NOT_FIXED = "not fixed yet"
 ENOUGH_TEXT = "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again."
 WITHDRAWN_TEXT = "This prayer request was withdrawn."
+# To a tap on "I can't go any more" (step 5b); without "The panthaky has been
+# told." at a fire temple with no panthaky in the app, where nobody is.
+BACKED_OUT_TEXT = "Thank you for letting us know. The panthaky has been told."
+BACKED_OUT_NO_PANTHAKY_TEXT = "Thank you for letting us know."
 # WhatsApp's customer-service window: plain text may answer a person only this
 # long after their last message to us.
 WINDOW = timedelta(hours=24)

@@ -296,7 +296,11 @@ async def requests_of(db: AsyncSession, record_ids: list[int]) -> dict[int, list
 
 
 def accepted(requests: list[FuneralRequest]) -> FuneralRequest | None:
-    return next((r for r in requests if r.status in ACCEPTED), None)
+    """The request that took the record for good: accepted, or all set - also
+    one waiting again because someone going backed out (R3.1 step 5b), whose
+    family and mobeds were already told the details."""
+    return next((r for r in requests if r.status in ACCEPTED
+                 or (r.status == REQUEST_WAITING and r.all_set_at is not None)), None)
 
 
 def waiting(requests: list[FuneralRequest]) -> FuneralRequest | None:
