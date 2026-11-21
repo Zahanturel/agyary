@@ -434,8 +434,9 @@ async def test_a_calls_result_going_not_going_or_no_answer(client, db, seeded, m
     assert meta.sent == [] and pushes == []        # the panthaky who marked it is not told of it
     assert (await _request(db, rid)).taken_at == taken
 
-    # Their first answer counts: a second mark is "already answered".
-    r = await client.post(url, json={"key": keys["Er. Second"], "result": "going"}, headers=panthaky)
+    # Their first answer counts: a second mark is "already answered" (a Going after a no is the
+    # one exception: see the next test).
+    r = await client.post(url, json={"key": keys["Er. Second"], "result": "not_going"}, headers=panthaky)
     assert r.status_code == 409 and r.json()["detail"] == "Er. Second has already said they cannot pray this time."
     r = await client.post(url, json={"key": keys["Er. Pervez Kias"], "result": "not_going"}, headers=panthaky)
     assert r.status_code == 409 and r.json()["detail"] == "Er. Pervez Kias is already going."
@@ -447,6 +448,47 @@ async def test_a_calls_result_going_not_going_or_no_answer(client, db, seeded, m
                         ({"key": f"u{me}", "result": "going"}, "key")):
         r = await client.post(url, json=body, headers=panthaky)
         assert r.status_code == 400 and r.headers["X-Field"] == field, (body, r.text)
+
+
+async def test_a_call_can_turn_an_earlier_no_into_going_but_never_touches_a_yes(client, db, seeded, meta, pushes,
+                                                                               live):
+    """Lead's choice, 21 Nov 2026: people change their mind on the phone. Going
+    after a call may override an earlier no (on WhatsApp here), through the same
+    rule for places and All set; someone going is left as they are."""
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _listed(client, aid, panthaky, ("Er. Listed", LISTED), ("Er. Second", SECOND))
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    answers = await _answers(db)
+    await _signed_tap(client, SECOND, f"pca:{answers[SECOND].token}:n")
+    await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
+    said_no = (await _answers(db))[SECOND]
+    assert said_no.answer == "no" and said_no.how == "whatsapp"
+    no_id, no_at = said_no.id, said_no.answered_at
+    keys = {m["name"]: m["key"] for m in (await client.get(_b(rid), headers=panthaky)).json()["mobeds"]}
+    url = _b(rid, "call-result")
+
+    # A yes on another channel is never undone or repeated by a call.
+    for result in ("not_going", "going"):
+        r = await client.post(url, json={"key": keys["Er. Listed"], "result": result}, headers=panthaky)
+        assert r.status_code == 409 and r.json()["detail"] == "Er. Listed is already going.", result
+    # A second no is still refused.
+    r = await client.post(url, json={"key": keys["Er. Second"], "result": "not_going"}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Second has already said they cannot pray this time."
+
+    # Going after their no: the last place, so the request is all set.
+    meta.sent.clear()
+    r = await client.post(url, json={"key": keys["Er. Second"], "result": "going"}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == "Er. Second is going. All the places are filled: it is all set."
+    assert [(p["name"], p["how"]) for p in r.json()["places"]] == [("Er. Listed", "whatsapp"), ("Er. Second", "phone")]
+    second = (await _answers(db))[SECOND]
+    assert second.id == no_id and second.answer == "yes" and second.how == "phone" and second.picked_at
+    assert second.recorded_by_user_id == await _uid(db, PANTHAKY) and second.answered_at > no_at
+    request = await _request(db, rid)
+    assert request.status == "all_set" and request.taken_by_user_id == await _uid(db, PANTHAKY)
+    assert meta.sent == []            # nothing goes on WhatsApp at a yes
+    assert (await _answers(db))[LISTED].picked_at < second.picked_at
 
 
 async def test_ask_everyone_from_the_board_takes_it_and_then_has_nobody_left(client, db, seeded, pushes):

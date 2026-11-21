@@ -898,21 +898,27 @@ async def record_answer(
 
 async def _answer(
     db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, yes: bool, *,
-    how: str, by_user: User | None, now: datetime, client: httpx.AsyncClient | None,
+    how: str, by_user: User | None, now: datetime, client: httpx.AsyncClient | None, over_no: bool = False,
 ) -> str:
     """Record one person's answer on ``row``, if it is their first: the
     request is locked first (every answer and place of a request waits here
     for the one before), then the row. The answer is committed before anything
     follows, so whatever happens next it stands. Returns what happened, for
-    the log; "already answered" when they had answered before."""
+    the log; "already answered" when they had answered before.
+
+    ``over_no`` (a call's Going, call_result): a yes may take the place of an
+    earlier no of theirs - people change their mind on the phone (lead's
+    choice, 21 Nov 2026) - but never of a yes: someone going or on standby
+    is left as they are."""
     await db.refresh(request, with_for_update=True)
     await db.refresh(row, with_for_update=True)
-    if row.answer is not None or any(
-        r.answer is not None for r in await _request_rows(db, request.id)
-        if r.id != row.id and _same_person(r, row)
-    ):
+    said = [r.answer for r in (row, *(r for r in await _request_rows(db, request.id)
+                                      if r.id != row.id and _same_person(r, row))) if r.answer is not None]
+    if said and not (over_no and yes and all(a == CALLOUT_NO for a in said)):
         await db.commit()
         return "already answered"
+    if said:
+        logger.info("Answer %s on request %s: an earlier no becomes a yes by phone", row.id, request.id)
     row.answer, row.answered_at, row.how = (CALLOUT_YES if yes else CALLOUT_NO), now, how
     row.recorded_by_user_id = by_user.id if by_user is not None and how in (HOW_PHONE, HOW_SELF) else None
     await db.commit()
@@ -1331,7 +1337,10 @@ async def call_result(
     by them, through ``fill``), "not_going" (a no by phone), or "no_answer"
     (nothing kept). Any of them takes the request. Only someone on the fire
     temple's list, and only their first answer (an answer on WhatsApp or in
-    the app first is "already answered")."""
+    the app first is "already answered") - except that "going" may turn an
+    earlier no into a yes (lead's choice, 21 Nov 2026: people change their
+    mind on the phone). Someone already going or on standby is never
+    touched; "not_going" for them stays refused (backing out is Step 5b)."""
     now = now or _now()
     if result not in CALL_RESULTS:
         raise CalloutError("Please say whether they are going, not going, or did not answer.", status=400,
@@ -1354,8 +1363,9 @@ async def call_result(
         return {"outcome": "no answer", "message": f"Noted: {m['name']} did not answer."}
     app = m["kind"] == "app"
     phone = (await db.get(User, m["id"])).phone if app else m["phone"]
+    yes = result == "going"
     row = _find(await _request_rows(db, request.id), key, phone)
-    if row is not None and row.answer is not None:
+    if row is not None and row.answer is not None and not (yes and row.answer == CALLOUT_NO):
         raise CalloutError(_already(m["name"], row))
     if row is None:
         callout = await _callout_of(db, request, sent_by_user_id=user.id, now=now)
@@ -1364,8 +1374,12 @@ async def call_result(
         db.add(row)
         await db.flush()
     await take_request(db, request, user, now)
-    yes = result == "going"
-    outcome = await _answer(db, settings, request, row, yes, how=HOW_PHONE, by_user=user, now=now, client=client)
+    outcome = await _answer(db, settings, request, row, yes, how=HOW_PHONE, by_user=user, now=now, client=client,
+                            over_no=yes)
+    if outcome == "already answered":
+        # A yes of theirs on another row (someone asked twice before R3.1): left as it is.
+        theirs = [r for r in await _request_rows(db, request.id) if _same_person(r, row) and r.answer == CALLOUT_YES]
+        raise CalloutError(_already(m["name"], theirs[0] if theirs else row))
     logger.info("Request %s: user %s marked %s %s by phone (%s)", request.id, user.id, key, result, outcome)
     if not yes:
         return {"outcome": outcome, "message": f"Noted: {m['name']} cannot pray this time."}
