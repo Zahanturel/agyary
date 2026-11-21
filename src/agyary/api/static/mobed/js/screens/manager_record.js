@@ -11,11 +11,19 @@
  *    it on the spot: manager_behdins.js), and the family's preferred fire
  *    temple - their usual one from the book, unless the manager chooses.
  *  - The record: everything on it, its requests, and Send / Withdraw / Edit.
- *    Once a fire temple accepts (Step 5): who accepted and where, and - only
- *    if they ticked "Share my name and number" - their number with Call and
- *    WhatsApp (the manager's own WhatsApp, a short message ready).
+ *    Where a request stands, in the server's words (R3.1 step 6): Waiting at
+ *    X (or Sent to the panthaky of X), Finding mobeds at X: 1 of 2 going, A
+ *    place has opened at X, All set at X with the mobeds' names and the
+ *    panthaky's Call and WhatsApp (the manager's own phone, a short message
+ *    ready), Declined by X, Nobody at X can take it, Withdrawn. While it
+ *    waits, "Send to another agyari" withdraws it (a sheet first) and opens
+ *    Ask a fire temple. A request accepted the old way (Step 5) still shows
+ *    who accepted, and - only if they ticked "Share my name and number" -
+ *    their number with Call and WhatsApp.
  *  - Choosing the fire temple: Suggested (nearest first) or Search all, then
- *    the tick that the family agreed, and Send.
+ *    the sheet saying what happens by that fire temple's way (its mobeds asked
+ *    at once, or its panthaky choosing who to ask), the tick that the family
+ *    agreed, and Send.
  *
  * Nothing about the cause of death, age, address, certificate, ID numbers or
  * how the body goes is asked.
@@ -746,7 +754,7 @@ function agyariRowHtml(a, i) {
     </div>`;
 }
 
-function wireRows(container, list, rec) {
+function wireRows(container, list, rec, whatsappOn) {
   container.querySelectorAll("[data-i]").forEach(row => {
     const a = list[+row.dataset.i];
     if (!a.may_send) {
@@ -755,7 +763,7 @@ function wireRows(container, list, rec) {
       row.tabIndex = -1;
       return;
     }
-    row.onclick = () => confirmSend(rec, a);
+    row.onclick = () => confirmSend(rec, a, whatsappOn);
   });
 }
 
@@ -827,7 +835,7 @@ export async function renderRecordSend({ id }) {
           id="msToAll">Search all</button></div>`);
     const toAll = document.getElementById("msToAll");
     if (toAll) toAll.onclick = () => show("all");
-    wireRows(near, list, rec);
+    wireRows(near, list, rec, got.whatsapp_on);
   };
   loadNear();
 
@@ -840,32 +848,39 @@ export async function renderRecordSend({ id }) {
       const q = input.value.trim();
       const mine = ++token;
       if (!q) { results.innerHTML = ""; return; }
-      let found;
+      let got;
       try {
-        found = (await managerSearchAgyaries(q, rec.funeral_place && rec.funeral_place.id)).agyaries;
+        got = await managerSearchAgyaries(q, rec.funeral_place && rec.funeral_place.id);
       } catch (e) {
         if (mine === token) results.innerHTML = `<p class="meta" role="alert">${esc(e.message)}</p>`;
         return;
       }
       if (mine !== token || !alive()) return;
+      const found = got.agyaries;
       results.innerHTML = found.length ? found.map(agyariRowHtml).join("")
         : `<p class="meta">No fire temple found for “${esc(q)}”.</p>`;
-      wireRows(results, found, rec);
+      wireRows(results, found, rec, got.whatsapp_on);
     }, 250);
   };
 }
 
 let sending = false;
 
+/** What happens at Send, by the fire temple's way (R3.1 step 6). */
+export function sendWords(a, whatsappOn) {
+  const how = a.way === "panthaky_first"
+    ? "Its panthaky is told and chooses who to ask."
+    : `Its mobeds are asked at once, ${whatsappOn ? "in the app and on WhatsApp" : "in the app"}, whether they can pray.`;
+  const shared = a.reach === "panthaky" ? "with its panthaky and the mobeds who go" : "with the mobeds who go";
+  return `${how} The family's name and number are shared only once enough mobeds are going, ${shared}.`;
+}
+
 /** The tick, then Send. The tick is asked every time, for this fire temple. */
-function confirmSend(rec, a) {
-  const who = a.reach === "panthaky" ? "its panthaky" : "its mobeds in Mobed Diary";
+function confirmSend(rec, a, whatsappOn) {
   const sheet = openSheet({
     title: `Send to ${a.name}?`,
     html: `
-      <p class="meta" style="margin-top:0">${esc(rec.prayed_name)}. It goes to ${who}, with the prayers and their
-        times, and its mobeds are asked on WhatsApp whether they can pray. The family's name and number go only to
-        the one who accepts and to the mobeds who go.</p>
+      <p class="meta" style="margin-top:0">${esc(rec.prayed_name)}. ${esc(sendWords(a, whatsappOn))}</p>
       <div class="check-row" id="msTickRow"><input type="checkbox" id="msTick">
         <label for="msTick">The family agreed to share their name and number with this agyari, and to get
           WhatsApp messages about the prayers from Mobed Diary</label></div>
