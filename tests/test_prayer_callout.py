@@ -240,7 +240,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     assert res["callout"]["message"] == "1 mobed of Goti Adarian was asked in the app, and 2 on WhatsApp."
     # Not the panthaky (the request is in their app, and it asks the mobeds to tell them),
     # not a STOP'd number, not an account that is off.
-    asked = meta.templates("prayer_request_mobeds")
+    asked = meta.templates("prayer_request_mobeds_v2")
     assert sorted(m["to"] for m in asked) == sorted([MOBED, LISTED])
     for m in asked:
         body = [p["text"] for p in m["template"]["components"][0]["parameters"]]
@@ -278,7 +278,10 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     pushes.clear()
     await _signed_tap(client, MOBED, f"pca:{kias.token}:y")
     await _signed_tap(client, MOBED, f"pca:{kias.token}:n")        # only the first tap counts
-    assert meta.sent == []
+    # Only the All set messages (templates 5-8, tests/test_all_set.py): no old details, no reply.
+    assert {m["template"]["name"] for m in meta.sent} == {
+        "prayers_all_set_family", "prayer_details_mobed_v3", "prayers_all_set_panthaky", "funeral_accepted_manager_v2"}
+    meta.sent.clear()
     kias = (await _answers(db))[MOBED]
     assert kias.answer == "yes" and kias.how == "whatsapp" and kias.picked_at is not None
     assert kias.details_sent_at is None
@@ -481,7 +484,7 @@ async def test_everyone_at_once_keeps_the_call_out_at_send(client, db, seeded, m
     rid, res, _ = await _send(client, db, aid)
     assert res["callout"] == {"state": "sent", "asked": 1, "asked_in_app": 1,
                               "message": "1 mobed of Goti Adarian was asked in the app, and 1 on WhatsApp."}
-    assert [m["to"] for m in meta.templates("prayer_request_mobeds")] == [MOBED]
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [MOBED]
     assert len(await _callouts(db)) == 1
 
 
@@ -510,7 +513,7 @@ async def test_come_to_me_first_tells_only_the_panthaky_and_asks_nobody_at_send(
     key = next(c["key"] for c in view["candidates"] if c["name"] == "Er. Pervez Kias")
     r = await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": [key]}, headers=panthaky)
     assert r.status_code == 200 and r.json()["asked_now"] == 1
-    assert [m["to"] for m in meta.templates("prayer_request_mobeds")] == [MOBED]
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [MOBED]
 
 
 async def test_come_to_me_first_with_two_panthakys_says_panthakys(client, db, seeded, meta, pushes, live):
@@ -535,7 +538,7 @@ async def test_come_to_me_first_with_no_confirmed_panthaky_on_is_everyone_at_onc
     # They had the request in the app from Send (no panthaky): asked on WhatsApp only now.
     assert res["callout"] == {"state": "sent", "asked": 2, "asked_in_app": 0,
                               "message": "2 mobeds of Mobeds Only Agyari (test) were asked on WhatsApp."}
-    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds")) == ["+919822200111", "+919822200112"]
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == ["+919822200111", "+919822200112"]
 
     # Goti Adarian, Come to me first, with its only panthaky switched off (D9): the same.
     meta.sent.clear()
@@ -544,8 +547,8 @@ async def test_come_to_me_first_with_no_confirmed_panthaky_on_is_everyone_at_onc
     await db.commit()
     _, res, _ = await _send(client, db, seeded["agyary_id"], mgr)
     assert res["callout"]["state"] == "sent" and res["callout"]["asked"] == 1
-    assert [m["to"] for m in meta.templates("prayer_request_mobeds")] == [MOBED]
-    body = [p["text"] for p in meta.templates("prayer_request_mobeds")[0]["template"]["components"][0]["parameters"]]
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [MOBED]
+    body = [p["text"] for p in meta.templates("prayer_request_mobeds_v2")[0]["template"]["components"][0]["parameters"]]
     assert body[5] == "Goti Adarian"      # nothing under the account that is off
 
 

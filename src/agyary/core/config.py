@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     deleted_account_cooldown_days: int = 30
 
     # --- The Doongerwadi side on WhatsApp (DECISIONS D10, 18 Nov 2026) ---------
-    # One switch for all four templates of docs/phase2-whatsapp-templates.md:
+    # One switch for all the templates of docs/phase2-whatsapp-templates.md and
+    # docs/phase2-requests-redesign.md:
     # off until Meta has approved them, then live. Off: nothing is sent, and the
     # app says that the messages start once Meta approves them. Live still needs
     # the token and number id above, and keeps to the pause switch, STOP, the
@@ -73,7 +74,18 @@ class Settings(BaseSettings):
     # 2: to the mobed who prays. v2 (19 Nov 2026) has no bungli and six blanks.
     whatsapp_prayer_details_template: str = "prayer_details_mobed_v2"
     whatsapp_prayers_family_template: str = "prayers_mobed_family"       # 3: to the family
-    whatsapp_prayer_request_template: str = "prayer_request_mobeds"      # 4: the panthaky's call-out
+    # 4: the call-out to the fire temple's mobeds. v2 (owner, 21 Nov 2026: R3.1) has
+    # the same six blanks as v1 and more fixed words: the details come once enough
+    # mobeds are going, and a mobed's name and number go to the family. Until Meta
+    # approves v2, a server's .env may name the old "prayer_request_mobeds": the
+    # blanks fit either.
+    whatsapp_prayer_request_template: str = "prayer_request_mobeds_v2"
+    # R3.1 step 5, at All set (docs/phase2-requests-redesign.md, "Template drafts");
+    # templates 1-3 are not sent for these requests.
+    whatsapp_all_set_family_template: str = "prayers_all_set_family"        # 5: to the family
+    whatsapp_all_set_details_template: str = "prayer_details_mobed_v3"      # 6: to each mobed going
+    whatsapp_all_set_panthaky_template: str = "prayers_all_set_panthaky"    # 7: to the panthaky
+    whatsapp_all_set_manager_template: str = "funeral_accepted_manager_v2"  # 8: to the place's managers
     # Ceilings, per IST day, over every one of these messages (and the short
     # "enough mobeds are going" text reply): all fire temples together, and one
     # fire temple. A message over either is not sent, the person who asked for it

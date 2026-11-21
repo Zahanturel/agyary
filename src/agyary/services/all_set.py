@@ -118,6 +118,11 @@ async def on_full(
     except Exception:   # noqa: BLE001 - it is all set and the books are made; this must not undo it
         logger.exception("Telling everyone that request %s is all set failed", request_id)
         await db.rollback()
+    try:
+        await _whatsapp(db, settings, request_id, now, client)
+    except Exception:   # noqa: BLE001 - as above; each message that went is written down (deliver)
+        logger.exception("The WhatsApp messages for request %s being all set failed", request_id)
+        await db.rollback()
     await db.refresh(request)
     return True
 
@@ -354,3 +359,79 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
         push=("All set", f"{going_words(going)} from {agyary.name}."), now=now,
     )
     await db.commit()
+
+
+# --- On WhatsApp ---------------------------------------------------------------------
+
+def _why_off(user: User | None, settings: Settings) -> str | None:
+    """Why an account may not be messaged (D9), or None."""
+    if user is None or not user.is_active:
+        return "their Mobed Diary account is gone"
+    if not mobed_access.has_access(settings, user):
+        return "their Mobed Diary access is not on"
+    return None
+
+
+async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: datetime,
+                    client: httpx.AsyncClient | None) -> int:
+    """The all-set messages from Mobed Diary's number, only while
+    FUNERAL_WHATSAPP_MODE is live (approved templates only; each still passes
+    STOP, the pause switch, the allowlist, the day's limits and the name
+    checks in funeral_whatsapp.deliver, and nothing goes to an account that is
+    not on, D9). Each is a row written before it is sent, at most once (this
+    runs once, for the call that made it all set):
+
+    5  to the family, only if the manager's tick recorded their agreement to
+       hear from Mobed Diary (as template 3 before);
+    6  to each mobed going with a number - app or added by hand, the panthaky
+       too if they pray - with "I can't go any more" on it;
+    7  to the request's panthakys who are not going (they have 6);
+    8  to the funeral place's managers.
+
+    Templates 1-3 are never sent for a request made all set. Returns how many
+    went."""
+    if not fw.mode_on(settings):
+        logger.info("Doongerwadi WhatsApp is off: nothing sent for request %s being all set", request_id)
+        return 0
+    request = await db.get(FuneralRequest, request_id)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    agyary = await db.get(Agyary, request.agyary_id)
+    going = await going_people(db, request_id)
+    people = [fw.Person(g["name"], g["phone"]) for g in going]
+    panthakys = await request_panthakys(db, request_id)
+    heads = [fw.Person(p.name, p.phone) for p in panthakys]
+
+    sends = []
+    if request.family_whatsapp_agreed:
+        sends.append(fw.all_set_family_send(record, agyary, going=people, panthakys=heads,
+                                            refs={"request": request_id, "to": "family"}))
+    for g in going:
+        row = g["row"]
+        if not g["phone"]:
+            continue
+        why = None
+        if row.user_id:
+            why, to = _why_off(await db.get(User, row.user_id), settings), ("user", row.user_id)
+        else:
+            contact = await db.get(AgyaryMobedContact, row.contact_id) if row.contact_id else None
+            account = await db.get(User, contact.user_id) if contact is not None and contact.user_id else None
+            if account is not None and not mobed_access.has_access(settings, account):
+                why = "their Mobed Diary access is not on"
+            to = ("contact", row.contact_id or 0)
+        sends.append(fw.all_set_details_send(
+            record, place, going=people, panthakys=heads, phone=g["phone"], recipient_type=to[0],
+            recipient_id=to[1], agyary_id=agyary.id, back_out=prayer_callout.back_out_payload(row),
+            refs={"request": request_id, "to": "going", "answer": row.id}, why_not=why))
+    going_ids = {g["row"].user_id for g in going if g["row"].user_id}
+    for p in panthakys:
+        if p.id not in going_ids:
+            sends.append(fw.all_set_panthaky_send(record, place, going=people, phone=p.phone, recipient_id=p.id,
+                                                  agyary_id=agyary.id, refs={"request": request_id, "to": "panthaky"}))
+    for m in await funeral_answers._managers(db, settings, record.funeral_place_id):
+        sends.append(fw.all_set_manager_send(record, agyary, going=people, panthakys=heads, phone=m.phone,
+                                             recipient_id=m.id, refs={"request": request_id, "to": "manager"}))
+    rows = await fw.deliver(db, settings, sends, now=now, client=client)
+    went = sum(1 for n in rows if fw.went(n))
+    logger.warning("Request %s all set: %d of %d WhatsApp messages went", request_id, went, len(rows))
+    return went

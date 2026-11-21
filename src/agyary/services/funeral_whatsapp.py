@@ -11,9 +11,21 @@ Four approved Utility templates, and one short text reply:
                                call-out - since then nobody going gets them
                                before All set, Step 5)
   3  prayers_mobed_family      to the family: who will pray
-  4  prayer_request_mobeds     the call-out to the agyari's mobeds, at once when
+  4  prayer_request_mobeds_v2  the call-out to the agyari's mobeds, at once when
                                a request is sent (and again by the panthaky's
                                hand), with "Yes, I can pray" / "Not this time"
+                               (v2 since R3.1; the same blanks as v1)
+
+At All set (R3.1 step 5, services/all_set.py), instead of 1-3:
+
+  5  prayers_all_set_family    to the family: who will pray, the times, the panthaky
+  6  prayer_details_mobed_v3   to each mobed going: the details, the family's
+                               contact, everyone going, the panthaky; with the
+                               button "I can't go any more" ("pca:<token>:x")
+  7  prayers_all_set_panthaky  to the panthaky not going: who is going, the family
+  8  funeral_accepted_manager_v2  to the funeral place's managers: who will pray,
+                               the panthaky's name and number
+
      "Thank you. Enough mobeds are going this time. If a place opens, we may
      ask you again."           plain text to a mobed who said yes once enough
                                were going (a standby, R3.1)
@@ -70,7 +82,13 @@ TYPE_FAMILY = "prayers_mobed_family"
 TYPE_CALLOUT = "prayer_request_mobeds"
 TYPE_ENOUGH = "prayer_enough_reply"
 TYPE_WITHDRAWN = "prayer_withdrawn_reply"
-TYPES = (TYPE_MANAGER, TYPE_DETAILS, TYPE_FAMILY, TYPE_CALLOUT, TYPE_ENOUGH, TYPE_WITHDRAWN)
+# R3.1 step 5, at All set (templates 5-8).
+TYPE_ALL_SET_FAMILY = "prayers_all_set_family"
+TYPE_ALL_SET_DETAILS = "prayer_details_mobed_v3"
+TYPE_ALL_SET_PANTHAKY = "prayers_all_set_panthaky"
+TYPE_ALL_SET_MANAGER = "funeral_accepted_manager_v2"
+ALL_SET_TYPES = (TYPE_ALL_SET_FAMILY, TYPE_ALL_SET_DETAILS, TYPE_ALL_SET_PANTHAKY, TYPE_ALL_SET_MANAGER)
+TYPES = (TYPE_MANAGER, TYPE_DETAILS, TYPE_FAMILY, TYPE_CALLOUT, TYPE_ENOUGH, TYPE_WITHDRAWN, *ALL_SET_TYPES)
 # What a call-out's screen reads, per mobed asked.
 CALLOUT_TYPES = (TYPE_CALLOUT, TYPE_DETAILS, TYPE_ENOUGH, TYPE_WITHDRAWN)
 TEXT_TEMPLATE = "text"   # template_name of the plain text reply
@@ -177,6 +195,12 @@ class Send:
     refs: dict = field(default_factory=dict)
     # The free text in the blanks, checked before anything goes: (what, text, max length).
     names: list[tuple[str, str, int]] = field(default_factory=list)
+    # What is written down for a blank that holds names and numbers together
+    # (1-based place -> the words with "[number]" for each number).
+    recorded: dict[int, str] = field(default_factory=dict)
+    # Why this one may not go whatever else holds (an account that is not on,
+    # D9); it is written down as "failed" with this reason.
+    why_not: str | None = None
 
 
 def template_name(settings: Settings, kind: str) -> str:
@@ -185,11 +209,16 @@ def template_name(settings: Settings, kind: str) -> str:
         TYPE_DETAILS: settings.whatsapp_prayer_details_template,
         TYPE_FAMILY: settings.whatsapp_prayers_family_template,
         TYPE_CALLOUT: settings.whatsapp_prayer_request_template,
+        TYPE_ALL_SET_FAMILY: settings.whatsapp_all_set_family_template,
+        TYPE_ALL_SET_DETAILS: settings.whatsapp_all_set_details_template,
+        TYPE_ALL_SET_PANTHAKY: settings.whatsapp_all_set_panthaky_template,
+        TYPE_ALL_SET_MANAGER: settings.whatsapp_all_set_manager_template,
     }.get(kind, TEXT_TEMPLATE)
 
 
 def _recorded_params(s: Send) -> dict:
-    out = {str(i): (HIDDEN if i in s.hidden else p) for i, p in enumerate(s.params, start=1)}
+    out = {str(i): (s.recorded[i] if i in s.recorded else HIDDEN if i in s.hidden else p)
+           for i, p in enumerate(s.params, start=1)}
     out.update({k: str(v) for k, v in s.refs.items()})
     return out
 
@@ -285,6 +314,8 @@ async def _blocked(db: AsyncSession, settings: Settings, s: Send, used: dict, no
     why = await why_not_now(db, settings)
     if why:
         return why
+    if s.why_not:
+        return s.why_not
     if await reminders.already_stopped(db, s.phone):
         return "they replied STOP to Mobed Diary, so nothing more goes to them"
     if not reminders.may_send_to(settings, s.phone):
@@ -543,4 +574,134 @@ def _join(words: list[str]) -> str:
 
 def in_window(answered_at: datetime | None, now: datetime) -> bool:
     return answered_at is not None and now - answered_at <= WINDOW
+
+
+# --- R3.1 step 5: at All set (templates 5-8) -----------------------------------------
+# docs/phase2-requests-redesign.md, "Template drafts": the blanks below are in
+# exactly that order. A blank that holds several people is built here, e.g.
+# "Er. A (+91 9800000001), Er. B (+91 9800000002)": the numbers are only the
+# sign-in number of an account, or the number a panthaky entered for a mobed
+# added by hand (cleaned by services/phone.py) - never free text - and each
+# name passes services/template_text.py. Meta's rules: no newline or tab, no
+# four spaces in a row, and no blank left empty ("not fixed yet" instead).
+
+@dataclass
+class Person:
+    """Someone named in a blank: their name, and their number where known."""
+
+    name: str
+    phone: str | None = None
+
+
+def clean(text: str | None) -> str:
+    """One line, single spaces (Meta refuses a newline, a tab or four spaces in a blank)."""
+    return " ".join(str(text or "").split())
+
+
+def spoken(phone: str) -> str:
+    """A number as people read it: "+91 9800000001" for India, else as stored."""
+    return f"+91 {phone[3:]}" if phone.startswith("+91") and len(phone) == 13 else phone
+
+
+def people_blank(people: list[Person]) -> tuple[str, str]:
+    """(what is sent, what is written down) for a blank of names with numbers:
+    "Er. A (+91 9800000001), Er. B" is written down as "Er. A ([number]), Er. B"."""
+    sent = ", ".join(f"{clean(p.name)} ({spoken(p.phone)})" if p.phone else clean(p.name) for p in people)
+    kept = ", ".join(f"{clean(p.name)} ({HIDDEN})" if p.phone else clean(p.name) for p in people)
+    return (sent, kept) if sent else (NOT_FIXED, NOT_FIXED)
+
+
+def names_blank(people: list[Person]) -> str:
+    """Names only: "Er. A and Er. B"."""
+    names = [clean(p.name) for p in people if clean(p.name)]
+    return _join(names) if names else NOT_FIXED
+
+
+def _people_checks(people: list[Person], what: str) -> list[tuple[str, str, int]]:
+    return [(what, p.name, template_text.MOBED_NAME_MAX) for p in people]
+
+
+def _record_checks(record: FuneralRecord, place: FuneralPlace | None, agyary: Agyary | None,
+                   family: bool) -> list[tuple[str, str, int]]:
+    out = [("the departed's name", departed(record), template_text.DEPARTED_MAX)]
+    if place is not None:
+        out.append(("the place's name", place.name, template_text.TEMPLE_MAX))
+    if agyary is not None:
+        out.append(("the fire temple's name", agyary.name, template_text.TEMPLE_MAX))
+    if family:
+        out.append(("the family's name", record.family_contact_name, CONTACT_NAME_MAX))
+    return out
+
+
+def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Person], panthakys: list[Person],
+                        refs: dict) -> Send:
+    """Template 5 (prayers_all_set_family): "The prayers for {{1 departed}} will
+    be offered by {{2 mobeds with numbers}} of {{3 agyari}}. Geh-saarnu: {{4}}.
+    Uthamna: {{5}}. For anything else, the panthaky is {{6 panthaky, number}}.
+    May the ruvan of the departed attain Garothman Behesht." No button."""
+    mobeds, mobeds_kept = people_blank(going)
+    pk, pk_kept = people_blank(panthakys)
+    return Send(
+        kind=TYPE_ALL_SET_FAMILY, phone=record.family_contact_phone, recipient_type="family", recipient_id=record.id,
+        agyary_id=agyary.id,
+        params=[clean(departed(record)), mobeds, clean(agyary.name), geh_saarnu_text(record), uthamna_text(record), pk],
+        recorded={2: mobeds_kept, 6: pk_kept}, refs=refs,
+        names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
+        + _people_checks(panthakys, "the panthaky's name"),
+    )
+
+
+def all_set_details_send(
+    record: FuneralRecord, place: FuneralPlace, *, going: list[Person], panthakys: list[Person], phone: str,
+    recipient_type: str, recipient_id: int, agyary_id: int, back_out: str, refs: dict, why_not: str | None = None,
+) -> Send:
+    """Template 6 (prayer_details_mobed_v3): "You will pray for {{1 departed}} at
+    {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}. The family's contact is
+    {{5 family name}}, {{6 family number}}. Mobeds going: {{7 mobeds with
+    numbers}}. The panthaky is {{8 panthaky, number}}. Thank you for your
+    service." One quick-reply button, "I can't go any more", whose payload is
+    ``back_out`` (prayer_callout.back_out_payload: Step 5b reads it)."""
+    mobeds, mobeds_kept = people_blank(going)
+    pk, pk_kept = people_blank(panthakys)
+    return Send(
+        kind=TYPE_ALL_SET_DETAILS, phone=phone, recipient_type=recipient_type, recipient_id=recipient_id,
+        agyary_id=agyary_id,
+        params=[clean(departed(record)), clean(place.name), geh_saarnu_text(record), uthamna_text(record),
+                clean(record.family_contact_name) or NOT_FIXED, record.family_contact_phone, mobeds, pk],
+        hidden=(6,), recorded={7: mobeds_kept, 8: pk_kept}, quick_replies=(back_out,), refs=refs, why_not=why_not,
+        names=_record_checks(record, place, None, True) + _people_checks(going, "the name of a mobed going")
+        + _people_checks(panthakys, "the panthaky's name"),
+    )
+
+
+def all_set_panthaky_send(record: FuneralRecord, place: FuneralPlace, *, going: list[Person], phone: str,
+                          recipient_id: int, agyary_id: int, refs: dict) -> Send:
+    """Template 7 (prayers_all_set_panthaky): "All mobeds are found for {{1
+    departed}} at {{2 place}}: {{3 mobeds with numbers}}. Geh-saarnu: {{4}}.
+    Uthamna: {{5}}. The family's contact is {{6 family name}}, {{7 family
+    number}}." No button."""
+    mobeds, mobeds_kept = people_blank(going)
+    return Send(
+        kind=TYPE_ALL_SET_PANTHAKY, phone=phone, recipient_type="user", recipient_id=recipient_id,
+        agyary_id=agyary_id,
+        params=[clean(departed(record)), clean(place.name), mobeds, geh_saarnu_text(record), uthamna_text(record),
+                clean(record.family_contact_name) or NOT_FIXED, record.family_contact_phone],
+        hidden=(7,), recorded={3: mobeds_kept}, refs=refs,
+        names=_record_checks(record, place, None, True) + _people_checks(going, "the name of a mobed going"),
+    )
+
+
+def all_set_manager_send(record: FuneralRecord, agyary: Agyary, *, going: list[Person], panthakys: list[Person],
+                         phone: str, recipient_id: int, refs: dict) -> Send:
+    """Template 8 (funeral_accepted_manager_v2): "The prayers for {{1 departed}}
+    will be offered by {{2 mobeds' names}} of {{3 agyari}}. The panthaky is
+    {{4 panthaky, number}}, by phone or WhatsApp." No button."""
+    pk, pk_kept = people_blank(panthakys)
+    return Send(
+        kind=TYPE_ALL_SET_MANAGER, phone=phone, recipient_type="user", recipient_id=recipient_id, agyary_id=agyary.id,
+        params=[clean(departed(record)), names_blank(going), clean(agyary.name), pk],
+        recorded={4: pk_kept}, refs=refs,
+        names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
+        + _people_checks(panthakys, "the panthaky's name"),
+    )
 

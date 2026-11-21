@@ -112,7 +112,7 @@ async def _rows(db) -> list[Notification]:
 
 
 def _on_accept(meta) -> list[dict]:
-    return [m for m in meta.sent if m.get("type") == "template" and m["template"]["name"] != "prayer_request_mobeds"]
+    return [m for m in meta.sent if m.get("type") == "template" and m["template"]["name"] != "prayer_request_mobeds_v2"]
 
 
 def _by_template(meta) -> dict:

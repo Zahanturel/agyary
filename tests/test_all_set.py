@@ -467,3 +467,185 @@ def test_a_long_title_still_fits():
                               "All set: 5 mobeds are going for Behdin Rustom Jamshed", "All set: enough mobeds are going")
     assert title == "All set: 5 mobeds are going for Behdin Rustom Jamshed"
     assert len(all_set.fit_title("x" * 200, "y" * 130)) == all_set.TITLE_MAX
+
+
+# --- On WhatsApp (templates 5-8) ----------------------------------------------------------
+
+OLD_TEMPLATES = ("funeral_accepted_manager", "prayer_details_mobed_v2", "prayers_mobed_family")
+
+
+def _body(m) -> list[str]:
+    return [p["text"] for p in m["template"]["components"][0]["parameters"]]
+
+
+def _buttons(m) -> list[dict]:
+    return [c for c in m["template"]["components"] if c["type"] == "button"]
+
+
+def _e164(m) -> str:
+    return "+" + m["to"].lstrip("+")
+
+
+def _to(meta, name) -> dict[str, dict]:
+    return {_e164(m): m for m in meta.templates(name)}
+
+
+def _times() -> tuple[str, str]:
+    today = funeral_records.today_ist()
+
+    def day(d):
+        return f"{d:%a} {d.day} {d:%b}"
+
+    return f"{day(today)}, Havan geh", f"{day(today + timedelta(days=2))}, 4:00 pm"
+
+
+async def test_live_each_one_gets_their_template_with_the_blanks_in_order(client, db, seeded, meta, pushes, live):
+    from agyary.models import Notification
+    from tests.funeral_helpers import MANAGER
+
+    aid = seeded["agyary_id"]
+    rid = await _two_yes(client, db, aid)
+    gs, ut = _times()
+    mobeds = "Er. Listed (+91 9822200055), Er. Pervez Kias (+91 9800000002)"
+    head = "Er. Hormuz Dadachanji (+91 9800000001)"
+    for name in OLD_TEMPLATES:
+        assert meta.templates(name) == []           # templates 1-3 are not sent for these
+
+    (family,) = meta.templates("prayers_all_set_family")
+    assert _e164(family) == FAMILY
+    assert _body(family) == ["Behdin Rustom Jamshed", mobeds, "Goti Adarian", gs, ut, head] and _buttons(family) == []
+
+    details = _to(meta, "prayer_details_mobed_v3")
+    assert set(details) == {LISTED, MOBED}           # each going with a number, app or added by hand
+    answers = await _answers(db)
+    for phone, m in details.items():
+        assert _body(m) == ["Behdin Rustom Jamshed", "Doongerwadi (test)", gs, ut, "Test Family", FAMILY, mobeds, head]
+        (button,) = _buttons(m)
+        assert button["sub_type"] == "quick_reply" and button["index"] == "0"
+        assert button["parameters"] == [{"type": "payload", "payload": f"pca:{answers[phone].token}:x"}]
+        assert prayer_callout.back_out_payload(answers[phone]) == f"pca:{answers[phone].token}:x"
+
+    (to_panthaky,) = meta.templates("prayers_all_set_panthaky")
+    assert _e164(to_panthaky) == PANTHAKY
+    assert _body(to_panthaky) == ["Behdin Rustom Jamshed", "Doongerwadi (test)", mobeds, gs, ut, "Test Family", FAMILY]
+    (to_place,) = meta.templates("funeral_accepted_manager_v2")
+    assert _e164(to_place) == MANAGER
+    assert _body(to_place) == ["Behdin Rustom Jamshed", "Er. Listed and Er. Pervez Kias", "Goti Adarian", head]
+    for m in meta.sent:
+        if m.get("type") == "template":
+            for text in _body(m):
+                assert "\n" not in text and "\t" not in text and "    " not in text and text.strip()
+
+    # Each is a row, written down with the names and never a number.
+    rows = (await db.execute(select(Notification).where(Notification.notification_type.in_(fw.ALL_SET_TYPES))
+                             )).scalars().all()
+    assert sorted(n.notification_type for n in rows) == sorted(
+        ["prayers_all_set_family", "prayer_details_mobed_v3", "prayer_details_mobed_v3", "prayers_all_set_panthaky",
+         "funeral_accepted_manager_v2"])
+    assert all(n.status == "sent" and n.template_params["request"] == str(rid) for n in rows)
+    for n in rows:
+        kept = json.dumps(n.template_params)
+        for number in (FAMILY, PANTHAKY, MOBED, LISTED, MANAGER):
+            assert number[3:] not in kept, (n.notification_type, kept)
+    family_row = next(n for n in rows if n.notification_type == "prayers_all_set_family")
+    assert family_row.template_params["2"] == "Er. Listed ([number]), Er. Pervez Kias ([number])"
+    assert family_row.template_params["6"] == "Er. Hormuz Dadachanji ([number])"
+
+
+async def test_the_panthaky_who_prays_gets_the_details_not_the_panthakys_message(client, db, seeded, meta, pushes,
+                                                                                live):
+    aid = seeded["agyary_id"]
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=1)
+    meta.sent.clear()
+    r = await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200 and r.json()["status"] == "all_set"
+    assert meta.templates("prayers_all_set_panthaky") == []
+    (details,) = meta.templates("prayer_details_mobed_v3")
+    assert _e164(details) == PANTHAKY
+    assert _body(details)[6:] == ["Er. Hormuz Dadachanji (+91 9800000001)"] * 2
+
+
+async def test_the_family_only_with_their_agreement_and_a_stop_is_honoured(client, db, seeded, meta, pushes, live):
+    from datetime import datetime, timezone
+
+    from agyary.models import ReminderOptOut
+    from tests.funeral_helpers import form, manager
+
+    aid = seeded["agyary_id"]
+    # The manager's tick did not record the family's agreement: no message to them.
+    mgr, _ = await manager(client, db)
+    rec = (await client.post("/api/mobed/manager/records", json=form(mobeds_wanted=1), headers=mgr)).json()["record"]
+    r = await client.post(f"/api/mobed/manager/records/{rec['id']}/requests", headers=mgr,
+                          json={"agyary_id": aid, "family_agreed": True})
+    rid = r.json()["record"]["requests"][0]["id"]
+    meta.sent.clear()
+    assert (await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))).status_code == 200
+    assert meta.templates("prayers_all_set_family") == [] and meta.templates("prayer_details_mobed_v3")
+    assert not await fw.rows_for(db, request_id=rid, kinds=(fw.TYPE_ALL_SET_FAMILY,))
+
+    # A family and a mobed who replied STOP: written down, not sent.
+    now = datetime.now(timezone.utc)
+    db.add_all([ReminderOptOut(phone=FAMILY, stopped_at=now), ReminderOptOut(phone=MOBED, stopped_at=now)])
+    await db.commit()
+    rid, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    meta.sent.clear()
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=await _as(client, MOBED))
+    assert r.status_code == 200 and r.json()["request"]["status"] == "all_set"
+    assert meta.templates("prayers_all_set_family") == [] and meta.templates("prayer_details_mobed_v3") == []
+    rows = {n.notification_type: n for n in await fw.rows_for(db, request_id=rid, kinds=fw.ALL_SET_TYPES)}
+    for kind in (fw.TYPE_ALL_SET_FAMILY, fw.TYPE_ALL_SET_DETAILS):
+        assert rows[kind].status == "failed" and "STOP" in rows[kind].error_message
+    assert rows[fw.TYPE_ALL_SET_PANTHAKY].status == "sent" and rows[fw.TYPE_ALL_SET_MANAGER].status == "sent"
+
+
+async def test_switched_off_nothing_is_sent_or_written_and_paused_nothing_goes(client, db, seeded, meta, pushes,
+                                                                              monkeypatch):
+    from agyary.services import guardrails
+
+    aid = seeded["agyary_id"]
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=2)
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"},
+                              headers=await _as(client, MOBED))).status_code == 200
+    r = await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200 and r.json()["status"] == "all_set"
+    assert meta.sent == [] and await fw.rows_for(db, request_id=rid, kinds=fw.ALL_SET_TYPES) == []
+    # Live, but paused: each is written down as not sent, and says why.
+    for key, value in LIVE.items():
+        monkeypatch.setenv(key, value)
+    config.get_settings.cache_clear()
+    await guardrails.pause(db, config.get_settings(), "test pause")
+    await db.commit()
+    rid2, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    r = await client.post(_b(rid2, "self"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200 and r.json()["status"] == "all_set"
+    rows = await fw.rows_for(db, request_id=rid2, kinds=fw.ALL_SET_TYPES)
+    assert rows and all(n.status == "failed" and "paused" in n.error_message for n in rows)
+    assert meta.sent == []
+
+
+async def test_a_mobed_whose_access_is_off_is_named_but_not_messaged(client, db, seeded, meta, pushes, live):
+    from sqlalchemy import update
+
+    aid = seeded["agyary_id"]
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"},
+                              headers=await _as(client, MOBED))).status_code == 200
+    await db.execute(update(User).where(User.phone == MOBED).values(access="off"))
+    await db.commit()
+    meta.sent.clear()
+    assert (await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))).status_code == 200
+    details = _to(meta, "prayer_details_mobed_v3")
+    assert set(details) == {PANTHAKY}
+    assert "Er. Pervez Kias (+91 9800000002)" in _body(details[PANTHAKY])[6]
+    (row,) = [n for n in await fw.rows_for(db, request_id=rid, kinds=(fw.TYPE_ALL_SET_DETAILS,))
+              if n.status == "failed"]
+    assert "access is not on" in row.error_message
+
+
+def test_the_people_blank_is_built_by_the_server():
+    people = [fw.Person("Er.  A\nName", "+919800000001"), fw.Person("Er. B", None), fw.Person("Er. C", "+14155550100")]
+    sent, kept = fw.people_blank(people)
+    assert sent == "Er. A Name (+91 9800000001), Er. B, Er. C (+14155550100)"
+    assert kept == "Er. A Name ([number]), Er. B, Er. C ([number])"
+    assert fw.people_blank([]) == ("not fixed yet", "not fixed yet")
+    assert fw.names_blank(people) == "Er. A Name, Er. B and Er. C" and fw.names_blank([]) == "not fixed yet"

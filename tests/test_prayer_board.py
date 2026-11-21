@@ -104,11 +104,14 @@ async def test_yeses_fill_the_places_in_order_and_a_later_yes_is_a_standby(clien
     meta.sent.clear()
     await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
     assert (await _request(db, rid)).status == "waiting"
-    await _signed_tap(client, MOBED, f"pca:{answers[MOBED].token}:y")
     # Nobody going is sent the details at a yes: they go only at All set (Step 5).
     assert meta.sent == []
+    await _signed_tap(client, MOBED, f"pca:{answers[MOBED].token}:y")
     request = await _request(db, rid)
     assert request.status == "all_set" and request.all_set_at is not None
+    assert {m["template"]["name"] for m in meta.sent} == {      # tests/test_all_set.py
+        "prayers_all_set_family", "prayer_details_mobed_v3", "prayers_all_set_panthaky", "funeral_accepted_manager_v2"}
+    meta.sent.clear()
     await _signed_tap(client, SECOND, f"pca:{answers[SECOND].token}:y")
     answers = await _answers(db)
     assert answers[LISTED].picked_at < answers[MOBED].picked_at and answers[SECOND].picked_at is None
@@ -271,14 +274,14 @@ async def test_asking_everyone_asks_the_app_mobeds_in_the_app_even_with_whatsapp
     done = await prayer_callout.ask_everyone(db, settings, rid)
     assert done == {"state": "sent", "asked": 2, "asked_in_app": 0,
                     "message": "2 mobeds of Goti Adarian were asked on WhatsApp."}
-    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds")) == sorted([MOBED, LISTED])
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted([MOBED, LISTED])
     rows = await _answers(db)
     assert set(rows) == {MOBED, LISTED} and rows[MOBED].id == first_row.id and rows[LISTED].how == "whatsapp"
     payload = next(m for m in meta.sent if m["to"] == MOBED)["template"]["components"][1]["parameters"][0]["payload"]
     assert payload == f"pca:{first_row.token}:y"
     done = await prayer_callout.ask_everyone(db, settings, rid)
     assert done["state"] == "none" and done["message"] == "Everyone on Goti Adarian's list of mobeds has been asked already."
-    assert len(meta.templates("prayer_request_mobeds")) == 2
+    assert len(meta.templates("prayer_request_mobeds_v2")) == 2
     _no_family(meta)
 
 
@@ -487,7 +490,8 @@ async def test_a_call_can_turn_an_earlier_no_into_going_but_never_touches_a_yes(
     assert second.recorded_by_user_id == await _uid(db, PANTHAKY) and second.answered_at > no_at
     request = await _request(db, rid)
     assert request.status == "all_set" and request.taken_by_user_id == await _uid(db, PANTHAKY)
-    assert meta.sent == []            # nothing goes on WhatsApp at a yes
+    # Nothing goes on WhatsApp at a yes: only the All set messages (tests/test_all_set.py).
+    assert all(m["template"]["name"] in fw.ALL_SET_TYPES for m in meta.sent) and meta.texts() == []
     assert (await _answers(db))[LISTED].picked_at < second.picked_at
 
 

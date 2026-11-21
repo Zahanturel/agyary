@@ -96,7 +96,7 @@ async def _request(db, rid) -> FuneralRequest:
 
 
 def _asked(meta) -> list[str]:
-    return sorted(m["to"] for m in meta.templates("prayer_request_mobeds"))
+    return sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2"))
 
 
 async def _uid(db, phone) -> int:
@@ -121,7 +121,7 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     at = sent_at + timedelta(minutes=30)
     assert await _tick(db, at) == 1
     assert _asked(meta) == sorted([MOBED, LISTED])
-    for m in meta.templates("prayer_request_mobeds"):
+    for m in meta.templates("prayer_request_mobeds_v2"):
         body = [p["text"] for p in m["template"]["components"][0]["parameters"]]
         assert body[5] == "Er. Hormuz Dadachanji" and FAMILY.lstrip("+") not in json.dumps(m)
     assert (await _request(db, rid)).escalated_at == at
@@ -254,7 +254,7 @@ async def test_nothing_goes_to_or_under_an_account_that_is_not_on(client, db, se
     pushes.clear()
     assert await _tick(db, sent_at + timedelta(minutes=15)) == 1
     assert _asked(meta) == [MOBED]                     # not the account that is off, nor the panthaky
-    body = [p["text"] for p in meta.templates("prayer_request_mobeds")[0]["template"]["components"][0]["parameters"]]
+    body = [p["text"] for p in meta.templates("prayer_request_mobeds_v2")[0]["template"]["components"][0]["parameters"]]
     assert body[5] == "Goti Adarian"                  # not under the panthaky who is off
     assert await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED) == []
     # Only the mobed asked is woken, with the request itself; not the panthaky who is off.
@@ -308,7 +308,7 @@ async def test_the_loop_runs_the_safety_net_at_three_in_the_morning(client, db, 
     async with httpx.AsyncClient(transport=httpx.MockTransport(fake.handler)) as http:
         report = await reminder_worker.tick(now=three_am, client=http, session_factory=factory)
     assert (report.closing, report.planned, report.sent) == (0, 0, 0)        # no evening job at 3 am
-    assert [m["to"] for m in fake.templates("prayer_request_mobeds")] == [MOBED]
+    assert [m["to"] for m in fake.templates("prayer_request_mobeds_v2")] == [MOBED]
     assert (await _request(db, rid)).escalated_at == three_am
 
 

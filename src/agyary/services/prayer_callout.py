@@ -116,9 +116,20 @@ OPEN = (REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_TAKEN)
 NOTICE_TTL = timedelta(days=3)
 NO_TICK = "Please tick that they agreed to get WhatsApp messages from Mobed Diary about prayers."
 CONSENT_WORDS = "They agreed to get WhatsApp messages from Mobed Diary about prayers"
-# What the quick-reply buttons carry: "pca:<token>:y" or "pca:<token>:n".
+# What the quick-reply buttons carry: "pca:<token>:y" or "pca:<token>:n" on the
+# call-out (template 4), and "pca:<token>:x" - "I can't go any more" - on the
+# details at All set (template 6, R3.1 step 5), where <token> is the same
+# unguessable token of that person's row on the request (prayer_callout_answers.
+# token). Step 5b answers the "x"; until then it is read as not one of ours
+# (record_answer: "malformed") and changes nothing.
 PAYLOAD_PREFIX = "pca:"
+BACK_OUT = "x"
 _PAYLOAD = re.compile(r"^pca:([A-Za-z0-9_-]{20,40}):([yn])$")
+
+
+def back_out_payload(row: PrayerCalloutAnswer) -> str:
+    """The payload of the "I can't go any more" button on this person's details."""
+    return f"{PAYLOAD_PREFIX}{row.token}:{BACK_OUT}"
 
 
 class CalloutError(ValueError):
