@@ -36,7 +36,11 @@ with no geh; with no Geh-saarnu day, from the Uthamna's day and time (6:30 am
 with no time); with neither, never. Claimed by a conditional update of
 short_alert_at before anyone is told, so it is told once, two loops included.
 
-Later: asking the next standby after 30 minutes (step 5b).
+A standby's 30 minutes (step 5b; services/standbys.py, timed_out): a standby
+asked again when a place opened who has not answered in 30 minutes is passed
+over once (a conditional update of reask_passed_at), and the next standby is
+asked, while the request waits with a place open. The prayers begin
+(prayers_begin) also bounds backing out.
 """
 
 from __future__ import annotations
@@ -52,7 +56,16 @@ from agyary.core.config import Settings
 from agyary.messaging.geh_times import IST
 from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest
 from agyary.models.enums import REQUEST_MODE_PANTHAKY_FIRST, REQUEST_WAITING
-from agyary.services import all_set, funeral_answers, funeral_requests, panthaky, prayer_callout, reminders, web_push
+from agyary.services import (
+    all_set,
+    funeral_answers,
+    funeral_requests,
+    panthaky,
+    prayer_callout,
+    reminders,
+    standbys,
+    web_push,
+)
 from agyary.services import funeral_whatsapp as fw
 
 logger = logging.getLogger(__name__)
@@ -67,7 +80,8 @@ async def run(db: AsyncSession, now: datetime, settings: Settings, client: httpx
     """Every timer that is due now. Returns how many requests it acted on.
     Commits as it goes; the loop calls it in its own step."""
     done = await safety_net(db, now, settings, client)
-    return done + await still_short(db, now, settings)
+    done += await still_short(db, now, settings)
+    return done + await standbys.timed_out(db, now, settings, client)
 
 
 def minutes_words(minutes: int) -> str:

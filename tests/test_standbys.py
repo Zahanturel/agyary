@@ -51,7 +51,7 @@ from tests.test_prayer_callout import (
 )
 
 REQUESTS = "/api/mobed/requests"
-OTHER_MOBED = "+919822200114"
+OTHER_MOBED, THIRD = "+919822200114", "+919822200099"
 PANTHAKY_NAME, MOBED_NAME = "Er. Hormuz Dadachanji", "Er. Pervez Kias"
 
 
@@ -132,11 +132,13 @@ def _to(meta, phone) -> list[dict]:
     return [m for m in meta.sent if "+" + m["to"].lstrip("+") == phone]
 
 
-async def _all_set(client, db, aid, *, standby=True, **changes) -> tuple[int, dict]:
+async def _all_set(client, db, aid, *, standby=True, third=False, **changes) -> tuple[int, dict]:
     """Everyone at once, two wanted, the prayers tomorrow: the one added by hand and the app
-    mobed say yes on WhatsApp (all set), then a second added by hand (a standby)."""
+    mobed say yes on WhatsApp (all set), then a second added by hand (a standby), and with
+    ``third`` a third after them (the next standby)."""
     panthaky = await _as(client, PANTHAKY)
-    await _listed(client, aid, panthaky, ("Er. Listed", LISTED), ("Er. Second", SECOND))
+    await _listed(client, aid, panthaky, ("Er. Listed", LISTED), ("Er. Second", SECOND),
+                  *((("Er. Third", THIRD),) if third else ()))
     rid, _, mgr = await _send(client, db, aid, mobeds_wanted=2, geh_saarnu_date=_tomorrow(), **changes)
     answers = await _answers(db)
     await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
@@ -144,7 +146,19 @@ async def _all_set(client, db, aid, *, standby=True, **changes) -> tuple[int, di
     assert (await _request(db, rid)).status == "all_set"
     if standby:
         await _signed_tap(client, SECOND, f"pca:{answers[SECOND].token}:y")
+    if third:
+        await _signed_tap(client, THIRD, f"pca:{answers[THIRD].token}:y")
     return rid, mgr
+
+
+def _reasks(meta, phone) -> list[dict]:
+    """The call-outs that went to ``phone`` asking again (their buttons carry the re-ask's token)."""
+    name = config.get_settings().whatsapp_prayer_request_template
+    return [m for m in _to(meta, phone) if m.get("type") == "template" and m["template"]["name"] == name]
+
+
+def _payloads(m) -> list[str]:
+    return [c["parameters"][0]["payload"] for c in m["template"]["components"] if c.get("sub_type") == "quick_reply"]
 
 
 # --- Backing out, three ways ------------------------------------------------------------
@@ -455,3 +469,181 @@ def test_the_payload_reads_the_three_buttons():
         assert prayer_callout._PAYLOAD.match(f"pca:{token}:{choice}")
     assert not prayer_callout._PAYLOAD.match(f"pca:{token}:z")
     assert json.dumps(prayer_callout.back_out_payload(PrayerCalloutAnswer(token=token))) == f'"pca:{token}:x"'
+
+
+# --- Standbys asked again, by themselves --------------------------------------------------
+
+async def test_the_first_standby_is_asked_again_with_a_fresh_token_and_the_panthaky_told(client, db, seeded, meta,
+                                                                                        pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, third=True)
+    second = (await _answers(db))[SECOND]
+    first_token = second.token
+    assert second.reasked_at is None and second.reask_token is None
+    hormuz = await _user(db, PANTHAKY)
+    pushes.clear()
+    r = await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))
+    assert r.status_code == 200, r.text
+
+    # Only the first standby, in the order they said yes; the call-out template, its buttons on a token of
+    # their own that is not the first one.
+    rows = await _answers(db)
+    second, third = rows[SECOND], rows[THIRD]
+    assert second.reasked_at is not None and third.reasked_at is None
+    assert second.reask_token and second.reask_token != first_token and len(second.reask_token) >= 20
+    (asked,) = [m for m in _reasks(meta, SECOND) if second.reask_token in json.dumps(m)]
+    assert _payloads(asked) == [f"pca:{second.reask_token}:y", f"pca:{second.reask_token}:n"]
+    assert len(_reasks(meta, THIRD)) == 1      # only the call-out at Send
+    _no_family(json.dumps(asked))
+
+    # The panthaky: "<A> can't go; we have asked <B>", in the app and on their phone.
+    (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert note.title == f"{MOBED_NAME} can't go; we have asked Er. Second" and note.link == f"#/requests/{rid}"
+    (push,) = [p for p in pushes if p["to"] == [hormuz.id]]
+    assert (push["title"], push["body"]) == (f"{MOBED_NAME} can't go", "We have asked Er. Second.")
+    board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
+    assert [(s["name"], s["reask"]) for s in board["standbys"]] == [("Er. Second", "asked_again"),
+                                                                    ("Er. Third", "waiting")]
+
+    # Their first buttons count no more; another number cannot use the new ones.
+    settings = config.get_settings()
+    assert (await prayer_callout.record_answer(db, settings, f"pca:{first_token}:y", SECOND)).endswith(
+        "already answered")
+    assert (await prayer_callout.record_answer(db, settings, f"pca:{second.reask_token}:y", THIRD)).endswith(
+        "not from the number asked")
+    # Their yes fills the place: all set again.
+    await _signed_tap(client, SECOND, f"pca:{second.reask_token}:y")
+    rows = await _answers(db)
+    assert rows[SECOND].reask_answer == "yes" and prayer_callout.holds_place(rows[SECOND])
+    assert (await _request(db, rid)).status == "all_set"
+    assert rows[THIRD].reasked_at is None and prayer_callout.is_standby(rows[THIRD])
+    # A second tap changes nothing.
+    assert (await prayer_callout.record_answer(db, settings, f"pca:{rows[SECOND].reask_token}:n", SECOND)
+            ).endswith("not asked again")
+
+
+async def test_an_app_standby_is_asked_in_the_app_and_answers_on_their_card(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    goti = await db.get(Agyary, aid)
+    await member(db, goti, OTHER_MOBED, name="Er. App Standby")
+    await db.commit()
+    rid, _ = await _all_set(client, db, aid, standby=False)
+    other = await _as(client, OTHER_MOBED)
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=other)
+    assert r.json()["request"]["my_answer"]["state"] == "standby"
+    assert r.json()["request"]["my_answer"]["reask"] == "waiting"
+    assert r.json()["request"]["my_answer"]["may_answer_again"] is False
+    standby = await _user(db, OTHER_MOBED)
+    assert await funeral_answers.waiting_count(db, standby.id) == 0
+    pushes.clear()
+
+    # The one added by hand can't go any more (on WhatsApp): the app standby is asked in the app.
+    listed = (await _answers(db))[LISTED]
+    await _signed_tap(client, LISTED, f"pca:{listed.token}:x")
+    (note,) = await _notes(db, OTHER_MOBED, standbys.KIND_REASK)
+    assert note.title == "A place has opened" and note.link == f"#/requests/{rid}"
+    _no_family(note.title + note.body)
+    (push,) = [p for p in pushes if p["to"] == [standby.id]]
+    assert push["title"] == "A place has opened" and "Rustom" not in push["body"]
+    card = (await client.get(f"{REQUESTS}/{rid}", headers=other)).json()["request"]
+    assert card["status"] == "waiting" and card["reopened"] is True
+    assert card["my_answer"]["reask"] == "asked_again" and card["my_answer"]["may_answer_again"] is True
+    assert await funeral_answers.waiting_count(db, standby.id) == 1
+    # The panthaky is told whom.
+    (told,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert told.title == "Er. Listed can't go; we have asked Er. App Standby"
+
+    # Their yes on the card fills the place: all set again, and they are told so.
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=other)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == prayer_callout.ALL_SET_GOING_WORDS
+    assert r.json()["request"]["status"] == "all_set"
+    assert r.json()["request"]["my_answer"]["state"] == "going"
+    assert await funeral_answers.waiting_count(db, standby.id) == 0
+    # Asked once more, it is already answered.
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "no"}, headers=other)
+    assert r.status_code == 409 and r.json()["detail"] == "You have already said yes: you are going."
+
+
+async def test_a_no_or_thirty_minutes_asks_the_next_once_and_none_left_tells_the_panthaky(client, db, seeded, meta,
+                                                                                         pushes, live):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, third=True)
+    assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))).status_code == 200
+    second = (await _answers(db))[SECOND]
+    reask = second.reask_token
+
+    # Er. Second says no: Er. Third is asked, and the panthaky told.
+    await _signed_tap(client, SECOND, f"pca:{reask}:n")
+    rows = await _answers(db)
+    assert rows[SECOND].reask_answer == "no" and rows[SECOND].reask_passed_at is not None
+    third = rows[THIRD]
+    assert third.reasked_at is not None and third.reask_token
+    assert [m for m in _reasks(meta, THIRD) if third.reask_token in json.dumps(m)]
+    notes = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert [n.title for n in notes][-1] == "Er. Second said no; we have asked Er. Third"
+
+    # Er. Third does not answer: nothing at 29 minutes; at 30, two loops at once move on once.
+    settings = config.get_settings()
+    asked_at = third.reasked_at
+    assert await standbys.timed_out(db, asked_at + timedelta(minutes=29), settings, None) == 0
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    at = asked_at + standbys.REASK_WAIT
+    async with factory() as one, factory() as two:
+        import asyncio
+        done = await asyncio.gather(standbys.timed_out(one, at, settings, None),
+                                    standbys.timed_out(two, at, settings, None))
+    assert sorted(done) == [0, 1]
+    notes = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert len(notes) == 3
+    assert notes[-1].title == "Er. Third did not answer and nobody else is on standby: please find someone"
+    assert "Ask everyone, call a mobed, or pray yourself" in notes[-1].body and notes[-1].link == f"#/requests/{rid}"
+    board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
+    assert [(s["name"], s["reask"]) for s in board["standbys"]] == [("Er. Second", "said_no"),
+                                                                    ("Er. Third", "no_answer")]
+    # Once is all: the loop again finds nothing.
+    assert await prayer_timers.run(db, at + timedelta(minutes=5), settings, None) == 0
+
+    # Er. Third's late yes still counts while the place is open: all set again.
+    await _signed_tap(client, THIRD, f"pca:{third.reask_token}:y")
+    assert prayer_callout.holds_place((await _answers(db))[THIRD])
+    assert (await _request(db, rid)).status == "all_set"
+
+
+async def test_a_place_filled_meanwhile_stops_the_asking_and_a_late_yes_is_a_standby_again(client, db, seeded, meta,
+                                                                                          pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, third=True)
+    assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))).status_code == 200
+    second = (await _answers(db))[SECOND]
+    reask, asked_at = second.reask_token, second.reasked_at
+    # The panthaky fills it with I'll pray meanwhile: all set again.
+    r = await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
+    notes = len(await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED))
+
+    # The 30 minutes pass: nobody more is asked, nobody told.
+    settings = config.get_settings()
+    assert await standbys.timed_out(db, asked_at + standbys.REASK_WAIT, settings, None) == 1
+    rows = await _answers(db)
+    assert rows[THIRD].reasked_at is None
+    assert len(await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)) == notes
+
+    # Er. Second's late yes: a standby again, thanked with the Enough mobeds words, nothing filled.
+    sent = len(meta.sent)
+    await _signed_tap(client, SECOND, f"pca:{reask}:y")
+    rows = await _answers(db)
+    assert rows[SECOND].reask_answer == "yes" and prayer_callout.is_standby(rows[SECOND])
+    assert standbys.reask_state(rows[SECOND]) == "waiting"
+    (thanked,) = meta.sent[sent:]
+    assert thanked["text"]["body"] == fw.ENOUGH_TEXT
+    assert await prayer_callout._going(db, rid) == 2
+
+    # When a place opens again, they are first again (they said yes before Er. Third), on a new token.
+    listed = (await _answers(db))[LISTED]
+    await _signed_tap(client, LISTED, f"pca:{listed.token}:x")
+    rows = await _answers(db)
+    assert rows[SECOND].reask_token != reask and standbys.reask_state(rows[SECOND]) == "asked_again"
+    assert rows[THIRD].reasked_at is None

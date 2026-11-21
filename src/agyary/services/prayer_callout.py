@@ -922,13 +922,23 @@ async def record_answer(
     token, choice = found.groups()
     answer = (await db.execute(select(PrayerCalloutAnswer).where(PrayerCalloutAnswer.token == token)
                                )).scalar_one_or_none()
+    # A standby asked again when a place opened (step 5b) answers on the re-ask's own token.
+    reask = answer is None
+    if reask:
+        answer = (await db.execute(select(PrayerCalloutAnswer).where(PrayerCalloutAnswer.reask_token == token)
+                                   )).scalar_one_or_none()
     if answer is None:
         return "unknown token"
     if not _from_them(answer, from_phone, wa_user_id, await _asked_user_id(db, answer)):
         return f"answer {answer.id}: not from the number asked"
     request = await db.get(FuneralRequest, await _request_id(db, answer))
     answer_id = answer.id   # what follows may roll the session back, which forgets it
-    if choice == BACK_OUT:
+    if reask:
+        if choice == BACK_OUT:
+            return f"answer {answer_id}: not a button of the re-ask"
+        outcome = await standbys.answer_reask(db, settings, request, answer, choice == "y", how=HOW_WHATSAPP,
+                                              by_user=None, now=now, client=client)
+    elif choice == BACK_OUT:
         outcome = await standbys.back_out_on_whatsapp(db, settings, request, answer, now=now, client=client)
     else:
         outcome = await _answer(db, settings, request, answer, choice == "y", how=HOW_WHATSAPP, by_user=None,
@@ -1273,6 +1283,7 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
     all set, for the panthaky the family went to only, the family's contact
     and everyone going (all_set.contacts_for)."""
     from agyary.services import all_set   # here: all_set reads this module's readers
+    from agyary.services import standbys as standbys_   # here: standbys reads this module
 
     await db.refresh(request)
     record = await db.get(FuneralRecord, request.funeral_record_id)
@@ -1327,7 +1338,9 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
         # All set once, waiting again: someone going backed out (step 5b).
         "reopened": reopened(request),
         "places": [_place(r, r.picked_at) for r in places],
-        "standbys": [_place(r, r.answered_at) for r in standbys],
+        # In the order they said yes, each with where their asking again stands (step 5b):
+        # "waiting" (not asked again), "asked_again", "said_no" or "no_answer".
+        "standbys": [{**_place(r, r.answered_at), "reask": standbys_.reask_state(r)} for r in standbys],
         # Those who were going and can no longer go: "Can't go" (step 5b).
         "backed_out": [_place(r, r.backed_out_at) for r in gone],
         # Whether a place's "Can't go" can be marked now: not once the prayers have begun.
@@ -1554,8 +1567,10 @@ async def answer_in_app(
     answers only for them (_after_no). Only someone the request reached
     (the caller checks: funeral_answers.get_for_user) who is not a confirmed
     panthaky of the fire temple - they use the board - and is still there,
-    while the request is waiting, or all set (a yes is then a standby)."""
-    from agyary.services import mobed_dashboard   # here: as the rest of the app's answering
+    while the request is waiting, or all set (a yes is then a standby). A
+    standby asked again when a place opened answers that instead
+    (standbys.answer_reask_in_app, step 5b)."""
+    from agyary.services import mobed_dashboard, standbys   # here: as the rest of the app's answering
 
     now = now or _now()
     if choice not in (CALLOUT_YES, CALLOUT_NO):
@@ -1571,6 +1586,13 @@ async def answer_in_app(
     if not agyary.is_active or not await mobed_dashboard.is_active_member(db, agyary.id, user.id):
         raise CalloutError(f"You are no longer at {agyary.name} in Mobed Diary, so you cannot answer for it.")
     row = _find(await _request_rows(db, request.id), f"u{user.id}", user.phone)
+    if row is not None and standbys.awaiting_answer(row):
+        # A standby asked again when a place opened (step 5b): this answers that.
+        done = await standbys.answer_reask_in_app(db, settings, user, request, row, choice == CALLOUT_YES, now=now,
+                                                  client=client)
+        logger.info("Request %s: user %s answered being asked again in the app (%s)", request.id, user.id,
+                    done["outcome"])
+        return done
     if row is not None and row.answer is not None:
         raise CalloutError(_mine_already(row))
     if row is None:
@@ -1597,8 +1619,9 @@ async def answer_in_app(
 async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: bool) -> dict:
     """For a person's own request card (funeral_answers.serialize): how many
     are going of how many, and with ``mine`` (an app mobed, not a panthaky)
-    their own answer and where they stand - asked, going, standby, or said no
-    - and whether they can still answer. Never anyone else's name or number."""
+    their own answer and where they stand - asked, going, standby, said no,
+    or (step 5b) said they can't go - whether they can still answer, back out,
+    or answer being asked again. Never anyone else's name or number."""
     from agyary.services import standbys   # here: standbys reads this module
 
     record = await db.get(FuneralRecord, request.funeral_record_id)
@@ -1616,6 +1639,12 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
             # "I can't go any more" (step 5b): someone going, before the prayers begin.
             "may_back_out": state == GOING and may_back_out(request, record, _now()),
         }
+        if state == STANDBY:
+            # Asked again when a place opened (step 5b): where it stands, and whether
+            # "A place has opened: can you still pray?" waits for their answer.
+            out["my_answer"]["reask"] = standbys.reask_state(row)
+            out["my_answer"]["may_answer_again"] = (standbys.awaiting_answer(row)
+                                                    and request.status == REQUEST_WAITING)
         if state in (GOING, BACKED_OUT):
             # Who "Tell <panthaky or fire temple> you can't go?" names.
             out["my_answer"]["tell"] = await standbys.who_hears(db, request)

@@ -131,13 +131,15 @@ async def waiting_count(db: AsyncSession, user_id: int) -> int:
     person (R3.1 step 4). For a confirmed panthaky of the fire temple, its
     waiting requests nobody has taken on the board yet (Ask everyone, I'll
     pray, a call's result). For anyone else it reached - an app mobed - its
-    waiting requests they have not answered, in the app or on WhatsApp."""
+    waiting requests they have not answered, in the app or on WhatsApp, and
+    (step 5b) those where, a standby asked again, they have not answered that."""
     panthaky_at = select(AgyaryUser.agyary_id).where(
         AgyaryUser.user_id == user_id, AgyaryUser.role == ROLE_PANTHAKY, AgyaryUser.is_active.is_(True))
     answered = (
         select(PrayerCallout.funeral_request_id)
         .join(PrayerCalloutAnswer, PrayerCalloutAnswer.callout_id == PrayerCallout.id)
         .where(PrayerCalloutAnswer.answer.is_not(None),
+               or_(PrayerCalloutAnswer.reasked_at.is_(None), PrayerCalloutAnswer.reask_answer.is_not(None)),
                or_(PrayerCalloutAnswer.user_id == user_id,
                    PrayerCalloutAnswer.phone == select(User.phone).where(User.id == user_id).scalar_subquery()))
     )
