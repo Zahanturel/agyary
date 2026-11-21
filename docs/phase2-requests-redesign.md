@@ -222,6 +222,22 @@ their number goes to the family; the message should say both before they answer.
 - **"I'll pray" is for a confirmed panthaky** (an admin who is not one cannot fill a place).
 - **At an agyari with no panthaky,** mobeds are not each told when another says yes; their
   card shows "1 of 2 going" instead.
+- **Whose book at All set:** the panthaky who took the request; if nobody did (or an admin who is
+  not a panthaky did, or the taker is now switched off), every confirmed panthaky it reached.
+  A going app mobed whose access is off, or who left the agyari, gets no book (D9) but is still
+  named in the messages.
+- **"Still short" is told only before the prayers begin** (never for a request whose Geh-saarnu
+  has begun or passed, such as an old test record left waiting).
+- **Template 7** says "All mobeds are found" also when the panthaky confirmed with fewer.
+
+## Open for the owner (next session)
+
+- **No panthaky in the app:** templates 5, 6 and 8 name "the panthaky"; at an agyari with none
+  the blank reads "not fixed yet", which sounds odd. Choose before submitting the templates:
+  reword those sentences (e.g. "For anything else, please contact [contact]", filled with the
+  panthaky or else the agyari's name), or leave it.
+- **The standby's 30 minutes** to answer before the next is asked (the lead's default).
+- Every choice in the section above.
 
 ## Data changes
 
