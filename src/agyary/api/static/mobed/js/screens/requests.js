@@ -31,11 +31,17 @@
  *  - A request accepted the old way (before R3.1) reads as it did (D8): for the one who
  *    accepted, the family's contact with "Message the family on WhatsApp" and "Call", and
  *    their own behdin and memorial.
+ *  - Standbys and backing out (R3.1 step 5b): a going app mobed has "I can't go any more" on
+ *    their card (a sheet first, naming who is told); the board's going places have "Can't go"
+ *    (a sheet first) and show who can't go; the standbys show where being asked again stands
+ *    (Asked again, Said no, No answer, Waiting); a request waiting again reads "A place has
+ *    opened: 1 of 2 going" with the board's actions back; and an app standby asked again
+ *    answers "A place has opened: can you still pray?" on their card.
  */
 
 import {
   myRequests, myRequest, answerRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself,
-  boardCallResult, boardConfirmShort,
+  boardCallResult, boardConfirmShort, boardCantGo, backOutRequest,
 } from "../api.js";
 import { state, saveSession } from "../state.js";
 import {
@@ -112,9 +118,16 @@ function standsText(q) {
   if (q.my_answer) return BOARD.has(q.status) ? myHeadline(q) : stateText(q);
   if (q.status === "waiting") {
     const n = q.places || { going: 0, wanted: 0 };
+    // All set once, and someone going can't go any more: a place is open again (step 5b).
+    if (q.reopened) return openedText(n);
     return q.taken === false ? "Waiting for you" : `Finding mobeds: ${n.going} of ${n.wanted}`;
   }
   return stateText(q);
+}
+
+/** "A place has opened: 1 of 2 going". */
+function openedText(n) {
+  return `A place has opened: ${n.going} of ${n.wanted} going`;
 }
 
 /** An all-set request in a few words: "All set: 2 going", and whether this person is one of
@@ -124,7 +137,8 @@ function allSetStands(q) {
   const n = a ? a.going.length : (q.places || { going: 0 }).going;
   const mine = q.my_answer ? q.my_answer.state : "";
   const me = mine === "going" || (a && a.going.some(g => g.is_me));
-  return `All set: ${n} going${me ? ", including you" : mine === "standby" ? ", you are on standby" : ""}`;
+  return `All set: ${n} going${me ? ", including you" : mine === "standby" ? ", you are on standby"
+    : mine === "backed_out" ? ", you said you can't go" : ""}`;
 }
 
 function waitingCardHtml(q) {
@@ -211,8 +225,9 @@ export async function renderRequest({ id }) {
  *  `my_answer` only to an app mobed the request reached (not the fire temple's confirmed
  *  panthaky, who has the board with the admin): they answer for themselves. */
 function drawFor(q, alive) {
-  // All set, and the family is in their book (a going app mobed): the contacts and the memorial.
-  if (q.status === "all_set" && q.all_set) return drawAllSet(q);
+  // All set, and the family is in their book (a going app mobed): the contacts and the memorial -
+  // also while a place has opened again (step 5b), since they are still going.
+  if ((q.status === "all_set" || q.reopened) && q.all_set) return drawAllSet(q, alive);
   return q.my_answer && BOARD.has(q.status) ? drawAnswerCard(q, alive) : drawRequest(q, alive);
 }
 
@@ -373,16 +388,35 @@ const STANDBY_WORDS = "Thank you. Enough mobeds are going this time. If a place 
 
 /** An app mobed's own request, in a few words, for the list and the page. */
 function myHeadline(q) {
-  const mine = q.my_answer.state;
+  const my = q.my_answer;
+  const mine = my.state;
   if (q.status === "all_set") return allSetStands(q);
-  return { going: "You are going", standby: "Standby", said_no: "You said not this time" }[mine]
-    || "Asked: can you pray?";
+  // A standby asked again, now a place has opened (step 5b).
+  if (my.may_answer_again) return "A place has opened: can you still pray?";
+  if (mine === "standby" && my.reask === "said_no") return "You said not this time";
+  return {
+    going: "You are going", standby: "Standby", said_no: "You said not this time", backed_out: "You said you can't go",
+  }[mine] || "Asked: can you pray?";
 }
 
 /** Where they stand, in a sentence. */
 function myWords(q) {
-  const mine = q.my_answer.state;
-  if (mine === "going") return q.status === "all_set" ? "Enough mobeds are going, and you are one of them." : GOING_WORDS;
+  const my = q.my_answer;
+  const mine = my.state;
+  if (mine === "going") {
+    if (q.status === "all_set") return "Enough mobeds are going, and you are one of them.";
+    return q.reopened ? "You are still going. Someone else can't go any more, so their place is being filled."
+      : GOING_WORDS;
+  }
+  if (mine === "backed_out") {
+    return `You said you can't go any more, and ${my.tell || "the panthaky"} has been told. Nothing more is needed `
+      + "from you.";
+  }
+  if (my.may_answer_again) {
+    return "Someone going can't go any more. If you can still pray, you take their place, and your name and number "
+      + "are shared with the family.";
+  }
+  if (mine === "standby" && my.reask === "said_no") return "You said you cannot pray this time. Nothing more is needed from you.";
   if (mine === "standby") return STANDBY_WORDS;
   if (mine === "said_no") return "You said not this time. Nothing more is needed from you.";
   return q.status === "all_set"
@@ -397,6 +431,9 @@ function myWords(q) {
  *  late), the headline says how many are going: their card has nobody's name. */
 function drawAnswerCard(q, alive) {
   const n = q.places || { going: 0, wanted: 0 };
+  const my = q.my_answer;
+  // Their first answer, or (step 5b) their answer to being asked again: one action bar either way.
+  const asking = my.may_answer || my.may_answer_again;
   mainEl.innerHTML = `
     <div class="card">
       <h2>${esc(q.prayed_name)}</h2>
@@ -404,15 +441,77 @@ function drawAnswerCard(q, alive) {
       <p style="margin:4px 0 0">${n.going} of ${n.wanted} going</p>
       <div style="margin-top:10px">${factsHtml(q)}</div>
       <p style="margin:10px 0 0">${esc(myWords(q))}</p>
-      ${q.my_answer.may_answer ? `<div class="action-bar">
+      ${asking ? `<div class="action-bar">
         <button type="button" class="secondary" id="rqNo">Not this time</button>
-        <button type="button" id="rqYes">I can pray</button>
+        <button type="button" id="rqYes">${my.may_answer_again ? "Yes, I can pray" : "I can pray"}</button>
       </div>` : ""}
+      ${backOutHtml(q)}
     </div>`;
   const yes = document.getElementById("rqYes");
   const no = document.getElementById("rqNo");
   if (yes) yes.onclick = () => answer(q, "yes", [yes, no], alive);
   if (no) no.onclick = () => answer(q, "no", [yes, no], alive);
+  wireBackOut(q, alive);
+}
+
+// --- I can't go any more (R3.1 step 5b) ------------------------------------------------
+
+/** "I can't go any more", for someone going before the prayers begin: never in the action bar
+ *  (on the all-set card that holds the memorial). */
+function backOutHtml(q) {
+  if (!q.my_answer || !q.my_answer.may_back_out) return "";
+  return `<button type="button" class="ghost danger-outline" id="rqBackOut" style="width:100%;margin-top:16px">I can't
+      go any more</button>`;
+}
+
+function wireBackOut(q, alive) {
+  const btn = document.getElementById("rqBackOut");
+  if (btn) btn.onclick = () => confirmBackOut(q, alive);
+}
+
+/** A sheet first: "Tell <panthaky or fire temple> you can't go?". Then the page as the server
+ *  has it, and what happened in words; a refusal (the prayers have begun, closed) said over the
+ *  page read again; no signal said in the sheet, to tap again. */
+function confirmBackOut(q, alive) {
+  const tell = q.my_answer.tell || q.agyari.name;
+  const sheet = openSheet({
+    title: `Tell ${tell} you can't go?`,
+    html: `
+      <p style="margin-top:0">Your place opens again, and the next mobed on standby is asked to take it.</p>
+      ${q.all_set ? `<p class="meta" style="margin:0 0 8px">The family stays in your Behdins.</p>` : ""}
+      <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
+      <div class="stack">
+        <button type="button" class="danger" data-yes>I can't go</button>
+        <button type="button" class="ghost" data-no>I can still go</button>
+      </div>`,
+  });
+  const body = sheet.body;
+  body.querySelector("[data-no]").onclick = sheet.close;
+  const yes = body.querySelector("[data-yes]");
+  yes.onclick = async () => {
+    if (yes.disabled) return;
+    yes.disabled = true;
+    body.querySelector("[data-msg]").textContent = "";
+    let res;
+    try {
+      res = await backOutRequest(q.id);
+    } catch (e) {
+      if (!alive()) return;
+      if (e.status === 400 || e.status === 404 || e.status === 409) {
+        sheet.close();
+        return redrawSaying(q, e.message, true, alive);
+      }
+      yes.disabled = false;
+      body.querySelector("[data-msg]").textContent = e.message;
+      return;
+    }
+    sheet.close();
+    if (!alive()) return;
+    refreshRequestCount();
+    drawFor(res.request, alive);
+    toTop();
+    showInfo((res.done && res.done.message) || "Noted: you can't go.");
+  };
 }
 
 async function answer(q, choice, buttons, alive) {
@@ -501,12 +600,12 @@ function allSetFamilyHtml(a, prayed) {
 }
 
 /** Everyone going, in the order the places filled, then the panthaky. `extra` goes under
- *  them (the board's standbys). */
-function allSetPrayingHtml(a, extra = "") {
+ *  them (the board's standbys); `under(g, i)` under each one going (the board's "Can't go"). */
+function allSetPrayingHtml(a, extra = "", under = () => "") {
   const heads = a.panthakys || [];
   return `<div class="card">
       <h2>Who is praying</h2>
-      ${a.going.map(g => prayerHtml(g.name, g.phone, g.is_me, SAID_YES[g.how] || "")).join("")}
+      ${a.going.map((g, i) => prayerHtml(g.name, g.phone, g.is_me, SAID_YES[g.how] || "") + under(g, i)).join("")}
       ${heads.length ? `<p style="margin:14px 0 0"><b>${heads.length === 1 ? "The panthaky" : "The panthakys"}</b></p>
         ${heads.map(p => prayerHtml(p.name, p.phone, p.is_me, "")).join("")}` : ""}
       ${extra}
@@ -531,8 +630,8 @@ function allSetBookHtml(a) {
 }
 
 /** The family, who is praying, and the book, in that order. */
-function allSetMoreHtml(a, prayed, extra = "") {
-  return `${allSetFamilyHtml(a, prayed)}${allSetPrayingHtml(a, extra)}${allSetBookHtml(a)}`;
+function allSetMoreHtml(a, prayed, extra = "", under = undefined) {
+  return `${allSetFamilyHtml(a, prayed)}${allSetPrayingHtml(a, extra, under)}${allSetBookHtml(a)}`;
 }
 
 /** The All set buttons, drawn in `root`. `ctx` is the request: {rid, aid, place}. */
@@ -549,20 +648,25 @@ function wireAllSet(root, a, ctx) {
 /** All set, on the card of a going app mobed (or anyone else it put the family in the book
  *  of who has no board): the prayers with "All set: 2 going", then the family, who is
  *  praying and the memorial. */
-function drawAllSet(q) {
+function drawAllSet(q, alive) {
   const a = q.all_set;
   const n = a.going.length;
   const wanted = (q.places || { wanted: n }).wanted;
   const me = a.going.some(g => g.is_me);
+  // Waiting again: someone going can't go any more and their place is being filled (step 5b).
+  const opened = q.status === "waiting";
+  const line = opened ? "Someone can't go any more, so their place is being filled." : allSetLine(n, wanted, a.confirmed_short);
   mainEl.innerHTML = `
     <div class="card">
       <h2>${esc(q.prayed_name)}</h2>
-      <p style="margin:0"><b>${esc(`All set: ${n} going`)}</b></p>
-      <p style="margin:4px 0 0">${esc(allSetLine(n, wanted, a.confirmed_short))}${me ? " You are going." : ""}</p>
+      <p style="margin:0"><b>${esc(opened ? openedText({ going: n, wanted }) : `All set: ${n} going`)}</b></p>
+      <p style="margin:4px 0 0">${esc(line)}${me ? (opened ? " You are still going." : " You are going.") : ""}</p>
       <div style="margin-top:10px">${factsHtml(q)}</div>
+      ${backOutHtml(q)}
     </div>
     ${allSetMoreHtml(a, q.prayed_name)}`;
   wireAllSet(mainEl, a, requestCtx(q));
+  if (alive) wireBackOut(q, alive);
 }
 
 // --- The board: "Who will pray" (R3.1) ----------------------------------------------
@@ -624,6 +728,8 @@ function boardStateText(b, asked) {
       + (asked ? " Nothing more is needed from you." : "");
   }
   if (b.status === "waiting") {
+    // All set once, and someone going can't go any more (step 5b): the actions are back.
+    if (b.reopened) return `${openedText(b)}.`;
     if (b.taken) return b.taken.by ? `Finding mobeds: ${b.taken.by} has taken this on.` : "Finding mobeds.";
     return b.way === "panthaky_first"
       ? "Waiting for you. Only you were told: ask everyone, call a mobed, or pray yourself."
@@ -634,21 +740,41 @@ function boardStateText(b, asked) {
   return "Accepted.";
 }
 
-/** A place per mobed wanted: who fills it and how, or "Open place" (not on a closed request). */
-function slotsHtml(b, { open = true } = {}) {
+/** A place per mobed wanted: who fills it and how, or "Open place" (not on a closed request).
+ *  On the board (`marks`), each place has "Can't go" while it can be marked (step 5b), and
+ *  those who can no longer go are shown so, under the places. */
+function slotsHtml(b, { open = true, marks = false } = {}) {
   const me = myKey();
   const out = b.places.map(p => `<div class="wp-slot"><b>${esc(p.name)}${p.key === me ? " (you)" : ""}</b>
-      <span class="meta">${esc(HOW[p.how] || "")}</span></div>`);
+      <span class="meta">${esc(HOW[p.how] || "")}</span>${marks ? cantGoHtml(b, p) : ""}</div>`);
   for (let i = b.places.length; open && i < b.wanted; i += 1) out.push(`<div class="wp-slot open">Open place</div>`);
+  if (marks) out.push(...(b.backed_out || []).map(goneHtml));
   return out.join("");
 }
+
+/** The board's "Can't go" for one place (a sheet asks first). */
+function cantGoHtml(b, p) {
+  if (!b.may_back_out || !p.key) return "";
+  return `<button type="button" class="ghost small danger-outline" data-cantgo="${esc(p.key)}"
+      aria-label="${esc(p.name)} can't go">Can't go</button>`;
+}
+
+/** Someone who was going and can no longer go. */
+function goneHtml(p) {
+  return `<div class="wp-slot gone"><b>${esc(p.name)}${p.key === myKey() ? " (you)" : ""}</b>
+      <span class="meta">Can't go</span></div>`;
+}
+
+// Where a standby's being asked again stands (step 5b), as the server says it.
+const REASK = { waiting: "Waiting", asked_again: "Asked again", said_no: "Said no", no_answer: "No answer" };
 
 function standbysHtml(b) {
   if (!b.standbys.length) return "";
   const me = myKey();
   return `<p style="margin:14px 0 4px"><b>Standby, in order</b></p>
     <ol style="margin:0;padding-left:28px">${b.standbys.map(s => `<li>${esc(s.name)}${s.key === me ? " (you)" : ""}
-      ${HOW[s.how] ? `<span class="meta">· ${esc(HOW[s.how])}</span>` : ""}</li>`).join("")}</ol>`;
+      ${HOW[s.how] ? `<span class="meta">· ${esc(HOW[s.how])}</span>` : ""}
+      ${REASK[s.reask] ? `<span class="meta">· <b>${esc(REASK[s.reask])}</b></span>` : ""}</li>`).join("")}</ol>`;
 }
 
 function boardCardHtml(view) {
@@ -666,7 +792,7 @@ function boardCardHtml(view) {
       <h2>${allSet ? esc(`All set: ${b.going} going`) : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
       <p ${allSet ? "" : `class="meta" `}style="margin:0">${esc(boardStateText(b, !!view.q))}</p>
       <p class="meta" id="rqLive" role="status" style="margin:4px 0 0">${esc(view.liveError)}</p>
-      ${contacts ? "" : `${slotsHtml(b, { open: !["declined", "withdrawn", "all_set"].includes(b.status) })}
+      ${contacts ? "" : `${slotsHtml(b, { open: !["declined", "withdrawn", "all_set"].includes(b.status), marks: true })}
         ${standbysHtml(b)}`}
       ${waiting ? `
         <div class="action-bar">
@@ -687,6 +813,7 @@ function boardCardHtml(view) {
 /** Where one of the fire temple's mobeds stands for this request. */
 function mobedStateText(m) {
   if (m.state === "going") return "Going";
+  if (m.state === "backed_out") return "Can't go";
   if (m.state === "standby") return "Standby";
   if (m.state === "said_no") return `Said no${SAID_HOW[m.how] ? ` ${SAID_HOW[m.how]}` : ""}`;
   if (m.state === "asked_whatsapp") {
@@ -752,8 +879,15 @@ function paintBoard(view) {
   // All set, and the family is in their book: the family, who is praying (the standbys under
   // them) and the memorial.
   const contacts = b.status === "all_set" && b.all_set;
+  // Each one going in the all-set list is a place on the board, in the same order: its "Can't go",
+  // and under them those who can no longer go (step 5b).
+  const under = (g, i) => {
+    const p = b.places[i];
+    return p && p.name === g.name ? cantGoHtml(b, p) : "";
+  };
+  const extra = `${(b.backed_out || []).map(goneHtml).join("")}${standbysHtml(b)}`;
   area.innerHTML = `${boardCardHtml(view)}
-    ${contacts ? `<div id="rqAllSetMore">${allSetMoreHtml(b.all_set, b.prayed_name, standbysHtml(b))}</div>` : ""}
+    ${contacts ? `<div id="rqAllSetMore">${allSetMoreHtml(b.all_set, b.prayed_name, extra, under)}</div>` : ""}
     ${waiting ? mobedsCardHtml(view) : ""}
     ${waiting && q ? `<p style="margin:20px 0 0;text-align:center">
       <button type="button" class="ghost small" id="rqCantTake">We can't take this</button></p>` : ""}`;
@@ -777,6 +911,12 @@ function paintBoard(view) {
     btn.onclick = () => {
       const m = mobed(btn.dataset.going);
       if (m) askGoing(view, m);
+    };
+  });
+  area.querySelectorAll("[data-cantgo]").forEach(btn => {
+    btn.onclick = () => {
+      const p = view.b.places.find(x => x.key === btn.dataset.cantgo);
+      if (p) confirmCantGo(view, p);
     };
   });
 }
@@ -923,7 +1063,8 @@ function askAbout(view, call) {
   const m = view.b.mobeds.find(x => x.key === call.key);
   if (!m) return;
   if (MAY_MARK.has(m.state)) return askGoing(view, m);
-  showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on standby already.`);
+  showInfo(m.state === "going" ? `${m.name} is going already.`
+    : m.state === "backed_out" ? `${m.name} has said they can't go.` : `${m.name} is on standby already.`);
 }
 
 /** Back in the app: the board read again (answers may have come meanwhile), then the
@@ -1047,6 +1188,58 @@ function confirmShort(view) {
     showBoard(view, nb, seq);
     refreshRequestCount();
     showInfo(done.message || "All set.");
+  };
+}
+
+// --- Can't go (R3.1 step 5b) -----------------------------------------------------------
+
+/** A mobed going phoned to say they can no longer go: a sheet first, then the board as the
+ *  server has it (the place open again, the next standby asked) and what was done in words. A
+ *  refusal (the prayers have begun, said already) is said over the board read again; no
+ *  signal is said in the sheet, to tap again. */
+function confirmCantGo(view, p) {
+  const me = p.key === myKey();
+  const sheet = openSheet({
+    title: me ? "You can't go?" : `${p.name} can't go?`,
+    html: `
+      <p style="margin-top:0">${me ? "Your" : "Their"} place opens again, and the first mobed on standby is asked to
+        take it.${me ? "" : " Nothing more is sent to them."}</p>
+      <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
+      <div class="stack">
+        <button type="button" class="danger" data-yes>Can't go</button>
+        <button type="button" class="ghost" data-no>${me ? "I can still go" : "Keep them going"}</button>
+      </div>`,
+  });
+  const body = sheet.body;
+  body.querySelector("[data-no]").onclick = sheet.close;
+  const yes = body.querySelector("[data-yes]");
+  yes.onclick = async () => {
+    if (yes.disabled) return;
+    yes.disabled = true;
+    body.querySelector("[data-msg]").textContent = "";
+    view.acting = true;
+    const seq = ++view.seq;
+    let res;
+    try {
+      res = await boardCantGo(view.id, p.key);
+    } catch (e) {
+      view.acting = false;
+      if (!here(view)) return;
+      if (e.status === 400 || e.status === 404 || e.status === 409) {
+        sheet.close();
+        return refused(view, e);
+      }
+      yes.disabled = false;
+      body.querySelector("[data-msg]").textContent = e.message;
+      return;
+    }
+    view.acting = false;
+    sheet.close();
+    if (!here(view)) return;
+    const { done = {}, ...nb } = res;
+    showBoard(view, nb, seq);
+    refreshRequestCount();
+    showInfo(done.message || "Noted.");
   };
 }
 

@@ -252,6 +252,10 @@ export const boardPrayMyself = (rid) => post(`/requests/${rid}/self`, {});
 export const boardCallResult = (rid, key, result) => post(`/requests/${rid}/call-result`, { key, result });
 /** "Confirm with who's going" (R3.1 step 5): all set with fewer than wanted. */
 export const boardConfirmShort = (rid) => post(`/requests/${rid}/confirm-short`, {});
+/** The board's "Can't go" on a place (R3.1 step 5b). key: the place's "u<user id>" or "c<contact id>". */
+export const boardCantGo = (rid, key) => post(`/requests/${rid}/cant-go`, { key });
+/** "I can't go any more" (R3.1 step 5b): someone going can no longer go; their place opens again. */
+export const backOutRequest = (id) => post(`/requests/${id}/back-out`, {});
 /** A fire temple's own list of mobeds, and the panthaky's call-out on WhatsApp (D10, Step 5c). */
 export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
 export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });

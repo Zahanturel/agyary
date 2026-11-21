@@ -706,6 +706,9 @@ body.sheet-open { overflow: hidden; }
   padding: var(--space-3) var(--space-4); margin-top: var(--space-2); }
 .wp-slot b { display: block; font-size: var(--text-md); }
 .wp-slot.open { border-style: dashed; border-color: var(--border); background: transparent; color: var(--muted); }
+/* Someone who was going and can no longer go (step 5b): kept on the board, plainly not a place. */
+.wp-slot.gone { border-color: var(--border); background: transparent; color: var(--muted); }
+.wp-slot button { display: block; margin-top: var(--space-2); }
 /* A fire temple a request cannot reach yet (nobody there in the app): shown, not tappable. */
 .search-result.unavailable { cursor: default; background: var(--ink-100); border-style: dashed; }
 .search-result.unavailable:hover { background: var(--ink-100); }
