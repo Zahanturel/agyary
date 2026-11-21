@@ -177,6 +177,11 @@ class FuneralRequest(Base):
     # "Still 1 mobed short", 4 hours before the Geh-saarnu
     # (services/prayer_timers.py). Set once, before anyone is told.
     short_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # R3.1 step 6: when the funeral place's managers were told "No answer yet
+    # from <agyari>": an hour after it was sent, nobody at the fire temple had
+    # answered or taken it (services/prayer_timers.py). Set once, before anyone
+    # is told; never before it was sent.
+    no_answer_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(f"status IN ({sql_in(REQUEST_STATUSES)})", name="status"),
@@ -184,6 +189,7 @@ class FuneralRequest(Base):
         CheckConstraint(
             "accepter_shared_contact IS NULL OR status IN ('accepted', 'taken')", name="shared_contact"
         ),
+        CheckConstraint("no_answer_alert_at IS NULL OR no_answer_alert_at >= sent_at", name="no_answer_after_sent"),
         Index(
             "uq_funeral_requests_one_waiting", "funeral_record_id", unique=True,
             postgresql_where=text("status = 'waiting'"),

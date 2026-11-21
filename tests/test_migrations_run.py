@@ -753,3 +753,40 @@ async def test_the_standby_migration_holds_its_rules_and_comes_off_cleanly():
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_no_answer_migration_adds_when_the_place_was_told_and_comes_off_cleanly():
+    """f4a5b6c7d8e2 (R3.1 step 6): a request from before reads NULL (the place
+    was never told nobody answered); it holds when it was told, never before
+    the request was sent; the downgrade takes it off and keeps the requests."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "e3f4a5b6c7d1"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        await _scratch_execute(
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at,"
+                               " sent_at) VALUES (1, 1, 'waiting', :at, :at)", {"at": AT})
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute("SELECT no_answer_alert_at FROM funeral_requests") == [(None,)]
+        await _refused("UPDATE funeral_requests SET no_answer_alert_at = :before",
+                       {"before": datetime(2026, 11, 18, 9, 0, tzinfo=timezone.utc)}, "told before it was sent")
+        told = datetime(2026, 11, 18, 11, 0, tzinfo=timezone.utc)
+        await _scratch_execute("UPDATE funeral_requests SET no_answer_alert_at = :at", {"at": told})
+        assert await _scratch_execute("SELECT no_answer_alert_at FROM funeral_requests") == [(told,)]
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'funeral_requests'::regclass")
+        assert "ck_funeral_requests_no_answer_after_sent" in {n for (n,) in names}
+
+        _ok(_alembic("downgrade", "e3f4a5b6c7d1"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'funeral_requests'")
+        assert "no_answer_alert_at" not in {c for (c,) in cols}
+        assert await _scratch_execute("SELECT status FROM funeral_requests") == [("waiting",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
