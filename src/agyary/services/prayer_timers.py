@@ -24,23 +24,35 @@ their phone, with nothing about the family.
   and only panthakys whose access is on are told. A panthaky switched off
   meanwhile does not hold the request back: nobody else could act on it.
 
-Later timers belong here too: "still short" 4 hours before the Geh-saarnu
-(step 5), and asking the next standby after 30 minutes (step 5b).
+"Still short" (step 5; owner, 21 Nov 2026): a request still waiting with
+places empty 4 hours before its Geh-saarnu - or at once, if it came later than
+that - is told once to the fire temple's confirmed panthakys it reached whose
+access is on, in the app and on their phones ("Still 1 mobed short for <prayed
+name>"; the lock screen without the departed or the family), or, with none,
+to the funeral place's managers (and the admin who sent it acting for the
+place). The 4 hours count from the start of the Geh-saarnu's geh in IST (the
+lead's choice): Havan 6:30 am, Rapithwin 12:30 pm, Uziran 3:30 pm, or 6:30 am
+with no geh; with no Geh-saarnu day, from the Uthamna's day and time (6:30 am
+with no time); with neither, never. Claimed by a conditional update of
+short_alert_at before anyone is told, so it is told once, two loops included.
+
+Later: asking the next standby after 30 minutes (step 5b).
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
+from agyary.messaging.geh_times import IST
 from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest
 from agyary.models.enums import REQUEST_MODE_PANTHAKY_FIRST, REQUEST_WAITING
-from agyary.services import funeral_requests, panthaky, prayer_callout, reminders, web_push
+from agyary.services import all_set, funeral_answers, funeral_requests, panthaky, prayer_callout, reminders, web_push
 from agyary.services import funeral_whatsapp as fw
 
 logger = logging.getLogger(__name__)
@@ -54,7 +66,8 @@ NOT_ASKED_TITLE = "Your mobeds could not be asked"
 async def run(db: AsyncSession, now: datetime, settings: Settings, client: httpx.AsyncClient | None) -> int:
     """Every timer that is due now. Returns how many requests it acted on.
     Commits as it goes; the loop calls it in its own step."""
-    return await safety_net(db, now, settings, client)
+    done = await safety_net(db, now, settings, client)
+    return done + await still_short(db, now, settings)
 
 
 def minutes_words(minutes: int) -> str:
@@ -149,3 +162,120 @@ async def _ask_and_tell(db: AsyncSession, settings: Settings, request_id: int, a
     await db.commit()
     await web_push.send_to_users(db, settings, [u.id for u in people], title=title, body=push,
                                  url="/mobed" + link, tag=f"prayer-escalated-{request_id}")
+
+
+# --- Still short (step 5) -------------------------------------------------------------
+
+KIND_STILL_SHORT = "prayer_request_still_short"
+SHORT_BEFORE = timedelta(hours=4)
+# When each day geh starts, for "4 hours before the Geh-saarnu" (the lead's
+# choice; the Geh-saarnu is prayed only in these gehs).
+GEH_SAARNU_STARTS = {1: time(6, 30), 2: time(12, 30), 3: time(15, 30)}
+DAY_START = time(6, 30)
+
+
+def short_alert_at(geh_saarnu_date: date | None, geh: int | None, uthamna_date: date | None,
+                   uthamna_time: time | None) -> datetime | None:
+    """When "still short" is due for a record's days (see the module's
+    docstring), or None when it has neither day."""
+    if geh_saarnu_date is not None:
+        start = datetime.combine(geh_saarnu_date, GEH_SAARNU_STARTS.get(geh, DAY_START), tzinfo=IST)
+    elif uthamna_date is not None:
+        start = datetime.combine(uthamna_date, uthamna_time or DAY_START, tzinfo=IST)
+    else:
+        return None
+    return start - SHORT_BEFORE
+
+
+async def _short_due(db: AsyncSession, now: datetime) -> list[int]:
+    """The waiting requests not told yet whose time has come. Only those whose
+    first day is no later than 4 hours from now are read: a handful."""
+    latest = (now.astimezone(IST) + SHORT_BEFORE).date()
+    rows = (await db.execute(
+        select(FuneralRequest.id, FuneralRecord.geh_saarnu_date, FuneralRecord.geh_saarnu_geh,
+               FuneralRecord.uthamna_date, FuneralRecord.uthamna_time)
+        .join(FuneralRecord, FuneralRecord.id == FuneralRequest.funeral_record_id)
+        .where(FuneralRequest.status == REQUEST_WAITING, FuneralRequest.short_alert_at.is_(None),
+               func.coalesce(FuneralRecord.geh_saarnu_date, FuneralRecord.uthamna_date) <= latest)
+        .order_by(FuneralRequest.sent_at, FuneralRequest.id)
+    )).all()
+    out = []
+    for rid, gs_date, geh, ut_date, ut_time in rows:
+        at = short_alert_at(gs_date, geh, ut_date, ut_time)
+        if at is not None and at <= now:
+            out.append(rid)
+    return out
+
+
+async def _claim_short(db: AsyncSession, request_id: int, now: datetime) -> bool:
+    """Take this request for "still short", once, while it is waiting:
+    committed before anyone is told."""
+    claimed = (await db.execute(
+        update(FuneralRequest)
+        .where(FuneralRequest.id == request_id, FuneralRequest.short_alert_at.is_(None),
+               FuneralRequest.status == REQUEST_WAITING)
+        .values(short_alert_at=now)
+        .returning(FuneralRequest.id)
+    )).scalar_one_or_none()
+    await db.commit()
+    return claimed is not None
+
+
+async def still_short(db: AsyncSession, now: datetime, settings: Settings) -> int:
+    """Tell, once, each waiting request with places empty whose time has come.
+    Returns how many it told (or claimed: see _tell_short)."""
+    done = 0
+    for request_id in await _short_due(db, now):
+        request = await db.get(FuneralRequest, request_id, populate_existing=True)
+        record = await db.get(FuneralRecord, request.funeral_record_id)
+        if await prayer_callout._going(db, request_id) >= prayer_callout.wanted(record):
+            continue            # full: it is made all set by the next yes or tap, not told it is short
+        if not await _claim_short(db, request_id, now):
+            continue            # another loop has it, or it stopped waiting just now
+        done += 1
+        try:
+            await _tell_short(db, settings, request_id, now)
+        except Exception:   # noqa: BLE001 - it is claimed (at most once); the next request still goes
+            logger.exception("Telling that request %s is still short failed after it was claimed", request_id)
+            await db.rollback()
+    await db.commit()
+    return done
+
+
+async def _tell_short(db: AsyncSession, settings: Settings, request_id: int, now: datetime) -> None:
+    request = await db.get(FuneralRequest, request_id)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    agyary = await db.get(Agyary, request.agyary_id)
+    want, going = prayer_callout.wanted(record), await prayer_callout._going(db, request_id)
+    missing = all_set.mobeds(want - going)
+    prayed = fw.departed(record)
+    when = (f"the Geh-saarnu is {fw.geh_saarnu_text(record)}" if record.geh_saarnu_date
+            else f"the Uthamna is {fw.uthamna_text(record)}")
+    confirmed = {p.id for p in await panthaky.panthakys_of(db, settings, agyary.id)}
+    people = [u for u in await funeral_requests.asked(db, request) if u.id in confirmed]
+    logger.warning("Request %s at fire temple %s is still short (%d of %d going): telling %s", request_id,
+                   agyary.id, going, want, f"{len(people)} panthaky(s)" if people else "the funeral place")
+    if not people:
+        await funeral_answers._tell_managers(
+            db, settings, record, request, kind=KIND_STILL_SHORT,
+            title=all_set.fit_title(f"Still {missing} short at {agyary.name} for {prayed}",
+                                    f"Still {missing} short at {agyary.name}", f"Still {missing} short"),
+            body=(f"{going} of {want} mobeds are going from {agyary.name} for {prayed}, and {when}. "
+                  "You can withdraw the request and send it to another fire temple."),
+            push=(f"Still {missing} short", f"The request to {agyary.name}: {going} of {want} going."), now=now,
+        )
+        await db.commit()
+        return
+    ways = "Ask everyone, call a mobed, or pray yourself" if going == 0 else \
+        "Ask everyone, call a mobed, or Confirm with who's going"
+    title = all_set.fit_title(f"Still {missing} short for {prayed}", f"Still {missing} short")
+    body = f"{going} of {want} going for the request from {place.name}, and {when}. {ways}."
+    link = f"#/requests/{request_id}"
+    for u in people:
+        await reminders.notify(db, u.id, KIND_STILL_SHORT, title, body, link=link, agyary_id=agyary.id, now=now,
+                               ttl=prayer_callout.NOTICE_TTL)
+    await db.commit()
+    await web_push.send_to_users(db, settings, [u.id for u in people], title=f"Still {missing} short",
+                                 body=f"The request from {place.name}: {going} of {want} going.",
+                                 url="/mobed" + link, tag=f"prayer-short-{request_id}")

@@ -544,7 +544,7 @@ async def test_every_board_action_takes_it_once_and_the_safety_net_then_never_fi
     assert (request.taken_at, request.taken_by_user_id) == took
     # The panthaky acted: the safety net never asks everyone.
     meta.sent.clear()
-    assert await prayer_timers.run(db, sent_at + timedelta(minutes=30), settings, None) == 0
+    assert await prayer_timers.safety_net(db, sent_at + timedelta(minutes=30), settings, None) == 0
     assert meta.sent == [] and (await _request(db, rid)).escalated_at is None
 
 

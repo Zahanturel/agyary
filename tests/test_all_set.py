@@ -716,3 +716,145 @@ async def test_confirm_with_whos_going_is_for_the_panthakys_it_reached_and_the_a
     assert (await client.post(f"/api/mobed/manager/requests/{rid2}/withdraw", headers=mgr)).status_code == 200
     r = await client.post(_b(rid2, "confirm-short"), json={}, headers=await _as(client, PANTHAKY))
     assert r.status_code == 409 and "withdrew this request" in r.json()["detail"]
+
+
+# --- Still short: 4 hours before the Geh-saarnu --------------------------------------------
+
+def test_when_still_short_is_due_for_each_geh_and_without_one():
+    from datetime import date, datetime, time
+
+    from agyary.services import prayer_timers as pt
+
+    day = date(2026, 11, 23)
+
+    def at(h, m, d=day):
+        return datetime.combine(d, time(h, m), tzinfo=pt.IST)
+
+    assert pt.short_alert_at(day, 1, None, None) == at(2, 30)        # Havan 6:30 am
+    assert pt.short_alert_at(day, 2, None, None) == at(8, 30)        # Rapithwin 12:30 pm
+    assert pt.short_alert_at(day, 3, day, time(16, 0)) == at(11, 30)  # Uziran 3:30 pm; the Uthamna does not count
+    assert pt.short_alert_at(day, None, None, None) == at(2, 30)     # no geh: 6:30 am
+    assert pt.short_alert_at(None, None, day, time(16, 0)) == at(12, 0)   # no Geh-saarnu: the Uthamna's time
+    assert pt.short_alert_at(None, None, day, None) == at(2, 30)     # nor its time: 6:30 am
+    assert pt.short_alert_at(None, None, None, None) is None         # neither: never
+
+
+async def _short_tick(db, at) -> int:
+    from agyary.services import prayer_timers
+
+    return await prayer_timers.still_short(db, at, config.get_settings())
+
+
+async def test_still_short_tells_the_panthaky_once_four_hours_before_the_geh_saarnu(client, db, seeded, pushes):
+    from datetime import datetime, time
+
+    from agyary.services import prayer_timers
+
+    aid = seeded["agyary_id"]
+    tomorrow = funeral_records.today_ist() + timedelta(days=1)
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2, geh_saarnu_date=tomorrow.isoformat(), geh_saarnu_geh=2,
+                            uthamna_date=(tomorrow + timedelta(days=1)).isoformat())
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"},
+                              headers=await _as(client, MOBED))).status_code == 200
+    due = datetime.combine(tomorrow, time(8, 30), tzinfo=prayer_timers.IST)
+    pushes.clear()
+    assert await _short_tick(db, due - timedelta(minutes=1)) == 0
+    assert await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT) == []
+    # The one-minute loop's tick runs it.
+    assert await prayer_timers.run(db, due, config.get_settings(), None) == 1
+    assert (await _request(db, rid)).short_alert_at == due
+    (note,) = await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)
+    assert note.title == "Still 1 mobed short for Behdin Rustom Jamshed" and note.link == f"#/requests/{rid}"
+    assert note.body == (f"1 of 2 going for the request from Doongerwadi (test), and the Geh-saarnu is "
+                         f"{tomorrow:%a} {tomorrow.day} {tomorrow:%b}, Rapithwin geh. "
+                         "Ask everyone, call a mobed, or Confirm with who's going.")
+    (push,) = pushes
+    assert push["to"] == [(await _user(db, PANTHAKY)).id] and push["title"] == "Still 1 mobed short"
+    assert push["body"] == "The request from Doongerwadi (test): 1 of 2 going."
+    for text in (note.title + note.body, push["title"] + push["body"]):
+        _no_family(text)
+    assert "Rustom" not in push["body"]
+    assert await _notes_of(db, MOBED, prayer_timers.KIND_STILL_SHORT) == []     # only the panthaky
+    # Once only.
+    for later in (1, 60, 600):
+        assert await _short_tick(db, due + timedelta(minutes=later)) == 0
+    assert len(await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)) == 1 and len(pushes) == 1
+
+
+async def test_still_short_at_once_when_the_request_comes_later_and_never_when_full_or_without_days(
+    client, db, seeded, pushes,
+):
+    from sqlalchemy import update
+
+    from agyary.models import FuneralRecord
+    from agyary.services import prayer_timers
+
+    aid = seeded["agyary_id"]
+    # A Geh-saarnu whose 4 hours had begun before the request came: told at the first tick.
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=2)
+    record_id = (await _request(db, rid)).funeral_record_id
+    yesterday = funeral_records.today_ist() - timedelta(days=1)
+    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(geh_saarnu_date=yesterday))
+    await db.commit()
+    sent_at = (await _request(db, rid)).sent_at
+    assert await _short_tick(db, sent_at + timedelta(seconds=30)) == 1
+    (note,) = await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)
+    assert note.title == "Still 2 mobeds short for Behdin Rustom Jamshed"
+    assert note.body.endswith("Ask everyone, call a mobed, or pray yourself.")
+
+    # All set: never.
+    rid2, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    assert (await client.post(_b(rid2, "self"), json={}, headers=await _as(client, PANTHAKY))).status_code == 200
+    # No Geh-saarnu and no Uthamna: never.
+    rid3, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1, geh_saarnu_date=None, geh_saarnu_geh=None,
+                             uthamna_date=None, uthamna_time=None)
+    far = sent_at + timedelta(days=30)
+    assert await _short_tick(db, far) == 0
+    assert (await _request(db, rid2)).short_alert_at is None and (await _request(db, rid3)).short_alert_at is None
+
+
+async def test_with_no_confirmed_panthaky_the_funeral_place_is_told(client, db, seeded, pushes):
+    from agyary.models import AppNotification
+    from agyary.services import prayer_timers
+    from tests.funeral_helpers import MANAGER, agyari
+
+    only = await agyari(db, "Mobeds Only Agyari (test)", None)
+    await member(db, only, "+919822200111", name="Er. Only One")
+    await db.commit()
+    rid, _, _ = await _send(client, db, only.id, mobeds_wanted=2)
+    sent_at = (await _request(db, rid)).sent_at
+    pushes.clear()
+    # The form's Geh-saarnu is today, Havan: due from 2:30 am today, before or after the request.
+    assert await _short_tick(db, max(sent_at, datetime_today_ist(2, 30))) == 1
+    (note,) = await _notes_of(db, MANAGER, prayer_timers.KIND_STILL_SHORT)
+    assert note.title == "Still 2 mobeds short at Mobeds Only Agyari (test) for Behdin Rustom Jamshed"
+    assert note.body.startswith("0 of 2 mobeds are going from Mobeds Only Agyari (test) for Behdin Rustom Jamshed")
+    assert note.body.endswith("You can withdraw the request and send it to another fire temple.")
+    assert note.link == f"#/manager/record/{(await _request(db, rid)).funeral_record_id}"
+    (push,) = pushes
+    assert push["title"] == "Still 2 mobeds short" and "Rustom" not in push["body"]
+    assert not (await db.execute(select(AppNotification).where(
+        AppNotification.kind == prayer_timers.KIND_STILL_SHORT,
+        AppNotification.user_id == (await _user(db, "+919822200111")).id))).scalars().all()
+
+
+def datetime_today_ist(h: int, m: int):
+    from datetime import datetime, time
+
+    from agyary.services import prayer_timers
+
+    return datetime.combine(funeral_records.today_ist(), time(h, m), tzinfo=prayer_timers.IST)
+
+
+async def test_two_loops_at_the_same_moment_tell_once(client, db, seeded, pushes):
+    from agyary.services import prayer_timers
+
+    rid, _, _ = await _send(client, db, seeded["agyary_id"], mobeds_wanted=2)
+    at = max((await _request(db, rid)).sent_at, datetime_today_ist(2, 30))
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    settings = config.get_settings()
+    async with factory() as one, factory() as two:
+        done = await asyncio.gather(prayer_timers.still_short(one, at, settings),
+                                    prayer_timers.still_short(two, at, settings))
+    assert sorted(done) == [0, 1]
+    assert len(await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)) == 1

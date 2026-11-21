@@ -79,6 +79,17 @@ def live(monkeypatch):
     config.get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def no_still_short(monkeypatch):
+    """These are the safety net's tests. "Still short", which the same tick runs
+    (and which a request here, its Geh-saarnu today, could be due for), has its
+    own in tests/test_all_set.py."""
+    async def nothing(*a, **kw):
+        return 0
+
+    monkeypatch.setattr(prayer_timers, "still_short", nothing)
+
+
 async def _come_to_me_first(client, db, aid, minutes=30, mgr=None) -> tuple[int, datetime, dict]:
     """A request sent to Goti Adarian in Come to me first: nobody is asked at Send."""
     await _way(db, aid, "panthaky_first", minutes)
