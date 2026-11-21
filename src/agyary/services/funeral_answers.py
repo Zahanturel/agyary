@@ -1,37 +1,36 @@
 """A request for prayers, on the fire temple's side (DECISIONS D10 and its
-18 Nov amendment, D2, D4; Phase 2 Step 5).
+18 Nov amendment, D2, D4; Phase 2 Step 5; R3.1).
 
-Who sees a request: exactly the people it was sent to
-(funeral_request_recipients) - a fire temple's confirmed panthakys, or if it
-had none, its mobeds. Nobody else, however the request id is guessed: it is
-404 to anyone not asked. The family's name and number are not shown to anyone
-asked until they accept, and then only to the one who accepted.
+Who sees a request: exactly the people it reached
+(funeral_request_recipients) - a fire temple's confirmed panthakys, its app
+mobeds once they are asked (R3.1), or if it had no panthaky, its mobeds.
+Nobody else, however the request id is guessed: it is 404 to anyone not asked.
+The family's name and number are shown only once it is all set, and then only
+to those whose own book it put the family in (services/all_set.py).
 
-Answering: the first to accept takes it. Accepting locks the funeral record and
-then the request (the order withdrawing and editing use, so the three cannot
-cross), and a request that is no longer waiting is refused in plain words:
-already accepted by whom, withdrawn by the place, or declined. The others asked
-then see "Accepted by <name>" (the request row says "accepted"; the "taken"
-state is not used). Declining, with an optional short reason, closes the
-request for that fire temple; the manager can send it to another.
+Taking a request: since R3.1 only the "Who will pray" board's actions take it
+(services/prayer_callout.py); the old Accept is gone (R3.1 step 7). A request
+accepted the old way before R3.1 keeps its state and reads as it did (D8):
+"Accepted by <name>" for the others asked, and for the one who accepted the
+family's contact, the message to them, their own record of the family and the
+memorial they made from it, and what our number sent then
+(funeral_whatsapp.summary). Whether they let the place have their name and
+number is kept on the request (accepter_shared_contact): the manager's screen
+shows the number only when it is set.
 
-Accepting sets up the accepter's own book, and only theirs (D2): their own
+Declining ("We can't take this", a confirmed panthaky's), with an optional
+short reason, locks the funeral record and then the request (the order
+withdrawing and editing use, so they cannot cross), closes the request for
+that fire temple, and the manager can send it to another; a request that is no
+longer waiting is refused in plain words. The funeral place's managers are
+told in the app and on their phones, and so is the admin who sent the request
+while acting for the place; neither carries the family's name or number.
+
+put_in_book sets up one person's own book, and only theirs (D2): their own
 record of the family's number (the one they already have, or a new one), with
-reminders off as for anyone new (D4; a STOP the number sent is kept, as always);
-the Geh-saarnu and the Uthamna on their calendar as events at that fire temple;
-and the memorial form, filled in, for them to check and save. No other mobed's
-book is read or touched: the family's number is looked up only among the
-accepter's own records.
-
-The funeral place's managers are told in the app and on their phones, and so
-is the admin who sent the request while acting for the place; neither carries
-the family's name or number. (The WhatsApp message to "the manager" goes to
-the place's managers only.) Whether the accepter let the place have
-their name and number (the tick, on by default) is kept on the request
-(accepter_shared_contact): the manager's screen shows the number only when it
-is set, and the WhatsApp messages from our number (Step 5b,
-services/funeral_whatsapp.py: approved templates only, sent only once
-FUNERAL_WHATSAPP_MODE is live) read the same column.
+reminders off as for anyone new (D4; a STOP the number sent is kept, as
+always), and the Geh-saarnu and the Uthamna on their calendar. All set uses it
+for each person praying.
 """
 
 from __future__ import annotations
@@ -66,7 +65,6 @@ from agyary.models import (
 from agyary.models.enums import (
     ACCOUNT_FUNERAL_MANAGER,
     GEH_NAMES,
-    REQUEST_ACCEPTED,
     REQUEST_ALL_SET,
     REQUEST_DECLINED,
     REQUEST_WAITING,
@@ -80,7 +78,6 @@ from agyary.services import (
     funeral_whatsapp,
     guardrails,
     mobed_access,
-    panthaky,
     prayer_callout,
     mobed_dashboard,
     reminders,
@@ -94,12 +91,11 @@ logger = logging.getLogger(__name__)
 EARLIER = 20
 REASON_MAX = 200
 NOTICE_TTL = funeral_requests.NOTICE_TTL
-KIND_ACCEPTED = "funeral_request_accepted"
 KIND_DECLINED = "funeral_request_declined"
 # To the others who were asked, once one of them has answered.
 KIND_ANSWERED = "funeral_request_answered"
 
-# The events put on the accepter's calendar, by these names in the fire
+# The events put on each calendar (put_in_book), by these names in the fire
 # temple's service list (added to it if it has none of that name).
 GEH_SAARNU, UTHAMNA = "Geh-saarnu", "Uthamna"
 # The Uthamna is in the afternoon (Uziran geh). With no time given, it goes on
@@ -446,17 +442,6 @@ class InBook:
     skipped: list[dict] = field(default_factory=list)
 
 
-@dataclass
-class Accepted:
-    request: FuneralRequest
-    customer_id: int
-    behdin_created: bool
-    # What went on the calendar: {"what", "date", "time", "booking_id", "conflict", "time_guessed"}.
-    events: list[dict] = field(default_factory=list)
-    # What did not: {"what", "why"}.
-    skipped: list[dict] = field(default_factory=list)
-
-
 async def _service(db: AsyncSession, agyary_id: int, name: str) -> Service:
     """The fire temple's service of this name, added to its list if missing."""
     service = (
@@ -484,8 +469,8 @@ async def put_in_book(
     place. No other mobed's book is read or touched: the number is looked up
     only among this person's own records. Not committed here.
 
-    Accepting (the old way) calls it for the one who accepted; All set
-    (services/all_set.py) once for each person whose book it is."""
+    All set (services/all_set.py) calls it once for each person whose book it
+    is; accepting did the same for the one who accepted, before R3.1."""
     customer, created = await behdin_directory.create_or_link(
         db, agyary.id, user.id, name=record.family_contact_name, phone=record.family_contact_phone,
     )
@@ -525,54 +510,6 @@ async def _put_on_calendar(
             "what": what, "date": day.isoformat(), "time": at.strftime("%H:%M"), "booking_id": made.booking.id,
             "conflict": made.calendar_conflict, "time_guessed": guessed,
         })
-
-
-async def accept(
-    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, *, share_contact: bool,
-    now: datetime | None = None,
-) -> Accepted:
-    """Accept for the fire temple: the first to accept takes it. AnswerError
-    says why not."""
-    now = now or datetime.now(timezone.utc)
-    record, place, agyary = await _answerable(db, user, request)
-    # Since R3.1 step 4 the fire temple's app mobeds are asked in the app too, and
-    # a mobed there answers for themselves only: where there is a confirmed
-    # panthaky, they take the request, and nobody else is given the family here.
-    if (not await prayer_callout.is_confirmed_panthaky(db, agyary.id, user.id)
-            and await panthaky.panthakys_of(db, settings, agyary.id)):
-        raise AnswerError(f"The panthaky of {agyary.name} takes this request. "
-                          "Please answer with I can pray or Not this time.")
-    request.status = REQUEST_ACCEPTED
-    request.accepted_by_user_id = user.id
-    request.decided_by_user_id = user.id
-    request.decided_at = now
-    request.accepter_shared_contact = bool(share_contact)
-    await db.flush()
-
-    # The accepter's own book only (D2): their record of the number, or a new one.
-    book = await put_in_book(db, user, agyary, record, place, today=now.astimezone(IST).date())
-    created = book.created
-    done = Accepted(request=request, customer_id=book.customer.id, behdin_created=created, events=book.events,
-                    skipped=book.skipped)
-
-    prayed = funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
-    await _tell_managers(
-        db, settings, record, request, kind=KIND_ACCEPTED,
-        title=f"{agyary.name} accepted the prayers",
-        body=f"{user.name} of {agyary.name} accepted the prayers for {prayed}."
-             + ("" if share_contact
-                else " They chose not to share their number; you can reach them through the fire temple."),
-        push=("Prayers accepted", f"{agyary.name} accepted the request from {place.name}."), now=now,
-    )
-    await _tell_the_others(
-        db, request, user, title="A request for prayers was accepted",
-        body=f"{user.name} accepted {place.name}'s request for {prayed}. Nothing more is needed from you.", now=now,
-    )
-    logger.warning(
-        "Funeral request %s accepted by user %s at fire temple %s (shared contact: %s, new behdin: %s, events: %d)",
-        request.id, user.id, agyary.id, bool(share_contact), created, len(done.events),
-    )
-    return done
 
 
 def checked_reason(reason: str | None) -> str | None:

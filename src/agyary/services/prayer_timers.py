@@ -175,7 +175,7 @@ async def _ask_and_tell(db: AsyncSession, settings: Settings, request_id: int, a
         return
     late = f"Nobody had answered the request from {place_name}"
     if outcome["state"] == "sent":
-        title, link = ASKED_TITLE, f"#/requests/{request_id}/callout"
+        title, link = ASKED_TITLE, f"#/requests/{request_id}"
         body = f"{late} for {departed} in {waited}, so Mobed Diary asked all your mobeds. {outcome['message']}"
         push = f"{late} in {waited}, so Mobed Diary asked all your mobeds."
     else:

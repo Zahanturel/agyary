@@ -17,10 +17,12 @@ have the request in the app, nor whoever sent it) is asked at once whether they
 can pray - template 4, with no family details. Each mobed asked has an answer
 row with an unguessable token, which is all the quick-reply buttons carry. The
 first tap counts; later ones change nothing. A mobed is asked once per request;
-the panthaky can ask again by hand those not asked yet (someone added to the
-list since), while the request is open. Since R3.1 (21 Nov 2026) that is the
-way Everyone at once; in Come to me first nothing goes at Send, and the
-panthaky chooses who to ask (after_send, request_settings.way_for).
+the board's Ask everyone asks those not asked yet (someone added to the list
+since), while the request waits. Since R3.1 (21 Nov 2026) that is the way
+Everyone at once; in Come to me first nothing goes at Send, and the panthaky
+chooses who to ask on the board (after_send, request_settings.way_for). The
+old call-out screen, with its hand-picked call-out and "Send the details
+again", is gone since R3.1 step 7; the board is the only way.
 
 The "Who will pray" board (R3.1 step 4, owner 21 Nov 2026): every answer and
 every place is one row per person per request, whatever the channel - a
@@ -181,10 +183,10 @@ async def our_mobeds(
     by hand; each says whether they can be messaged now and, if not, why.
 
     An app mobed's own number is given only with ``with_numbers``, which only
-    the Mobeds page passes (owner, 21 Nov 2026): its route lets in only the
-    fire temple's confirmed panthakys and the admin (routes/callouts.py,
-    _managed_agyary). Everywhere else - the call-out screen, the call-out
-    itself - it stays None."""
+    the Mobeds page and the board pass (owner, 21 Nov 2026): their routes let
+    in only the fire temple's confirmed panthakys (the board: those the
+    request reached) and the admin (routes/callouts.py). Everywhere else -
+    asking everyone, a call's result - it stays None."""
     members = (await db.execute(
         select(User).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
             AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
@@ -299,27 +301,11 @@ def wanted(record: FuneralRecord) -> int:
     return record.mobeds_wanted or DEFAULT_WANTED
 
 
-async def callout_request(db: AsyncSession, settings: Settings, user: User, request_id: int) -> FuneralRequest | None:
-    """The request, if this person may see its call-out: a confirmed panthaky
-    of the fire temple it was sent to, or the admin. None otherwise (a 404,
-    whatever the reason). Asking and sending need it to be open too."""
-    request = await db.get(FuneralRequest, request_id)
-    if request is None or not await may_manage(db, settings, user, request.agyary_id):
-        return None
-    return request
-
-
-async def _answers(
-    db: AsyncSession, request_id: int, *, lock: bool = False,
-) -> list[tuple[PrayerCalloutAnswer, PrayerCallout]]:
-    query = (
+async def _answers(db: AsyncSession, request_id: int) -> list[tuple[PrayerCalloutAnswer, PrayerCallout]]:
+    return list((await db.execute(
         select(PrayerCalloutAnswer, PrayerCallout).join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
         .where(PrayerCallout.funeral_request_id == request_id).order_by(PrayerCalloutAnswer.id)
-    )
-    if lock:
-        # Two taps on "Send the details again" wait here, and the second sees the first's.
-        query = query.with_for_update(of=PrayerCalloutAnswer).execution_options(populate_existing=True)
-    return list((await db.execute(query)).all())
+    )).all())
 
 
 def _answer_key(a: PrayerCalloutAnswer) -> str | None:
@@ -335,76 +321,8 @@ def _latest(rows) -> dict[tuple[str, str], object]:
     return out
 
 
-def _asked_keys(answered, latest) -> set:
-    """Who has been asked for this request: a call-out that went (or was
-    answered). One that WhatsApp did not take may be asked again."""
-    keys = set()
-    for a, _ in answered:
-        asked_n = latest.get((fw.TYPE_CALLOUT, str(a.id)))
-        if a.answer is not None or asked_n is None or fw.went(asked_n):
-            keys.add(_answer_key(a))
-    return keys
-
-
 def _state(n) -> dict | None:
     return {"state": fw.state_words(n), "why": fw.why(n)} if n is not None else None
-
-
-async def view(db: AsyncSession, settings: Settings, user: User, request: FuneralRequest,
-               now: datetime | None = None) -> dict:
-    """The call-out screen: the prayers (no family details), whether sending is
-    on, everyone asked with their answer and whether they are going, and who
-    can still be asked."""
-    now = now or _now()
-    record = await db.get(FuneralRecord, request.funeral_record_id)
-    place = await db.get(FuneralPlace, record.funeral_place_id)
-    agyary = await db.get(Agyary, request.agyary_id)
-    answered = await _answers(db, request.id)
-    latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=fw.CALLOUT_TYPES))
-    asked_keys = _asked_keys(answered, latest)
-    people = []
-    for a, _ in answered:
-        key = str(a.id)
-        details_n = latest.get((fw.TYPE_DETAILS, key))
-        going = holds_place(a)
-        people.append({
-            "id": a.id, "name": a.name, "kind": "app" if a.user_id else "contact",
-            "asked": _state(latest.get((fw.TYPE_CALLOUT, key))),
-            "answer": a.answer, "answered_at": a.answered_at.isoformat() if a.answered_at else None,
-            "going": going,
-            "details": _state(details_n),
-            "enough": _state(latest.get((fw.TYPE_ENOUGH, key))),
-            "withdrawn_note": _state(latest.get((fw.TYPE_WITHDRAWN, key))),
-            # A mobed going whose details were tried and did not go (sending was
-            # paused, say), before R3.1. Since R3.1 nobody going is sent the
-            # details until All set, so there is nothing to send again.
-            "may_resend": going and a.details_sent_at is None and bool(a.phone) and details_n is not None
-                          and not fw.went(details_n) and is_open(request),
-        })
-    candidates = []
-    if is_open(request):
-        for m in await our_mobeds(db, settings, request.agyary_id, me=user):
-            if m["is_me"]:
-                continue
-            already = m["key"] in asked_keys
-            candidates.append({**m, "asked_already": already, "may_ask": m["can_message"] and not already})
-    return {
-        "request_id": request.id,
-        "status": request.status,
-        "open": is_open(request),
-        "agyari": {"id": agyary.id, "name": agyary.name},
-        "prayed_name": fw.departed(record),
-        "place": place.name,
-        "geh_saarnu": fw.geh_saarnu_text(record),
-        "uthamna": fw.uthamna_text(record),
-        "mobeds_wanted": record.mobeds_wanted,
-        "wanted": wanted(record),
-        "going": sum(1 for p in people if p["going"]),
-        "whatsapp": await fw.status(db, settings),
-        "candidates": candidates,
-        "asked": people,
-        "max": settings.prayer_callout_max_recipients,
-    }
 
 
 async def summary(db: AsyncSession, request: FuneralRequest) -> dict:
@@ -766,54 +684,6 @@ async def take_request(db: AsyncSession, request: FuneralRequest, user: User, no
     if taken is not None:
         logger.info("Funeral request %s taken on the board by user %s", request.id, user.id)
     return taken is not None
-
-
-async def send(
-    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, keys: list[str], *,
-    now: datetime | None = None, client: httpx.AsyncClient | None = None,
-) -> int:
-    """The panthaky asks again, by hand: those chosen who have not been asked
-    for this request yet (a mobed added to the list since, say). Returns how
-    many were asked."""
-    now = now or _now()
-    if not is_open(request):
-        raise CalloutError("This request is closed, so nobody more can be asked for it.")
-    why = await fw.why_not_now(db, settings)
-    if why:
-        raise CalloutError(why)
-    keys = list(dict.fromkeys(keys))
-    if not keys:
-        raise CalloutError("Please choose who to ask.", status=400)
-    if len(keys) > settings.prayer_callout_max_recipients:
-        raise CalloutError(f"One call-out can ask at most {settings.prayer_callout_max_recipients} mobeds.", status=400)
-    by_key = {m["key"]: m for m in (await view(db, settings, user, request, now))["candidates"]}
-    chosen = []
-    for key in keys:
-        m = by_key.get(key)
-        if m is None:
-            raise CalloutError("Someone chosen is no longer on the list. Please open the list again.", status=400)
-        if m["asked_already"]:
-            raise CalloutError(f"{m['name']} has been asked already for these prayers.", status=400)
-        if not m["can_message"]:
-            raise CalloutError(f"{m['name']} cannot be asked: {m['why_not']}.", status=400)
-        chosen.append(m)
-    room = await fw.room_today(db, settings, request.agyary_id, now)
-    if len(chosen) > room:
-        raise CalloutError(f"Today's limit for WhatsApp messages from Mobed Diary allows {room} more, "
-                           f"so {len(chosen)} cannot be asked now.")
-    record = await db.get(FuneralRecord, request.funeral_record_id)
-    place = await db.get(FuneralPlace, record.funeral_place_id)
-    agyary = await db.get(Agyary, request.agyary_id)
-    for what, text, max_len in _names(record, place, agyary, user.name, template_text.MOBED_NAME_MAX):
-        problem = template_text.problem(text or "", max_len=max_len)
-        if problem:
-            what = "your name" if what == "the panthaky's name" else what
-            raise CalloutError(f"This cannot be sent from Mobed Diary's number: {what} {problem}.")
-    went = await _ask(db, settings, request, chosen, asker=user.name, asker_max=template_text.MOBED_NAME_MAX,
-                      sent_by_user_id=user.id, now=now, client=client)
-    logger.warning("Call-out for request %s by user %s: %d asked of %d chosen", request.id, user.id, went,
-                   len(chosen))
-    return went
 
 
 # --- The board's rows: one per person per request (R3.1 step 4) ---------------------
@@ -1190,7 +1060,9 @@ async def _tell_panthakys(
     confirmed = {p.id for p in await panthaky.panthakys_of(db, settings, request.agyary_id)}
     people = [u for u in await funeral_requests.asked(db, request)
               if u.id in confirmed and u.id not in (answer.user_id, skip_user_id)]
-    link = link or f"#/requests/{request.id}/callout"
+    # The request's own page, with the board (the old call-out screen's address
+    # still opens it, for notices from before R3.1 step 7).
+    link = link or f"#/requests/{request.id}"
     for u in people:
         await reminders.notify(db, u.id, kind, title, body, link=link, agyary_id=request.agyary_id, now=now,
                                ttl=NOTICE_TTL)
@@ -1652,43 +1524,6 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
 
 
 # --- Afterwards -------------------------------------------------------------------
-
-async def details_again(
-    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, *,
-    now: datetime | None = None, client: httpx.AsyncClient | None = None,
-) -> dict:
-    """Message 2 again to those going whose details were tried and did not go
-    (sending was paused, say, before R3.1); never twice to anyone, and never
-    to someone going whose details were never tried: since R3.1 step 4 they go
-    only at All set. Returns {"tried", "sent"}."""
-    now = now or _now()
-    if not is_open(request):
-        raise CalloutError("This request is closed, so nothing more is sent for it.")
-    why = await fw.why_not_now(db, settings)
-    if why:
-        raise CalloutError(why)
-    answered = await _answers(db, request.id, lock=True)
-    latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=(fw.TYPE_DETAILS,)))
-    due = [a for a, _ in answered if holds_place(a) and a.details_sent_at is None and a.phone
-           and (fw.TYPE_DETAILS, str(a.id)) in latest and not fw.went(latest[(fw.TYPE_DETAILS, str(a.id))])]
-    if not due:
-        await db.commit()
-        return {"tried": 0, "sent": 0}
-    record = await db.get(FuneralRecord, request.funeral_record_id)
-    place = await db.get(FuneralPlace, record.funeral_place_id)
-    sends = [fw.details_send(record, place, phone=a.phone, agyary_id=request.agyary_id,
-                             refs={"request": request.id, "answer": a.id, "to": "going"}, **_to(a)) for a in due]
-    rows = await fw.deliver(db, settings, sends, now=now, client=client)
-    by_id = {a.id: a for a in due}
-    sent = 0
-    for n in rows:
-        a = by_id.get(int(n.template_params.get("answer", 0)))
-        if a is not None and fw.went(n):
-            a.details_sent_at, sent = now, sent + 1
-    await db.commit()
-    logger.warning("Request %s: details sent again by user %s to %d of %d", request.id, user.id, sent, len(due))
-    return {"tried": len(due), "sent": sent}
-
 
 async def after_closed(
     db: AsyncSession, settings: Settings, request_id: int, *, now: datetime | None = None,

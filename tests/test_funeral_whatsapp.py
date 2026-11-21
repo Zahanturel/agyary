@@ -1,13 +1,17 @@
-"""WhatsApp from Mobed Diary's number when a request is accepted (DECISIONS D10
-and its 18 Nov 2026 amendments; docs/phase2-whatsapp-templates.md; Step 5b).
+"""WhatsApp from Mobed Diary's number about a prayer request (DECISIONS D10 and
+its 18 Nov 2026 amendments; docs/phase2-whatsapp-templates.md; Step 5b; R3.1).
 
-Off by default: nothing is sent and the accepter is told it starts once Meta
-approves. Live, with "Share my name and number" ticked: template 1 to the
-place's managers, template 2 to the accepter, template 3 to the family only if
-the manager's tick recorded their agreement and they never said STOP. Without
-the share tick, nothing. The pause switch and the day's limits stop sends; a
-send that fails never makes the accept fail; no phone number reaches the logs.
-Outbound HTTP is mocked throughout.
+Templates 1-3 went on accepting, before R3.1. The Accept is gone (R3.1 step 7),
+so nothing sends them any more (tests/test_funeral_accept.py), and a request
+accepted the old way still reads what went then: sent, not sent and why,
+nothing while sending was off, or nothing because the accepter did not share
+their number, and a note when the family had not agreed. The family is messaged
+only with the manager's tick (its words since 18 Nov). Every message that goes
+now - the call-out, and All set's templates 5-8 (tests/test_all_set.py) - keeps
+to the same safeguards, tried here through All set: the day's limits (and the
+admins told), a send that fails never undoes the All set, a name that breaks
+the rules is not sent and says why, and no phone number reaches the rows or the
+logs. Outbound HTTP is mocked throughout.
 """
 
 from __future__ import annotations
@@ -21,11 +25,11 @@ import pytest
 from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import AppNotification, FuneralRequest, Notification, ReminderOptOut, User
+from agyary.models import AppNotification, FuneralRequest, Notification, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import guardrails
 from tests.conftest import sign_in
-from tests.funeral_helpers import FAMILY, auth, form, manager
+from tests.funeral_helpers import FAMILY, accepted_the_old_way, auth, form, manager
 
 RECORDS = "/api/mobed/manager/records"
 REQUESTS = "/api/mobed/requests"
@@ -93,50 +97,79 @@ async def _sent(client, db, aid, *, whatsapp_agreed=True, mgr=None, **changes) -
     return r.json()["record"]["requests"][0]["id"]
 
 
-async def _accept(client, rid, share=True):
+async def _pray(client, rid) -> dict:
+    """The panthaky's "I'll pray" on a request wanting one mobed: it is all set."""
     headers = auth(await sign_in(client, PANTHAKY))
-    r = await client.post(f"{REQUESTS}/{rid}/accept", json={"share_contact": share}, headers=headers)
+    r = await client.post(f"{REQUESTS}/{rid}/self", json={}, headers=headers)
     assert r.status_code == 200, r.text
-    return r.json(), headers
-
-
-# What accepting sends. Since 19 Nov 2026 the mobeds' call-out (template 4) goes
-# when the request is sent: tests/test_prayer_callout.py covers it, so it is left
-# out of what is counted here.
-ON_ACCEPT = (fw.TYPE_MANAGER, fw.TYPE_DETAILS, fw.TYPE_FAMILY)
+    assert r.json()["status"] == "all_set"
+    return r.json()
 
 
 async def _rows(db) -> list[Notification]:
-    return list((await db.execute(select(Notification).where(Notification.notification_type.in_(ON_ACCEPT))
+    """What All set wrote down (templates 5-8)."""
+    return list((await db.execute(select(Notification).where(Notification.notification_type.in_(fw.ALL_SET_TYPES))
                                   .order_by(Notification.id))).scalars().all())
 
 
-def _on_accept(meta) -> list[dict]:
+def _all_set_sent(meta) -> list[dict]:
     return [m for m in meta.sent if m.get("type") == "template" and m["template"]["name"] != "prayer_request_mobeds_v2"]
 
 
-def _by_template(meta) -> dict:
-    return {m["template"]["name"]: m for m in _on_accept(meta)}
+def _old_row(rid: int, aid: int, kind: str, to: str, status: str, error: str | None = None) -> Notification:
+    """A message sent on accepting, before R3.1, as accepting wrote it down (never a number)."""
+    now = datetime.now(timezone.utc)
+    return Notification(agyary_id=aid, recipient_phone={"family": FAMILY, "accepter": PANTHAKY}.get(to, MANAGER),
+                        recipient_type="family" if to == "family" else "user", recipient_id=1, notification_type=kind,
+                        template_name=kind, template_params={"1": "Behdin Rustom Jamshed", "4": fw.HIDDEN,
+                                                             "request": str(rid), "to": to},
+                        scheduled_at=now, created_at=now, status=status, error_message=error)
 
 
-def _body(m) -> list[str]:
-    return [p["text"] for p in m["template"]["components"][0]["parameters"]]
+async def test_one_accepted_the_old_way_still_reads_what_went_then(client, db, seeded, meta, pushes):
+    aid = seeded["agyary_id"]
+    rid = await _sent(client, db, aid)
+    await accepted_the_old_way(db, rid, PANTHAKY, book=False)
+    headers = auth(await sign_in(client, PANTHAKY))
 
+    async def whatsapp(request_id: int) -> dict:
+        return (await client.get(f"{REQUESTS}/{request_id}", headers=headers)).json()["request"]["whatsapp"]
 
-def _buttons(m) -> list:
-    # Meta does not allow buttons that link straight to WhatsApp, so these three
-    # templates have none: the number in the text is tappable instead.
-    return [c for c in m["template"]["components"] if c["type"] == "button"]
+    # Nothing went (sending was off then): it says the messages start once Meta approves them.
+    got = await whatsapp(rid)
+    assert got["state"] == "off" and got["message"] == fw.OFF_WORDS and got["items"] == []
+    assert got["family_note"] is None
 
+    # What went, as accepting wrote it down: to the manager, to them and to the family.
+    for kind, to, status in ((fw.TYPE_MANAGER, "manager", "delivered"), (fw.TYPE_DETAILS, "accepter", "read"),
+                             (fw.TYPE_FAMILY, "family", "sent")):
+        db.add(_old_row(rid, aid, kind, to, status))
+    await db.commit()
+    got = await whatsapp(rid)
+    assert got["state"] == "sent"
+    assert got["message"] == "WhatsApp messages sent from Mobed Diary to the manager, you and the family."
+    assert [(i["to"], i["state"]) for i in got["items"]] == [("manager", "Delivered"), ("accepter", "Read"),
+                                                              ("family", "Sent")]
 
-async def test_switched_off_nothing_is_sent_and_the_accepter_is_told_why(client, db, seeded, meta, pushes):
-    rid = await _sent(client, db, seeded["agyary_id"])
-    body, headers = await _accept(client, rid)
-    assert meta.sent == [] and await _rows(db) == []
-    assert body["whatsapp"]["state"] == "off" and body["whatsapp"]["message"] == fw.OFF_WORDS
-    # The request page says the same later.
-    page = (await client.get(f"{REQUESTS}/{rid}", headers=headers)).json()["request"]
-    assert page["whatsapp"]["state"] == "off" and page["whatsapp"]["message"] == fw.OFF_WORDS
+    # One that did not go says why.
+    await db.execute(update(Notification).where(Notification.notification_type == fw.TYPE_FAMILY).values(
+        status="failed", error_message="Not sent: they replied STOP to Mobed Diary, so nothing more goes to them"))
+    await db.commit()
+    got = await whatsapp(rid)
+    assert got["state"] == "failed"
+    assert got["message"] == ("The WhatsApp message to the family could not be sent: they replied STOP to Mobed "
+                              "Diary, so nothing more goes to them.")
+
+    # Accepted without sharing their number: nothing went, and nothing is said.
+    mgr, _ = await manager(client, db, phone="+919911100072", name="Second Manager")
+    rid2 = await _sent(client, db, aid, mgr=mgr)
+    await accepted_the_old_way(db, rid2, PANTHAKY, share=False, book=False)
+    assert (await whatsapp(rid2))["state"] == "not_shared"
+    # The manager's tick did not say the family agreed: noted.
+    rid3 = await _sent(client, db, aid, whatsapp_agreed=False, mgr=mgr, departed_name="Dinshaw")
+    await accepted_the_old_way(db, rid3, PANTHAKY, book=False)
+    assert "did not include their agreement" in (await whatsapp(rid3))["family_note"]
+    assert meta.sent == []
 
 
 async def test_the_new_tick_is_stored_and_an_old_app_never_agrees_for_the_family(client, db, seeded, pushes):
@@ -149,100 +182,35 @@ async def test_the_new_tick_is_stored_and_an_old_app_never_agrees_for_the_family
     assert row.family_whatsapp_agreed is False
 
 
-async def test_live_with_share_the_three_templates_go_to_the_right_people(client, db, seeded, meta, pushes, live, caplog):
+async def test_live_no_phone_number_reaches_the_rows_or_the_logs(client, db, seeded, meta, pushes, live, caplog):
     caplog.set_level(logging.DEBUG)
-    rid = await _sent(client, db, seeded["agyary_id"], uthamna_date=None, uthamna_time=None)
-    body, headers = await _accept(client, rid)
-    sent = _by_template(meta)
-    assert set(sent) == {"funeral_accepted_manager", "prayer_details_mobed_v2", "prayers_mobed_family"}
-
-    to_manager = sent["funeral_accepted_manager"]
-    assert to_manager["to"] == MANAGER
-    assert _body(to_manager) == ["Behdin Rustom Jamshed", "Er. Hormuz Dadachanji", "Goti Adarian", PANTHAKY]
-    assert _buttons(to_manager) == []
-
-    details = sent["prayer_details_mobed_v2"]
-    assert details["to"] == PANTHAKY
-    b = _body(details)
-    # prayer_details_mobed_v2 (19 Nov 2026): six blanks, no bungli.
-    assert details["template"]["name"] == "prayer_details_mobed_v2"
-    assert b[0] == "Behdin Rustom Jamshed" and b[1] == "Doongerwadi (test)"
-    assert b[2].endswith(", Havan geh") and b[3] == "not fixed yet"
-    assert b[4:] == ["Test Family", FAMILY] and _buttons(details) == []
-
-    family = sent["prayers_mobed_family"]
-    assert family["to"] == FAMILY
-    assert _body(family) == ["Behdin Rustom Jamshed", "Er. Hormuz Dadachanji", "Goti Adarian", PANTHAKY]
-    assert _buttons(family) == []
-
+    rid = await _sent(client, db, seeded["agyary_id"], mobeds_wanted=1)
+    await _pray(client, rid)
+    assert {m["template"]["name"] for m in _all_set_sent(meta)} == {
+        "prayers_all_set_family", "prayer_details_mobed_v3", "funeral_accepted_manager_v2"}
+    # Templates 1-3 are never sent any more.
+    assert not {"funeral_accepted_manager", "prayer_details_mobed_v2", "prayers_mobed_family"} & {
+        m["template"]["name"] for m in _all_set_sent(meta)}
     rows = await _rows(db)
-    assert {(n.notification_type, n.recipient_type, n.status) for n in rows} == {
-        ("funeral_accepted_manager", "user", "sent"), ("prayer_details_mobed", "user", "sent"),
-        ("prayers_mobed_family", "family", "sent")}
-    # The rows keep the names, never a number.
+    assert len(rows) == 3 and all(n.status == "sent" for n in rows)
     for n in rows:
-        assert fw.HIDDEN in n.template_params.values()
         assert not any(p.lstrip("+") in str(v) for v in n.template_params.values() for p in (PANTHAKY, FAMILY))
         assert n.template_params["request"] == str(rid)
-    assert body["whatsapp"]["state"] == "sent"
-    assert body["whatsapp"]["message"] == "WhatsApp messages sent from Mobed Diary to the manager, you and the family."
-    page = (await client.get(f"{REQUESTS}/{rid}", headers=headers)).json()["request"]
-    assert page["whatsapp"]["state"] == "sent"
-    # No phone number in the logs.
     for number in (PANTHAKY, FAMILY, MANAGER):
         assert number not in caplog.text and number.lstrip("+") not in caplog.text
 
 
-async def test_the_family_only_with_their_agreement_and_without_a_stop(client, db, seeded, meta, pushes, live):
-    rid = await _sent(client, db, seeded["agyary_id"], whatsapp_agreed=False)
-    body, _ = await _accept(client, rid)
-    assert set(_by_template(meta)) == {"funeral_accepted_manager", "prayer_details_mobed_v2"}
-    assert "did not include their agreement" in body["whatsapp"]["family_note"]
-
-    meta.sent.clear()
-    db.add(ReminderOptOut(phone="+919822200044", stopped_at=datetime.now(timezone.utc)))
-    await db.commit()
-    mgr, _ = await manager(client, db, phone="+919911100072", name="Second Manager")
-    rec = (await client.post(RECORDS, json=form(family_contact_phone="+919822200044"), headers=mgr)).json()["record"]
-    r = await client.post(f"{RECORDS}/{rec['id']}/requests", headers=mgr,
-                          json={"agyary_id": seeded["agyary_id"], "family_agreed": True, "family_whatsapp_agreed": True})
-    rid2 = r.json()["record"]["requests"][0]["id"]
-    body, _ = await _accept(client, rid2)
-    assert "prayers_mobed_family" not in _by_template(meta)
-    (row,) = [n for n in await fw.rows_for(db, request_id=rid2) if n.notification_type == "prayers_mobed_family"]
-    assert row.status == "failed" and "STOP" in row.error_message
-    assert body["whatsapp"]["state"] == "failed" and "to the family could not be sent" in body["whatsapp"]["message"]
-
-
-async def test_without_the_share_tick_nothing_goes_by_whatsapp(client, db, seeded, meta, pushes, live):
-    rid = await _sent(client, db, seeded["agyary_id"])
-    body, _ = await _accept(client, rid, share=False)
-    assert _on_accept(meta) == [] and await _rows(db) == []
-    assert body["whatsapp"]["state"] == "not_shared"
-
-
-async def test_the_pause_switch_stops_every_send(client, db, seeded, meta, pushes, live):
-    await guardrails.pause(db, config.get_settings(), "test pause")
-    await db.commit()
-    rid = await _sent(client, db, seeded["agyary_id"])
-    body, _ = await _accept(client, rid)
-    assert meta.sent == []
-    rows = await _rows(db)
-    assert len(rows) == 3 and all(n.status == "failed" and "paused" in n.error_message for n in rows)
-    assert body["whatsapp"]["state"] == "failed"
-
-
 async def test_the_daily_limit_stops_sends_and_tells_the_admins(client, db, seeded, meta, pushes, live, monkeypatch):
-    # Two: the call-out at sending takes one (to the one mobed there), accepting the other.
+    # Two: the call-out at sending takes one (to the one mobed there), All set the other.
     monkeypatch.setenv("FUNERAL_WHATSAPP_DAILY_CAP", "2")
     config.get_settings.cache_clear()
     await sign_in(client, ADMIN)
-    rid = await _sent(client, db, seeded["agyary_id"])
+    rid = await _sent(client, db, seeded["agyary_id"], mobeds_wanted=1)
     assert len(meta.sent) == 1
-    await _accept(client, rid)
-    assert len(_on_accept(meta)) == 1
+    await _pray(client, rid)
+    assert len(_all_set_sent(meta)) == 1
     rows = await _rows(db)
-    assert [n.status for n in rows].count("sent") == 1
+    assert len(rows) == 3 and [n.status for n in rows].count("sent") == 1
     assert all("limit" in n.error_message for n in rows if n.status == "failed")
     admin = (await db.execute(select(User).where(User.phone == ADMIN))).scalar_one()
     alerts = (await db.execute(select(AppNotification).where(AppNotification.user_id == admin.id,
@@ -250,34 +218,31 @@ async def test_the_daily_limit_stops_sends_and_tells_the_admins(client, db, seed
     assert len(alerts) == 1
 
 
-@pytest.mark.parametrize("failure", ["timeout", "refused", "crash"])
-async def test_accepting_never_fails_because_a_send_fails(client, db, seeded, meta, pushes, live, monkeypatch, failure):
+@pytest.mark.parametrize("failure", ["timeout", "refused"])
+async def test_all_set_never_fails_because_a_send_fails(client, db, seeded, meta, pushes, live, monkeypatch, failure):
+    rid = await _sent(client, db, seeded["agyary_id"], mobeds_wanted=1)
     if failure == "timeout":
         meta.fail = httpx.ReadTimeout("slow")
-    elif failure == "refused":
-        meta.status = 400
     else:
-        async def boom(*a, **kw):
-            raise RuntimeError("something unexpected")
-        monkeypatch.setattr(fw, "deliver", boom)
-    rid = await _sent(client, db, seeded["agyary_id"])
-    body, headers = await _accept(client, rid)
-    assert body["request"]["status"] == "accepted" and body["request"]["accepted_by_me"] is True
-    assert body["whatsapp"]["state"] == "failed" and "could not be sent" in body["whatsapp"]["message"]
-    assert (await db.get(FuneralRequest, rid)).status == "accepted"
+        meta.status = 400
+    body = await _pray(client, rid)
+    assert body["status"] == "all_set" and [p["name"] for p in body["places"]] == ["Er. Hormuz Dadachanji"]
+    assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "all_set"
+    rows = await _rows(db)
     if failure == "timeout":
-        assert all("may or may not have been sent" in n.error_message for n in await _rows(db))
+        assert rows and all("may or may not have been sent" in n.error_message for n in rows)
     if failure == "refused":
         # A template Meta will not take pauses everything, as for reminders.
+        assert rows and all(n.status == "failed" for n in rows)
         assert await guardrails.paused_reason(db)
 
 
 async def test_a_name_that_breaks_the_rules_is_not_sent_and_says_why(client, db, seeded, meta, pushes, live):
+    rid = await _sent(client, db, seeded["agyary_id"], mobeds_wanted=1)
     await db.execute(update(User).where(User.phone == PANTHAKY).values(name="Er. Visit spam.com"))
     await db.commit()
-    rid = await _sent(client, db, seeded["agyary_id"])
-    body, _ = await _accept(client, rid)
-    # Only the details went: the other two would carry the name.
-    assert set(_by_template(meta)) == {"prayer_details_mobed_v2"}
-    failed = [n for n in await _rows(db) if n.status == "failed"]
-    assert len(failed) == 2 and all("link" in n.error_message for n in failed)
+    await _pray(client, rid)
+    # Each of them names the panthaky going, so none went, and each says why.
+    assert _all_set_sent(meta) == []
+    rows = await _rows(db)
+    assert len(rows) == 3 and all(n.status == "failed" and "link" in n.error_message for n in rows)

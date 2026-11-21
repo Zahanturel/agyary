@@ -2,21 +2,22 @@
 (DECISIONS D10 and its 18 Nov 2026 amendments; docs/phase2-whatsapp-templates.md;
 Phase 2 Steps 5b and 5c).
 
-Four approved Utility templates, and one short text reply:
+Utility templates, and short text replies:
 
-  1  funeral_accepted_manager  to the funeral place's managers: who accepted
-  2  prayer_details_mobed_v2   to the mobed who will pray: the details and the
-                               family's contact (the accepter; and, before R3.1
-                               step 4, each of the first mobeds to say yes to a
-                               call-out - since then nobody going gets them
-                               before All set, Step 5)
-  3  prayers_mobed_family      to the family: who will pray
-  4  prayer_request_mobeds_v2  the call-out to the agyari's mobeds, at once when
-                               a request is sent (and again by the panthaky's
-                               hand), with "Yes, I can pray" / "Not this time"
-                               (v2 since R3.1; the same blanks as v1)
+  1  funeral_accepted_manager  to the managers: who accepted       (not sent
+  2  prayer_details_mobed_v2   to the accepter: the details         since
+  3  prayers_mobed_family      to the family: who will pray          R3.1)
+                               These went on accepting, before R3.1; the
+                               Accept is gone (R3.1 step 7). Their rows are
+                               kept, and a request accepted the old way still
+                               reads what went (summary).
+  4  prayer_request_mobeds_v2  the call-out to the agyari's mobeds: at Send in
+                               Everyone at once, from the board's Ask everyone,
+                               by the safety net, and to a standby asked again,
+                               with "Yes, I can pray" / "Not this time" (v2
+                               since R3.1; the same blanks as v1)
 
-At All set (R3.1 step 5, services/all_set.py), instead of 1-3:
+At All set (R3.1 step 5, services/all_set.py):
 
   5  prayers_all_set_family    to the family: who will pray, the times, the panthaky
   6  prayer_details_mobed_v3   to each mobed going: the details, the family's
@@ -57,7 +58,8 @@ never a phone number (template_params has "[number]" where one went), and the
 logs carry ids only (core/log_safety.py).
 
 Sending happens after the caller's own work has been committed, and never
-raises: accepting a request cannot fail because a message did not go.
+raises: a request cannot fail to be sent, or be all set, because a message did
+not go.
 """
 
 from __future__ import annotations
@@ -72,13 +74,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings, get_settings
-from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, Notification, User
+from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, Notification
 from agyary.models.enums import GEH_NAMES
 from agyary.services import funeral_records, guardrails, reminder_sender, reminders, template_text, wa_send
 
 logger = logging.getLogger(__name__)
 
 # notification_type of each message, the same as the template's default name.
+# 1-3 are not sent since R3.1 (step 7): kept to read what went before.
 TYPE_MANAGER = "funeral_accepted_manager"
 TYPE_DETAILS = "prayer_details_mobed"
 TYPE_FAMILY = "prayers_mobed_family"
@@ -214,10 +217,9 @@ class Send:
 
 
 def template_name(settings: Settings, kind: str) -> str:
+    """The template a message of this kind goes out on. Templates 1-3 are not
+    sent since R3.1, so they are not here (their settings are kept, unused)."""
     return {
-        TYPE_MANAGER: settings.whatsapp_funeral_manager_template,
-        TYPE_DETAILS: settings.whatsapp_prayer_details_template,
-        TYPE_FAMILY: settings.whatsapp_prayers_family_template,
         TYPE_CALLOUT: settings.whatsapp_prayer_request_template,
         TYPE_ALL_SET_FAMILY: settings.whatsapp_all_set_family_template,
         TYPE_ALL_SET_DETAILS: settings.whatsapp_all_set_details_template,
@@ -300,14 +302,6 @@ async def sent_today(db: AsyncSession, now: datetime, agyary_id: int | None = No
     if agyary_id is not None:
         where.append(Notification.agyary_id == agyary_id)
     return (await db.execute(select(func.count()).select_from(Notification).where(*where))).scalar_one()
-
-
-async def room_today(db: AsyncSession, settings: Settings, agyary_id: int, now: datetime) -> int:
-    """How many more may go today for this fire temple, under both limits."""
-    return max(0, min(
-        settings.funeral_whatsapp_daily_cap - await sent_today(db, now),
-        settings.funeral_whatsapp_per_agyari_daily_cap - await sent_today(db, now, agyary_id),
-    ))
 
 
 def _text_problem(s: Send) -> str | None:
@@ -474,86 +468,19 @@ def why(n: Notification) -> str | None:
     return text.removeprefix("Not sent: ")
 
 
-# --- Step 5b: on accept -----------------------------------------------------------
+# --- A request accepted the old way, before R3.1: what went then --------------------
+# Templates 1-3 went on accepting (Step 5b, 18-19 Nov 2026). Nothing sends them
+# since R3.1 step 7; their rows are kept (D8), and the accepter's request still
+# reads what went.
 
 ACCEPT_TO = ("manager", "accepter", "family")
 TO_WORDS = {"manager": "the manager", "accepter": "you", "family": "the family"}
 
 
-def details_send(
-    record: FuneralRecord, place: FuneralPlace, *, phone: str, recipient_type: str, recipient_id: int,
-    agyary_id: int, refs: dict,
-) -> Send:
-    """Template 2 (prayer_details_mobed_v2, the owner's wording of 19 Nov 2026, no bungli): "You
-    will pray for {{1 departed}} at {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}.
-    The family's contact is {{5 name}}, {{6 number}}. Thank you for your service."""
-    return Send(
-        kind=TYPE_DETAILS, phone=phone, recipient_type=recipient_type, recipient_id=recipient_id,
-        agyary_id=agyary_id,
-        params=[departed(record), place.name, geh_saarnu_text(record), uthamna_text(record),
-                record.family_contact_name, record.family_contact_phone],
-        hidden=(6,), refs=refs,
-        names=[("the departed's name", departed(record), template_text.DEPARTED_MAX),
-               ("the place's name", place.name, template_text.TEMPLE_MAX),
-               ("the family's name", record.family_contact_name, CONTACT_NAME_MAX)],
-    )
-
-
-async def after_accept(
-    db: AsyncSession, settings: Settings, request_id: int, *, now: datetime | None = None,
-    client: httpx.AsyncClient | None = None,
-) -> dict:
-    """Once an accept is committed: with "Share my name and number" ticked,
-    template 1 to the place's managers whose access is on, template 2 to the
-    accepter, and template 3 to the family if the manager's tick recorded their
-    agreement. Returns what the accepter is shown. Never raises."""
-    try:
-        return await _after_accept(db, settings, request_id, now=now or _now(), client=client)
-    except Exception:   # noqa: BLE001 - accepting must never fail because of a message
-        logger.exception("Doongerwadi WhatsApp after accepting request %s failed", request_id)
-        await db.rollback()
-        return {"state": "failed", "message": "The WhatsApp messages could not be sent.", "items": []}
-
-
-async def _after_accept(db, settings, request_id, *, now, client) -> dict:
-    from agyary.services import funeral_answers   # here: funeral_answers reads summary() from this module
-
-    request = await db.get(FuneralRequest, request_id)
-    if request is None or not request.accepter_shared_contact or not request.accepted_by_user_id:
-        return await summary(db, settings, request) if request else {"state": "not_shared", "items": []}
-    if not mode_on(settings):
-        logger.info("Doongerwadi WhatsApp is off: nothing sent for request %s", request.id)
-        return await summary(db, settings, request)
-    if await rows_for(db, request_id=request.id, kinds=(TYPE_MANAGER, TYPE_FAMILY)):
-        return await summary(db, settings, request)     # already done once
-    record = await db.get(FuneralRecord, request.funeral_record_id)
-    place = await db.get(FuneralPlace, record.funeral_place_id)
-    agyary = await db.get(Agyary, request.agyary_id)
-    mobed = await db.get(User, request.accepted_by_user_id)
-    name = departed(record)
-    who = [("the departed's name", name, template_text.DEPARTED_MAX),
-           ("the mobed's name", mobed.name, template_text.MOBED_NAME_MAX),
-           ("the fire temple's name", agyary.name, template_text.TEMPLE_MAX)]
-    who_params = [name, mobed.name, agyary.name, mobed.phone]
-    sends = [
-        Send(kind=TYPE_MANAGER, phone=m.phone, recipient_type="user", recipient_id=m.id, agyary_id=agyary.id,
-             params=who_params, hidden=(4,),
-             refs={"request": request.id, "to": "manager"}, names=who)
-        for m in await funeral_answers._managers(db, settings, record.funeral_place_id)
-    ]
-    sends.append(details_send(record, place, phone=mobed.phone, recipient_type="user", recipient_id=mobed.id,
-                              agyary_id=agyary.id, refs={"request": request.id, "to": "accepter"}))
-    if request.family_whatsapp_agreed:
-        sends.append(Send(kind=TYPE_FAMILY, phone=record.family_contact_phone, recipient_type="family",
-                          recipient_id=record.id, agyary_id=agyary.id, params=who_params, hidden=(4,),
-                          refs={"request": request.id, "to": "family"}, names=who))
-    await deliver(db, settings, sends, now=now, client=client)
-    return await summary(db, settings, request)
-
-
 async def summary(db: AsyncSession, settings: Settings | None, request: FuneralRequest) -> dict:
-    """What the accepter is told about the messages for their accept: the
-    state, a sentence, and each message (to the manager, them, the family)."""
+    """What the accepter of a request accepted the old way reads about the
+    messages for their accept: the state, a sentence, and each message (to the
+    manager, them, the family)."""
     settings = settings or get_settings()
     if not request.accepter_shared_contact:
         return {"state": "not_shared", "message": None, "items": []}

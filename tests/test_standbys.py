@@ -408,9 +408,7 @@ async def test_someone_who_backed_out_counts_as_going_nowhere(client, db, seeded
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
     assert [s["name"] for s in board["standbys"]] == ["Er. Second"]
     assert MOBED_NAME not in [p["name"] for p in board["places"] + board["standbys"]]
-    # The call-out screen reads the same, and a call cannot mark them going again by mistake.
-    view = await prayer_callout.view(db, config.get_settings(), hormuz, request)
-    assert view["going"] == 1
+    # A call cannot mark them going again by mistake.
     r = await client.post(_b(rid, "call-result"), json={"key": f"u{kias.id}", "result": "going"},
                           headers=await _as(client, PANTHAKY))
     assert r.status_code == 409 and r.json()["detail"] == f"{MOBED_NAME} has said they can't go."

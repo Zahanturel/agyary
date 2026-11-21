@@ -191,8 +191,9 @@ async def test_an_all_set_request_is_taken_for_good_on_the_managers_side(client,
     got = (await client.get(f"/api/mobed/manager/records/{record_id}", headers=mgr)).json()["record"]
     assert got["may_send"] is False and got["may_edit"] is False
     assert got["requests"][0]["status"] == "all_set"
-    r = await client.post(f"/api/mobed/requests/{rid}/accept", json={}, headers=await _as(client, PANTHAKY))
+    r = await client.post(f"/api/mobed/requests/{rid}/decline", json={}, headers=await _as(client, PANTHAKY))
     assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is all set."
+    assert (await _request(db, rid)).status == "all_set"
     assert len(list((await db.execute(select(FuneralRequest))).scalars())) == 1
 
 
@@ -631,10 +632,12 @@ async def test_an_app_mobed_answers_in_the_app_and_the_first_answer_counts_acros
     assert r.status_code == 409 and r.json()["detail"] == prayer_callout.PANTHAKY_USES_BOARD
     r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=await _as(client, SECOND))
     assert r.status_code == 404
-    # The old Accept is for the panthaky here: a mobed answers for themselves.
+    # The old Accept is gone (R3.1 step 7): a mobed answers for themselves, and only the
+    # board's actions take a request.
     r = await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=mobed)
-    assert r.status_code == 409 and "The panthaky of Goti Adarian takes this request" in r.json()["detail"]
-    assert (await _request(db, rid)).status == "waiting"
+    assert r.status_code == 404
+    request = await _request(db, rid)
+    assert request.status == "waiting" and request.taken_at is None and request.accepted_by_user_id is None
 
 
 async def test_a_mobeds_not_this_time_answers_only_for_them_and_a_late_yes_is_a_standby(client, db, seeded,

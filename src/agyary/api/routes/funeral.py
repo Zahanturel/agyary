@@ -26,7 +26,10 @@ answers 404.
 
 The fire temple's side (Step 5): the requests a mobed was asked, answered from
 their Requests tab (services/funeral_answers.py). These are mobed routes,
-closed to a manager's account like the rest of the mobed app.
+closed to a manager's account like the rest of the mobed app. Since R3.1 step
+7 there is no Accept: a request is taken only by the board's actions
+(routes/callouts.py), and a request accepted the old way before R3.1 is still
+read here as it was (D8).
 """
 
 from __future__ import annotations
@@ -60,7 +63,6 @@ from agyary.services import (
     funeral_places,
     funeral_records,
     funeral_requests,
-    funeral_whatsapp,
     guardrails,
     prayer_callout,
     standbys,
@@ -510,11 +512,6 @@ async def withdraw_request(
 # ---------------------------------------------------------------------------
 # Mobed routes: get_current_user refuses a manager's account (and anyone whose
 # access is not on). A request is 404 to anyone who was not asked.
-class AcceptIn(BaseModel):
-    # "Share my name and number with <the funeral place>", on by default.
-    share_contact: bool = True
-
-
 class DeclineIn(BaseModel):
     reason: str | None = Field(default=None, max_length=600)
 
@@ -544,7 +541,9 @@ async def my_request_count(db: AsyncSession = Depends(get_db), user: User = Depe
 @router.get("/requests")
 async def my_requests(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     """The requests this mobed was asked: those waiting, and the last few
-    answered or withdrawn. No family name or number until they accept."""
+    answered or withdrawn. No family name or number until it is all set, and
+    then only for those whose book it put the family in (or, on a request
+    accepted the old way, for the one who accepted it)."""
     waiting, earlier = await funeral_answers.for_user(db, user.id)
     return {
         "waiting": await funeral_answers.serialize(db, user, waiting),
@@ -557,38 +556,6 @@ async def my_request(
     request_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user),
 ) -> dict:
     return {"request": await _one(db, user, await _asked_request(db, user, request_id))}
-
-
-@router.post("/requests/{request_id}/accept")
-async def accept_request(
-    request_id: int, payload: AcceptIn, db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> dict:
-    """Accept for the fire temple; the first to accept takes it. Sets up the
-    behdin in this mobed's own book and the Geh-saarnu and Uthamna on their
-    calendar, and returns the memorial form's fields for them to check."""
-    rate_limit.enforce_key(f"funeral_answer:{user.id}", max_requests=30, window_seconds=3600)
-    request = await _asked_request(db, user, request_id)
-    settings = get_settings()
-    try:
-        done = await funeral_answers.accept(db, settings, user, request, share_contact=payload.share_contact)
-    except funeral_answers.AnswerError as exc:
-        raise _answer_error(exc) from exc
-    await db.commit()
-    # Only now, with the accept committed: the WhatsApp messages from our number
-    # (Step 5b). They never make the accept fail; what happened is said.
-    whatsapp = await funeral_whatsapp.after_accept(db, settings, request.id)
-    # Read again: a failure in sending rolls the session back, which forgets them.
-    await db.refresh(request)
-    await db.refresh(user)
-    return {
-        "request": await _one(db, user, request),
-        "customer_id": done.customer_id,
-        "behdin_created": done.behdin_created,
-        "events": done.events,
-        "skipped": done.skipped,
-        "whatsapp": whatsapp,
-    }
 
 
 class AnswerIn(BaseModel):

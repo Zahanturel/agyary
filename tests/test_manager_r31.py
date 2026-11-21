@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from agyary.core import config
 from agyary.models import Agyary, AppNotification, FuneralRecord, FuneralRequest, User
 from agyary.services import funeral_records, prayer_timers
-from tests.funeral_helpers import FAMILY, MANAGER, MUMBAI, agyari, form, manager, member
+from tests.funeral_helpers import FAMILY, MANAGER, MUMBAI, accepted_the_old_way, agyari, form, manager, member
 from tests.test_prayer_callout import ADMIN, LIVE, MOBED, PANTHAKY, _as, _way
 
 RECORDS = "/api/mobed/manager/records"
@@ -247,9 +247,7 @@ async def test_declined_nobody_withdrawn_and_accepted_the_old_way(client, db, se
 
     # Accepted the old way (D8): reads as before, the number only with the accepter's tick.
     rid4, record4, _ = await _send(client, db, aid, mgr)
-    r = await client.post(f"{REQUESTS}/{rid4}/accept", json={"share_contact": True},
-                          headers=await _as(client, PANTHAKY))
-    assert r.status_code == 200, r.text
+    await accepted_the_old_way(db, rid4, PANTHAKY, share=True)
     q = await _latest(client, record4, mgr)
     assert (q["stage"], q["headline"]) == ("accepted", f"Accepted by {HEAD} of Goti Adarian")
     assert q["accepted_by"] == HEAD and q["accepter_phone"] == PANTHAKY

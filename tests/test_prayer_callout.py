@@ -41,7 +41,7 @@ from agyary.models import (
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import prayer_callout, request_settings
 from tests.conftest import WA_APP_SECRET, sign_in
-from tests.funeral_helpers import FAMILY, agyari, auth, form, manager, member
+from tests.funeral_helpers import FAMILY, accepted_the_old_way, agyari, auth, form, manager, member
 
 RECORDS = "/api/mobed/manager/records"
 PANTHAKY, MOBED, ADMIN = "+919800000001", "+919800000002", "+919800000003"
@@ -205,21 +205,23 @@ async def test_switched_off_nothing_goes_at_send_and_the_screens_say_why(client,
     (row,) = (await _answers(db)).values()
     assert row.phone == MOBED and row.how == "app" and row.answer is None
     panthaky = await _as(client, PANTHAKY)
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    assert view["whatsapp"] == {"on": False, "why_not": fw.OFF_WORDS}
-    assert view["open"] is True and view["going"] == 0 and view["wanted"] == 5
-    assert [(p["name"], p["asked"], p["answer"]) for p in view["asked"]] == [("Er. Pervez Kias", None, None)]
-    assert FAMILY not in json.dumps(view) and "Test Family" not in json.dumps(view)
-    r = await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": [view["candidates"][0]["key"]]},
-                          headers=panthaky)
-    assert r.status_code == 409 and r.json()["detail"] == fw.OFF_WORDS
+    board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
+    assert board["whatsapp"] == {"on": False, "why_not": fw.OFF_WORDS}
+    assert board["open"] is True and board["going"] == 0 and board["wanted"] == 5
+    (kias,) = [m for m in board["mobeds"] if m["name"] == "Er. Pervez Kias"]
+    assert kias["state"] == "asked_app" and kias["whatsapp"] is None
+    assert FAMILY not in json.dumps(board) and "Test Family" not in json.dumps(board)
+    # Asked in the app already, and WhatsApp is off: Ask everyone says why it can ask nobody.
+    assert board["ask_everyone"]["can"] is False and fw.OFF_WORDS in board["ask_everyone"]["why_not"]
+    r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
+    assert r.status_code == 409 and fw.OFF_WORDS in r.json()["detail"]
     assert meta.sent == []
     # The request's own page shows the panthaky the call-out while it waits.
     page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
     assert page["may_call_out"] is True and page["callout"] == {"asked": 1, "yes": 0, "going": 0, "wanted": 5}
     assert page["callout_whatsapp"]["on"] is False
     # Not the panthaky: 404.
-    r = await client.get(f"/api/mobed/requests/{rid}/callout", headers=await _as(client, MOBED))
+    r = await client.get(f"/api/mobed/requests/{rid}/board", headers=await _as(client, MOBED))
     assert r.status_code == 404
 
 
@@ -256,15 +258,17 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     payload = next(m for m in asked if m["to"] == MOBED)["template"]["components"][1]["parameters"][0]["payload"]
     assert payload == f"pca:{kias.token}:y"
 
-    # Each is asked once per request; those who could not be asked say why.
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    by_name = {c["name"]: c for c in view["candidates"]}
-    assert by_name["Er. Pervez Kias"]["asked_already"] and by_name["Er. Listed"]["asked_already"]
-    assert not by_name["Er. Stopped"]["may_ask"] and "STOP" in by_name["Er. Stopped"]["why_not"]
-    assert not by_name["Er. Switched Off"]["may_ask"] and "switched off" in by_name["Er. Switched Off"]["why_not"]
-    r = await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": [by_name["Er. Pervez Kias"]["key"]]},
-                          headers=panthaky)
-    assert r.status_code == 400 and "asked already" in r.json()["detail"]
+    # Each is asked once per request; those who could not be asked say why, on the board.
+    board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
+    by_name = {m["name"]: m for m in board["mobeds"]}
+    assert by_name["Er. Pervez Kias"]["state"] == "asked_whatsapp" and not by_name["Er. Pervez Kias"]["can_ask"]
+    assert by_name["Er. Listed"]["state"] == "asked_whatsapp" and not by_name["Er. Listed"]["can_ask"]
+    assert not by_name["Er. Stopped"]["can_ask"] and "STOP" in by_name["Er. Stopped"]["why_not"]
+    assert not by_name["Er. Switched Off"]["can_ask"] and "switched off" in by_name["Er. Switched Off"]["why_not"]
+    assert board["ask_everyone"]["can"] is False
+    r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
+    assert r.status_code == 409 and "asked already" in r.json()["detail"]
+    assert len(meta.templates("prayer_request_mobeds_v2")) == 2
 
     # Forged, unknown, or from another number: nothing changes.
     meta.sent.clear()
@@ -289,7 +293,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     (going,) = await _notes(db, PANTHAKY, prayer_callout.KIND_GOING)
     assert going.title == "Er. Pervez Kias is going (1 of 1)"
     assert going.body == "Er. Pervez Kias said yes on WhatsApp for the prayers for Behdin Rustom Jamshed: 1 of 1 going."
-    assert going.link == f"#/requests/{rid}/callout"
+    assert going.link == f"#/requests/{rid}"
     # (The All set notices that follow are tests/test_all_set.py's.)
     (push,) = [p for p in pushes if p["title"] != "All set"]
     assert push["title"] == "Er. Pervez Kias is going (1 of 1)"
@@ -312,12 +316,10 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     assert also.title == "Er. Listed also said yes" and "standby" in also.body
     assert len([p for p in pushes if p["title"] != "All set"]) == 1     # no phone notification for it
 
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    people = {p["name"]: p for p in view["asked"]}
-    assert view["going"] == 1 and view["wanted"] == 1 and view["open"] is False
-    assert people["Er. Pervez Kias"]["going"] and people["Er. Pervez Kias"]["details"] is None
-    assert not people["Er. Pervez Kias"]["may_resend"]
-    assert not people["Er. Listed"]["going"] and people["Er. Listed"]["enough"]["state"] == "Sent"
+    board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
+    assert board["going"] == 1 and board["wanted"] == 1 and board["open"] is False
+    assert [p["name"] for p in board["places"]] == ["Er. Pervez Kias"]
+    assert [s["name"] for s in board["standbys"]] == ["Er. Listed"]
     page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
     assert page["status"] == "all_set" and page["callout"] == {"asked": 2, "yes": 2, "going": 1, "wanted": 1}
     assert "family_contact" not in page
@@ -333,9 +335,8 @@ async def test_two_go_when_nobody_said_how_many_and_after_accepting_too(client, 
         assert r.status_code == 200, r.text
     rid, res, _ = await _send(client, db, aid, mobeds_wanted=None)
     assert res["callout"]["asked"] == 3
-    # The panthaky accepts in the app; the mobeds' answers still count.
-    r = await client.post(f"/api/mobed/requests/{rid}/accept", json={"share_contact": False}, headers=panthaky)
-    assert r.status_code == 200, r.text
+    # The panthaky had accepted it the old way, before R3.1; the mobeds' answers still count.
+    await accepted_the_old_way(db, rid, PANTHAKY, share=False)
     meta.sent.clear()
     answers = await _answers(db)
     for phone in (SECOND, MOBED, LISTED):
@@ -345,51 +346,14 @@ async def test_two_go_when_nobody_said_how_many_and_after_accepting_too(client, 
     assert [m["to"] for m in meta.texts()] == [LISTED]
     answers = await _answers(db)
     assert [p for p in (SECOND, MOBED, LISTED) if answers[p].picked_at] == [SECOND, MOBED]
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    assert view["wanted"] == prayer_callout.DEFAULT_WANTED == 2 and view["going"] == 2
-    # Accepted the old way before R3.1: it keeps its state when its places fill (D8).
+    page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
+    assert page["callout"] == {"asked": 3, "yes": 3, "going": 2, "wanted": prayer_callout.DEFAULT_WANTED}
+    assert prayer_callout.DEFAULT_WANTED == 2
+    # Accepted the old way before R3.1: it keeps its state when its places fill (D8), and the
+    # accepter still reads the family's contact on it.
     assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "accepted"
-
-
-async def test_details_that_did_not_go_can_be_sent_again_but_never_twice(client, db, seeded, meta, pushes, live):
-    from agyary.models import Notification
-    from agyary.services import guardrails
-
-    rid, _, _ = await _send(client, db, seeded["agyary_id"])
-    panthaky = await _as(client, PANTHAKY)
-    answer = (await _answers(db))[MOBED]
-    meta.sent.clear()
-    await _signed_tap(client, MOBED, f"pca:{answer.token}:y")
-    again = f"/api/mobed/requests/{rid}/callout/details-again"
-    # Going since R3.1: no details were tried, so there is nothing to send again before All set.
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    (person,) = view["asked"]
-    assert person["going"] and not person["may_resend"] and person["details"] is None
-    r = await client.post(again, headers=panthaky)
-    assert r.status_code == 200 and r.json()["done"] == {"tried": 0, "sent": 0} and meta.sent == []
-
-    # One going from before R3.1 whose details were tried while sending was paused.
-    db.add(Notification(agyary_id=seeded["agyary_id"], recipient_phone=MOBED, recipient_type="user",
-                        recipient_id=answer.user_id, notification_type=fw.TYPE_DETAILS,
-                        template_name="prayer_details_mobed_v2", status="failed",
-                        error_message=f"Not sent: {fw.PAUSED}",
-                        template_params={"request": str(rid), "answer": str(answer.id), "to": "going"}))
-    await guardrails.pause(db, config.get_settings(), "test pause")
-    await db.commit()
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    (person,) = view["asked"]
-    assert person["going"] and person["may_resend"] and "paused" in person["details"]["why"]
-    r = await client.post(again, headers=panthaky)
-    assert r.status_code == 409 and "paused" in r.json()["detail"]
-    await guardrails.resume(db)
-    await db.commit()
-    r = await client.post(again, headers=panthaky)
-    assert r.status_code == 200 and r.json()["done"] == {"tried": 1, "sent": 1}
-    assert len(meta.templates("prayer_details_mobed_v2")) == 1 and not r.json()["asked"][0]["may_resend"]
-    r = await client.post(again, headers=panthaky)
-    assert r.json()["done"] == {"tried": 0, "sent": 0} and len(meta.templates("prayer_details_mobed_v2")) == 1
-    # Nobody else's: a mobed of the fire temple cannot.
-    assert (await client.post(again, headers=await _as(client, MOBED))).status_code == 404
+    assert page["status"] == "accepted" and page["accepted_by_me"] is True
+    assert page["family_contact"]["phone"] == FAMILY and page["all_set"] is None
 
 
 async def test_withdrawing_tells_those_who_said_yes_inside_24_hours(client, db, seeded, meta, pushes, live):
@@ -415,13 +379,13 @@ async def test_withdrawing_tells_those_who_said_yes_inside_24_hours(client, db, 
     await _signed_tap(client, SECOND, f"pca:{answers[SECOND].token}:y")
     assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(SECOND, fw.WITHDRAWN_TEXT)]
     assert (await _answers(db))[SECOND].picked_at is None
-    # Closed: nobody more is asked, and the screen says it is closed.
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    assert view["open"] is False and view["candidates"] == []
-    assert {p["name"]: (p["withdrawn_note"] or {}).get("state") for p in view["asked"]} == {
-        "Er. Pervez Kias": "Sent", "Er. Listed": None, "Er. Second": "Sent"}
-    r = await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": ["u1"]}, headers=panthaky)
-    assert r.status_code == 409 and "closed" in r.json()["detail"]
+    # Closed: nobody more is asked, and the board says it is withdrawn.
+    board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
+    assert board["open"] is False and board["ask_everyone"]["can"] is False
+    assert "withdrew" in board["ask_everyone"]["why_not"]
+    r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
+    assert r.status_code == 409 and "withdrew" in r.json()["detail"]
+    assert {(m["to"], m["text"]["body"]) for m in meta.texts()} == {(SECOND, fw.WITHDRAWN_TEXT)}
 
 
 async def test_declining_tells_them_too(client, db, seeded, meta, pushes, live):
@@ -507,14 +471,14 @@ async def test_come_to_me_first_tells_only_the_panthaky_and_asks_nobody_at_send(
     assert "Goti Adarian" in note.body
     assert await _notes(db, MOBED, "funeral_request") == []
     assert [p["to"] for p in pushes] == [[(await db.execute(select(User.id).where(User.phone == PANTHAKY))).scalar_one()]]
-    # The panthaky chooses who to ask: everyone on the list is still there to ask.
-    view = (await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)).json()
-    assert view["asked"] == [] and {c["name"] for c in view["candidates"] if c["may_ask"]} == {
+    # The panthaky chooses who to ask, on the board: everyone on the list is still there to ask.
+    board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
+    assert board["places"] == [] and {m["name"] for m in board["mobeds"] if m["can_ask"]} == {
         "Er. Pervez Kias", "Er. Listed"}
-    key = next(c["key"] for c in view["candidates"] if c["name"] == "Er. Pervez Kias")
-    r = await client.post(f"/api/mobed/requests/{rid}/callout", json={"who": [key]}, headers=panthaky)
-    assert r.status_code == 200 and r.json()["asked_now"] == 1
-    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [MOBED]
+    assert {m["state"] for m in board["mobeds"]} == {"not_asked"}
+    r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"]["asked"] == 2, r.text
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted([MOBED, LISTED])
 
 
 async def test_come_to_me_first_with_two_panthakys_says_panthakys(client, db, seeded, meta, pushes, live):

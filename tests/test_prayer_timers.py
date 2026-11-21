@@ -6,7 +6,8 @@ all our mobeds", the loop asks everyone on WhatsApp - as Everyone at once does
 at Send - once that long has passed with the request still waiting and the
 panthaky not having acted: never before, never twice (two loops at once
 included), never under Never, never once the panthaky switched to Everyone at
-once, asked by hand, accepted or declined, nor once the request was withdrawn.
+once, acted on the board, accepted (the old way) or declined, nor once the
+request was withdrawn.
 When nobody can be asked it is still done once, and the panthaky is told what
 happened, in the app and on their phone, with nothing about the family. D9:
 nothing goes to or under an account that is not on. The loop runs the timers
@@ -31,7 +32,7 @@ from agyary.core.config import Settings
 from agyary.models import Agyary, FuneralRequest, PrayerCallout, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import prayer_timers, reminder_sender, reminder_worker, reminders
-from tests.funeral_helpers import FAMILY, member
+from tests.funeral_helpers import FAMILY, accepted_the_old_way, member
 from tests.test_prayer_callout import (
     LISTED,
     LIVE,
@@ -146,7 +147,7 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     assert note.body == ("Nobody had answered the request from Doongerwadi (test) for Behdin Rustom Jamshed in "
                          "30 minutes, so Mobed Diary asked all your mobeds. "
                          "1 mobed of Goti Adarian was asked in the app, and 2 on WhatsApp.")
-    assert note.link == f"#/requests/{rid}/callout" and note.agyary_id == aid
+    assert note.link == f"#/requests/{rid}" and note.agyary_id == aid
     request_push, push = pushes
     assert request_push["to"] == [await _uid(db, MOBED)] and request_push["title"] == "A request for prayers"
     (asked_in_app,) = await _notes(db, MOBED, "funeral_request")
@@ -154,7 +155,7 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     assert push["to"] == [await _uid(db, PANTHAKY)] and push["title"] == "All your mobeds were asked"
     assert push["body"] == ("Nobody had answered the request from Doongerwadi (test) in 30 minutes, "
                             "so Mobed Diary asked all your mobeds.")
-    assert push["url"] == f"/mobed#/requests/{rid}/callout"
+    assert push["url"] == f"/mobed#/requests/{rid}"
     for text in (note.title, note.body, push["title"], push["body"]):
         assert FAMILY not in text and FAMILY[3:] not in text and "Test Family" not in text
     assert "Rustom" not in push["body"]
@@ -172,16 +173,13 @@ async def test_nothing_once_the_panthaky_acted_or_the_request_stopped_waiting(cl
                                                                               live):
     aid = seeded["agyary_id"]
     panthaky = await _as(client, PANTHAKY)
-    # The panthaky asked a mobed by hand.
+    # The panthaky asked everyone from the board.
     asked_rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15)
-    view = (await client.get(f"/api/mobed/requests/{asked_rid}/callout", headers=panthaky)).json()
-    r = await client.post(f"/api/mobed/requests/{asked_rid}/callout", json={"who": [view["candidates"][0]["key"]]},
-                          headers=panthaky)
-    assert r.status_code == 200 and r.json()["asked_now"] == 1
-    # Accepted, declined, withdrawn.
+    r = await client.post(f"/api/mobed/requests/{asked_rid}/ask-everyone", headers=panthaky)
+    assert r.status_code == 200 and r.json()["done"]["asked"] == 1, r.text
+    # Accepted the old way (before R3.1), declined, withdrawn.
     accepted, _, _ = await _come_to_me_first(client, db, aid, 15, mgr)
-    r = await client.post(f"/api/mobed/requests/{accepted}/accept", json={"share_contact": False}, headers=panthaky)
-    assert r.status_code == 200, r.text
+    await accepted_the_old_way(db, accepted, PANTHAKY, share=False, book=False)
     declined, _, _ = await _come_to_me_first(client, db, aid, 15, mgr)
     r = await client.post(f"/api/mobed/requests/{declined}/decline", json={"reason": None}, headers=panthaky)
     assert r.status_code == 200, r.text

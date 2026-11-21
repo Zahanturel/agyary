@@ -19,7 +19,7 @@ from agyary.api.routes import funeral as funeral_routes
 from agyary.api.routes import mobed as mobed_routes
 from agyary.core import config
 from agyary.models import Agyary, AppNotification, FuneralRecord, FuneralRequest, User
-from agyary.services import funeral_answers
+from agyary.services import all_set, funeral_answers
 from tests.conftest import sign_in
 from tests.funeral_helpers import MUMBAI, auth, form, manager, place
 
@@ -114,18 +114,20 @@ async def test_the_admin_does_all_a_manager_does_for_that_place_and_its_managers
     r = await client.post(f"{RECORDS}/{rec['id']}/requests?{act}", json=send, headers=admin)
     rid = r.json()["record"]["requests"][0]["id"]
 
-    # The admin is also the fire temple's panthaky: they accept it in the same app.
-    accepted = await client.post(f"{REQUESTS}/{rid}/accept", json={"share_contact": True}, headers=admin)
-    assert accepted.status_code == 200, accepted.text
+    # The admin is also the fire temple's panthaky: on the request's board in the same app they
+    # pray themselves and confirm with who's going (the old Accept is gone, R3.1 step 7).
+    for what in ("self", "confirm-short"):
+        r = await client.post(f"{REQUESTS}/{rid}/{what}", json={}, headers=admin)
+        assert r.status_code == 200, (what, r.text)
     for headers in (admin, mgr):
         q = (await client.get(f"{RECORDS}/{rec['id']}?{act}" if headers is admin else f"{RECORDS}/{rec['id']}",
                               headers=headers)).json()["record"]["requests"][0]
-        assert q["status"] == "accepted" and q["accepted_by"] == "Er. Hormuz Dadachanji"
+        assert q["status"] == "all_set" and q["going_names"] == ["Er. Hormuz Dadachanji"]
 
-    # The answer reaches the manager, and the admin who sent it, each with their own way back.
+    # All set reaches the manager, and the admin who sent it, each with their own way back.
     mgr_id = (await client.get("/api/mobed/auth/me", headers=mgr)).json()["id"]
-    (to_mgr,) = await _notices(db, mgr_id, funeral_answers.KIND_ACCEPTED)
-    (to_admin,) = await _notices(db, admin_id, funeral_answers.KIND_ACCEPTED)
+    (to_mgr,) = await _notices(db, mgr_id, all_set.KIND_ALL_SET)
+    (to_admin,) = [n for n in await _notices(db, admin_id, all_set.KIND_ALL_SET) if n.link.startswith("#/admin/")]
     assert to_mgr.link == f"#/manager/record/{rec['id']}"
     assert to_admin.link == f"#/admin/act/{at.id}/record/{rec['id']}"
     answered = [p for p in pushes if p.get("tag") == f"funeral-answer-{rid}"]

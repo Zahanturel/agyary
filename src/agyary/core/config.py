@@ -70,10 +70,13 @@ class Settings(BaseSettings):
     # allowlist (REMINDERS_ALLOWLIST) and the limits below. The template names
     # are settings so a renamed or re-approved template needs no code change.
     funeral_whatsapp_mode: str = "off"                                 # off | live
-    whatsapp_funeral_manager_template: str = "funeral_accepted_manager"   # 1: to the manager
-    # 2: to the mobed who prays. v2 (19 Nov 2026) has no bungli and six blanks.
+    # Templates 1-3 went on accepting a request, before R3.1. They are no longer
+    # sent (the Accept is gone since R3.1 step 7); the settings are kept only so
+    # a server .env that names them still loads, and nothing reads them.
+    whatsapp_funeral_manager_template: str = "funeral_accepted_manager"   # 1: no longer sent
+    # 2: no longer sent (v2 of 19 Nov 2026 had no bungli and six blanks).
     whatsapp_prayer_details_template: str = "prayer_details_mobed_v2"
-    whatsapp_prayers_family_template: str = "prayers_mobed_family"       # 3: to the family
+    whatsapp_prayers_family_template: str = "prayers_mobed_family"       # 3: no longer sent
     # 4: the call-out to the fire temple's mobeds. v2 (owner, 21 Nov 2026: R3.1) has
     # the same six blanks as v1 and more fixed words: the details come once enough
     # mobeds are going, and a mobed's name and number go to the family. Until Meta

@@ -179,20 +179,15 @@ async def test_no_other_screen_gives_out_the_app_mobeds_numbers(client, db, seed
     assert r.status_code == 200, r.text
     rid = r.json()["record"]["requests"][0]["id"]
 
-    # The panthaky's call-out screen lists the app mobeds without their numbers.
+    # The requests do not, for the panthaky or a mobed there, nor the manager's record. (The
+    # old call-out screen is gone since R3.1 step 7; the board shows numbers only to the
+    # panthakys the request reached and the admin, tests/test_prayer_board.py.)
     panthaky = await _as(client, PANTHAKY)
-    view = await client.get(f"/api/mobed/requests/{rid}/callout", headers=panthaky)
-    assert view.status_code == 200, view.text
-    app = [c for c in view.json()["candidates"] if c["kind"] == "app"]
-    assert {c["name"] for c in app} >= {"Er. Pervez Kias", "Er. Switched Off", "Er. Waiting", "Er. Stopped"}
-    assert all(c["phone"] is None for c in app)
-
-    # Nor do the requests, for the panthaky or a mobed there, or the manager's record.
     seen = [(PANTHAKY, path, await client.get(path, headers=panthaky))
-            for path in ("/api/mobed/requests", f"/api/mobed/requests/{rid}", f"/api/mobed/requests/{rid}/callout")]
+            for path in ("/api/mobed/requests", f"/api/mobed/requests/{rid}")]
     mobed = await _as(client, MOBED)
     seen += [(MOBED, path, await client.get(path, headers=mobed))
-             for path in ("/api/mobed/requests", f"/api/mobed/requests/{rid}", f"/api/mobed/requests/{rid}/callout")]
+             for path in ("/api/mobed/requests", f"/api/mobed/requests/{rid}", f"/api/mobed/requests/{rid}/board")]
     seen += [("manager", path, await client.get(path, headers=mgr))
              for path in (f"{RECORDS}/{rec['id']}", f"{RECORDS}/{rec['id']}/agyaries")]
     for who, path, r in seen:

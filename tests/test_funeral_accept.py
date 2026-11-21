@@ -1,29 +1,28 @@
 """A request for prayers on the fire temple's side (DECISIONS D10 and its 18 Nov
-amendment, D2, D4; Phase 2 Step 5).
+amendment, D2, D4; Phase 2 Step 5; R3.1).
 
-Only those asked see a request; the family's name and number are not shown
-before accepting, and then only to the one who accepted. The first to accept
-takes it, under concurrency too; a request that is no longer waiting is refused
-in plain words. Accepting sets up the accepter's own book only - their own
-record of the number (reused if they have one, made if not, reminders off, a
-STOP kept), the Geh-saarnu and the Uthamna on their calendar - and never reads
-or touches another mobed's record of the same number. The manager sees the
-accepter's number only with the tick; nobody's notice or phone notification
-carries the family's details. Declining takes a short reason.
+Only those asked see a request, and the family's name and number are not shown
+to them. Since R3.1 step 7 there is no Accept: the board's actions are the only
+way to take a request (tests/test_prayer_board.py), and the old Accept and
+call-out routes are gone. A request accepted the old way before R3.1 stays (D8)
+and still reads as it did: the family's contact, the message to them and the
+memorial only for the one who accepted, "Accepted by <name>" for the others, and
+the accepter's number for the manager only with their tick. The family going
+into one person's book (put_in_book, which All set uses) sets up their own book
+only - their own record of the number (reused if they have one, made if not,
+reminders off, a STOP kept), the Geh-saarnu and the Uthamna on their calendar -
+and never reads or touches another mobed's record of the same number. Declining
+takes a short reason.
 """
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 from agyary.api.routes import mobed as mobed_routes
-from agyary.core import config
 from agyary.models import (
     Agyary,
     AppNotification,
@@ -32,13 +31,15 @@ from agyary.models import (
     Customer,
     FuneralRequest,
     Memorial,
+    Notification,
+    PrayerCallout,
     ReminderOptOut,
     Service,
     User,
 )
-from agyary.services import funeral_answers, funeral_records
-from tests.conftest import TEST_DATABASE_URL, sign_in
-from tests.funeral_helpers import FAMILY, agyari, auth, form, manager, member
+from agyary.services import funeral_records
+from tests.conftest import sign_in
+from tests.funeral_helpers import FAMILY, accepted_the_old_way, agyari, auth, form, manager, member
 
 RECORDS = "/api/mobed/manager/records"
 REQUESTS = "/api/mobed/requests"
@@ -82,7 +83,7 @@ def _no_family(text: str) -> None:
     assert FAMILY not in text and FAMILY[3:] not in text and "Test Family" not in text, text
 
 
-async def test_only_those_asked_see_it_and_not_the_family_until_they_accept(client, db, seeded, pushes):
+async def test_only_those_asked_see_it_and_not_the_family(client, db, seeded, pushes):
     mgr, _, rid = await _sent(client, db, seeded["agyary_id"])
     panthaky = await _as(client, PANTHAKY)
     assert (await client.get(f"{REQUESTS}/count", headers=panthaky)).json() == {"waiting": 1}
@@ -115,14 +116,41 @@ async def test_only_those_asked_see_it_and_not_the_family_until_they_accept(clie
     _, _, rid2 = await _sent(client, db, seeded["agyary_id"], mgr=mgr)
     assert (await client.get(f"{REQUESTS}/count", headers=mobed)).json() == {"waiting": 1}
     assert [q["id"] for q in (await client.get(REQUESTS, headers=mobed)).json()["waiting"]] == [rid]
-    for method, path in (("GET", f"{REQUESTS}/{rid2}"), ("POST", f"{REQUESTS}/{rid2}/accept"),
+    for method, path in (("GET", f"{REQUESTS}/{rid2}"), ("POST", f"{REQUESTS}/{rid2}/answer"),
                          ("POST", f"{REQUESTS}/{rid2}/decline")):
         r = await client.request(method, path, json={}, headers=mobed)
         assert r.status_code == 404, (method, path, r.text)
     assert (await db.get(FuneralRequest, rid2)).status == "waiting"
 
 
-async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client, db, seeded, pushes):
+async def test_the_old_accept_and_call_out_routes_are_gone(client, db, seeded, pushes):
+    """R3.1 step 7: the board's actions are the only way to take a request. The
+    old Accept, the call-out screen, its hand-picked call-out and "Send the
+    details again" are not routes any more: they answer 404 to the confirmed
+    panthaky who could use them before, and change nothing."""
+    from agyary.api.main import app
+
+    paths = {getattr(r, "path", "") for r in app.routes}
+    assert not {p for p in paths if p.endswith("/accept") or "/callout" in p}, paths
+    _, _, rid = await _sent(client, db, seeded["agyary_id"])
+    panthaky = await _as(client, PANTHAKY)
+    callouts = len((await db.execute(select(PrayerCallout))).scalars().all())
+    for method, path, body in (("POST", f"{REQUESTS}/{rid}/accept", {"share_contact": True}),
+                               ("GET", f"{REQUESTS}/{rid}/callout", None),
+                               ("POST", f"{REQUESTS}/{rid}/callout", {"who": ["u2"]}),
+                               ("POST", f"{REQUESTS}/{rid}/callout/details-again", None)):
+        r = await client.request(method, path, json=body, headers=panthaky)
+        assert r.status_code == 404, (method, path, r.text)
+    request = await db.get(FuneralRequest, rid, populate_existing=True)
+    assert request.status == "waiting" and request.taken_at is None and request.accepted_by_user_id is None
+    assert len((await db.execute(select(PrayerCallout))).scalars().all()) == callouts
+    assert (await db.execute(select(Notification.id))).first() is None
+    assert await _count(db, Customer, Customer.phone == FAMILY) == 0
+
+
+async def test_one_accepted_the_old_way_reads_as_before_and_its_book_is_the_accepters_only(
+    client, db, seeded, pushes,
+):
     aid = seeded["agyary_id"]
     # Another mobed at the same fire temple already has the family's number, under their own name for them.
     mobed = await _as(client, MOBED)
@@ -134,13 +162,11 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
 
     _, rec, rid = await _sent(client, db, aid)
     panthaky_user = await _user(db, PANTHAKY)
-    r = await client.post(f"{REQUESTS}/{rid}/accept", json={"share_contact": True}, headers=await _as(client, PANTHAKY))
-    assert r.status_code == 200, r.text
-    body = r.json()
-    req = body["request"]
+    done = await accepted_the_old_way(db, rid, PANTHAKY)
+    headers = await _as(client, PANTHAKY)
+    req = (await client.get(f"{REQUESTS}/{rid}", headers=headers)).json()["request"]
     assert req["status"] == "accepted" and req["accepted_by_me"] is True
     assert req["family_contact"] == {"name": "Test Family", "phone": FAMILY}
-    assert req["family_message"].startswith("Sahebji Test Family, I am Er. Hormuz Dadachanji of ")
     today = funeral_records.today_ist()
     day = lambda d: f"{d:%a} {d.day} {d:%b}"   # noqa: E731
     assert req["family_message"] == (
@@ -153,15 +179,11 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
         "name": "Behdin Rustom Jamshed", "calendar": "shenshai", "deathBy": "date",
         "death": rec["death"]["date"], "deathRoj": "", "deathMah": "",
     }
-    assert body["behdin_created"] is True and req["customer_id"] == body["customer_id"]
-
-    row = await db.get(FuneralRequest, rid)
-    await db.refresh(row)
-    assert row.accepted_by_user_id == panthaky_user.id == row.decided_by_user_id
-    assert row.decided_at is not None and row.accepter_shared_contact is True
+    assert done.created is True and req["customer_id"] == done.customer.id
+    assert req["shared_contact"] is True and req["all_set"] is None
 
     # The accepter's own record: new, under the family contact's name, reminders off.
-    mine = await db.get(Customer, body["customer_id"])
+    mine = await db.get(Customer, done.customer.id)
     assert mine.owner_user_id == panthaky_user.id and mine.phone == FAMILY and mine.name == "Test Family"
     assert mine.reminders_enabled is False and mine.reminders_stopped_at is None
     # The other mobed's record is exactly as it was, and is not the one used.
@@ -171,9 +193,8 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
     assert await _count(db, Customer, Customer.phone == FAMILY) == 2
 
     # The Geh-saarnu and the Uthamna on the accepter's calendar, for their own record, at the fire temple.
-    events = {e["what"]: e for e in body["events"]}
-    assert set(events) == {"Geh-saarnu", "Uthamna"} and body["skipped"] == []
-    today = funeral_records.today_ist()
+    events = {e["what"]: e for e in done.events}
+    assert set(events) == {"Geh-saarnu", "Uthamna"} and done.skipped == []
     assert events["Geh-saarnu"]["date"] == today.isoformat() and events["Geh-saarnu"]["time"] == "07:00"
     assert events["Uthamna"]["date"] == (today + timedelta(days=2)).isoformat() and events["Uthamna"]["time"] == "16:00"
     assert not events["Uthamna"]["time_guessed"]
@@ -188,7 +209,6 @@ async def test_accepting_sets_up_the_accepters_own_book_and_no_one_elses(client,
     # Nothing was put in the other mobed's book.
     assert await _count(db, Booking, Booking.customer_id == theirs.id) == 0
     # The count on the tab is down, and the request is under Earlier.
-    headers = await _as(client, PANTHAKY)
     assert (await client.get(f"{REQUESTS}/count", headers=headers)).json() == {"waiting": 0}
     lists = (await client.get(REQUESTS, headers=headers)).json()
     assert lists["waiting"] == [] and [q["id"] for q in lists["earlier"]] == [rid]
@@ -201,8 +221,8 @@ async def test_an_own_record_is_reused_and_a_stop_is_kept(client, db, seeded, pu
                           headers=panthaky)
     known = r.json()["id"]
     _, _, rid = await _sent(client, db, aid)
-    body = (await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=panthaky)).json()
-    assert body["behdin_created"] is False and body["customer_id"] == known
+    done = await accepted_the_old_way(db, rid, PANTHAKY)
+    assert done.created is False and done.customer.id == known
     assert (await db.get(Customer, known)).name == "Known Family"   # never renamed by a request
     assert await _count(db, Customer, Customer.phone == FAMILY) == 1
 
@@ -212,65 +232,31 @@ async def test_an_own_record_is_reused_and_a_stop_is_kept(client, db, seeded, pu
     await db.commit()
     mgr, _ = await manager(client, db, phone="+919911100072", name="Second Manager")
     _, _, rid2 = await _sent(client, db, aid, mgr=mgr, family_contact_phone=other)
-    body = (await client.post(f"{REQUESTS}/{rid2}/accept", json={"share_contact": False}, headers=panthaky)).json()
-    made = await db.get(Customer, body["customer_id"])
+    done = await accepted_the_old_way(db, rid2, PANTHAKY, share=False)
+    made = await db.get(Customer, done.customer.id)
     assert made.reminders_stopped_at is not None and made.reminders_enabled is False
 
 
-async def test_the_first_to_accept_takes_it_and_the_others_see_who(client, db, seeded, pushes):
+async def test_the_others_asked_see_who_accepted_it_the_old_way_and_cannot_answer_it(client, db, seeded, pushes):
     temple = await agyari(db, "Two Mobeds Agyari (test)", (18.96, 72.83))
-    a = await member(db, temple, "+919822200011", name="Er. First Mobed")
-    b = await member(db, temple, "+919822200012", name="Er. Second Mobed")
+    await member(db, temple, "+919822200011", name="Er. First Mobed")
+    await member(db, temple, "+919822200012", name="Er. Second Mobed")
     await db.commit()
     _, _, rid = await _sent(client, db, temple.id)
+    await accepted_the_old_way(db, rid, "+919822200011")
 
-    engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    settings = config.get_settings()
-
-    async def try_to_accept(user_id: int) -> str:
-        async with factory() as s:
-            user, request = await s.get(User, user_id), await s.get(FuneralRequest, rid)
-            try:
-                await funeral_answers.accept(s, settings, user, request, share_contact=True)
-            except funeral_answers.AnswerError as exc:
-                await s.rollback()
-                return str(exc)
-            await s.commit()
-            return "accepted"
-
-    try:
-        results = await asyncio.gather(try_to_accept(a.id), try_to_accept(b.id))
-    finally:
-        await engine.dispose()
-    assert results.count("accepted") == 1, results
-    (loser_msg,) = [m for m in results if m != "accepted"]
-    assert loser_msg in ("Already accepted by Er. First Mobed.", "Already accepted by Er. Second Mobed."), results
-
-    people = {u.id: (u.name, u.phone) for u in (a, b)}
-    db.expire_all()
-    row = await db.get(FuneralRequest, rid)
-    winner_id = row.accepted_by_user_id
-    (loser_id,) = set(people) - {winner_id}
-    winner_name, (_, loser_phone) = people[winner_id][0], people[loser_id]
-    assert loser_msg == f"Already accepted by {winner_name}."
-    # One book was set up, the winner's, once.
-    (only,) = (await db.execute(select(Customer).where(Customer.phone == FAMILY))).scalars().all()
-    assert only.owner_user_id == winner_id
-    assert await _count(db, Booking, Booking.customer_id == only.id) == 2
-
-    # The other sees who took it, without the family's details, and a notice in the app.
-    headers = await _as(client, loser_phone)
+    headers = await _as(client, "+919822200012")
     (seen,) = (await client.get(REQUESTS, headers=headers)).json()["earlier"]
-    assert seen["status"] == "accepted" and seen["accepted_by"] == winner_name and seen["accepted_by_me"] is False
-    assert "family_contact" not in seen
-    r = await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=headers)
-    assert r.status_code == 409 and r.json()["detail"] == f"Already accepted by {winner_name}."
-    (note,) = (await db.execute(select(AppNotification).where(AppNotification.user_id == loser_id,
-                                                             AppNotification.kind == "funeral_request_answered"))
-               ).scalars().all()
-    assert winner_name in note.body and note.link == "#/requests"
-    _no_family(note.title + note.body)
+    assert seen["status"] == "accepted" and seen["accepted_by"] == "Er. First Mobed" and seen["accepted_by_me"] is False
+    assert "family_contact" not in seen and "family_message" not in seen
+    page = (await client.get(f"{REQUESTS}/{rid}", headers=headers)).text
+    _no_family(page)
+    assert "Er. First Mobed" in page
+    for path, body in ((f"{REQUESTS}/{rid}/answer", {"answer": "yes"}), (f"{REQUESTS}/{rid}/decline", {})):
+        r = await client.post(path, json=body, headers=headers)
+        assert r.status_code == 409 and "no longer waiting" in r.json()["detail"], r.text
+    row = await db.get(FuneralRequest, rid, populate_existing=True)
+    assert row.status == "accepted" and row.accepted_by_user_id == (await _user(db, "+919822200011")).id
 
 
 async def test_withdrawn_declined_and_accepted_are_refused_in_plain_words(client, db, seeded, pushes):
@@ -278,7 +264,7 @@ async def test_withdrawn_declined_and_accepted_are_refused_in_plain_words(client
     panthaky = await _as(client, PANTHAKY)
     mgr, rec, rid = await _sent(client, db, aid)
     assert (await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)).status_code == 200
-    r = await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=panthaky)
+    r = await client.post(f"{REQUESTS}/{rid}/decline", json={}, headers=panthaky)
     assert r.status_code == 409
     assert r.json()["detail"] == "Doongerwadi (test) withdrew this request, so nothing more is needed for it."
 
@@ -296,7 +282,7 @@ async def test_withdrawn_declined_and_accepted_are_refused_in_plain_words(client
     row = await db.get(FuneralRequest, rid2)
     assert row.decline_reason == "No mobed free that day" and row.decided_at is not None
     assert row.accepted_by_user_id is None and row.accepter_shared_contact is None
-    r = await client.post(f"{REQUESTS}/{rid2}/accept", json={}, headers=panthaky)
+    r = await client.post(f"{REQUESTS}/{rid2}/decline", json={}, headers=panthaky)
     assert r.status_code == 409 and r.json()["detail"] == "You have already declined this request."
     # The manager is told, with the reason, and can send it elsewhere.
     (note,) = (await db.execute(select(AppNotification).where(AppNotification.kind == "funeral_request_declined"))
@@ -310,24 +296,20 @@ async def test_withdrawn_declined_and_accepted_are_refused_in_plain_words(client
     got = (await client.get(f"{RECORDS}/{rec['id']}", headers=mgr)).json()["record"]
     assert got["may_send"] is True and got["requests"][0]["decline_reason"] == "No mobed free that day"
 
-    # Accepted, then a second tap.
+    # Accepted the old way, then declined: refused.
     _, _, rid3 = await _sent(client, db, aid, mgr=mgr)
-    assert (await client.post(f"{REQUESTS}/{rid3}/accept", json={}, headers=panthaky)).status_code == 200
-    r = await client.post(f"{REQUESTS}/{rid3}/accept", json={}, headers=panthaky)
-    assert r.status_code == 409 and r.json()["detail"] == "You have already accepted this request."
+    await accepted_the_old_way(db, rid3, PANTHAKY, book=False)
     r = await client.post(f"{REQUESTS}/{rid3}/decline", json={}, headers=panthaky)
-    assert r.status_code == 409
+    assert r.status_code == 409 and r.json()["detail"] == "You have already accepted this request."
+    assert (await db.get(FuneralRequest, rid3, populate_existing=True)).status == "accepted"
 
 
-async def test_the_manager_sees_the_number_only_with_the_tick(client, db, seeded, pushes):
+async def test_the_manager_sees_the_accepters_number_only_with_the_tick(client, db, seeded, pushes):
     aid = seeded["agyary_id"]
-    panthaky = await _as(client, PANTHAKY)
     mgr, shared, rid = await _sent(client, db, aid)
     _, kept, rid2 = await _sent(client, db, aid, mgr=mgr, departed_name="Dinshaw")
-    pushes.clear()
-    assert (await client.post(f"{REQUESTS}/{rid}/accept", json={"share_contact": True}, headers=panthaky)).status_code == 200
-    assert (await client.post(f"{REQUESTS}/{rid2}/accept", json={"share_contact": False}, headers=panthaky)
-            ).status_code == 200
+    await accepted_the_old_way(db, rid, PANTHAKY, share=True, book=False)
+    await accepted_the_old_way(db, rid2, PANTHAKY, share=False, book=False)
 
     q = (await client.get(f"{RECORDS}/{shared['id']}", headers=mgr)).json()["record"]["requests"][0]
     assert q["accepted_by"] == "Er. Hormuz Dadachanji" and q["accepter_phone"] == PANTHAKY
@@ -336,24 +318,12 @@ async def test_the_manager_sees_the_number_only_with_the_tick(client, db, seeded
     assert q["accepted_by"] == "Er. Hormuz Dadachanji" and q["accepter_phone"] is None
     assert (await db.get(FuneralRequest, rid2)).accepter_shared_contact is False
 
-    notes = (await db.execute(select(AppNotification).where(AppNotification.kind == "funeral_request_accepted")
-                              .order_by(AppNotification.id))).scalars().all()
-    assert len(notes) == 2 and notes[0].link == f"#/manager/record/{shared['id']}"
-    assert notes[0].body.startswith("Er. Hormuz Dadachanji of ") and notes[0].body.endswith("Behdin Rustom Jamshed.")
-    assert "number" not in notes[0].body       # owner, 19 Nov 2026: no "Their number is on the record."
-    assert "chose not to share their number" in notes[1].body
-    assert len(pushes) == 2 and pushes[0]["title"] == "Prayers accepted"
-    for text in [n.title + n.body for n in notes] + [p["title"] + p["body"] for p in pushes]:
-        _no_family(text)
-    # The lock screen does not name the departed either.
-    assert not any("Rustom" in p["body"] or "Dinshaw" in p["body"] for p in pushes)
-
 
 async def test_the_memorial_saved_from_it_is_noted_on_it_for_the_accepter_only(client, db, seeded, pushes):
     aid = seeded["agyary_id"]
     panthaky = await _as(client, PANTHAKY)
     mgr, rec, rid = await _sent(client, db, aid)
-    body = (await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=panthaky)).json()
+    done = await accepted_the_old_way(db, rid, PANTHAKY)
     baaj = (await db.execute(select(Service.id).where(Service.agyary_id == aid, Service.name == "Baaj"))).scalar_one()
     memorial = {"departed_name": "Behdin Rustom Jamshed", "death_date": rec["death"]["date"], "calendar": "shenshai",
                 "day_counts": [30], "service_ids": [baaj], "funeral_request_id": rid}
@@ -365,7 +335,7 @@ async def test_the_memorial_saved_from_it_is_noted_on_it_for_the_accepter_only(c
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{other_id}/memorials", json=memorial, headers=mobed)
     assert r.status_code == 200, r.text
     assert (await db.get(FuneralRequest, rid)).memorial_id is None
-    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{body['customer_id']}/memorials", json=memorial,
+    r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{done.customer.id}/memorials", json=memorial,
                           headers=panthaky)
     assert r.status_code == 200, r.text
     row = await db.get(FuneralRequest, rid)
@@ -387,19 +357,20 @@ async def test_a_record_by_roj_and_mah_fills_the_memorial_form_so_and_an_uthamna
                                       year=None)
     _, _, rid = await _sent(client, db, aid, death_date=None, death_roj=death.roj, death_mah=death.mah,
                             uthamna_time=None, geh_saarnu_date=None, geh_saarnu_geh=None)
-    body = (await client.post(f"{REQUESTS}/{rid}/accept", json={}, headers=await _as(client, PANTHAKY))).json()
-    pre = body["request"]["memorial_prefill"]
+    done = await accepted_the_old_way(db, rid, PANTHAKY)
+    req = (await client.get(f"{REQUESTS}/{rid}", headers=await _as(client, PANTHAKY))).json()["request"]
+    pre = req["memorial_prefill"]
     assert pre["deathBy"] == "parsi" and pre["death"] == ""
     assert (pre["deathRoj"], pre["deathMah"]) == (str(death.roj), str(death.mah))
-    assert [e["what"] for e in body["events"]] == ["Uthamna"]
-    assert body["events"][0]["time"] == "15:30" and body["events"][0]["time_guessed"] is True
-    assert [s["what"] for s in body["skipped"]] == ["Geh-saarnu"]
+    assert [e["what"] for e in done.events] == ["Uthamna"]
+    assert done.events[0]["time"] == "15:30" and done.events[0]["time_guessed"] is True
+    assert [s["what"] for s in done.skipped] == ["Geh-saarnu"]
 
 
 async def test_a_manager_cannot_reach_the_requests_and_a_mobed_none_of_the_managers_side(client, db, seeded, pushes):
     mgr, rec, rid = await _sent(client, db, seeded["agyary_id"])
     for method, path in (("GET", REQUESTS), ("GET", f"{REQUESTS}/count"), ("GET", f"{REQUESTS}/{rid}"),
-                         ("POST", f"{REQUESTS}/{rid}/accept"), ("POST", f"{REQUESTS}/{rid}/decline")):
+                         ("POST", f"{REQUESTS}/{rid}/answer"), ("POST", f"{REQUESTS}/{rid}/decline")):
         r = await client.request(method, path, json={}, headers=mgr)
         assert r.status_code == 403 and r.json()["detail"] == mobed_routes.NOT_FOR_MANAGERS, (method, path)
     from tests.test_funeral_managers import MANAGER_MAY

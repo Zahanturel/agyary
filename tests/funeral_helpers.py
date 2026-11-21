@@ -3,12 +3,12 @@ record's form filled in, and fire temples with people in them (Step 4)."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 
-from agyary.models import Agyary, AgyaryUser, FuneralPlace, FuneralPlaceManager, User
-from agyary.services import funeral_records
+from agyary.models import Agyary, AgyaryUser, FuneralPlace, FuneralPlaceManager, FuneralRecord, FuneralRequest, User
+from agyary.services import funeral_answers, funeral_records
 from tests.conftest import sign_in
 
 MANAGER = "+919911100071"
@@ -71,3 +71,27 @@ async def member(db, agyary: Agyary, phone: str, role: str = "mobed", *, access=
     db.add(AgyaryUser(agyary_id=agyary.id, user_id=u.id, role=role))
     await db.flush()
     return u
+
+
+async def accepted_the_old_way(db, request_id: int, phone: str, *, share: bool = True, book: bool = True):
+    """A request accepted the old way, before R3.1, as accepting left it: the
+    Accept is gone since R3.1 step 7, but those requests stay (D8) and must
+    still read right. The request accepted by the person with ``phone``, their
+    name and number shared with the place or not, and (``book``) the family in
+    their own book with the Geh-saarnu and Uthamna on their calendar
+    (funeral_answers.put_in_book, which All set uses too). Returns what
+    put_in_book did, or None."""
+    user = (await db.execute(select(User).where(User.phone == phone))).scalar_one()
+    request = await db.get(FuneralRequest, request_id, populate_existing=True)
+    now = datetime.now(timezone.utc)
+    request.status, request.decided_at = "accepted", now
+    request.accepted_by_user_id = request.decided_by_user_id = user.id
+    request.accepter_shared_contact = share
+    done = None
+    if book:
+        record = await db.get(FuneralRecord, request.funeral_record_id)
+        place = await db.get(FuneralPlace, record.funeral_place_id)
+        agyary = await db.get(Agyary, request.agyary_id)
+        done = await funeral_answers.put_in_book(db, user, agyary, record, place, today=funeral_records.today_ist())
+    await db.commit()
+    return done

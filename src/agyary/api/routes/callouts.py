@@ -1,6 +1,6 @@
-"""A fire temple's own list of mobeds, the panthaky's call-out to them on
-WhatsApp (DECISIONS D10, Phase 2 Step 5c; services/prayer_callout.py), and how
-a prayer request reaches the fire temple (R3.1; services/request_settings.py).
+"""A fire temple's own list of mobeds (the Mobeds page; DECISIONS D10;
+services/prayer_callout.py), and how a prayer request reaches the fire temple
+(R3.1; services/request_settings.py).
 
 Mobed routes (get_current_user: signed in, switched on, and never a manager's
 account). Only a confirmed panthaky of that fire temple, or the admin, reaches
@@ -11,7 +11,10 @@ with that field's name in the X-Field header.
 The "Who will pray" board on a request (R3.1 step 4): the board, Ask everyone,
 I'll pray, and a call's result, for the confirmed panthakys the request reached
 and the admin; (step 5) "Confirm with who's going"; and (step 5b) "Can't go" on
-a place, for a mobed going who phoned to say they can no longer go.
+a place, for a mobed going who phoned to say they can no longer go. The board's
+actions are the only way to take a request: the old call-out screen's routes
+(GET and POST .../callout, .../callout/details-again) and the old Accept are
+gone since R3.1 step 7.
 """
 
 from __future__ import annotations
@@ -136,58 +139,6 @@ async def put_request_settings(agyary_id: int, payload: RequestSettingsIn, db: A
         raise HTTPException(status_code=400, detail=str(exc), headers={FIELD_HEADER: exc.field}) from exc
     await db.commit()
     return saved
-
-
-# --- The call-out on an accepted request ------------------------------------------
-async def _request(db: AsyncSession, user: User, request_id: int):
-    request = await prayer_callout.callout_request(db, get_settings(), user, request_id)
-    if request is None:
-        raise HTTPException(status_code=404, detail=NO_REQUEST)
-    return request
-
-
-@router.get("/requests/{request_id}/callout")
-async def callout(request_id: int, db: AsyncSession = Depends(get_db),
-                  user: User = Depends(get_current_user)) -> dict:
-    """Everyone asked with their answer and who is going, and who can still be
-    asked. No family details."""
-    request = await _request(db, user, request_id)
-    return await prayer_callout.view(db, get_settings(), user, request)
-
-
-class CalloutIn(BaseModel):
-    # "u<user id>" for a mobed in the app, "c<contact id>" for one added by hand.
-    who: list[str] = Field(default_factory=list, max_length=200)
-
-
-@router.post("/requests/{request_id}/callout")
-async def send_callout(request_id: int, payload: CalloutIn, db: AsyncSession = Depends(get_db),
-                       user: User = Depends(get_current_user)) -> dict:
-    """Ask again, by hand: the chosen mobeds not asked yet for this request
-    (template 4). Everyone who could be was asked when the request was sent."""
-    request = await _request(db, user, request_id)
-    rate_limit.enforce_key(f"prayer_callout:{user.id}", max_requests=10, window_seconds=3600)
-    settings = get_settings()
-    try:
-        sent = await prayer_callout.send(db, settings, user, request, [k[:24] for k in payload.who])
-    except prayer_callout.CalloutError as exc:
-        raise _error(exc) from exc
-    return {**await prayer_callout.view(db, settings, user, request), "asked_now": sent}
-
-
-@router.post("/requests/{request_id}/callout/details-again")
-async def details_again(request_id: int, db: AsyncSession = Depends(get_db),
-                        user: User = Depends(get_current_user)) -> dict:
-    """The first yeses go and get the details at once (19 Nov 2026); this sends
-    them again to those going whose details did not go. Never twice."""
-    request = await _request(db, user, request_id)
-    rate_limit.enforce_key(f"prayer_callout_again:{user.id}", max_requests=30, window_seconds=3600)
-    settings = get_settings()
-    try:
-        done = await prayer_callout.details_again(db, settings, user, request)
-    except prayer_callout.CalloutError as exc:
-        raise _error(exc) from exc
-    return {**await prayer_callout.view(db, settings, user, request), "done": done}
 
 
 # --- The board: "Who will pray" (R3.1 step 4) ---------------------------------------
