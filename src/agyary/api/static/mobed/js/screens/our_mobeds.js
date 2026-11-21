@@ -3,8 +3,9 @@
 /**
  * Mobeds (DECISIONS D10, changed 21 Nov 2026; R3.1 step 3; "Our mobeds"
  * before): the mobeds a confirmed panthaky works with, to call, message, or ask
- * on WhatsApp whether they can pray. Reached from Settings and from the
- * call-out screen, at #/mobeds (the old #/our-mobeds leads here too).
+ * on WhatsApp whether they can pray. Reached from Settings, and from a
+ * request's board while nobody is on the list, at #/mobeds (the old
+ * #/our-mobeds leads here too).
  *
  *  - In Mobed Diary: the fire temple's mobeds in the app, on it by themselves,
  *    each with their number and Call and WhatsApp (not on the panthaky's own row).

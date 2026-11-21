@@ -73,7 +73,6 @@ const SHELL_FILES = [
   "/mobed-app/js/screens/manager_record.js",
   "/mobed-app/js/screens/manager_behdins.js",
   "/mobed-app/js/screens/requests.js",
-  "/mobed-app/js/screens/callout.js",
   "/mobed-app/js/screens/our_mobeds.js",
   "/mobed-app/js/screens/request_settings.js",
   "/mobed-app/js/screens/menu.js",

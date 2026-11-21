@@ -46,7 +46,6 @@ import { renderSlip } from "./screens/slip.js";
 import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
-import { renderCallout } from "./screens/callout.js";
 import { renderMobeds } from "./screens/our_mobeds.js";
 import { renderRequestSettings } from "./screens/request_settings.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
@@ -134,8 +133,9 @@ route("#/memorial/:id/:oid", renderMemorial, { parent: "#/behdins", tab: "behdin
 // Requests for prayers from a Doongerwadi or prayer hall (D10), the fourth tab.
 route("#/requests", renderRequests, { tab: "requests" });
 route("#/requests/:id", renderRequest, { parent: "#/requests", tab: "requests" });
-// A confirmed panthaky asks the agyari's mobeds on WhatsApp (D10, Step 5c).
-route("#/requests/:id/callout", renderCallout, { parent: (p) => `#/requests/${p.id}`, tab: "requests" });
+// The old "Who is going" screen (Step 5c): the request's own page, with its board (R3.1),
+// is where its notification links and bookmarks land now.
+route("#/requests/:id/callout", (p) => navigate(`#/requests/${encodeURIComponent(p.id)}`, { replace: true }));
 // The panthaky's Mobeds page (R3.1), from Settings. It was "Our mobeds": the old
 // address (a bookmark, an old link) leads to the same page.
 route("#/mobeds", renderMobeds, { parent: "#/menu" });

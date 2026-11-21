@@ -237,8 +237,10 @@ function whatsappHtml(wa) {
     ${wa.family_note ? `<p class="meta" style="margin:4px 0 0">${esc(wa.family_note)}</p>` : ""}`;
 }
 
-/** A confirmed panthaky of the fire temple: who was asked on WhatsApp when the
- *  request came, and who is going (the first yeses go, 19 Nov 2026). */
+/** A confirmed panthaky of the fire temple, on a request accepted the old way (or closed):
+ *  who was asked on WhatsApp when it came, and who is going (the first yeses went, 19 Nov
+ *  2026). The names come from the board (showWhoPrays), where the old "Who is going" screen
+ *  was. */
 function calloutCardHtml(q) {
   const wa = q.callout_whatsapp || { on: false, why_not: "" };
   const c = q.callout || { asked: 0, yes: 0, going: 0, wanted: 2 };
@@ -255,8 +257,23 @@ function calloutCardHtml(q) {
         ? `The first mobed of ${esc(q.agyari.name)} to say yes goes, and gets`
         : `The first ${c.wanted} mobeds of ${esc(q.agyari.name)} to say yes go, and get`} the details and the family's
         contact on WhatsApp.</p>
-      <div class="action-bar"><button type="button" class="secondary" id="rqCallout">Who is going</button></div>
+      <div id="rqWhoPrays"></div>
     </div>`;
+}
+
+/** The names going (and on standby) under calloutCardHtml's counts, from the board. */
+async function showWhoPrays(q, alive) {
+  let b = null;
+  try {
+    b = await requestBoard(q.id);
+  } catch (e) {
+    b = null;
+  }
+  const box = alive() ? document.getElementById("rqWhoPrays") : null;
+  if (!box) return;
+  box.innerHTML = b
+    ? `${slotsHtml(b, { open: q.status === "accepted" || q.status === "taken" })}${standbysHtml(b)}`
+    : `<p class="meta" style="margin:8px 0 0">Couldn't load who is going just now.</p>`;
 }
 
 /** The page as it was before R3.1: a request accepted the old way, declined or withdrawn
@@ -276,7 +293,7 @@ function drawRequest(q, alive) {
     ${q.may_call_out && !waiting ? calloutCardHtml(q) : ""}`;
 
   const on = (sel, fn) => { const el = document.getElementById(sel); if (el) el.onclick = fn; };
-  on("rqCallout", () => navigate(`#/requests/${q.id}/callout`));
+  if (q.may_call_out && !waiting) showWhoPrays(q, alive);
   if (!q.accepted_by_me) return;
   const msg = document.getElementById("rqMsg");
   const wa = document.getElementById("rqWa");
@@ -444,11 +461,12 @@ function boardStateText(b) {
   return "Accepted.";
 }
 
-function slotsHtml(b) {
+/** A place per mobed wanted: who fills it and how, or "Open place" (not on a closed request). */
+function slotsHtml(b, { open = true } = {}) {
   const me = myKey();
   const out = b.places.map(p => `<div class="wp-slot"><b>${esc(p.name)}${p.key === me ? " (you)" : ""}</b>
       <span class="meta">${esc(HOW[p.how] || "")}</span></div>`);
-  for (let i = b.places.length; i < b.wanted; i += 1) out.push(`<div class="wp-slot open">Open place</div>`);
+  for (let i = b.places.length; open && i < b.wanted; i += 1) out.push(`<div class="wp-slot open">Open place</div>`);
   return out.join("");
 }
 
@@ -471,7 +489,7 @@ function boardCardHtml(view) {
       <h2>${b.status === "all_set" ? "All set" : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
       <p class="meta" style="margin:0">${esc(boardStateText(b))}</p>
       <p class="meta" id="rqLive" role="status" style="margin:4px 0 0">${esc(view.liveError)}</p>
-      ${slotsHtml(b)}
+      ${slotsHtml(b, { open: b.status !== "declined" && b.status !== "withdrawn" })}
       ${standbysHtml(b)}
       ${waiting ? `
         <div class="action-bar">
