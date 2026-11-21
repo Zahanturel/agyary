@@ -83,11 +83,13 @@ def live(monkeypatch):
 def no_still_short(monkeypatch):
     """These are the safety net's tests. "Still short", which the same tick runs
     (and which a request here, its Geh-saarnu today, could be due for), has its
-    own in tests/test_all_set.py."""
+    own in tests/test_all_set.py; so has "No answer yet", which a request here
+    nobody answers is due for after an hour, in tests/test_manager_r31.py."""
     async def nothing(*a, **kw):
         return 0
 
     monkeypatch.setattr(prayer_timers, "still_short", nothing)
+    monkeypatch.setattr(prayer_timers, "no_answer", nothing)
 
 
 async def _come_to_me_first(client, db, aid, minutes=30, mgr=None) -> tuple[int, datetime, dict]:

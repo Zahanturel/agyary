@@ -41,6 +41,18 @@ asked again when a place opened who has not answered in 30 minutes is passed
 over once (a conditional update of reask_passed_at), and the next standby is
 asked, while the request waits with a place open. The prayers begin
 (prayers_begin) also bounds backing out.
+
+No answer for an hour (step 6; owner, 21 Nov 2026, third round): a request
+still waiting an hour after it was sent, never taken on the board and with no
+answer from anyone at the fire temple (no yes, no no - in the app, on WhatsApp
+or by phone - and no call's result, which takes it), is told once to the
+funeral place's managers, and the admin who sent it acting for the place, in
+the app and on their phones: "No answer yet from <agyari>", with the record's
+link, so they can send it to another fire temple. The request stays open
+there until they withdraw it. Never for a request whose prayers have begun.
+Claimed by a conditional update of no_answer_alert_at (only while still
+unanswered and untaken) before anyone is told, so it is told once, two loops
+included.
 """
 
 from __future__ import annotations
@@ -49,12 +61,12 @@ import logging
 from datetime import date, datetime, time, timedelta
 
 import httpx
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.messaging.geh_times import IST
-from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest
+from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, PrayerCallout, PrayerCalloutAnswer
 from agyary.models.enums import REQUEST_MODE_PANTHAKY_FIRST, REQUEST_WAITING
 from agyary.services import (
     all_set,
@@ -81,6 +93,7 @@ async def run(db: AsyncSession, now: datetime, settings: Settings, client: httpx
     Commits as it goes; the loop calls it in its own step."""
     done = await safety_net(db, now, settings, client)
     done += await still_short(db, now, settings)
+    done += await no_answer(db, now, settings)
     return done + await standbys.timed_out(db, now, settings, client)
 
 
@@ -310,3 +323,100 @@ async def _tell_short(db: AsyncSession, settings: Settings, request_id: int, now
     await web_push.send_to_users(db, settings, [u.id for u in people], title=f"Still {missing} short",
                                  body=f"The request from {place.name}: {going} of {want} going.",
                                  url="/mobed" + link, tag=f"prayer-short-{request_id}")
+
+
+# --- No answer for an hour (step 6) ----------------------------------------------------
+
+KIND_NO_ANSWER = "funeral_request_no_answer"
+NO_ANSWER_AFTER = timedelta(hours=1)
+
+
+def _unanswered():
+    """SQL: nobody at the fire temple has answered the request (no yes or no
+    on any of its rows, whichever way it came)."""
+    return ~(
+        select(PrayerCalloutAnswer.id)
+        .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .where(PrayerCallout.funeral_request_id == FuneralRequest.id, PrayerCalloutAnswer.answer.is_not(None))
+        .correlate(FuneralRequest)
+        .exists()
+    )
+
+
+# A request nobody at the fire temple has done anything with: still waiting,
+# never all set (someone was going), never taken on the board, never answered.
+_UNTOUCHED = (FuneralRequest.status == REQUEST_WAITING, FuneralRequest.all_set_at.is_(None),
+              FuneralRequest.taken_at.is_(None))
+
+
+async def _no_answer_due(db: AsyncSession, now: datetime) -> list[int]:
+    """The requests sent an hour ago or more that nobody at the fire temple
+    has touched, not told yet, whose prayers have not begun. Those whose first
+    day is before today have begun: they are not even read."""
+    today = now.astimezone(IST).date()
+    first_day = func.coalesce(FuneralRecord.geh_saarnu_date, FuneralRecord.uthamna_date)
+    rows = (await db.execute(
+        select(FuneralRequest.id, FuneralRecord.geh_saarnu_date, FuneralRecord.geh_saarnu_geh,
+               FuneralRecord.uthamna_date, FuneralRecord.uthamna_time)
+        .join(FuneralRecord, FuneralRecord.id == FuneralRequest.funeral_record_id)
+        .where(*_UNTOUCHED, FuneralRequest.no_answer_alert_at.is_(None),
+               FuneralRequest.sent_at <= now - NO_ANSWER_AFTER,
+               or_(first_day.is_(None), first_day >= today), _unanswered())
+        .order_by(FuneralRequest.sent_at, FuneralRequest.id)
+    )).all()
+    out = []
+    for rid, gs_date, geh, ut_date, ut_time in rows:
+        begins = prayers_begin(gs_date, geh, ut_date, ut_time)
+        if begins is None or now < begins:
+            out.append(rid)
+    return out
+
+
+async def _claim_no_answer(db: AsyncSession, request_id: int, now: datetime) -> bool:
+    """Take this request for "No answer yet", once, while nobody at the fire
+    temple has touched it: committed before anyone is told."""
+    claimed = (await db.execute(
+        update(FuneralRequest)
+        .where(FuneralRequest.id == request_id, FuneralRequest.no_answer_alert_at.is_(None), *_UNTOUCHED,
+               _unanswered())
+        .values(no_answer_alert_at=now)
+        .returning(FuneralRequest.id)
+    )).scalar_one_or_none()
+    await db.commit()
+    return claimed is not None
+
+
+async def no_answer(db: AsyncSession, now: datetime, settings: Settings) -> int:
+    """Tell, once, the funeral place of each request nobody at the fire temple
+    has answered or taken in an hour. Returns how many it told (or claimed:
+    see _tell_no_answer)."""
+    done = 0
+    for request_id in await _no_answer_due(db, now):
+        if not await _claim_no_answer(db, request_id, now):
+            continue            # another loop has it, or someone answered or took it just now
+        done += 1
+        try:
+            await _tell_no_answer(db, settings, request_id, now)
+        except Exception:   # noqa: BLE001 - it is claimed (at most once); the next request still goes
+            logger.exception("Telling that nobody answered request %s failed after it was claimed", request_id)
+            await db.rollback()
+    await db.commit()
+    return done
+
+
+async def _tell_no_answer(db: AsyncSession, settings: Settings, request_id: int, now: datetime) -> None:
+    request = await db.get(FuneralRequest, request_id, populate_existing=True)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    agyary = await db.get(Agyary, request.agyary_id)
+    title = all_set.fit_title(f"No answer yet from {agyary.name}", "No answer yet")
+    managers = await funeral_answers._tell_managers(
+        db, settings, record, request, kind=KIND_NO_ANSWER, title=title,
+        body=(f"Nobody at {agyary.name} has answered the request for {fw.departed(record)} in an hour. "
+              "You can send it to another fire temple."),
+        push=(title, f"Nobody at {agyary.name} has answered in an hour. You can send the request to another "
+                     "fire temple."),
+        now=now,
+    )
+    await db.commit()
+    logger.warning("Request %s at fire temple %s: no answer in an hour, so the funeral place was told "
+                   "(%d manager(s))", request_id, agyary.id, len(managers))

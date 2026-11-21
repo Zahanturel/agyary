@@ -21,16 +21,18 @@ sent again. Outbound HTTP is mocked throughout.
 
 from __future__ import annotations
 
+import asyncio
 import json
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from agyary.core import config
-from agyary.models import Agyary, AppNotification, FuneralRequest, User
-from agyary.services import funeral_records
-from tests.funeral_helpers import MUMBAI, agyari, form, manager, member
+from agyary.models import Agyary, AppNotification, FuneralRecord, FuneralRequest, User
+from agyary.services import funeral_records, prayer_timers
+from tests.funeral_helpers import FAMILY, MANAGER, MUMBAI, agyari, form, manager, member
 from tests.test_prayer_callout import ADMIN, LIVE, MOBED, PANTHAKY, _as, _way
 
 RECORDS = "/api/mobed/manager/records"
@@ -97,7 +99,7 @@ async def _request(db, rid) -> FuneralRequest:
     return await db.get(FuneralRequest, rid, populate_existing=True)
 
 
-async def _notes(db, phone, kind) -> list[AppNotification]:
+async def _notes(db, phone, kind=prayer_timers.KIND_NO_ANSWER) -> list[AppNotification]:
     uid = await _id(db, phone)
     return list((await db.execute(select(AppNotification).where(
         AppNotification.user_id == uid, AppNotification.kind == kind).order_by(AppNotification.id))).scalars())
@@ -300,3 +302,139 @@ async def test_the_agyari_rows_say_the_way_and_nothing_else(client, db, seeded, 
     config.get_settings.cache_clear()
     _, near = await rows()
     assert near["whatsapp_on"] is True
+
+
+# --- No answer for an hour ---------------------------------------------------------------
+
+async def _tick(db, at) -> int:
+    return await prayer_timers.run(db, at, config.get_settings(), None)
+
+
+async def test_no_answer_in_an_hour_tells_the_place_once(client, db, seeded, pushes):
+    aid = seeded["agyary_id"]
+    rid, record_id, mgr = await _send(client, db, aid)
+    sent_at = (await _request(db, rid)).sent_at
+    pushes.clear()
+
+    assert await _tick(db, sent_at + timedelta(minutes=59, seconds=59)) == 0
+    assert await _notes(db, MANAGER) == [] and pushes == []
+
+    at = sent_at + timedelta(hours=1)
+    assert await _tick(db, at) == 1
+    assert (await _request(db, rid)).no_answer_alert_at == at
+    (note,) = await _notes(db, MANAGER)
+    assert note.title == "No answer yet from Goti Adarian"
+    assert note.body == ("Nobody at Goti Adarian has answered the request for Behdin Rustom Jamshed in an hour. "
+                         "You can send it to another fire temple.")
+    assert note.link == f"#/manager/record/{record_id}"
+    (push,) = pushes
+    assert push["to"] == [await _id(db, MANAGER)] and push["title"] == "No answer yet from Goti Adarian"
+    assert push["body"] == ("Nobody at Goti Adarian has answered in an hour. You can send the request to another "
+                            "fire temple.")
+    assert push["url"] == f"/mobed#/manager/record/{record_id}"
+    for text in (note.title + note.body, push["title"] + push["body"]):
+        assert FAMILY not in text and FAMILY[3:] not in text and "Test Family" not in text
+    assert "Rustom" not in push["body"]
+    # Nobody at the fire temple is told: it is the place's to act on.
+    assert await _notes(db, PANTHAKY) == [] and await _notes(db, MOBED) == []
+
+    # The record says so while still nobody has answered; the request stays open there.
+    q = await _latest(client, record_id, mgr)
+    assert q["stage"] == "waiting" and q["no_answer_told_at"] == at.isoformat() and q["may_withdraw"] is True
+
+    # Once only.
+    for later in (1, 60, 600):
+        assert await _tick(db, at + timedelta(minutes=later)) == 0
+    assert len(await _notes(db, MANAGER)) == 1 and len(pushes) == 1
+
+    # Someone answering later: it reads as finding mobeds, no longer as unanswered.
+    await _yes(client, rid, answer="no")
+    q = await _latest(client, record_id, mgr)
+    assert q["stage"] == "finding" and q["no_answer_told_at"] is None
+
+
+async def test_no_answer_never_once_anyone_answered_took_it_or_it_closed(client, db, seeded, pushes):
+    aid = seeded["agyary_id"]
+    said_no, _, mgr = await _send(client, db, aid)
+    await _yes(client, said_no, answer="no")
+    said_yes, _, _ = await _send(client, db, aid, mgr)
+    await _yes(client, said_yes)
+    # The panthaky called a mobed who did not answer: that takes it.
+    called, _, _ = await _send(client, db, aid, mgr)
+    await _board(client, called, "call-result", {"key": f"u{await _id(db, MOBED)}", "result": "no_answer"})
+    withdrawn, _, _ = await _send(client, db, aid, mgr)
+    assert (await client.post(f"/api/mobed/manager/requests/{withdrawn}/withdraw", headers=mgr)).status_code == 200
+    all_set, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=1)
+    await _board(client, all_set, "self")
+    assert (await _request(db, all_set)).status == "all_set"
+
+    later = datetime.now(prayer_timers.IST) + timedelta(hours=3)
+    assert await _tick(db, later) == 0
+    for rid in (said_no, said_yes, called, withdrawn, all_set):
+        assert (await _request(db, rid)).no_answer_alert_at is None
+    assert await _notes(db, MANAGER) == []
+
+
+async def _no_answer(db, at) -> int:
+    """The timer alone: "still short" is due near these prayers too (tests/test_all_set.py)."""
+    return await prayer_timers.no_answer(db, at, config.get_settings())
+
+
+async def test_no_answer_never_once_the_prayers_have_begun(client, db, seeded, pushes):
+    aid = seeded["agyary_id"]
+    rid, record_id, _ = await _send(client, db, aid)
+    tomorrow = funeral_records.today_ist() + timedelta(days=1)
+    # The Geh-saarnu tomorrow, Havan (6:30 am); sent at 5 am.
+    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
+        geh_saarnu_date=tomorrow, geh_saarnu_geh=1))
+    sent = datetime.combine(tomorrow, time(5, 0), tzinfo=prayer_timers.IST)
+    await db.execute(update(FuneralRequest).where(FuneralRequest.id == rid).values(sent_at=sent))
+    await db.commit()
+    assert await _no_answer(db, datetime.combine(tomorrow, time(6, 30), tzinfo=prayer_timers.IST)) == 0
+    assert await _no_answer(db, datetime.combine(tomorrow, time(9, 0), tzinfo=prayer_timers.IST)) == 0
+    assert (await _request(db, rid)).no_answer_alert_at is None
+    # Prayers on a day already gone: long begun, not even read.
+    yesterday = funeral_records.today_ist() - timedelta(days=1)
+    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
+        geh_saarnu_date=yesterday, geh_saarnu_geh=1, uthamna_date=None, uthamna_time=None))
+    await db.commit()
+    assert await _no_answer(db, sent + timedelta(hours=2)) == 0
+    assert await _notes(db, MANAGER) == []
+    # Before the prayers begin it is told: a minute before the Havan geh.
+    await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
+        geh_saarnu_date=tomorrow, geh_saarnu_geh=1))
+    await db.commit()
+    assert await _no_answer(db, datetime.combine(tomorrow, time(6, 29), tzinfo=prayer_timers.IST)) == 1
+    assert len(await _notes(db, MANAGER)) == 1
+
+
+async def test_no_answer_in_come_to_me_first_and_to_the_admin_who_sent_it(client, db, seeded, pushes, admin):
+    aid = seeded["agyary_id"]
+    await _way(db, aid, "panthaky_first")
+    mgr, at_place = await manager(client, db)
+    acting = await _as(client, admin)
+    rid, record_id, _ = await _send(client, db, aid, acting, act=at_place.id)
+    sent_at = (await _request(db, rid)).sent_at
+    pushes.clear()
+    assert await _tick(db, sent_at + timedelta(hours=1)) == 1
+    (to_manager,) = await _notes(db, MANAGER)
+    (to_admin,) = await _notes(db, ADMIN)
+    assert to_manager.link == f"#/manager/record/{record_id}"
+    assert to_admin.link == f"#/admin/act/{at_place.id}/record/{record_id}"
+    assert to_admin.title == to_manager.title == "No answer yet from Goti Adarian"
+    assert sorted(p["to"][0] for p in pushes) == sorted([await _id(db, MANAGER), await _id(db, ADMIN)])
+    q = await _latest(client, record_id, mgr)
+    assert q["stage"] == "panthaky_first" and q["no_answer_told_at"] is not None
+    assert await _latest(client, record_id, acting, act=at_place.id) == q
+
+
+async def test_two_loops_at_the_same_moment_tell_once(client, db, seeded, pushes):
+    rid, _, _ = await _send(client, db, seeded["agyary_id"])
+    at = (await _request(db, rid)).sent_at + timedelta(hours=1)
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    settings = config.get_settings()
+    async with factory() as one, factory() as two:
+        done = await asyncio.gather(prayer_timers.no_answer(one, at, settings),
+                                    prayer_timers.no_answer(two, at, settings))
+    assert sorted(done) == [0, 1]
+    assert len(await _notes(db, MANAGER)) == 1
