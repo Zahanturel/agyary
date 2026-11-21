@@ -586,7 +586,7 @@ async function openBoard(id, q, alive) {
   } catch (e) {
     if (!alive()) return;
     // No longer theirs to answer (no longer the panthaky there, say): the page as it reads to them.
-    if (e.status === 404) return q ? drawRequest(q, alive) : screenFailed("That request could not be found.");
+    if (e.status === 404) return q ? drawFor(q, alive) : screenFailed("That request could not be found.");
     return screenFailed("Couldn't open the request: " + e.message, () => renderRequest({ id }));
   }
   if (!alive()) return;
@@ -614,9 +614,15 @@ function boardFactsHtml({ q, b }) {
     </div>`;
 }
 
-/** Where the board stands, under its heading. */
-function boardStateText(b) {
-  if (b.status === "all_set") return "Enough mobeds are going.";
+/** Where the board stands, under its heading. `asked`: the request reached them (not the
+ *  admin, whom it never reaches). */
+function boardStateText(b, asked) {
+  if (b.status === "all_set") {
+    // Those it put the family in the book of have who is praying below, with the contacts.
+    if (b.all_set) return allSetLine(b.going, b.wanted, b.confirmed_short);
+    return `${goingWords(b.places.map(p => p.name))}${b.confirmed_short ? `: confirmed with ${b.going} of ${b.wanted}` : ""}.`
+      + (asked ? " Nothing more is needed from you." : "");
+  }
   if (b.status === "waiting") {
     if (b.taken) return b.taken.by ? `Finding mobeds: ${b.taken.by} has taken this on.` : "Finding mobeds.";
     return b.way === "panthaky_first"
@@ -652,12 +658,16 @@ function boardCardHtml(view) {
   // "I'll pray" only for the fire temple's confirmed panthaky, and not twice.
   const self = waiting && b.may_pray && !b.places.concat(b.standbys).some(p => p.key === me);
   const ask = b.ask_everyone || { can: false, why_not: null };
+  const allSet = b.status === "all_set";
+  // All set, for the one it put the family in the book of: who is praying is drawn below with
+  // the family's contact (#rqAllSetMore), so the places are not listed twice.
+  const contacts = allSet && b.all_set;
   return `<div class="card">
-      <h2>${b.status === "all_set" ? "All set" : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
-      <p class="meta" style="margin:0">${esc(boardStateText(b))}</p>
+      <h2>${allSet ? esc(`All set: ${b.going} going`) : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
+      <p ${allSet ? "" : `class="meta" `}style="margin:0">${esc(boardStateText(b, !!view.q))}</p>
       <p class="meta" id="rqLive" role="status" style="margin:4px 0 0">${esc(view.liveError)}</p>
-      ${slotsHtml(b, { open: b.status !== "declined" && b.status !== "withdrawn" })}
-      ${standbysHtml(b)}
+      ${contacts ? "" : `${slotsHtml(b, { open: !["declined", "withdrawn", "all_set"].includes(b.status) })}
+        ${standbysHtml(b)}`}
       ${waiting ? `
         <div class="action-bar">
           ${self ? `<button type="button" class="secondary" id="rqSelf">I'll pray</button>` : ""}
@@ -734,12 +744,15 @@ function paintBoard(view) {
   const { b, q } = view;
   const waiting = b.status === "waiting";
   view.drawn = JSON.stringify(b);
+  // All set, and the family is in their book: the family, who is praying (the standbys under
+  // them) and the memorial.
+  const contacts = b.status === "all_set" && b.all_set;
   area.innerHTML = `${boardCardHtml(view)}
-    ${b.status === "all_set" ? `<div id="rqAllSetMore"></div>` : ""}
+    ${contacts ? `<div id="rqAllSetMore">${allSetMoreHtml(b.all_set, b.prayed_name, standbysHtml(b))}</div>` : ""}
     ${waiting ? mobedsCardHtml(view) : ""}
     ${waiting && q ? `<p style="margin:20px 0 0;text-align:center">
       <button type="button" class="ghost small" id="rqCantTake">We can't take this</button></p>` : ""}`;
-  // Step 5: the family's contact and "Make the memorial" go in #rqAllSetMore.
+  if (contacts) wireAllSet(area, b.all_set, { rid: b.request_id, aid: b.agyari.id, place: b.place.name });
 
   const on = (sel, fn) => { const el = area.querySelector(sel); if (el) el.onclick = fn; };
   on("#rqAsk", (ev) => act(view, ev.currentTarget, () => boardAskEveryone(view.id)));
