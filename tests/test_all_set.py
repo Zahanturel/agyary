@@ -323,6 +323,9 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert got["is_panthaky"] is True and got["confirmed_short"] is False and got["memorial_id"] is None
     assert got["customer_id"] == (await _books(db, rid))[PANTHAKY].customer_id
     assert got["memorial_prefill"]["name"] == "Behdin Rustom Jamshed"
+    # The message their own WhatsApp opens with, to the family, in their own name.
+    assert got["family_message"].startswith("Sahebji Test Family, I am Er. Hormuz Dadachanji of ")
+    assert got["family_message"].endswith("May the ruvan of Behdin Rustom Jamshed attain Garothman Behesht.")
     assert (await client.get(f"{REQUESTS}/{rid}", headers=panthaky)).json()["request"]["all_set"] == got
     assert (await _books(db, rid))[PANTHAKY].user_id == hormuz.id
 
@@ -332,6 +335,7 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert card["all_set"]["panthakys"] == [{"name": "Er. Hormuz Dadachanji", "phone": PANTHAKY, "is_me": False}]
     assert [g["is_me"] for g in card["all_set"]["going"]] == [False, True]
     assert card["all_set"]["customer_id"] == (await _books(db, rid))[MOBED].customer_id
+    assert card["all_set"]["family_message"].startswith("Sahebji Test Family, I am Er. Pervez Kias of ")
 
     # Nobody else: another panthaky it reached, the admin, a mobed not going - nor the manager.
     for headers in (second, admin):

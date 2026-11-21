@@ -253,19 +253,24 @@ async def request_panthakys(db: AsyncSession, request_id: int) -> list[User]:
 
 async def contacts_for(db: AsyncSession, request: FuneralRequest, user: User) -> dict | None:
     """What this person is given once the request is all set, if the family is
-    in their book for it: the family's contact, the panthaky, everyone going
-    (with numbers where known), their own record of the family and the
-    memorial they made from it, and the memorial form's fields. None for
-    anyone else, and for everyone before All set."""
+    in their book for it: the family's contact with the short message to them
+    that their own WhatsApp opens with (the same words as for a request
+    accepted the old way), the panthaky, everyone going (with numbers where
+    known), their own record of the family and the memorial they made from
+    it, and the memorial form's fields. None for anyone else, and for everyone
+    before All set."""
     if request.all_set_at is None:
         return None
     mine = await book_of(db, request.id, user.id)
     if mine is None:
         return None
     record = await db.get(FuneralRecord, request.funeral_record_id)
+    place = await db.get(FuneralPlace, record.funeral_place_id)
+    agyary = await db.get(Agyary, request.agyary_id)
     own = await db.get(Customer, mine.customer_id) if mine.customer_id else None
     return {
         "family_contact": {"name": record.family_contact_name, "phone": record.family_contact_phone},
+        "family_message": funeral_answers.family_message(record, place, agyary, user),
         "panthakys": [{"name": p.name, "phone": p.phone, "is_me": p.id == user.id}
                       for p in await request_panthakys(db, request.id)],
         "going": [{"name": g["name"], "phone": g["phone"], "how": g["row"].how, "is_me": g["row"].user_id == user.id}
