@@ -229,6 +229,15 @@ their number goes to the family; the message should say both before they answer.
 - **"Still short" is told only before the prayers begin** (never for a request whose Geh-saarnu
   has begun or passed, such as an old test record left waiting).
 - **Template 7** says "All mobeds are found" also when the panthaky confirmed with fewer.
+- **Standbys (step 5b):** one standby is asked per open place, in the order they said yes; one
+  who gave no answer in 30 minutes is not asked again for a later place (a late answer to that
+  re-ask still counts); the panthaky's own standby ("I'll pray" when full) is never re-asked; a
+  standby nobody can reach (WhatsApp off and not in the app) is skipped and the panthaky told.
+  Only the re-ask's own buttons answer a re-ask, not the first message's.
+- **A reopened request** (someone backed out) can still be withdrawn by the Doongerwadi; "still
+  short" is not told a second time.
+- **The WhatsApp reply to "I can't go any more"** at an agyari with no panthaky in the app is
+  "Thank you for letting us know." (without "the panthaky has been told").
 
 ## Open for the owner (next session)
 
