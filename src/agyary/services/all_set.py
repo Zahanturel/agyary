@@ -32,6 +32,12 @@ Only those people, and only once it is all set, are given the family's
 contact and the others praying (``contacts_for``): on the board and on their
 own request card, with the memorial one tap away. Nobody else - another
 panthaky, a mobed not going, the admin, the funeral place - ever is.
+
+Once that is committed, everyone is told (``_tell``: the panthakys it reached,
+each app mobed whose book it is, the funeral place's managers, in the app and
+on their phones, the lock screen without the departed or the family), and,
+only while FUNERAL_WHATSAPP_MODE is live, WhatsApp templates 5-8 go
+(``_whatsapp``). Neither can undo the All set, and neither is ever repeated.
 """
 
 from __future__ import annotations

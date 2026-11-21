@@ -858,3 +858,18 @@ async def test_two_loops_at_the_same_moment_tell_once(client, db, seeded, pushes
                                     prayer_timers.still_short(two, at, settings))
     assert sorted(done) == [0, 1]
     assert len(await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)) == 1
+
+
+async def test_confirming_takes_it_so_the_family_goes_to_the_panthaky_who_confirmed(client, db, seeded, pushes):
+    aid = seeded["agyary_id"]
+    await member(db, await db.get(Agyary, aid), SECOND_PANTHAKY, role="panthaky", name="Er. Second Panthaky")
+    await db.commit()
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=await _as(client, MOBED))
+    assert r.status_code == 200 and (await _request(db, rid)).taken_at is None
+    r = await client.post(_b(rid, "confirm-short"), json={}, headers=await _as(client, SECOND_PANTHAKY))
+    assert r.status_code == 200, r.text
+    assert (await _request(db, rid)).taken_by_user_id == (await _user(db, SECOND_PANTHAKY)).id
+    books = await _books(db, rid)
+    assert set(books) == {SECOND_PANTHAKY, MOBED} and books[SECOND_PANTHAKY].is_panthaky
+    assert r.json()["all_set"]["panthakys"] == [{"name": "Er. Second Panthaky", "phone": SECOND_PANTHAKY, "is_me": True}]
