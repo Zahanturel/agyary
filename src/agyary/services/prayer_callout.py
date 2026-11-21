@@ -1269,6 +1269,8 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
         "ask_everyone": ask,
         "may_pray": waiting and await is_confirmed_panthaky(db, agyary.id, user.id),
         "whatsapp": await fw.status(db, settings),
+        # "Confirm with who's going": while waiting with someone going and places empty.
+        "may_confirm_short": waiting and 0 < len(places) < wanted(record),
         "confirmed_short": bool(request.confirmed_short),
         # Once it is all set, for the panthaky whose book it put the family in (R3.1
         # step 5): the family's contact, everyone going, their own record and memorial.
@@ -1342,6 +1344,41 @@ async def pray_myself(
     logger.info("Request %s: user %s will pray (%s)", request.id, user.id, outcome)
     return {"outcome": outcome,
             "message": _done_words(row, request, await _going(db, request.id), wanted(record), me=True)}
+
+
+SHORT_NOBODY = ("Nobody is going yet, so there is nobody to confirm with. "
+                "Ask everyone, call a mobed, or tap I'll pray.")
+SHORT_FAILED = "It could not be made all set just now. Please try again."
+
+
+async def confirm_short(
+    db: AsyncSession, settings: Settings, user: User, request: FuneralRequest, *, now: datetime | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> dict:
+    """The board's "Confirm with who's going" (owner, 21 Nov 2026; R3.1 step
+    5): while the request is waiting with at least one going and fewer than
+    wanted, it becomes all set with those going - ``confirmed_short`` - through
+    the same All set as when the places fill (all_set.on_full: the books, the
+    notices, the messages). It takes the request, as every board action does.
+    Refused in plain words otherwise. (If the places are somehow all filled
+    while it still waits, it is simply made all set.)"""
+    from agyary.services import all_set   # here: all_set reads this module
+
+    now = now or _now()
+    await _lock_waiting(db, request)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    want, going = wanted(record), await _going(db, request.id)
+    if going == 0:
+        raise CalloutError(SHORT_NOBODY)
+    short = going < want
+    await take_request(db, request, user, now)
+    made = await all_set.on_full(db, settings, request, now=now, client=client, short=short, by_user_id=user.id)
+    if not made:
+        raise CalloutError(SHORT_FAILED)
+    logger.warning("Request %s: user %s confirmed with %d of %d going", request.id, user.id, going, want)
+    return {"outcome": "all set" + (", short" if short else ""),
+            "message": f"All set with {going} of {want} going." if short
+            else "All the places are filled: it is all set."}
 
 
 CALL_RESULTS = ("going", "not_going", "no_answer")

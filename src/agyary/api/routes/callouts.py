@@ -10,7 +10,7 @@ with that field's name in the X-Field header.
 
 The "Who will pray" board on a request (R3.1 step 4): the board, Ask everyone,
 I'll pray, and a call's result, for the confirmed panthakys the request reached
-and the admin.
+and the admin; and (step 5) "Confirm with who's going".
 """
 
 from __future__ import annotations
@@ -235,6 +235,21 @@ async def board_pray_myself(request_id: int, db: AsyncSession = Depends(get_db),
     settings = get_settings()
     try:
         done = await prayer_callout.pray_myself(db, settings, user, request)
+    except prayer_callout.CalloutError as exc:
+        raise _error(exc) from exc
+    return {**await prayer_callout.board(db, settings, user, request), "done": done}
+
+
+@router.post("/requests/{request_id}/confirm-short")
+async def board_confirm_short(request_id: int, db: AsyncSession = Depends(get_db),
+                              user: User = Depends(get_current_user)) -> dict:
+    """ "Confirm with who's going" (R3.1 step 5): all set with those going,
+    while at least one is and fewer than wanted are. ``done`` says so."""
+    request = await _board_request(db, user, request_id)
+    rate_limit.enforce_key(f"prayer_board:{user.id}", max_requests=60, window_seconds=3600)
+    settings = get_settings()
+    try:
+        done = await prayer_callout.confirm_short(db, settings, user, request)
     except prayer_callout.CalloutError as exc:
         raise _error(exc) from exc
     return {**await prayer_callout.board(db, settings, user, request), "done": done}

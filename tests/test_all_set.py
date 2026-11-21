@@ -649,3 +649,70 @@ def test_the_people_blank_is_built_by_the_server():
     assert kept == "Er. A Name ([number]), Er. B, Er. C ([number])"
     assert fw.people_blank([]) == ("not fixed yet", "not fixed yet")
     assert fw.names_blank(people) == "Er. A Name, Er. B and Er. C" and fw.names_blank([]) == "not fixed yet"
+
+
+# --- Confirm with who's going -------------------------------------------------------------
+
+async def test_confirm_with_whos_going_makes_it_all_set_short_the_same_way(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    await _way(db, aid, "panthaky_first")
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=3)
+    panthaky = await _as(client, PANTHAKY)
+    url = _b(rid, "confirm-short")
+    # Nobody going yet: nothing to confirm, and nothing is taken.
+    assert (await client.get(_b(rid), headers=panthaky)).json()["may_confirm_short"] is False
+    r = await client.post(url, json={}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == prayer_callout.SHORT_NOBODY
+    assert (await _request(db, rid)).taken_at is None and (await _request(db, rid)).status == "waiting"
+
+    assert (await client.post(_b(rid, "self"), json={}, headers=panthaky)).status_code == 200
+    assert (await client.get(_b(rid), headers=panthaky)).json()["may_confirm_short"] is True
+    meta.sent.clear()
+    r = await client.post(url, json={}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"] == {"outcome": "all set, short", "message": "All set with 1 of 3 going."}
+    board = r.json()
+    assert board["status"] == "all_set" and board["confirmed_short"] is True and board["may_confirm_short"] is False
+    assert board["all_set"]["confirmed_short"] is True and board["all_set"]["family_contact"]["phone"] == FAMILY
+    request = await _request(db, rid)
+    assert request.confirmed_short is True and request.all_set_at is not None
+    assert set(await _books(db, rid)) == {PANTHAKY}
+    (note,) = await _notes_of(db, PANTHAKY)
+    assert note.body.startswith("Er. Hormuz Dadachanji is going for Behdin Rustom Jamshed, 1 of 3 wanted: "
+                                "the panthaky confirmed with who is going.")
+    assert {m["template"]["name"] for m in meta.sent} == {
+        "prayers_all_set_family", "prayer_details_mobed_v3", "funeral_accepted_manager_v2"}
+    # Once all set, it is refused in plain words.
+    r = await client.post(url, json={}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is all set."
+
+
+async def test_confirm_with_whos_going_is_for_the_panthakys_it_reached_and_the_admin_only(client, db, seeded, pushes,
+                                                                                         monkeypatch):
+    from tests.funeral_helpers import agyari
+
+    monkeypatch.setenv("ADMIN_PHONES", ADMIN)
+    config.get_settings.cache_clear()
+    aid = seeded["agyary_id"]
+    other = await agyari(db, "Other Agyari (test)", None)
+    await member(db, other, "+919822200099", role="panthaky", name="Er. Other Panthaky")
+    await db.commit()
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=2)
+    mobed = await _as(client, MOBED)
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=mobed)).status_code == 200
+    url = _b(rid, "confirm-short")
+    for headers in (mobed, await _as(client, "+919822200099")):
+        r = await client.post(url, json={}, headers=headers)
+        assert r.status_code == 404 and r.json()["detail"] == "That request could not be found."
+    assert (await client.post(url, json={}, headers=mgr)).status_code == 403
+    assert (await _request(db, rid)).status == "waiting"
+    # The admin may; the admin is not the panthaky, so the family goes to the panthaky it reached.
+    r = await client.post(url, json={}, headers=await _as(client, ADMIN))
+    assert r.status_code == 200 and r.json()["done"]["message"] == "All set with 1 of 2 going.", r.text
+    assert r.json()["all_set"] is None
+    assert set(await _books(db, rid)) == {PANTHAKY, MOBED}
+    # A withdrawn request is refused too.
+    rid2, _, _ = await _send(client, db, aid, mgr, mobeds_wanted=2)
+    assert (await client.post(f"/api/mobed/manager/requests/{rid2}/withdraw", headers=mgr)).status_code == 200
+    r = await client.post(_b(rid2, "confirm-short"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 409 and "withdrew this request" in r.json()["detail"]
