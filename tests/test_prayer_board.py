@@ -553,7 +553,11 @@ async def test_once_all_set_the_board_reads_so_and_takes_no_more(client, db, see
     assert board["status"] == "all_set" and board["open"] is False and board["all_set_at"]
     all_set_words = "Enough mobeds are going for this request: it is all set."
     assert board["ask_everyone"] == {"can": False, "why_not": all_set_words}
-    assert FAMILY[3:] not in r.text and "Test Family" not in r.text
+    # The family's contact is there now, for the panthaky whose book it went into, under all_set only
+    # (Step 5; tests/test_all_set.py).
+    assert board["all_set"]["family_contact"] == {"name": "Test Family", "phone": FAMILY}
+    rest = {k: v for k, v in board.items() if k != "all_set"}
+    assert FAMILY[3:] not in json.dumps(rest) and "Test Family" not in json.dumps(rest)
     key = board["mobeds"][0]["key"]
     for path, body in (("ask-everyone", {}), ("self", {}), ("call-result", {"key": key, "result": "going"})):
         r = await client.post(_b(rid, path), json=body, headers=panthaky)

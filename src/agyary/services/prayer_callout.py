@@ -1197,7 +1197,11 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
     name or number), the way, who took it, the places and the standbys (in
     the order they said yes), the fire temple's Mobeds list with their numbers
     (as on the Mobeds page) and each one's state for this request, whether Ask
-    everyone would ask anyone now, and whether WhatsApp sending is on."""
+    everyone would ask anyone now, and whether WhatsApp sending is on; once
+    all set, for the panthaky the family went to only, the family's contact
+    and everyone going (all_set.contacts_for)."""
+    from agyary.services import all_set   # here: all_set reads this module's readers
+
     await db.refresh(request)
     record = await db.get(FuneralRecord, request.funeral_record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
@@ -1254,6 +1258,11 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
         "ask_everyone": ask,
         "may_pray": waiting and await is_confirmed_panthaky(db, agyary.id, user.id),
         "whatsapp": await fw.status(db, settings),
+        "confirmed_short": bool(request.confirmed_short),
+        # Once it is all set, for the panthaky whose book it put the family in (R3.1
+        # step 5): the family's contact, everyone going, their own record and memorial.
+        # None for anyone else - another panthaky, the admin - and before All set.
+        "all_set": await all_set.contacts_for(db, request, user),
     }
 
 

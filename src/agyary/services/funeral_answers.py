@@ -40,7 +40,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem
@@ -55,6 +55,7 @@ from agyary.models import (
     FuneralPlaceManager,
     FuneralRecord,
     FuneralRequest,
+    FuneralRequestBook,
     FuneralRequestRecipient,
     Memorial,
     PrayerCallout,
@@ -228,7 +229,10 @@ def memorial_prefill(record: FuneralRecord) -> dict:
 async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]) -> list[dict]:
     """Requests as the person asked sees them. The family's name and number,
     the message to them, and the accepter's own behdin and memorial are there
-    only for the one who accepted."""
+    only for the one who accepted; on an all-set request (R3.1), under
+    "all_set", only for those whose book it put the family in."""
+    from agyary.services import all_set   # here: all_set reads this module
+
     if not requests:
         return []
     records = {
@@ -305,6 +309,10 @@ async def serialize(db: AsyncSession, user: User, requests: list[FuneralRequest]
         # else's name or number.
         is_panthaky = await prayer_callout.is_confirmed_panthaky(db, q.agyary_id, user.id)
         item.update(await prayer_callout.card(db, q, user, mine=not is_panthaky))
+        # Once it is all set, for those it put the family in the book of only (R3.1
+        # step 5): the family's contact, the panthaky, everyone going, their own
+        # record and memorial. None for everyone else.
+        item["all_set"] = await all_set.contacts_for(db, q, user)
         # A confirmed panthaky of the fire temple sees who was asked on WhatsApp
         # and who is going, while the request still wants mobeds (19 Nov 2026).
         item["may_call_out"] = False
@@ -606,14 +614,26 @@ async def decline(
 
 
 async def link_memorial(db: AsyncSession, user: User, request_id: int | None, memorial: Memorial) -> bool:
-    """Note the memorial saved from a request on it: only the accepter's own
-    accepted request, and only once. Returns whether it was linked."""
+    """Note the memorial saved from a request: on an all-set request (R3.1
+    step 5), on this person's own book row for it, if the request put the
+    family in their book; on one accepted the old way, on the request, only
+    for the one who accepted. Only their own memorial, and only once. Returns
+    whether it was linked."""
     if request_id is None:
         return False
     request = await db.get(FuneralRequest, request_id)
-    if (request is None or request.status not in funeral_records.ACCEPTED
-            or request.accepted_by_user_id != user.id or request.memorial_id is not None
-            or memorial.created_by_user_id != user.id):
+    if request is None or memorial.created_by_user_id != user.id:
+        return False
+    linked = (await db.execute(
+        update(FuneralRequestBook)
+        .where(FuneralRequestBook.funeral_request_id == request.id, FuneralRequestBook.user_id == user.id,
+               FuneralRequestBook.memorial_id.is_(None))
+        .values(memorial_id=memorial.id).returning(FuneralRequestBook.id)
+    )).scalar_one_or_none()
+    if linked is not None:
+        return True
+    if (request.status not in funeral_records.ACCEPTED or request.accepted_by_user_id != user.id
+            or request.memorial_id is not None):
         return False
     request.memorial_id = memorial.id
     await db.flush()

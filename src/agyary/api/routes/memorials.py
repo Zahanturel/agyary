@@ -101,8 +101,9 @@ class CreateMemorialIn(MemorialIn):
     service_overrides: dict[str, list[int]] = {}
     # The family has already paid for every date.
     all_paid: bool = False
-    # Made from a request for prayers this mobed accepted (D10, Step 5): the
-    # memorial is noted on it, for their Requests tab. Anything else is ignored.
+    # Made from a request for prayers this mobed accepted (D10, Step 5), or one
+    # all set that put the family in their book (R3.1 step 5): the memorial is
+    # noted on it, for their own request card. Anything else is ignored.
     funeral_request_id: int | None = None
 
 
