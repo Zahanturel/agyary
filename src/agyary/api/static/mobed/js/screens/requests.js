@@ -6,7 +6,9 @@
  *
  *  - The list: what waits (the departed's prayed name, the place, four days or one, the
  *    Geh-saarnu and Uthamna, mobeds wanted, which fire temple it was sent to, when), and
- *    "Earlier": accepted (by whom), declined, withdrawn.
+ *    "Earlier": all set, accepted (by whom), declined, withdrawn. Each says where it stands:
+ *    "Waiting for you" (a panthaky's, not taken yet), "Finding mobeds: 1 of 2", "All set",
+ *    and for an app mobed "Asked: can you pray?", "You are going", "Standby".
  *  - A request's page, for a confirmed panthaky the request reached and for the admin: the
  *    "Who will pray: n of N" board. The prayers without the family's name or number; a place
  *    per mobed wanted, filled or open, and the standbys in the order they said yes; Ask
@@ -34,7 +36,7 @@ import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, s
 import { esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
-import { refreshRequestCount, paintRequestCount } from "../requests_count.js";
+import { refreshRequestCount } from "../requests_count.js";
 import { memorialFromRequest } from "./memorial_new.js";
 
 // --- Words ------------------------------------------------------------------------
@@ -94,8 +96,21 @@ function factsHtml(q) {
 
 // --- The list ---------------------------------------------------------------------
 
+/** Where a request stands, in a few words: for a confirmed panthaky "Waiting for you" until
+ *  the board's first action takes it (as the red count counts it), then "Finding mobeds: 1 of
+ *  2"; for an app mobed their own answer; "All set"; and the old states as they were. */
+function standsText(q) {
+  if (q.my_answer) return BOARD.has(q.status) ? myHeadline(q) : stateText(q);
+  if (q.status === "waiting") {
+    const n = q.places || { going: 0, wanted: 0 };
+    return q.taken === false ? "Waiting for you" : `Finding mobeds: ${n.going} of ${n.wanted}`;
+  }
+  return stateText(q);
+}
+
 function waitingCardHtml(q) {
   return `<div class="card search-result req-card" data-rid="${q.id}">
+      <p style="margin:0 0 4px"><b>${esc(standsText(q))}</b></p>
       <h2>${esc(q.prayed_name)}</h2>
       <p class="meta" style="margin:0">${esc(placeText(q.funeral_place))}</p>
       <p style="margin:6px 0 0">${esc(q.obsequies_label)}${q.mobeds_wanted
@@ -109,7 +124,7 @@ function waitingCardHtml(q) {
 function earlierRowHtml(q) {
   return `<div class="search-result" data-rid="${q.id}">
       <div><strong>${esc(q.prayed_name)}</strong></div>
-      <div class="addr">${q.status === "withdrawn" ? "" : `${esc(q.funeral_place.name)} · `}${esc(stateText(q))}</div>
+      <div class="addr">${q.status === "withdrawn" ? "" : `${esc(q.funeral_place.name)} · `}${esc(standsText(q))}</div>
     </div>`;
 }
 
@@ -127,7 +142,9 @@ export async function renderRequests() {
     return screenFailed("Couldn't load your requests: " + e.message, renderRequests);
   }
   if (!alive()) return;
-  paintRequestCount(got.waiting.length);
+  // The server's count, not the list's length: a request taken on the board, or answered,
+  // still waits here but no longer waits for this person.
+  refreshRequestCount();
   mainEl.innerHTML = `
     <h2 style="margin:0 0 4px">Requests</h2>
     <p class="meta" style="margin:0 0 12px">When a Doongerwadi or prayer hall asks your fire temple for the prayers,
