@@ -23,7 +23,7 @@
  */
 
 import {
-  myRequests, myRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself,
+  myRequests, myRequest, declineRequest, requestBoard, boardAskEveryone, boardPrayMyself, boardCallResult,
 } from "../api.js";
 import { state, saveSession } from "../state.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet } from "../ui.js";
@@ -148,6 +148,7 @@ export async function renderRequest({ id }) {
   showFab(false);
   loading();
   const alive = navGuard();
+  onScreen = null;    // a board drawn before this is no longer read or answered
   let q = null;
   try {
     q = (await myRequest(id)).request;
@@ -312,9 +313,13 @@ async function openBoard(id, q, alive) {
   if (!alive()) return;
   // `seq` counts every read and action, so an answer that arrives after a newer one is dropped.
   const view = { id: b.request_id, q, b, alive, seq: 0, reading: false, acting: false, timer: null, liveError: "" };
+  onScreen = view;
   mainEl.innerHTML = `${boardFactsHtml(view)}<div id="rqBoard"></div>`;
   paintBoard(view);
   keepLive(view);
+  // Opened again after the phone closed the app during a call made from here.
+  const call = takeCall(view, { reloaded: true });
+  if (call) askAbout(view, call);
 }
 
 /** The prayers, as the board gives them: never the family's name or number. */
@@ -419,11 +424,13 @@ function mobedRowHtml(b, m) {
       <a class="button secondary" href="${esc(waLink(m.phone, askText(b)))}" target="_blank" rel="noopener"
         data-chat="${esc(m.key)}" aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
     </div>` : "";
+  const going = MAY_MARK.has(m.state) ? `<button type="button" class="secondary" data-going="${esc(m.key)}"
+      style="width:100%;margin-top:8px" aria-label="Is ${esc(m.name)} going?">Going?</button>` : "";
   return `<div class="fact">
       <div><b>${esc(m.name)}</b></div>
       <div class="meta"><b>${esc(mobedStateText(m))}</b></div>
       ${notes.map(n => `<div class="meta">${n}</div>`).join("")}
-      ${reach}
+      ${reach}${going}
     </div>`;
 }
 
@@ -431,7 +438,8 @@ function mobedsCardHtml(view) {
   const { b, q } = view;
   return `<div class="card">
       <h2>Mobeds</h2>
-      <p class="meta" style="margin:0 0 4px">Call or message one of your mobeds from your own phone.</p>
+      <p class="meta" style="margin:0 0 4px">Call or message one of your mobeds from your own phone. When you come
+        back, you are asked whether they are going.</p>
       ${b.mobeds.length ? b.mobeds.map(m => mobedRowHtml(b, m)).join("") : `
         <p style="margin:8px 0 0">Nobody else is on ${esc(b.agyari.name)}'s list of mobeds yet.</p>
         ${q ? `<button type="button" class="ghost small" id="rqMobedsPage" style="margin-top:8px">Open the Mobeds
@@ -458,11 +466,32 @@ function paintBoard(view) {
   on("#rqSelf", (ev) => act(view, ev.currentTarget, () => boardPrayMyself(view.id)));
   on("#rqCantTake", () => confirmDecline(q, view.alive));
   on("#rqMobedsPage", () => { useFireTempleOf(q); navigate("#/mobeds"); });
+  const mobed = (key) => view.b.mobeds.find(m => m.key === key);
+  // The link does the calling or the chat; remembered, to ask "Is <name> going?" on coming back.
+  area.querySelectorAll("[data-call], [data-chat]").forEach(a => {
+    a.addEventListener("click", () => {
+      const m = mobed(a.dataset.call || a.dataset.chat);
+      if (m) rememberCall(view, m);
+    });
+  });
+  area.querySelectorAll("[data-going]").forEach(btn => {
+    btn.onclick = () => {
+      const m = mobed(btn.dataset.going);
+      if (m) askGoing(view, m);
+    };
+  });
+}
+
+let onScreen = null;   // the board being shown (renderRequest forgets it), for the page coming back into view
+
+/** Whether this board is still the one on screen. */
+function here(view) {
+  return onScreen === view && view.alive();
 }
 
 /** A board read or action has answered: drawn, unless something newer has been asked since. */
 function showBoard(view, b, seq) {
-  if (seq !== view.seq || !view.alive()) return;
+  if (seq !== view.seq || !here(view)) return;
   view.b = b;
   view.liveError = "";
   paintBoard(view);
@@ -481,11 +510,11 @@ async function act(view, btn, call) {
     res = await call();
   } catch (e) {
     view.acting = false;
-    if (view.alive()) refused(view, e, btn);
+    if (here(view)) refused(view, e, btn);
     return;
   }
   view.acting = false;
-  if (!view.alive()) return;
+  if (!here(view)) return;
   const { done = {}, ...b } = res;
   showBoard(view, b, seq);
   refreshRequestCount();
@@ -512,7 +541,7 @@ async function readBoard(view) {
   const seq = ++view.seq;
   try {
     const b = await requestBoard(view.id);
-    if (seq === view.seq && view.alive() && JSON.stringify(b) === view.drawn) {
+    if (seq === view.seq && here(view) && JSON.stringify(b) === view.drawn) {
       view.liveError = "";
       const line = document.getElementById("rqLive");
       if (line) line.textContent = "";
@@ -520,7 +549,7 @@ async function readBoard(view) {
       showBoard(view, b, seq);
     }
   } catch (e) {
-    if (seq === view.seq && view.alive()) {
+    if (seq === view.seq && here(view)) {
       if (e.status === 404) {
         view.reading = false;
         return renderRequest({ id: view.id });
@@ -536,35 +565,142 @@ async function readBoard(view) {
 
 // --- Live: the board read again while it waits and is on screen ---------------------
 
-let onScreen = null;   // the board being shown, for the page coming back into view
-
 function keepLive(view) {
-  onScreen = view;
   clearTimeout(view.timer);
   view.timer = null;
-  if (!view.alive() || view.b.status !== "waiting" || document.hidden) return;
+  if (!here(view) || view.b.status !== "waiting" || document.hidden) return;
   view.timer = setTimeout(() => tick(view), LIVE_MS);
 }
 
 async function tick(view) {
   clearTimeout(view.timer);
   view.timer = null;
-  if (!view.alive() || view.b.status !== "waiting" || document.hidden) return;
+  if (!here(view) || view.b.status !== "waiting" || document.hidden) return;
   // Never two at once, and not while a tap is being answered: its answer is the board.
   if (!view.acting) await readBoard(view);
-  if (view.alive() && !view.timer) keepLive(view);
+  if (here(view) && !view.timer) keepLive(view);
 }
 
-document.addEventListener("visibilitychange", () => {
-  const view = onScreen;
-  if (!view || !view.alive()) return;
-  if (document.hidden) {
-    clearTimeout(view.timer);
-    view.timer = null;
-  } else if (view.b.status === "waiting") {
-    tick(view);
+// --- "Is <name> going?": back from a call or a chat started on the board -------------
+
+// Whose answer a call can still give: not someone going or on standby. (Going may turn an
+// earlier no into a yes: people change their mind on the phone.)
+const MAY_MARK = new Set(["not_asked", "asked_app", "asked_whatsapp", "said_no"]);
+// A call or chat is asked about when the panthaky is back in the app within this.
+const CALL_WITHIN_MS = 30 * 60 * 1000;
+// Kept for this tab too: a phone short of memory may close the app during a long call.
+const CALL_KEY = "mobed.boardCall";
+let lastCall = null;   // {rid, key, name, at, left}: the last Call or WhatsApp tapped on a board
+
+function rememberCall(view, m) {
+  lastCall = { rid: view.id, key: m.key, name: m.name, at: Date.now(), left: false };
+  try { sessionStorage.setItem(CALL_KEY, JSON.stringify(lastCall)); } catch (e) { /* this visit only, then */ }
+}
+
+function forgetCall() {
+  lastCall = null;
+  try { sessionStorage.removeItem(CALL_KEY); } catch (e) { /* nothing was kept */ }
+}
+
+/** The call or chat to ask about on this board now, once: one started here that the
+ *  panthaky left the app for and came back from within 30 minutes - or, `reloaded`, one
+ *  from before the app was opened again. */
+function takeCall(view, { reloaded = false } = {}) {
+  let call = lastCall;
+  if (!call && reloaded) {
+    try { call = JSON.parse(sessionStorage.getItem(CALL_KEY) || "null"); } catch (e) { call = null; }
+    if (call) call.left = true;
   }
-});
+  if (!call || !call.left) return null;
+  if (!(Date.now() - call.at <= CALL_WITHIN_MS)) {
+    forgetCall();
+    return null;
+  }
+  if (String(call.rid) !== String(view.id)) return null;
+  forgetCall();
+  return call;
+}
+
+/** Ask about `call` on the board as it now reads, if that mobed can still be marked. */
+function askAbout(view, call) {
+  if (!here(view) || view.b.status !== "waiting") return;
+  const m = view.b.mobeds.find(x => x.key === call.key);
+  if (!m) return;
+  if (MAY_MARK.has(m.state)) return askGoing(view, m);
+  showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on standby already.`);
+}
+
+/** Back in the app: the board read again (answers may have come meanwhile), then the
+ *  question about the call or chat, if there was one. */
+async function backInApp() {
+  const view = onScreen;
+  if (!view || !here(view) || document.hidden) return;
+  const call = takeCall(view);
+  if (view.b.status === "waiting" && (call || !view.timer)) await tick(view);
+  if (call) askAbout(view, call);
+}
+
+function leftApp() {
+  if (lastCall) lastCall.left = true;
+  const view = onScreen;
+  if (view && document.hidden) {
+    clearTimeout(view.timer);    // nothing is read while the page is out of sight
+    view.timer = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => (document.hidden ? leftApp() : backInApp()));
+window.addEventListener("blur", leftApp);
+window.addEventListener("focus", backInApp);
+
+/** "Is <name> going?", from a mobed's Going? or on coming back from a call: one tap, then
+ *  the board as the server has it. A refusal is said in the server's words. */
+function askGoing(view, m) {
+  const sheet = openSheet({
+    title: `Is ${m.name} going?`,
+    html: `
+      <p class="meta" style="margin-top:0">To pray for ${esc(view.b.prayed_name)}.</p>
+      <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
+      <div class="stack">
+        <button type="button" data-result="going">Going</button>
+        <button type="button" class="secondary" data-result="not_going">Not this time</button>
+        <button type="button" class="ghost" data-result="no_answer">No answer</button>
+      </div>`,
+  });
+  const body = sheet.body;
+  const buttons = [...body.querySelectorAll("[data-result]")];
+  buttons.forEach(btn => {
+    btn.onclick = async () => {
+      if (btn.disabled) return;
+      buttons.forEach(x => { x.disabled = true; });
+      body.querySelector("[data-msg]").textContent = "";
+      view.acting = true;
+      const seq = ++view.seq;
+      let res;
+      try {
+        res = await boardCallResult(view.id, m.key, btn.dataset.result);
+      } catch (e) {
+        view.acting = false;
+        if (!here(view)) return;
+        if (e.status === 400 || e.status === 404 || e.status === 409) {
+          sheet.close();
+          return refused(view, e);
+        }
+        // No signal, or a passing failure: said where they are looking, to tap again.
+        buttons.forEach(x => { x.disabled = false; });
+        body.querySelector("[data-msg]").textContent = e.message;
+        return;
+      }
+      view.acting = false;
+      sheet.close();
+      if (!here(view)) return;
+      const { done = {}, ...b } = res;
+      showBoard(view, b, seq);
+      refreshRequestCount();
+      showInfo(done.message || "Noted.");
+    };
+  });
+}
 
 // --- We can't take this ---------------------------------------------------------------
 
