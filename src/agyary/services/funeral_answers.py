@@ -50,6 +50,7 @@ from agyary.messaging.geh_times import GEH_START_TIMES, IST, machi_ceremony_date
 from agyary.models import (
     Agyary,
     AgyaryUser,
+    Customer,
     FuneralPlace,
     FuneralPlaceManager,
     FuneralRecord,
@@ -424,6 +425,18 @@ async def _tell_the_others(
 
 
 @dataclass
+class InBook:
+    """The family in one person's own book (put_in_book)."""
+
+    customer: Customer
+    created: bool
+    # What went on the calendar: {"what", "date", "time", "booking_id", "conflict", "time_guessed"}.
+    events: list[dict] = field(default_factory=list)
+    # What did not: {"what", "why"}.
+    skipped: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class Accepted:
     request: FuneralRequest
     customer_id: int
@@ -449,8 +462,30 @@ async def _service(db: AsyncSession, agyary_id: int, name: str) -> Service:
     return service
 
 
+async def put_in_book(
+    db: AsyncSession, user: User, agyary: Agyary, record: FuneralRecord, place: FuneralPlace, *, today: date,
+) -> InBook:
+    """The family into this one person's own book, and only theirs (D2): their
+    own record of the family's number (the one they already have, back in
+    their book if they had removed it, never renamed; or a new one under the
+    family contact's name), linked to the fire temple, with reminders off as
+    for anyone new (D4; a STOP the number sent is kept, as always); and the
+    Geh-saarnu and the Uthamna on their calendar as events at the funeral
+    place. No other mobed's book is read or touched: the number is looked up
+    only among this person's own records. Not committed here.
+
+    Accepting (the old way) calls it for the one who accepted; All set
+    (services/all_set.py) once for each person whose book it is."""
+    customer, created = await behdin_directory.create_or_link(
+        db, agyary.id, user.id, name=record.family_contact_name, phone=record.family_contact_phone,
+    )
+    done = InBook(customer=customer, created=created)
+    await _put_on_calendar(db, user, agyary, record, place, customer, done, today)
+    return done
+
+
 async def _put_on_calendar(
-    db: AsyncSession, user: User, agyary: Agyary, record: FuneralRecord, place: FuneralPlace, customer, done: Accepted,
+    db: AsyncSession, user: User, agyary: Agyary, record: FuneralRecord, place: FuneralPlace, customer, done: InBook,
     today: date,
 ) -> None:
     where = place.name
@@ -505,11 +540,10 @@ async def accept(
     await db.flush()
 
     # The accepter's own book only (D2): their record of the number, or a new one.
-    customer, created = await behdin_directory.create_or_link(
-        db, agyary.id, user.id, name=record.family_contact_name, phone=record.family_contact_phone,
-    )
-    done = Accepted(request=request, customer_id=customer.id, behdin_created=created)
-    await _put_on_calendar(db, user, agyary, record, place, customer, done, now.astimezone(IST).date())
+    book = await put_in_book(db, user, agyary, record, place, today=now.astimezone(IST).date())
+    created = book.created
+    done = Accepted(request=request, customer_id=book.customer.id, behdin_created=created, events=book.events,
+                    skipped=book.skipped)
 
     prayed = funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
     await _tell_managers(
