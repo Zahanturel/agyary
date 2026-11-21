@@ -1397,7 +1397,9 @@ async def call_result(
     the app first is "already answered") - except that "going" may turn an
     earlier no into a yes (lead's choice, 21 Nov 2026: people change their
     mind on the phone). Someone already going or on standby is never
-    touched; "not_going" for them stays refused (backing out is Step 5b)."""
+    touched; "not_going" for them stays refused (backing out is Step 5b).
+    "not_going" for someone who had said no already is noted quietly, the
+    same as the first time (step 5)."""
     now = now or _now()
     if result not in CALL_RESULTS:
         raise CalloutError("Please say whether they are going, not going, or did not answer.", status=400,
@@ -1421,7 +1423,16 @@ async def call_result(
     app = m["kind"] == "app"
     phone = (await db.get(User, m["id"])).phone if app else m["phone"]
     yes = result == "going"
-    row = _find(await _request_rows(db, request.id), key, phone)
+    rows = await _request_rows(db, request.id)
+    row = _find(rows, key, phone)
+    if (not yes and row is not None and row.answer == CALLOUT_NO
+            and not any(r.answer == CALLOUT_YES for r in rows if _same_person(r, row))):
+        # They had said no already (on WhatsApp, in the app, or an earlier call): the call says
+        # the same, so it is noted quietly rather than refused (R3.1 step 5). It takes the request.
+        await take_request(db, request, user, now)
+        await db.commit()
+        logger.info("Request %s: user %s called %s, who had said no already", request.id, user.id, key)
+        return {"outcome": "no, already", "message": f"Noted: {m['name']} cannot pray this time."}
     if row is not None and row.answer is not None and not (yes and row.answer == CALLOUT_NO):
         raise CalloutError(_already(m["name"], row))
     if row is None:

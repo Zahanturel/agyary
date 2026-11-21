@@ -437,10 +437,14 @@ async def test_a_calls_result_going_not_going_or_no_answer(client, db, seeded, m
     assert meta.sent == [] and pushes == []        # the panthaky who marked it is not told of it
     assert (await _request(db, rid)).taken_at == taken
 
-    # Their first answer counts: a second mark is "already answered" (a Going after a no is the
-    # one exception: see the next test).
+    # Their first answer counts (a Going after a no is the one exception: see the next test). A
+    # second "not going" for someone who said no says the same, so it is noted quietly (Step 5)
+    # and changes nothing.
+    no_at = (await _answers(db))[SECOND].answered_at
     r = await client.post(url, json={"key": keys["Er. Second"], "result": "not_going"}, headers=panthaky)
-    assert r.status_code == 409 and r.json()["detail"] == "Er. Second has already said they cannot pray this time."
+    assert r.status_code == 200 and r.json()["done"] == {"outcome": "no, already",
+                                                         "message": "Noted: Er. Second cannot pray this time."}
+    assert (await _answers(db))[SECOND].answered_at == no_at and (await _answers(db))[SECOND].how == "phone"
     r = await client.post(url, json={"key": keys["Er. Pervez Kias"], "result": "not_going"}, headers=panthaky)
     assert r.status_code == 409 and r.json()["detail"] == "Er. Pervez Kias is already going."
 
@@ -475,9 +479,11 @@ async def test_a_call_can_turn_an_earlier_no_into_going_but_never_touches_a_yes(
     for result in ("not_going", "going"):
         r = await client.post(url, json={"key": keys["Er. Listed"], "result": result}, headers=panthaky)
         assert r.status_code == 409 and r.json()["detail"] == "Er. Listed is already going.", result
-    # A second no is still refused.
+    # A no by phone after their no on WhatsApp is noted quietly (Step 5); their no stays as it came.
     r = await client.post(url, json={"key": keys["Er. Second"], "result": "not_going"}, headers=panthaky)
-    assert r.status_code == 409 and r.json()["detail"] == "Er. Second has already said they cannot pray this time."
+    assert r.status_code == 200 and r.json()["done"]["message"] == "Noted: Er. Second cannot pray this time."
+    kept = (await _answers(db))[SECOND]
+    assert (kept.answer, kept.how, kept.answered_at) == ("no", "whatsapp", no_at)
 
     # Going after their no: the last place, so the request is all set.
     meta.sent.clear()
