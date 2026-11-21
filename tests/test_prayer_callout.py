@@ -284,7 +284,8 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     meta.sent.clear()
     kias = (await _answers(db))[MOBED]
     assert kias.answer == "yes" and kias.how == "whatsapp" and kias.picked_at is not None
-    assert kias.details_sent_at is None
+    # The details went at All set (template 6), written down so they never go twice (step 5b).
+    assert kias.details_sent_at is not None
     (going,) = await _notes(db, PANTHAKY, prayer_callout.KIND_GOING)
     assert going.title == "Er. Pervez Kias is going (1 of 1)"
     assert going.body == "Er. Pervez Kias said yes on WhatsApp for the prayers for Behdin Rustom Jamshed: 1 of 1 going."

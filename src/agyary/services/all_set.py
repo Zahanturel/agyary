@@ -37,7 +37,10 @@ Once that is committed, everyone is told (``_tell``: the panthakys it reached,
 each app mobed whose book it is, the funeral place's managers, in the app and
 on their phones, the lock screen without the departed or the family), and,
 only while FUNERAL_WHATSAPP_MODE is live, WhatsApp templates 5-8 go
-(``_whatsapp``). Neither can undo the All set, and neither is ever repeated.
+(``_whatsapp``). Neither can undo the All set, and neither is ever repeated -
+except that a request filled again after someone going backed out (step 5b,
+services/standbys.py) is "all set again": the new names in the app, template 6
+to the one new to it and template 5 to the family again, never 7 or 8.
 """
 
 from __future__ import annotations
@@ -92,12 +95,19 @@ async def on_full(
     once; then tell everyone (``by_user_id``, whose tap made it so, sees it on
     screen, so their phone is not woken). Commits. Returns whether this call
     made it all set (False if it already was, is no longer waiting, or the
-    books could not be set up, when it stays waiting)."""
+    books could not be set up, when it stays waiting).
+
+    Safe a second time (step 5b): a request filled again after someone going
+    backed out is "all set again" - a book only for a going app mobed without
+    one yet, the in-app notices with the new names, template 6 only to those
+    going whose details have not gone, template 5 to the family again (with
+    their agreement), and templates 7 and 8 not again."""
     now = now or _now()
-    values = {"status": REQUEST_ALL_SET, "all_set_at": now, "decided_at": now}
-    if short:
-        values["confirmed_short"] = True
+    # Filled again after someone going backed out (step 5b): it was all set before.
     request_id = request.id
+    again = (await db.execute(select(FuneralRequest.all_set_at).where(FuneralRequest.id == request_id))
+             ).scalar_one_or_none() is not None
+    values = {"status": REQUEST_ALL_SET, "all_set_at": now, "decided_at": now, "confirmed_short": short}
     done = (await db.execute(
         update(FuneralRequest)
         .where(FuneralRequest.id == request_id, FuneralRequest.status == REQUEST_WAITING)
@@ -117,15 +127,15 @@ async def on_full(
         return False
     await db.commit()
     await db.refresh(request)
-    logger.warning("Funeral request %s is all set at fire temple %s%s: %d book(s)", request_id, request.agyary_id,
-                   " (confirmed short)" if short else "", len(books))
+    logger.warning("Funeral request %s is all set%s at fire temple %s%s: %d book(s)", request_id,
+                   " again" if again else "", request.agyary_id, " (confirmed short)" if short else "", len(books))
     try:
-        await _tell(db, settings, request_id, now, by_user_id=by_user_id)
+        await _tell(db, settings, request_id, now, by_user_id=by_user_id, again=again)
     except Exception:   # noqa: BLE001 - it is all set and the books are made; this must not undo it
         logger.exception("Telling everyone that request %s is all set failed", request_id)
         await db.rollback()
     try:
-        await _whatsapp(db, settings, request_id, now, client)
+        await _whatsapp(db, settings, request_id, now, client, again=again)
     except Exception:   # noqa: BLE001 - as above; each message that went is written down (deliver)
         logger.exception("The WhatsApp messages for request %s being all set failed", request_id)
         await db.rollback()
@@ -333,22 +343,25 @@ def fit_title(*choices: str) -> str:
 
 
 async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: datetime, *,
-                by_user_id: int | None) -> None:
+                by_user_id: int | None, again: bool = False) -> None:
     """In the app and on their phones: the fire temple's confirmed panthakys
-    the request reached, each app mobed whose book it is, and the funeral
-    place's managers (and the admin who sent it acting for the place, as for
-    any answer). "All set: Er. A and Er. B are going for <prayed name>"; the
-    lock screen says who and the place, and nothing about the departed or the
-    family. D9: only accounts that are on."""
+    the request reached, each app mobed going whose book it is, and the
+    funeral place's managers (and the admin who sent it acting for the place,
+    as for any answer). "All set: Er. A and Er. B are going for <prayed
+    name>" - "All set again: ..." when it is filled again after someone going
+    backed out (step 5b), who is not told; the lock screen says who and the
+    place, and nothing about the departed or the family. D9: only accounts
+    that are on."""
     request = await db.get(FuneralRequest, request_id)
     record = await db.get(FuneralRecord, request.funeral_record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
     agyary = await db.get(Agyary, request.agyary_id)
     going = [g["name"] for g in await going_people(db, request_id)]
     prayed = fw.departed(record)
-    title = fit_title(f"All set: {going_words(going)} for {prayed}",
-                      f"All set: {mobeds(len(going))} {'is' if len(going) == 1 else 'are'} going for {prayed}",
-                      "All set: enough mobeds are going")
+    head = "All set again" if again else "All set"
+    title = fit_title(f"{head}: {going_words(going)} for {prayed}",
+                      f"{head}: {mobeds(len(going))} {'is' if len(going) == 1 else 'are'} going for {prayed}",
+                      f"{head}: enough mobeds are going")
     said = f"{going_words(going)} for {prayed}" + (
         f", {len(going)} of {prayer_callout.wanted(record)} wanted: the panthaky confirmed with who is going."
         if request.confirmed_short else ".")
@@ -375,7 +388,7 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
     await db.commit()
     woken = [uid for uid in told if uid != by_user_id]
     if woken:
-        await web_push.send_to_users(db, settings, woken, title="All set",
+        await web_push.send_to_users(db, settings, woken, title=head,
                                      body=f"{going_words(going)} for the request from {place.name}.",
                                      url="/mobed" + link, tag=f"funeral-all-set-{request_id}")
     panthakys = await request_panthakys(db, request_id)
@@ -384,7 +397,7 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
     await funeral_answers._tell_managers(
         db, settings, record, request, kind=KIND_ALL_SET, title=title,
         body=f"{agyary.name}: {said}{who}",
-        push=("All set", f"{going_words(going)} from {agyary.name}."), now=now,
+        push=(head, f"{going_words(going)} from {agyary.name}."), now=now,
     )
     await db.commit()
 
@@ -401,7 +414,7 @@ def _why_off(user: User | None, settings: Settings) -> str | None:
 
 
 async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: datetime,
-                    client: httpx.AsyncClient | None) -> int:
+                    client: httpx.AsyncClient | None, *, again: bool = False) -> int:
     """The all-set messages from Mobed Diary's number, only while
     FUNERAL_WHATSAPP_MODE is live (approved templates only; each still passes
     STOP, the pause switch, the allowlist, the day's limits and the name
@@ -410,11 +423,16 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
     runs once, for the call that made it all set):
 
     5  to the family, only if the manager's tick recorded their agreement to
-       hear from Mobed Diary (as template 3 before);
+       hear from Mobed Diary (as template 3 before) - again, with the new
+       names, when it is all set again (step 5b);
     6  to each mobed going with a number - app or added by hand, the panthaky
-       too if they pray - with "I can't go any more" on it;
+       too if they pray - with "I can't go any more" on it, once each: only
+       to those whose details have not gone (``details_sent_at``, set when it
+       goes), so all set again reaches only the one new to it;
     7  to the request's panthakys who are not going (they have 6);
-    8  to the funeral place's managers.
+    8  to the funeral place's managers;
+    7 and 8 are not sent again (step 5b): the panthaky and the place see the
+    new names in the app.
 
     Templates 1-3 are never sent for a request made all set. Returns how many
     went."""
@@ -432,12 +450,14 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
 
     sends = []
     if request.family_whatsapp_agreed:
-        sends.append(fw.all_set_family_send(record, agyary, going=people, panthakys=heads,
-                                            refs={"request": request_id, "to": "family"}))
+        refs = {"request": request_id, "to": "family"}
+        if again:
+            refs["again"] = "1"
+        sends.append(fw.all_set_family_send(record, agyary, going=people, panthakys=heads, refs=refs))
     for g in going:
         row = g["row"]
-        if not g["phone"]:
-            continue
+        if not g["phone"] or row.details_sent_at is not None:
+            continue        # no number, or their details went at an earlier All set
         why = None
         if row.user_id:
             why, to = _why_off(await db.get(User, row.user_id), settings), ("user", row.user_id)
@@ -452,14 +472,25 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
             recipient_id=to[1], agyary_id=agyary.id, back_out=prayer_callout.back_out_payload(row),
             refs={"request": request_id, "to": "going", "answer": row.id}, why_not=why))
     going_ids = {g["row"].user_id for g in going if g["row"].user_id}
-    for p in panthakys:
-        if p.id not in going_ids:
-            sends.append(fw.all_set_panthaky_send(record, place, going=people, phone=p.phone, recipient_id=p.id,
-                                                  agyary_id=agyary.id, refs={"request": request_id, "to": "panthaky"}))
-    for m in await funeral_answers._managers(db, settings, record.funeral_place_id):
-        sends.append(fw.all_set_manager_send(record, agyary, going=people, panthakys=heads, phone=m.phone,
-                                             recipient_id=m.id, refs={"request": request_id, "to": "manager"}))
+    if not again:
+        for p in panthakys:
+            if p.id not in going_ids:
+                sends.append(fw.all_set_panthaky_send(record, place, going=people, phone=p.phone, recipient_id=p.id,
+                                                      agyary_id=agyary.id,
+                                                      refs={"request": request_id, "to": "panthaky"}))
+        for m in await funeral_answers._managers(db, settings, record.funeral_place_id):
+            sends.append(fw.all_set_manager_send(record, agyary, going=people, panthakys=heads, phone=m.phone,
+                                                 recipient_id=m.id, refs={"request": request_id, "to": "manager"}))
     rows = await fw.deliver(db, settings, sends, now=now, client=client)
+    # Whose details have gone, so they are never sent them twice (step 5b: all set again).
+    by_id = {g["row"].id: g["row"] for g in going}
+    for n in rows:
+        row = by_id.get(int(n.template_params.get("answer", 0) or 0)) \
+            if n.notification_type == fw.TYPE_ALL_SET_DETAILS else None
+        if row is not None and fw.went(n):
+            row.details_sent_at = now
+    await db.commit()
     went = sum(1 for n in rows if fw.went(n))
-    logger.warning("Request %s all set: %d of %d WhatsApp messages went", request_id, went, len(rows))
+    logger.warning("Request %s all set%s: %d of %d WhatsApp messages went", request_id, " again" if again else "",
+                   went, len(rows))
     return went

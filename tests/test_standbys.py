@@ -647,3 +647,83 @@ async def test_a_place_filled_meanwhile_stops_the_asking_and_a_late_yes_is_a_sta
     rows = await _answers(db)
     assert rows[SECOND].reask_token != reask and standbys.reask_state(rows[SECOND]) == "asked_again"
     assert rows[THIRD].reasked_at is None
+
+
+# --- Filled again: all set again ------------------------------------------------------------
+
+def _templates(meta, name) -> list[dict]:
+    return [m for m in meta.sent if m.get("type") == "template" and m["template"]["name"] == name]
+
+
+def _body(m) -> list[str]:
+    return [p["text"] for p in m["template"]["components"][0]["parameters"]]
+
+
+async def test_all_set_again_tells_the_new_names_once_without_repeating_the_rest(client, db, seeded, meta, pushes,
+                                                                                live):
+    from tests.funeral_helpers import MANAGER
+
+    aid = seeded["agyary_id"]
+    goti = await db.get(Agyary, aid)
+    await member(db, goti, OTHER_MOBED, name="Er. App Standby")
+    await db.commit()
+    rid, _ = await _all_set(client, db, aid, standby=False)
+    other = await _as(client, OTHER_MOBED)
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=other)).status_code == 200
+    first_at = (await _request(db, rid)).all_set_at
+    books_before = {b.user_id: (b.id, b.customer_id) for b in (await db.execute(select(FuneralRequestBook))).scalars()}
+    kias, standby = await _user(db, MOBED), await _user(db, OTHER_MOBED)
+    bookings = {uid: await _count(db, Booking, Booking.created_by_user_id == uid) for uid in books_before}
+    rows = await _answers(db)
+    # The details that went at the first All set are written down as gone.
+    assert rows[LISTED].details_sent_at is not None and rows[MOBED].details_sent_at is not None
+    sent = len(meta.sent)
+
+    # The app mobed going can't go; the app standby is asked and says yes: all set again.
+    assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))).status_code == 200
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=other)
+    assert r.status_code == 200 and r.json()["request"]["status"] == "all_set", r.text
+    request = await _request(db, rid)
+    assert request.all_set_at > first_at and request.confirmed_short is False
+    new = meta.sent[sent:]
+
+    # Template 6 only to the one now going; template 5 to the family again, with the new names;
+    # 7 and 8 not again; nothing to the one who can't go.
+    six = config.get_settings().whatsapp_all_set_details_template
+    details = [m for m in new if m.get("type") == "template" and m["template"]["name"] == six]
+    assert ["+" + m["to"].lstrip("+") for m in details] == [OTHER_MOBED]
+    mobeds = "Er. Listed (+91 9822200055), Er. App Standby (+91 9822200114)"
+    assert _body(details[0])[6] == mobeds
+    family = [m for m in new if m.get("type") == "template" and m["template"]["name"] == "prayers_all_set_family"]
+    assert len(family) == 1 and "+" + family[0]["to"].lstrip("+") == FAMILY and _body(family[0])[1] == mobeds
+    assert MOBED_NAME not in json.dumps(family)
+    for name in ("prayers_all_set_panthaky", "funeral_accepted_manager_v2"):
+        assert len(_templates(meta, name)) == 1
+    assert not [m for m in new if "+" + m["to"].lstrip("+") == MOBED]
+    assert (await _answers(db))[OTHER_MOBED].details_sent_at is not None
+
+    # A book only for the one new to it; the others' books, and the calendar, as they were.
+    books = {b.user_id: (b.id, b.customer_id) for b in (await db.execute(select(FuneralRequestBook))).scalars()}
+    assert set(books) == set(books_before) | {standby.id}
+    assert all(books[uid] == books_before[uid] for uid in books_before)
+    for uid, n in bookings.items():
+        assert await _count(db, Booking, Booking.created_by_user_id == uid) == n
+    assert kias.id in books
+
+    # In the app: All set again, with the new names, to the panthaky, those going and the place.
+    title = "All set again: Er. Listed and Er. App Standby are going for Behdin Rustom Jamshed"
+    assert (await _notes(db, PANTHAKY, all_set.KIND_ALL_SET))[-1].title == title
+    assert (await _notes(db, OTHER_MOBED, all_set.KIND_ALL_SET))[-1].title == title
+    assert (await _notes(db, MANAGER, all_set.KIND_ALL_SET))[-1].title == title
+    assert len(await _notes(db, MOBED, all_set.KIND_ALL_SET)) == 1        # the first one only
+    assert [p for p in pushes if p["title"] == "All set again"]
+
+    # The board and the cards read the new names; the one who can't go reads so.
+    board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
+    assert [g["name"] for g in board["all_set"]["going"]] == ["Er. Listed", "Er. App Standby"]
+    assert [p["name"] for p in board["backed_out"]] == [MOBED_NAME]
+    card = (await client.get(f"{REQUESTS}/{rid}", headers=other)).json()["request"]
+    assert card["all_set"]["family_contact"]["phone"] == FAMILY
+    assert [g["is_me"] for g in card["all_set"]["going"]] == [False, True]
+    gone = (await client.get(f"{REQUESTS}/{rid}", headers=await _as(client, MOBED))).json()["request"]
+    assert gone["all_set"] is None and gone["my_answer"]["state"] == "backed_out"
