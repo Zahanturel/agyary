@@ -311,6 +311,8 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "no"}, headers=not_going)).status_code == 200
     r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=mobed)
     assert r.status_code == 200 and r.json()["request"]["status"] == "all_set"
+    # Their yes filled the last place: told so, not that the details are still to come.
+    assert r.json()["done"]["message"] == prayer_callout.ALL_SET_GOING_WORDS
 
     # The panthaky who took it (by I'll pray), on the board and on their request.
     hormuz = await _user(db, PANTHAKY)

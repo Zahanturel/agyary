@@ -949,6 +949,8 @@ def _same_person(a: PrayerCalloutAnswer, b: PrayerCalloutAnswer) -> bool:
 
 # What a mobed going, or on standby, is told in the app (owner, 21 Nov 2026).
 GOING_WORDS = "You are going. You will get the details once enough mobeds are going."
+# An app mobed whose "I can pray" filled the last place: the details are on their card now.
+ALL_SET_GOING_WORDS = "You are going, and all the places are filled: it is all set."
 HOW_WORDS = {HOW_WHATSAPP: "said yes on WhatsApp", HOW_APP: "said yes in the app", HOW_PHONE: "said yes on the phone"}
 
 
@@ -1515,8 +1517,11 @@ async def answer_in_app(
         message = _mine_already(row)
     elif not yes:
         message = NO_WORDS
+    elif row.picked_at is None:
+        message = fw.ENOUGH_TEXT
     else:
-        message = GOING_WORDS if row.picked_at is not None else fw.ENOUGH_TEXT
+        await db.refresh(request)
+        message = ALL_SET_GOING_WORDS if request.status == REQUEST_ALL_SET else GOING_WORDS
     return {"outcome": outcome, "message": message}
 
 
