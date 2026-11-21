@@ -217,6 +217,11 @@ their number goes to the family; the message should say both before they answer.
 - **Red counts:** a panthaky's Requests count is the open requests nobody has taken yet; an
   app mobed's is the open requests they were asked and have not answered.
 - **A Yes is not told the details at once any more:** the details go to everyone at All set.
+- **A phone call can turn an earlier "no" into Going** (people change their mind on the phone);
+  it never touches someone already going or a standby. Backing out is the 5b path.
+- **"I'll pray" is for a confirmed panthaky** (an admin who is not one cannot fill a place).
+- **At an agyari with no panthaky,** mobeds are not each told when another says yes; their
+  card shows "1 of 2 going" instead.
 
 ## Data changes
 
