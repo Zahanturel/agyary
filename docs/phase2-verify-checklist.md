@@ -160,7 +160,8 @@ Tell me afterwards which test records to remove.
 
 - **R3.1 step 8:** the templates submitted and approved, then a live test with your own numbers.
 - A real-phone check of notifications; a security pass over everything new.
-- **Small follow-ups:** the name screen still says "slips" for managers; sign-up dates shown in UK
-  time; a manager cannot change their place in the app.
+- **Small follow-ups:** a manager cannot change their place in the app. Done 22 Nov 2026 (built,
+  not live yet): the sign-up name screen no longer says "slips" to managers; sign-up dates in India
+  time; the bell and the Requests count refresh after acting on a request.
 - **Before real deaths at scale:** the lawyer's question on the departed's data (research doc).
 - **Later (to discuss):** the behdin app (R4); payments through a gateway with your fee.
