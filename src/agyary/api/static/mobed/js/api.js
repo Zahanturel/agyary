@@ -186,9 +186,12 @@ export const waLoginPoll = () => get("/auth/wa/poll");
 export const waLoginComplete = (name) => post("/auth/wa/complete", { name });
 /** The number we sent back to the phone the code came from (AU-1). */
 export const waLoginConfirm = (number) => post("/auth/wa/confirm", { number });
-export const logout = () => post("/auth/logout");
-/** End every other signed-in device of this mobed; this one stays. */
-export const signOutOtherDevices = () => post("/auth/sessions/sign-out-others", {});
+/** Sign out; `endpoint` is this phone's push subscription, if any, which the server forgets too. */
+export const logout = (endpoint = null) => post("/auth/logout", endpoint ? { endpoint } : {});
+/** End every other signed-in device of this mobed, and their notifications; this one stays,
+ *  with its own (`keepEndpoint`, this phone's push subscription, if any). */
+export const signOutOtherDevices = (keepEndpoint = null) =>
+  post("/auth/sessions/sign-out-others", { keep_endpoint: keepEndpoint || null });
 /** Delete this account and everything that is the mobed's. Cannot be undone. */
 export const deleteMyAccount = () => post("/auth/account/delete", { confirm: true });
 /** Admin only: end every signed-in device of the mobed with this number. */

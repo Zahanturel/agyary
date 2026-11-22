@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.core.config import get_settings
 from agyary.models import AgyaryUser, User, UserSession
 from agyary.models.enums import ACCESS_ON, ACCESS_PENDING
+from agyary.services import web_push
 
 JWT_ALGORITHM = "HS256"
 
@@ -284,9 +285,14 @@ async def end_token(db: AsyncSession, claims: dict) -> None:
         await db.flush()
 
 
-async def end_all_sessions(db: AsyncSession, user: User, *, keep: int | None = None) -> int:
+async def end_all_sessions(
+    db: AsyncSession, user: User, *, keep: int | None = None, keep_endpoint: str | None = None,
+) -> int:
     """End every session of ``user`` but ``keep``, and refuse every token from
-    before sessions existed. Returns how many sessions were ended."""
+    before sessions existed. The phone notifications of the devices signed out
+    stop too: every one of the account's push subscriptions is forgotten but
+    ``keep_endpoint``, the one of the device that stays signed in (with
+    ``keep`` only). Returns how many sessions were ended."""
     now = _now()
     rows = (
         await db.execute(
@@ -299,5 +305,6 @@ async def end_all_sessions(db: AsyncSession, user: User, *, keep: int | None = N
             session.revoked_at = now
             ended += 1
     user.tokens_valid_after = now
+    await web_push.remove_all(db, user.id, keep_endpoint=keep_endpoint if keep is not None else None)
     await db.flush()
     return ended

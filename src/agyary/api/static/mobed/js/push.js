@@ -112,6 +112,23 @@ export async function turnOn() {
   return myPushSubscribe({ endpoint: json.endpoint, keys: json.keys });
 }
 
+/** At most `ms` for `promise`, then `fallback`: signing out must never wait long on the browser. */
+function within(promise, ms, fallback) {
+  return Promise.race([promise, new Promise((ok) => setTimeout(() => ok(fallback), ms))]).catch(() => fallback);
+}
+
+/** This phone's subscription, or null, for signing out: never waits long, never throws. */
+export async function thisPhone(ms = 3000) {
+  return within(Promise.resolve().then(() => current()), ms, null);
+}
+
+/** Stop `sub` in this browser once signed out (the server has forgotten it already), so a
+ *  phone handed over shows nothing more of this account. Best effort: never throws. */
+export async function forget(sub, ms = 3000) {
+  if (!sub) return;
+  await within(Promise.resolve().then(() => sub.unsubscribe()), ms, false);
+}
+
 /** Stop notifications on this phone, here and on the server. */
 export async function turnOff() {
   const sub = await current();

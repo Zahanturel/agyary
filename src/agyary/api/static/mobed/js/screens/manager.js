@@ -37,6 +37,7 @@ import { clearAllDrafts } from "../drafts.js";
 import { shellVersion } from "../update.js";
 import { flagProblems } from "../fielderrors.js";
 import { paintPushCard } from "../push_card.js";
+import * as push from "../push.js";
 import { managerHash, paintActBanner } from "../acting.js";
 
 /** A way to reach the person who runs Mobed Diary, in words and (if the
@@ -332,7 +333,9 @@ export function renderManagerSettings() {
     const btn = ev.currentTarget;
     btn.disabled = true;
     try {
-      const r = await signOutOtherDevices();
+      // This phone keeps its notifications; the others' stop.
+      const sub = await push.thisPhone();
+      const r = await signOutOtherDevices(sub ? sub.endpoint : null);
       showInfo(r.signed_out
         ? `Signed out of ${r.signed_out} other device${r.signed_out === 1 ? "" : "s"}.`
         : "You were not signed in anywhere else.");
@@ -364,6 +367,8 @@ export function renderManagerSettings() {
         btn.disabled = false;
         return showError(err.message);
       }
+      // The server forgot this phone's notifications with the account; the browser drops them too.
+      await push.forget(await push.thisPhone());
       clearSession();
       clearAllDrafts();
       forgetLastPhone();

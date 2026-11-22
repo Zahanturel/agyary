@@ -87,6 +87,8 @@ _STEPS = [
     # notices and preferences go with it). login_otps stay: they are what the
     # code limits count, and they are swept after two days.
     "DELETE FROM agyary_users WHERE user_id = :u",
+    # Their phones' notifications stop (the foreign key would take them too).
+    "DELETE FROM push_subscriptions WHERE user_id = :u",
     # Their answers to a panthaky's call-out are the fire temple's record (D10):
     # kept, without their name or number.
     "UPDATE prayer_callout_answers SET name = 'A deleted account', phone = NULL WHERE user_id = :u",

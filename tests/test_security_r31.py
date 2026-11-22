@@ -15,7 +15,8 @@ from agyary.core import config
 from agyary.models import Agyary, AppNotification, FuneralRecord, FuneralRequest, ReminderOptOut, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import funeral_records, prayer_callout, standbys
-from tests.funeral_helpers import FAMILY, agyari, form, member
+from tests.conftest import sign_in
+from tests.funeral_helpers import FAMILY, agyari, auth as _auth, form, member
 from tests.test_prayer_callout import LISTED, LIVE, RECORDS, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
 from tests.test_standbys import OTHER_MOBED, REQUESTS, THIRD, _all_set, _b, _reasks, _to, _tomorrow
 
@@ -379,6 +380,87 @@ async def test_erasing_a_number_a_panthaky_added_takes_it_off_every_list(client,
     got = (await client.get(_list(aid), headers=panthaky)).json()
     assert [m["name"] for m in got["mobeds"] if m["kind"] == "contact"] == ["Er. Second"]
     assert "Er. Listed" not in json.dumps((await client.get(_b(rid), headers=panthaky)).json())
+
+
+# --- 7. Signing out stops the phone notifications of the devices signed out --------------
+
+PUSH = "https://fcm.googleapis.com/fcm/send/"
+
+
+async def _phones(db, user_id: int, *names: str) -> None:
+    from agyary.models import PushSubscription
+
+    for name in names:
+        db.add(PushSubscription(user_id=user_id, endpoint=PUSH + name, p256dh="k" * 40, auth="a" * 16))
+    await db.commit()
+
+
+async def _left(db, user_id: int) -> list[str]:
+    from agyary.models import PushSubscription
+
+    return sorted(e.removeprefix(PUSH) for e in (await db.execute(
+        select(PushSubscription.endpoint).where(PushSubscription.user_id == user_id))).scalars())
+
+
+async def test_signing_out_forgets_this_phones_notifications(client, db, seeded):
+    body = await sign_in(client, "+919944401801", "Er. Push Mobed")
+    uid = body["user"]["id"]
+    await _phones(db, uid, "this-phone", "other-phone")
+    r = await client.post("/api/mobed/auth/logout", json={"endpoint": PUSH + "this-phone"})
+    assert r.status_code == 200, r.text
+    assert await _left(db, uid) == ["other-phone"]
+    # An app from before (no body) still signs out.
+    await sign_in(client, "+919944401801")
+    assert (await client.post("/api/mobed/auth/logout")).status_code == 200
+
+
+async def test_signing_out_other_devices_stops_theirs_and_keeps_this_one(client, db, seeded):
+    body = await sign_in(client, "+919944401802", "Er. Push Mobed")
+    uid = body["user"]["id"]
+    await _phones(db, uid, "this-phone", "lost-phone", "lent-phone")
+    r = await client.post("/api/mobed/auth/sessions/sign-out-others", json={"keep_endpoint": PUSH + "this-phone"},
+                          headers=_auth(body))
+    assert r.status_code == 200, r.text
+    assert await _left(db, uid) == ["this-phone"]
+    # This phone without notifications on: every other one's stop.
+    r = await client.post("/api/mobed/auth/sessions/sign-out-others", json={}, headers=_auth(body))
+    assert r.status_code == 200 and await _left(db, uid) == []
+
+
+async def test_the_admins_sign_out_everywhere_and_deleting_the_account_stop_them_all(client, db, seeded, monkeypatch):
+    monkeypatch.setenv("ADMIN_PHONES", seeded["mobed_phone"])
+    config.get_settings.cache_clear()
+    victim = await sign_in(client, "+919944401803", "Er. Push Mobed")
+    await _phones(db, victim["user"]["id"], "lost-phone", "home-phone")
+    admin = await sign_in(client, seeded["mobed_phone"])
+    r = await client.post("/api/mobed/admin/sign-out-everywhere", json={"phone": "+919944401803"},
+                          headers=_auth(admin))
+    assert r.status_code == 200, r.text
+    assert await _left(db, victim["user"]["id"]) == []
+
+    leaving = await sign_in(client, "+919944401804", "Er. Leaving Mobed")
+    await _phones(db, leaving["user"]["id"], "their-phone")
+    r = await client.post("/api/mobed/auth/account/delete", json={"confirm": True}, headers=_auth(leaving))
+    assert r.status_code == 200, r.text
+    assert await _left(db, leaving["user"]["id"]) == []
+
+
+def test_the_app_drops_this_phones_subscription_when_signing_out():
+    from pathlib import Path
+
+    js = Path(__file__).resolve().parents[1] / "src" / "agyary" / "api" / "static" / "mobed" / "js"
+    session = (js / "session.js").read_text(encoding="utf-8")
+    sign_out = session[session.index("export async function signOut"):session.index("export function isFuneralManager")]
+    # Read first (at most a moment), handed to the server with the sign-out, dropped in the browser after.
+    assert sign_out.index("push.thisPhone()") < sign_out.index("logout(sub ? sub.endpoint : null)")
+    assert sign_out.index("logout(") < sign_out.index("push.forget(sub)") < sign_out.index("clearSession()")
+    push = (js / "push.js").read_text(encoding="utf-8")
+    assert "export async function thisPhone(ms = 3000)" in push and "export async function forget(sub, ms = 3000)" in push
+    for screen in ("menu.js", "manager.js"):
+        text = (js / "screens" / screen).read_text(encoding="utf-8")
+        assert "signOutOtherDevices(sub ? sub.endpoint : null)" in text
+        delete = text[text.index("await deleteMyAccount();"):]
+        assert delete.index("push.forget(") < delete.index("clearSession()")
 
 
 # --- 4. The funeral place learns no mobed's name before All set --------------------------

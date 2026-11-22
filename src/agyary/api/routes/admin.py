@@ -188,7 +188,8 @@ async def sign_out_everywhere(
     payload: SignOutIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
 ) -> dict:
     """End every signed-in device of one mobed (AU-2) - a phone that was lost or
-    taken, a sign-in nobody recognises. They can sign in again with WhatsApp."""
+    taken, a sign-in nobody recognises - and stop the phone notifications of
+    every one of them. They can sign in again with WhatsApp."""
     user = (await db.execute(select(User).where(User.phone == payload.phone))).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="No mobed has that number")

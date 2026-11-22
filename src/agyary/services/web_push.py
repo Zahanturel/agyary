@@ -74,6 +74,18 @@ async def remove(db: AsyncSession, user_id: int, endpoint: str) -> int:
     return result.rowcount or 0
 
 
+async def remove_all(db: AsyncSession, user_id: int, *, keep_endpoint: str | None = None) -> int:
+    """Forget every device of this user but ``keep_endpoint`` (the phone that
+    stays signed in, if it has notifications on): signing out of other
+    devices, or everywhere, stops their notifications too, so a phone handed
+    over or lost shows nothing more of this account. Not committed here."""
+    where = [PushSubscription.user_id == user_id]
+    if keep_endpoint:
+        where.append(PushSubscription.endpoint != keep_endpoint)
+    result = await db.execute(delete(PushSubscription).where(*where))
+    return result.rowcount or 0
+
+
 async def devices(db: AsyncSession, user_id: int) -> int:
     return (await db.execute(
         select(func.count()).select_from(PushSubscription).where(PushSubscription.user_id == user_id)

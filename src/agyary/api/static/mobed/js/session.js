@@ -12,16 +12,21 @@ import { refreshHeader, chrome, showError } from "./ui.js";
 import { navigate } from "./router.js";
 import { clearAllDrafts } from "./drafts.js";
 import { refreshRequestCount } from "./requests_count.js";
+import * as push from "./push.js";
 
 /** Sign this phone out, from Settings or the waiting screen. `btn` is the
- *  button pressed: off while it runs, back on if it could not be done. */
+ *  button pressed: off while it runs, back on if it could not be done.
+ *  This phone's notifications stop too (the server forgets its push
+ *  subscription, and the browser drops it), so a phone handed over shows
+ *  nothing more of this account; that is best effort and never holds it up. */
 export async function signOut(btn) {
   btn.disabled = true;   // one sign-out per tap; the page reloads when it is done
+  const sub = await push.thisPhone();
   // The server has to clear the refresh cookie - it's httpOnly, so
   // dropping the in-memory token alone would sign you back in on the
   // next load.
   try {
-    await logout();
+    await logout(sub ? sub.endpoint : null);
   } catch (e) {
     // Only the server can clear that cookie, so with no answer the next
     // launch would sign this phone straight back in. Say so (FE-04).
@@ -31,6 +36,7 @@ export async function signOut(btn) {
         + "Please try again when you have signal.");
     }
   }
+  await push.forget(sub);
   clearSession();
   clearAllDrafts();
   forgetLastPhone();

@@ -11,7 +11,7 @@ import math
 from datetime import date, datetime, timezone
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
@@ -483,9 +483,15 @@ async def _serialize_user(db: AsyncSession, user: User) -> dict:
     }
 
 
+class LogoutIn(BaseModel):
+    # This phone's push subscription, if it has notifications on: forgotten too.
+    endpoint: str | None = Field(default=None, max_length=2000)
+
+
 @router.post("/auth/logout")
 async def logout(
     response: Response,
+    payload: LogoutIn | None = Body(default=None),
     refresh_token: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -496,7 +502,9 @@ async def logout(
     "sign out" would silently sign you straight back in on the next load -
     the opposite of what someone handing their phone to a colleague wants.
     Cleared with the same attributes it was set with, or the browser won't
-    match it.
+    match it. This phone's notifications stop too (``endpoint``, its push
+    subscription, which the app also unsubscribes in the browser), so a phone
+    handed over shows nothing more of this account.
     """
     settings = get_settings()
     # The session ends on the server too, so a copy of the cookie is worthless.
@@ -504,6 +512,8 @@ async def logout(
         try:
             claims = mobed_auth.decode_token(refresh_token, "refresh")
             await mobed_auth.end_token(db, claims)
+            if payload is not None and payload.endpoint:
+                await web_push.remove(db, claims["sub"], payload.endpoint)
             await db.commit()
         except mobed_auth.TokenError:
             pass
@@ -541,15 +551,23 @@ async def delete_my_account(
     return {"deleted": True}
 
 
+class SignOutOthersIn(BaseModel):
+    # This phone's push subscription, if it has notifications on: it stays.
+    keep_endpoint: str | None = Field(default=None, max_length=2000)
+
+
 @router.post("/auth/sessions/sign-out-others")
 async def sign_out_other_devices(
+    payload: SignOutOthersIn | None = Body(default=None),
     authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
 ) -> dict:
     """End every other signed-in device of this mobed - a lost phone, a phone
     lent to someone, a sign-in they do not recognise - and refuse any token
-    from before sessions existed. This device stays signed in."""
+    from before sessions existed. This device stays signed in, and keeps its
+    notifications (``keep_endpoint``); the others' stop."""
     user, session_id = await _current(authorization, db)
-    ended = await mobed_auth.end_all_sessions(db, user, keep=session_id)
+    ended = await mobed_auth.end_all_sessions(db, user, keep=session_id,
+                                              keep_endpoint=payload.keep_endpoint if payload is not None else None)
     await db.commit()
     return {"signed_out": ended}
 

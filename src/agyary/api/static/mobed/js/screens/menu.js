@@ -27,6 +27,7 @@ import { shellVersion } from "../update.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { paintPushCard } from "../push_card.js";
+import * as push from "../push.js";
 
 const PARSI_SYSTEMS = [
   ["shenshai", "Shenshai"],
@@ -314,7 +315,9 @@ export async function renderMenu() {
     const btn = ev.currentTarget;
     btn.disabled = true;   // one request per tap
     try {
-      const r = await signOutOtherDevices();
+      // This phone keeps its notifications; the others' stop.
+      const sub = await push.thisPhone();
+      const r = await signOutOtherDevices(sub ? sub.endpoint : null);
       showInfo(r.signed_out
         ? `Signed out of ${r.signed_out} other device${r.signed_out === 1 ? "" : "s"}.`
         : "You were not signed in anywhere else.");
@@ -346,6 +349,8 @@ export async function renderMenu() {
         e.target.disabled = false;
         return showError(err.message);
       }
+      // The server forgot this phone's notifications with the account; the browser drops them too.
+      await push.forget(await push.thisPhone());
       clearSession();
       clearAllDrafts();
       forgetLastPhone();
