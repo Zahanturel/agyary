@@ -62,7 +62,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.core.config import Settings, get_settings
 from agyary.models import (
     Agyary,
-    AgyaryMobedContact,
     FuneralPlace,
     FuneralRecord,
     FuneralRequest,
@@ -318,9 +317,9 @@ async def _send_reask(db: AsyncSession, settings: Settings, request: FuneralRequ
         if account is not None:
             why = all_set._why_off(account, settings)
         elif row.contact_id:
-            contact = await db.get(AgyaryMobedContact, row.contact_id)
-            linked = await db.get(User, contact.user_id) if contact is not None and contact.user_id else None
-            if linked is not None and not mobed_access.has_access(settings, linked):
+            # Matched to an account by their number now, not only when they were added.
+            linked = (await pc.accounts_by_phone(db, [row.phone])).get(row.phone)
+            if linked is not None and not pc.account_on(settings, linked):
                 why = "their Mobed Diary access is not on"
         # The call-out's own words (template 4 v2), with the re-ask's buttons.
         send = fw.Send(

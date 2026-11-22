@@ -479,9 +479,9 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
         if row.user_id:
             why, to = _why_off(await db.get(User, row.user_id), settings), ("user", row.user_id)
         else:
-            contact = await db.get(AgyaryMobedContact, row.contact_id) if row.contact_id else None
-            account = await db.get(User, contact.user_id) if contact is not None and contact.user_id else None
-            if account is not None and not mobed_access.has_access(settings, account):
+            # Matched to an account by the number it goes to, now (prayer_callout.accounts_by_phone).
+            account = (await prayer_callout.accounts_by_phone(db, [g["phone"]])).get(g["phone"])
+            if account is not None and not prayer_callout.account_on(settings, account):
                 why = "their Mobed Diary access is not on"
             to = ("contact", row.contact_id or 0)
         sends.append(fw.all_set_details_send(

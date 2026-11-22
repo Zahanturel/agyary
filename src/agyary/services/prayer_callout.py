@@ -176,6 +176,22 @@ def _off_words(user: User, settings: Settings) -> str | None:
     return "they are waiting for the admin's approval"
 
 
+def account_on(settings: Settings, user: User | None) -> bool:
+    """An account whose access is on (D9), and not gone."""
+    return user is not None and user.is_active and mobed_access.has_access(settings, user)
+
+
+async def accounts_by_phone(db: AsyncSession, phones) -> dict[str, User]:
+    """The Mobed Diary accounts of these numbers, by number. A mobed added by
+    hand is matched to an account by their number whenever they would be
+    asked or sent something - not only when they were added, since the number
+    may sign up later, or its account be switched off since."""
+    phones = {p for p in phones if p}
+    if not phones:
+        return {}
+    return {u.phone: u for u in (await db.execute(select(User).where(User.phone.in_(phones)))).scalars()}
+
+
 async def our_mobeds(
     db: AsyncSession, settings: Settings, agyary_id: int, *, me: User | None = None, with_numbers: bool = False,
 ) -> list[dict]:
@@ -198,9 +214,8 @@ async def our_mobeds(
                                          AgyaryMobedContact.is_active.is_(True))
         .order_by(AgyaryMobedContact.name, AgyaryMobedContact.id)
     )).scalars().all()
-    linked_ids = {c.user_id for c in contacts if c.user_id}
-    linked = {u.id: u for u in (await db.execute(select(User).where(User.id.in_(linked_ids)))).scalars()} \
-        if linked_ids else {}
+    # An account of a mobed added by hand, by their number now (accounts_by_phone).
+    linked = await accounts_by_phone(db, {c.phone for c in contacts})
     adders_ids = {c.consent_by_user_id for c in contacts if c.consent_by_user_id}
     adders = dict((await db.execute(select(User.id, User.name).where(User.id.in_(adders_ids)))).all()) \
         if adders_ids else {}
@@ -226,9 +241,10 @@ async def our_mobeds(
     for c in contacts:
         if c.phone in member_phones:
             continue    # they joined the app: listed once, as an app mobed
-        account = linked.get(c.user_id) if c.user_id else None
+        account = linked.get(c.phone)
         why = ("they replied STOP to Mobed Diary" if c.phone in stopped
-               else _off_words(account, settings) if account is not None and account.access == ACCESS_OFF else None)
+               else _off_words(account, settings) if account is not None and not account_on(settings, account)
+               else None)
         out.append({"key": f"c{c.id}", "kind": "contact", "id": c.id, "name": c.name, "phone": c.phone,
                     "stopped": c.phone in stopped, "is_me": False, "can_message": why is None, "why_not": why,
                     "agreed_at": c.consent_at.isoformat() if c.consent_at else None,

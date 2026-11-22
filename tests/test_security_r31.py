@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from agyary.core import config
 from agyary.models import AppNotification, FuneralRequest, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import prayer_callout, standbys
-from tests.funeral_helpers import FAMILY
+from tests.funeral_helpers import FAMILY, agyari, member
 from tests.test_prayer_callout import LISTED, LIVE, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
 from tests.test_standbys import REQUESTS, _all_set, _b, _reasks, _to
 
@@ -166,3 +166,53 @@ async def test_a_removed_mobed_holding_a_place_is_not_named_or_sent_the_details(
             assert "Er. Listed" not in note.title + note.body
     board = (await client.get(_b(rid), headers=panthaky)).json()
     assert [g["name"] for g in board["all_set"]["going"]] == [KIAS]
+
+
+# --- 5. A mobed added by hand is matched to an account by their number when asked ------
+
+async def test_a_number_that_signs_up_after_being_added_is_not_asked_while_waiting(client, db, seeded, meta, pushes,
+                                                                                    live):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _add(client, aid, panthaky, "Er. Listed", LISTED)
+    # The number signs up afterwards, at another fire temple, and waits for the admin.
+    elsewhere = await agyari(db, "Elsewhere Agyari (test)", None)
+    await member(db, elsewhere, LISTED, access="pending", name="Er. Listed Himself")
+    await db.commit()
+
+    rid, res, mgr = await _send(client, db, aid)
+    assert _to(meta, LISTED) == []
+    (listed,) = [m for m in (await client.get(_list(aid), headers=panthaky)).json()["mobeds"] if m["kind"] == "contact"]
+    assert listed["can_message"] is False
+    board = (await client.get(_b(rid), headers=panthaky)).json()
+    (row,) = [m for m in board["mobeds"] if m["kind"] == "contact"]
+    assert row["can_ask"] is False and row["state"] == "not_asked"
+
+    # Approved, they are asked like anyone; switched off again, not on the next request.
+    await db.execute(update(User).where(User.phone == LISTED).values(access="on"))
+    await db.commit()
+    r = await client.post(_b(rid, "ask-everyone"), headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert len(_templates(meta, LISTED, "prayer_request_mobeds_v2")) == 1
+    await db.execute(update(User).where(User.phone == LISTED).values(access="off"))
+    await db.commit()
+    assert (await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)).status_code == 200
+    await _send(client, db, aid, mgr)
+    assert len(_templates(meta, LISTED, "prayer_request_mobeds_v2")) == 1
+
+
+async def test_a_standby_whose_number_has_an_account_waiting_is_not_asked_again(client, db, seeded, meta, pushes,
+                                                                                 live):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)          # Er. Second on standby
+    elsewhere = await agyari(db, "Elsewhere Agyari (test)", None)
+    await member(db, elsewhere, SECOND, access="pending", name="Er. Second Himself")
+    await db.commit()
+    asked = len(_reasks(meta, SECOND))
+    r = await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))
+    assert r.status_code == 200, r.text
+    assert len(_reasks(meta, SECOND)) == asked
+    row = (await _answers(db))[SECOND]
+    assert row.reasked_at is not None and row.reask_passed_at is not None     # passed over
+    (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert "nobody on standby could be asked" in note.title
