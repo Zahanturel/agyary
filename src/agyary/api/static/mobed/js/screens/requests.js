@@ -51,6 +51,7 @@ import { esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { refreshRequestCount } from "../requests_count.js";
+import { refreshAfterAction } from "../notifications.js";
 import { memorialFromRequest } from "./memorial_new.js";
 
 // --- Words ------------------------------------------------------------------------
@@ -372,11 +373,12 @@ function openMemorialForm({ rid, aid, place }, customerId, prefill) {
 }
 
 /** After an answer the request may have changed meanwhile: the page is drawn again, and
- *  what happened is said over it. Nothing, if the mobed has gone to another screen. */
+ *  what happened is said over it. Nothing on the page, if the mobed has gone to another
+ *  screen; the bell and the red count are read again either way. */
 async function redrawSaying(q, message, isError, alive) {
+  refreshAfterAction();
   if (!alive()) return;
   await renderRequest({ id: q.id });
-  refreshRequestCount();
   (isError ? showError : showInfo)(message);
 }
 
@@ -506,8 +508,8 @@ function confirmBackOut(q, alive) {
       return;
     }
     sheet.close();
+    refreshAfterAction();
     if (!alive()) return;
-    refreshRequestCount();
     drawFor(res.request, alive);
     toTop();
     showInfo((res.done && res.done.message) || "Noted: you can't go.");
@@ -527,8 +529,8 @@ async function answer(q, choice, buttons, alive) {
     buttons.forEach(b => { b.disabled = false; });
     return showError(e.message);
   }
+  refreshAfterAction();
   if (!alive()) return;
-  refreshRequestCount();
   drawFor(res.request, alive);
   // Their yes made it all set: a new page (the family's contact, who is praying), from its top.
   if (res.request.status === "all_set" && res.request.all_set) toTop();
@@ -953,10 +955,10 @@ async function act(view, btn, call) {
     return;
   }
   view.acting = false;
+  refreshAfterAction();
   if (!here(view)) return;
   const { done = {}, ...b } = res;
   showBoard(view, b, seq);
-  refreshRequestCount();
   (done.state === "failed" ? showError : showInfo)(done.message || "Done.");
 }
 
@@ -1130,10 +1132,10 @@ function askGoing(view, m) {
       }
       view.acting = false;
       sheet.close();
+      refreshAfterAction();
       if (!here(view)) return;
       const { done = {}, ...b } = res;
       showBoard(view, b, seq);
-      refreshRequestCount();
       showInfo(done.message || "Noted.");
     };
   });
@@ -1183,10 +1185,10 @@ function confirmShort(view) {
     }
     view.acting = false;
     sheet.close();
+    refreshAfterAction();
     if (!here(view)) return;
     const { done = {}, ...nb } = res;
     showBoard(view, nb, seq);
-    refreshRequestCount();
     showInfo(done.message || "All set.");
   };
 }
@@ -1235,10 +1237,10 @@ function confirmCantGo(view, p) {
     }
     view.acting = false;
     sheet.close();
+    refreshAfterAction();
     if (!here(view)) return;
     const { done = {}, ...nb } = res;
     showBoard(view, nb, seq);
-    refreshRequestCount();
     showInfo(done.message || "Noted.");
   };
 }

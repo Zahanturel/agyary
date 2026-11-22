@@ -46,6 +46,7 @@ import { esc, gregLabel, istHm, istYmd, todayIst, phoneField, readPhone, setPhon
 import { navigate, navGuard, returnTo } from "../router.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
 import { managerHash, managerPlaces } from "../acting.js";
+import { refreshAfterAction } from "../notifications.js";
 
 const TITLES = [["behdin", "Behdin"], ["ervad", "Ervad"], ["osta", "Osta"], ["osti", "Osti"], ["khud", "Khud"]];
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
@@ -713,6 +714,7 @@ function confirmElsewhere(rec, q, alive) {
       return;
     }
     sheet.close();
+    refreshAfterAction();
     if (!alive()) return;
     flashInfo(`Withdrawn from ${where}. Now choose another fire temple to ask.`);
     navigate(managerHash(`/record/${rec.id}/send`));
@@ -741,6 +743,7 @@ function confirmWithdraw(rec, q) {
       return showError(e.message);
     }
     sheet.close();
+    refreshAfterAction();
     await renderRecordView({ id: rec.id });
     showInfo("Withdrawn. You can now send it to another fire temple.");
   };
@@ -919,6 +922,7 @@ function confirmSend(rec, a, whatsappOn) {
       sending = false;
     }
     sheet.close();
+    refreshAfterAction();
     const n = res.asked;
     const wa = res.callout || {};
     if (wa.state === "panthaky_first") {

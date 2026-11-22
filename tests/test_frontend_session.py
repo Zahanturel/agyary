@@ -307,3 +307,38 @@ console.log(JSON.stringify({{ day: istYmd(late), time: istHm(late), shown: istSh
         assert ".slice(0, 10)" not in source and "istShortWhen(" in source, screen
     behdins = (JS / "screens" / "behdins.js").read_text(encoding="utf-8")
     assert "gregShort(istYmd(reminders.stopped_at))" in behdins
+
+
+def test_the_bell_and_the_red_count_are_read_again_after_a_request_is_acted_on():
+    """The bell kept what it had until the app was opened again, so a notice about a request
+    just answered stayed there. Each action that worked now reads the bell and the Requests
+    red count again: one read each per tap, never on a timer. The screens need a page to run,
+    so this pins the shape."""
+    notes = (JS / "notifications.js").read_text(encoding="utf-8")
+    helper = notes[notes.index("export function refreshAfterAction"):]
+    helper = helper[:helper.index("\n}") + 2]
+    assert "refreshNotifications();" in helper and "refreshRequestCount();" in helper
+    assert "setInterval" not in notes and "setTimeout" not in notes
+    requests = (JS / "screens" / "requests.js").read_text(encoding="utf-8")
+    # (where the code starts, where it ends, what the refresh comes after)
+    for start, end, after in [
+        ("async function answer(", "// --- All set", "await answerRequest("),          # I can pray / Not this time
+        ("function confirmBackOut(", "async function answer(", "await backOutRequest("),  # I can't go any more
+        ("async function act(", "async function refused(", "await call()"),             # Ask everyone, I'll pray
+        ("function askGoing(", "// --- Confirm with who's going", "await boardCallResult("),
+        ("function confirmShort(", "// --- Can't go", "await boardConfirmShort("),
+        ("function confirmCantGo(", "// --- We can't take this", "await boardCantGo("),
+        ("async function redrawSaying(", "// --- An app mobed", "async function redrawSaying("),
+    ]:
+        body = requests[requests.index(start):requests.index(end)]
+        assert body.index(after) < body.index("refreshAfterAction();"), start
+    decline = requests[requests.index("function confirmDecline("):]
+    assert decline.index("await declineRequest(") < decline.index("redrawSaying(q, `Declined.")
+    record = (JS / "screens" / "manager_record.js").read_text(encoding="utf-8")
+    for start, end in [("function confirmElsewhere(", "function confirmWithdraw("),       # Send to another
+                       ("function confirmWithdraw(", "// --- Choosing the fire temple"),  # Withdraw
+                       ("function confirmSend(", "\n}\n")]:                              # Send
+        body = record[record.index(start):]
+        body = body[:body.index(end)]
+        call = "await managerSend(" if start == "function confirmSend(" else "await managerWithdraw("
+        assert body.index(call) < body.index("refreshAfterAction();"), start

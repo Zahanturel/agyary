@@ -14,6 +14,7 @@ import { getNotifications, markNotificationsSeen } from "./api.js";
 import { state } from "./state.js";
 import { esc } from "./util.js";
 import { navigate } from "./router.js";
+import { refreshRequestCount } from "./requests_count.js";
 
 const bell = document.getElementById("bellBtn");
 const badge = document.getElementById("bellBadge");
@@ -93,6 +94,15 @@ export async function refreshNotifications({ popup = false } = {}) {
   paintBadge();
   const fresh = items.filter(n => !n.seen);
   if (popup && fresh.length && !overlay) show(fresh, { markSeen: true, title: "New for you" });
+}
+
+/** After a tap on a request has worked (an answer, a board action, Can't go, a manager's
+ *  Send or Withdraw): the bell and the Requests red count as the server has them now, since
+ *  the action can clear a notice or bring one. Two reads per tap, no polling; no popup, as the
+ *  screen is already saying what happened. */
+export function refreshAfterAction() {
+  refreshNotifications();
+  refreshRequestCount();
 }
 
 export function setupNotifications() {
