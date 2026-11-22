@@ -18,7 +18,7 @@
 
 import { adminMobeds, adminSetMobedAccess, adminDecidePanthaky } from "../api.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed } from "../ui.js";
-import { esc, gregShort } from "../util.js";
+import { esc, istShortWhen } from "../util.js";
 import { navGuard } from "../router.js";
 
 const TAGS = {
@@ -66,7 +66,8 @@ function row(m) {
       ? m.funeral_places.map(p => `Manager at <strong>${esc(p.name)}</strong>${p.city && !p.name.includes(p.city) ? `, ${esc(p.city)}` : ""}`).join("; ")
       : "Doongerwadi manager, no place")
     : m.agyaries.length ? m.agyaries.map(esc).join(", ") : "No fire temple chosen yet";
-  const when = m.signed_up ? `Signed up ${esc(gregShort(m.signed_up.slice(0, 10)))}` : "";
+  // In India time, as everywhere in the app (not the UTC day the server's timestamp starts with).
+  const when = m.signed_up ? `Signed up ${esc(istShortWhen(m.signed_up))}` : "";
   let actions = "";
   if (m.is_admin) {
     actions = `<span class="meta">Admin - always on</span>`;

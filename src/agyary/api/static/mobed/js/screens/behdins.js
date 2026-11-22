@@ -27,7 +27,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, flashInfo, flashError,
   refreshHeader, loading, backBar, loadFailedHtml, wireRetry, screenFailed, toTop,
 } from "../ui.js";
-import { esc, gregShort, phoneField, readPhone } from "../util.js";
+import { esc, gregShort, istYmd, phoneField, readPhone } from "../util.js";
 import { navigate, back, navGuard } from "../router.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
 import { openDeleteBox, deleteResultText } from "../behdin_delete.js";
@@ -561,7 +561,7 @@ export async function renderBehdinDetail({ id }) {
     const paintNote = () => {
       const parts = [];
       if (reminders.stopped_at) {
-        parts.push(`${record.name} replied STOP on ${gregShort(reminders.stopped_at.slice(0, 10))}, `
+        parts.push(`${record.name} replied STOP on ${gregShort(istYmd(reminders.stopped_at))}, `
           + "so reminders are off. Turn them back on only if they ask you to.");
       }
       if (reminders.enabled && reminders.delivery !== "live") {

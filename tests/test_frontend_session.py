@@ -289,3 +289,21 @@ def test_the_sign_up_name_step_fits_a_doongerwadi_manager_too():
     assert "This is your name in Mobed Diary. For a mobed, it is also the name on your slips." in step
     for screen in ("manager.js", "manager_record.js", "manager_behdins.js", "waiting.js"):
         assert "slip" not in (JS / "screens" / screen).read_text(encoding="utf-8").lower(), screen
+
+
+def test_sign_up_and_other_moments_are_shown_in_india_time():
+    """Admin -> Mobeds showed "Signed up" as the first ten characters of the server's UTC
+    timestamp: the day in UK time, a day early for anyone signing up before 5:30 am in India.
+    The admin's recent failures and a behdin's STOP did the same with their day."""
+    out = _node(STORAGE + f"""
+const {{ istShortWhen, istYmd, istHm }} = await import({json.dumps(_module(JS / "util.js"))});
+const late = "2026-11-21T20:15:00+00:00";   // 1:45 am on 22 Nov in India
+console.log(JSON.stringify({{ day: istYmd(late), time: istHm(late), shown: istShortWhen(late) }}));
+""")
+    assert out["day"] == "2026-11-22" and out["time"] == "01:45"
+    assert out["shown"].endswith(", 01:45") and "22" in out["shown"] and "21" not in out["shown"]
+    for screen in ("admin_mobeds.js", "admin.js"):
+        source = (JS / "screens" / screen).read_text(encoding="utf-8")
+        assert ".slice(0, 10)" not in source and "istShortWhen(" in source, screen
+    behdins = (JS / "screens" / "behdins.js").read_text(encoding="utf-8")
+    assert "gregShort(istYmd(reminders.stopped_at))" in behdins

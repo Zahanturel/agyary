@@ -53,6 +53,12 @@ export function gregShort(ymd) {
     day: "numeric", month: "short", timeZone: "UTC",
   });
 }
+/** A moment the server sent (an ISO timestamp, in UTC) as its day and time in India:
+ *  "22 Nov, 01:30". Never the timestamp's own first ten characters: that is the day in
+ *  UTC (UK time), a day early for anything before 5:30 am in India. */
+export function istShortWhen(iso) {
+  return `${gregShort(istYmd(iso))}, ${istHm(iso)}`;
+}
 
 export const MAH_NAMES_JS = ["Fravardin", "Ardibehesht", "Khordad", "Tir", "Amardad", "Shahrevar",
   "Meher", "Avan", "Adar", "Dae-Dadar", "Bahman", "Aspandard"];

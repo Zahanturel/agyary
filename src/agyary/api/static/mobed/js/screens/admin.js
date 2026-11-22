@@ -15,7 +15,7 @@ import { paintPushCard } from "../push_card.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed,
 } from "../ui.js";
-import { esc, gregShort, istHm, phoneField, readPhone } from "../util.js";
+import { esc, istShortWhen, phoneField, readPhone } from "../util.js";
 import { navGuard, navigate } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 
@@ -135,7 +135,7 @@ export async function renderAdmin() {
       <h2>Recent failures</h2>
       ${o.recent_failures.length ? o.recent_failures.map(f => `
         <div class="list-row"><div class="lr-main"><b>${esc(f.to)}</b>
-          <span>${esc(gregShort(f.when.slice(0, 10)))} ${esc(istHm(f.when))} - ${esc(f.reason)}</span></div></div>
+          <span>${esc(istShortWhen(f.when))} - ${esc(f.reason)}</span></div></div>
       `).join("") : `<p class="meta">None.</p>`}
     </div>
 
