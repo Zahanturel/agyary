@@ -17,6 +17,8 @@
  *  - Who replied STOP, or is switched off or waiting, says so: they are never
  *    asked by Mobed Diary, but Call and WhatsApp stay, since those are the
  *    panthaky's own phone and WhatsApp (a plain chat, nothing typed for them).
+ *    For a mobed added by hand it says only "Cannot be asked on WhatsApp now",
+ *    never whether their number has a Mobed Diary account, or its state.
  *
  * Only that fire temple's confirmed panthakys (and the admin) see any of it.
  */
@@ -28,6 +30,9 @@ import { esc, phoneField, readPhone } from "../util.js";
 import { navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { canPickContacts, pickContacts, fillFromContact } from "../behdin_add.js";
+
+/** The server's words as a sentence: "cannot be ..." -> "Cannot be ...". */
+const sentence = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
 /** Call and WhatsApp from the panthaky's own phone, as on a request
  *  (requests.js): the WhatsApp one opens a plain chat. Not on their own row. */
@@ -49,8 +54,10 @@ function personHtml(m) {
     if (m.kind === "app") lines.push("Uses Mobed Diary");
     else if (m.added_by) lines.push(`Added by ${esc(m.added_by)}`);
   }
+  // For a mobed added by hand the server's words are whole ("cannot be asked on WhatsApp now"):
+  // they never say whether the number has a Mobed Diary account, or its state.
   const state = m.stopped ? "Replied STOP: not asked on WhatsApp"
-    : !m.can_message && !m.is_me ? `Not asked: ${m.why_not}` : "";
+    : !m.can_message && !m.is_me ? (m.kind === "contact" ? sentence(m.why_not) : `Not asked: ${m.why_not}`) : "";
   return `<div class="search-result" data-key="${esc(m.key)}" style="overflow-wrap:anywhere;cursor:default">
       <strong>${esc(m.name)}</strong>
       ${lines.map(l => `<div class="addr">${l}</div>`).join("")}

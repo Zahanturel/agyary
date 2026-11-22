@@ -4,17 +4,20 @@ true, one section per fix. Outbound HTTP is mocked throughout; nothing is sent.
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import AppNotification, FuneralRequest, User
+from agyary.models import AppNotification, FuneralRequest, ReminderOptOut, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import prayer_callout, standbys
 from tests.funeral_helpers import FAMILY, agyari, member
 from tests.test_prayer_callout import LISTED, LIVE, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
-from tests.test_standbys import REQUESTS, _all_set, _b, _reasks, _to
+from tests.test_standbys import REQUESTS, THIRD, _all_set, _b, _reasks, _to
 
 
 @pytest.fixture
@@ -216,3 +219,27 @@ async def test_a_standby_whose_number_has_an_account_waiting_is_not_asked_again(
     assert row.reasked_at is not None and row.reask_passed_at is not None     # passed over
     (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
     assert "nobody on standby could be asked" in note.title
+
+
+# --- 6. Adding a mobed by hand never tells the panthaky about an account -----------------
+
+async def test_adding_a_number_says_a_stop_but_never_what_account_it_has(client, db, seeded):
+    aid = seeded["agyary_id"]
+    elsewhere = await agyari(db, "Elsewhere Agyari (test)", None)
+    await member(db, elsewhere, LISTED, access="off", name="Er. Off Elsewhere")
+    await member(db, elsewhere, SECOND, access="pending", name="Er. Waiting Elsewhere")
+    db.add(ReminderOptOut(phone=THIRD, stopped_at=datetime.now(timezone.utc)))
+    await db.commit()
+    panthaky = await _as(client, PANTHAKY)
+    for name, phone in (("Er. One", LISTED), ("Er. Two", SECOND), ("Er. Three", THIRD)):
+        r = await client.post(_list(aid), json={"name": name, "phone": phone, "agreed": True}, headers=panthaky)
+        assert r.status_code == 200, r.text
+        words = json.dumps(r.json())
+        for leak in ("switched off", "waiting for", "approval", "access", "Elsewhere"):
+            assert leak not in words, (phone, leak)
+    got = {m["phone"]: m for m in r.json()["mobeds"] if m["kind"] == "contact"}
+    for phone in (LISTED, SECOND):
+        assert got[phone]["can_message"] is False and got[phone]["stopped"] is False
+        assert got[phone]["why_not"] == prayer_callout.CANNOT_ASK_NOW == "cannot be asked on WhatsApp now"
+    # A STOP is said: the panthaky needs to know the number cannot be asked.
+    assert got[THIRD]["stopped"] is True and "STOP" in got[THIRD]["why_not"]

@@ -176,6 +176,11 @@ def _off_words(user: User, settings: Settings) -> str | None:
     return "they are waiting for the admin's approval"
 
 
+# Why a mobed added by hand cannot be asked, when their number's account is not
+# on: said without saying that the number has an account, or its state.
+CANNOT_ASK_NOW = "cannot be asked on WhatsApp now"
+
+
 def account_on(settings: Settings, user: User | None) -> bool:
     """An account whose access is on (D9), and not gone."""
     return user is not None and user.is_active and mobed_access.has_access(settings, user)
@@ -242,9 +247,10 @@ async def our_mobeds(
         if c.phone in member_phones:
             continue    # they joined the app: listed once, as an app mobed
         account = linked.get(c.phone)
+        # A STOP is said (the panthaky needs to know it cannot be asked), but never that
+        # the number has a Mobed Diary account, or what state it is in (D2's spirit).
         why = ("they replied STOP to Mobed Diary" if c.phone in stopped
-               else _off_words(account, settings) if account is not None and not account_on(settings, account)
-               else None)
+               else CANNOT_ASK_NOW if account is not None and not account_on(settings, account) else None)
         out.append({"key": f"c{c.id}", "kind": "contact", "id": c.id, "name": c.name, "phone": c.phone,
                     "stopped": c.phone in stopped, "is_me": False, "can_message": why is None, "why_not": why,
                     "agreed_at": c.consent_at.isoformat() if c.consent_at else None,

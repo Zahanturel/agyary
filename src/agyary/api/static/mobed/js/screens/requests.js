@@ -237,6 +237,9 @@ function waLink(phone, text) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
 }
 
+/** The server's words as a sentence: "cannot be ..." -> "Cannot be ...". */
+const sentence = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
+
 function familyCardHtml(q) {
   const c = q.family_contact;
   return `
@@ -840,6 +843,9 @@ function mobedRowHtml(b, m) {
   const notes = [];
   if (m.phone) notes.push(esc(m.phone));
   if (m.stopped) notes.push("Replied STOP: not asked on WhatsApp");
+  // For a mobed added by hand the server's words are whole ("cannot be asked on WhatsApp now"):
+  // they never say whether the number has a Mobed Diary account, or its state.
+  else if (!m.can_message && m.why_not && m.kind === "contact") notes.push(esc(sentence(m.why_not)));
   else if (!m.can_message && m.why_not) notes.push(`Not asked on WhatsApp: ${esc(m.why_not)}`);
   // Call and WhatsApp use the panthaky's own phone, so only someone whose number is shown.
   const reach = m.phone ? `<div class="row" style="margin-top:8px">
