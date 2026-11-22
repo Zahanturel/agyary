@@ -25,8 +25,8 @@ import { flagProblems, clearProblems } from "../fielderrors.js";
 const PANTHAKY_FIRST = "panthaky_first";
 const MODES = [
   ["everyone", "Everyone at once",
-    "As soon as a request comes, every mobed on your list is asked on WhatsApp. The first to say yes fill "
-    + "the places. You only step in if it is short."],
+    "As soon as a request comes, every mobed on your list is asked, in the app and on WhatsApp. The first "
+    + "to say yes fill the places. You only step in if it is short."],
   [PANTHAKY_FIRST, "Come to me first",
     "Only you are told. Then you choose: ask everyone on WhatsApp, call a mobed, or pray yourself."],
 ];

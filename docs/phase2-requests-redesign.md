@@ -240,6 +240,33 @@ their number goes to the family; the message should say both before they answer.
 - **The WhatsApp reply to "I can't go any more"** at an agyari with no panthaky in the app is
   "Thank you for letting us know." (without "the panthaky has been told").
 
+## The lead's browser walk-through (22 Nov 2026, scratch database on :8011)
+
+Walked as a panthaky who is also the admin, acting for a test Doongerwadi: Settings -> Prayer
+requests (Come to me first, safety net shown only under it, Saved), Mobeds (the other app mobed
+with number, Call, WhatsApp; "You" without buttons), record a death and Send (the sheet before
+Send words Come to me first right), the Requests list ("Waiting for you", red count 1), the board
+(0 of 2, open places, I'll pray, Ask everyone, the mobed with Call / WhatsApp / Going?), Call then
+leaving and coming back (the "Is Er. ... going?" sheet appeared; Going filled a place "By phone"),
+I'll pray (All set: 2 going; the family's contact, the message to the family, who is praying, In
+your book, Make the memorial), the Doongerwadi's record (All set with the names and only the
+panthaky's number), "No answer yet" (told correctly 3 hours after an unanswered send), and
+Can't go (the place reopened, "Nobody is on standby: please find someone"). Every path worked.
+The full migration chain ran on a fresh database. All 539 related tests passed (one file re-run
+after a stalled run).
+
+Fixed at once: the "Everyone at once" words in Settings now say "asked, in the app and on WhatsApp".
+
+**Polish for later (not blocking):**
+- After a place reopens, the panthaky's board hides the family's contact again, though the
+  family is already in their book.
+- The message to the family names only the sender; it could also name the other mobeds praying.
+- The "Is X going?" sheet needs the phone to leave the app (a real call does); a WhatsApp chat on
+  a desktop browser may not trigger it.
+- Not walked in the browser (covered by tests and the helpers' screen checks): an app mobed's own
+  card, standbys being asked again, the safety net firing, Everyone at once at Send, a decline,
+  and a withdraw.
+
 ## Open for the owner (next session)
 
 - **No panthaky in the app:** templates 5, 6 and 8 name "the panthaky"; at an agyari with none
