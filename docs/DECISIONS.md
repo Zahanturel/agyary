@@ -313,6 +313,26 @@ Decided, not built. The research, the sources and the full design are in
     - **If the panthaky's own account is switched off after a request reached them**, the safety
       net (if set) still asks everyone, since nobody else could act (lead's choice, step 2).
 
+## D11. Words, greetings and names: a Parsi app (22 Nov 2026)
+
+The owner found "Namaste" in a ready-to-send WhatsApp message (live since 18 Nov) and said: "I am
+trying to make this a good Parsi app." Binding from now on:
+
+- **A mobed is greeted "Sahebji" and their first name** ("Sahebji Hormuz, ..."): a title typed
+  before the name (Er., Ervad, Dasturji, ...) is left out. Never "Namaste" or any other greeting
+  that is not the community's own.
+- **A behdin (family) is always shown and addressed by their own full name** as they gave it, not
+  by a first and middle name ("Sahebji <full name>" in the family message).
+- **Examples written for mobeds** (e.g. "Er. ..." as a sample name) belong on mobed and Doongerwadi
+  screens only. The behdin side (R4) gets its own words and examples, thought through for families.
+- **Behdins will use their own app: anything that touches their side is thought through properly
+  and shown to the owner before it is built.**
+- **The owner checks every text in the app** (messages, greetings, placeholders, names,
+  notifications, screens): an inventory of all of them is made for the owner to confirm or change.
+  Open from this review: how names are typed in (today a free text with the title in it, e.g. at
+  sign-up "e.g. Er. ...", against the title choice plus name used for behdins), to settle with the
+  inventory and R4.
+
 ## Not decided yet
 
 Separate WhatsApp numbers for sign-in and reminders; price and payer; Gujarati reminders; the
