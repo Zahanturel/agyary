@@ -43,6 +43,7 @@ from agyary.services import (
     mobed_access,
     mobed_auth,
     panthaky,
+    standbys,
     web_push,
 )
 from agyary.services.phone import Phone
@@ -275,7 +276,9 @@ async def set_mobed_access(
 ) -> dict:
     """Approve a waiting mobed or turn one on, or turn one off. Off keeps
     everything they saved; they see one screen saying so, and nothing is sent
-    under their account until they are on again."""
+    under their account until they are on again. Turned off, a place they hold
+    on a request is freed as "Can't go" frees it (lead's decision, 22 Nov
+    2026), and ``freed`` says so (None if none was)."""
     rate_limit.enforce_key(f"admin_access:{admin.id}", max_requests=60, window_seconds=60)
     user = await db.get(User, user_id)
     if user is None or not user.is_active:
@@ -285,8 +288,14 @@ async def set_mobed_access(
     except mobed_access.AccessError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await db.commit()
-    logger.warning("Admin %s set mobed %s access to %s", admin.id, user.id, payload.access)
-    return {"id": user.id, "access": mobed_access.effective(get_settings(), user)}
+    uid, phone = user.id, user.phone
+    logger.warning("Admin %s set mobed %s access to %s", admin.id, uid, payload.access)
+    freed = []
+    if payload.access == "off":
+        freed = await standbys.free_places_of(db, get_settings(), by_user=admin, user_id=uid, phone=phone)
+        await db.refresh(user)
+    return {"id": uid, "access": mobed_access.effective(get_settings(), user),
+            "freed": standbys.freed_words(freed) or None}
 
 
 class PanthakyDecisionIn(BaseModel):
@@ -342,14 +351,15 @@ async def decide_requests(
         raise HTTPException(status_code=404, detail="That mobed is not at that fire temple.")
     act = {"confirm": join_confirmation.confirm, "off": join_confirmation.take_off,
            "on": join_confirmation.put_back}[payload.action]
+    aid = agyary.id
     try:
         done = await act(db, get_settings(), admin, agyary, user_id)
     except join_confirmation.JoinError as exc:   # refused before anything changed
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     await db.commit()
-    membership = await mobed_auth.get_membership(db, agyary.id, user_id)
+    membership = await mobed_auth.get_membership(db, aid, user_id)
     user = await db.get(User, user_id)
-    return {"id": user_id, "agyary_id": agyary.id,
+    return {"id": user_id, "agyary_id": aid,
             "requests": panthaky.request_state(get_settings(), membership, user), "done": done}
 
 

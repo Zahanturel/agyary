@@ -21,8 +21,9 @@ taken off the list (panthaky.counts_for_requests, the one rule):
 On the Mobeds page, a confirmed panthaky (or the admin) can **Confirm** a mobed
 waiting, or say they are **Not one of ours**; can **Take off the list** one of
 its mobeds; and can **Put back** one taken off. Taken off, they stay a member
-(nothing else changes for them) and a mobed the panthaky had added by hand with
-the same number goes off the list with them. Confirmed or put back, the mobed is
+(nothing else changes for them), a mobed the panthaky had added by hand with
+the same number goes off the list with them, and a place they hold on one of
+its requests is freed as "Can't go" frees it. Confirmed or put back, the mobed is
 told in the app. A waiting mobed's number is never shown, nor one taken off:
 only the fire temple's mobeds' numbers are on the page (D10, "approved mobeds
 with their numbers").
@@ -33,6 +34,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -211,13 +213,18 @@ async def put_back(
 
 async def take_off(
     db: AsyncSession, settings: Settings, actor: User, agyary: Agyary, user_id, *, now: datetime | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> dict:
     """ "Not one of ours" (a mobed waiting) or "Take off the list" (one of its
     mobeds): off the list for its prayer requests, by ``actor``. They stay a
     member, and nothing else changes for them; a mobed added by hand with the
-    same number goes off the list too. Never a panthaky of the fire temple
-    (the owner decides that, on Admin -> Mobeds). Committed. Returns
-    {"message"}."""
+    same number goes off the list too. A place they hold on one of its
+    requests is freed as "Can't go" frees it (lead's decision, 22 Nov 2026:
+    standbys.free_places_of), and their own book keeps the family (D8). Never
+    a panthaky of the fire temple (the owner decides that, on Admin ->
+    Mobeds). Committed. Returns {"message"}, saying any place freed."""
+    from agyary.services import standbys   # here: standbys reaches all_set, which reaches the books
+
     now = now or _now()
     m, user = await _member(db, agyary.id, user_id)
     if m.role == ROLE_PANTHAKY:
@@ -233,6 +240,10 @@ async def take_off(
         .values(is_active=False)
     )
     await db.commit()
-    logger.warning("User %s took user %s off the list of fire temple %s%s", actor.id, user.id, agyary.id,
+    name, uid, phone, aid = user.name, user.id, user.phone, agyary.id
+    logger.warning("User %s took user %s off the list of fire temple %s%s", actor.id, uid, aid,
                    " (not one of ours)" if waiting else "")
-    return {"message": f"{user.name} is off the list."}
+    freed = await standbys.free_places_of(db, settings, by_user=actor, agyary_id=aid, user_id=uid, phone=phone,
+                                          now=now, client=client)
+    return {"message": " ".join(w for w in (f"{name} is off the list.", standbys.freed_words(freed)) if w),
+            "places_freed": len(freed)}

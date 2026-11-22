@@ -152,8 +152,14 @@ async def test_a_removed_mobed_holding_a_place_is_not_named_or_sent_the_details(
     await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
     assert (await _answers(db))[LISTED].picked_at is not None
     await _remove(client, aid, panthaky, contact)
+    # Their place is freed as Can't go frees it (lead's decision, 22 Nov 2026).
+    listed = (await _answers(db))[LISTED]
+    assert listed.backed_out_at is not None and listed.picked_at is not None
     meta.sent.clear()
     await _signed_tap(client, MOBED, f"pca:{answers[MOBED].token}:y")
+    assert (await _request(db, rid)).status == "waiting"
+    r = await client.post(_b(rid, "confirm-short"), headers=panthaky)
+    assert r.status_code == 200, r.text
     assert (await _request(db, rid)).status == "all_set"
 
     # The details only to the one going who is still on the list; nothing at all to them.

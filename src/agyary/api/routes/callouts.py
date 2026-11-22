@@ -104,14 +104,22 @@ async def add_our_mobed(agyary_id: int, payload: ContactIn, db: AsyncSession = D
 @router.delete("/agyaries/{agyary_id}/our-mobeds/{contact_id}")
 async def remove_our_mobed(agyary_id: int, contact_id: int, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_user)) -> dict:
-    """Take a mobed added by hand off the list (kept, turned off)."""
+    """Take a mobed added by hand off the list (kept, turned off). A place
+    they hold on one of its requests is freed as "Can't go" frees it (lead's
+    decision, 22 Nov 2026); ``done`` says so."""
     agyary = await _managed_agyary(db, user, agyary_id)
     try:
-        await prayer_callout.remove_contact(db, agyary.id, contact_id, user)
+        contact = await prayer_callout.remove_contact(db, agyary.id, contact_id, user)
     except prayer_callout.CalloutError as exc:
         raise _error(exc) from exc
     await db.commit()
-    return await _list(db, user, agyary)
+    name = contact.name
+    freed = await standbys.free_places_of(db, get_settings(), by_user=user, agyary_id=agyary.id,
+                                          contact_id=contact.id)
+    await db.refresh(user)
+    await db.refresh(agyary)
+    words = " ".join(w for w in (f"{name} is off the list.", standbys.freed_words(freed)) if w)
+    return {**await _list(db, user, agyary), "done": {"message": words, "places_freed": len(freed)}}
 
 
 # --- Joined, waiting for you; Off the list (D10, owner 22 Nov 2026) ----------------
@@ -127,7 +135,9 @@ async def _member_action(db: AsyncSession, user: User, agyary_id: int, act) -> d
     except join_confirmation.JoinError as exc:   # refused before anything changed
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     await db.commit()
+    # Read again: freeing a place may have rolled the session back, which forgets them.
     await db.refresh(user)
+    await db.refresh(agyary)
     return {**await _list(db, user, agyary), "done": done}
 
 

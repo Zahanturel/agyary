@@ -58,7 +58,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings, get_settings
@@ -595,6 +595,83 @@ async def mark_cant_go(
     logger.info("Request %s: user %s marked %s can't go", request.id, user_id, key)
     return {"outcome": "backed out",
             "message": " ".join(w for w in (f"Noted: {'you' if me else name} can't go.", _asked_words(opened)) if w)}
+
+
+# --- Freeing a held place (the lead's decision, 22 Nov 2026) ----------------------------
+
+@dataclass
+class Freed:
+    """A place freed: on which request, for whom it was prayed, and what followed."""
+
+    request_id: int
+    departed: str
+    opened: Opened
+
+
+async def free_places_of(
+    db: AsyncSession, settings: Settings, *, by_user: User, agyary_id: int | None = None,
+    user_id: int | None = None, contact_id: int | None = None, phone: str | None = None,
+    now: datetime | None = None, client: httpx.AsyncClient | None = None,
+) -> list[Freed]:
+    """Someone holding a place who can no longer take part - an app mobed
+    taken off a fire temple's list ("Not one of ours", "Take off the list"), a
+    mobed added by hand Removed from it, or someone whose Mobed Diary access
+    the admin switched off - has their place freed exactly as "Can't go" frees
+    it, through the same _back_out: the place reopens, the first standby is
+    asked and the panthakys are told (not ``by_user``, who sees it on screen);
+    an all-set request is waiting again, and is all set again once filled.
+    Their own book keeps the family (D8) and nothing is sent to them.
+
+    The rows are theirs by ``user_id``, ``contact_id`` or ``phone`` (at
+    ``agyary_id`` only, if given), and only those prayer_callout.left_out now
+    leaves out (a number still on the list another way keeps its place); only
+    on a request waiting or all set, and before the prayers begin, as for
+    Can't go (after that the place is left as it is, and at All set they are
+    still neither named nor sent anything). Commits. Returns what was freed."""
+    now = now or _now()
+    who = [cond for given, cond in ((user_id, PrayerCalloutAnswer.user_id == user_id),
+                                    (contact_id, PrayerCalloutAnswer.contact_id == contact_id),
+                                    (phone, PrayerCalloutAnswer.phone == phone)) if given]
+    if not who:
+        return []
+    query = (
+        select(PrayerCalloutAnswer.id, FuneralRequest.id)
+        .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .join(FuneralRequest, FuneralRequest.id == PrayerCallout.funeral_request_id)
+        .where(or_(*who), *pc.HOLDS_PLACE, FuneralRequest.status.in_(pc.MAY_BACK_OUT))
+        .order_by(FuneralRequest.id, PrayerCalloutAnswer.id)
+    )
+    if agyary_id is not None:
+        query = query.where(FuneralRequest.agyary_id == agyary_id)
+    found = (await db.execute(query)).all()
+    by_user_id = by_user.id
+    words = _Words(already="", not_going="", begun=BOARD_BEGUN)
+    out = []
+    for row_id, request_id in found:
+        row = await db.get(PrayerCalloutAnswer, row_id, populate_existing=True)
+        request = await db.get(FuneralRequest, request_id, populate_existing=True)
+        if row is None or request is None or not (await pc.left_out(db, settings, request.agyary_id, [row])):
+            continue
+        departed = fw.departed(await db.get(FuneralRecord, request.funeral_record_id))
+        try:
+            opened = await _back_out(db, settings, request, row, by_user=by_user, words=words, now=now,
+                                     client=client, skip_user_id=by_user_id)
+        except CalloutError as exc:     # not going any more, closed meanwhile, or the prayers have begun
+            await db.rollback()
+            await db.refresh(by_user)
+            logger.info("Request %s: the place of answer %s is not freed (%s)", request_id, row_id, exc)
+            continue
+        await db.refresh(by_user)
+        logger.warning("Request %s: the place of answer %s is freed by user %s", request_id, row_id, by_user_id)
+        out.append(Freed(request_id=request_id, departed=departed, opened=opened))
+    return out
+
+
+def freed_words(freed: list[Freed]) -> str:
+    """For whoever did it, on screen: each place open again, and what was done
+    about it ("We have asked Er. B.", or nobody is on standby)."""
+    return " ".join(" ".join(w for w in (f"Their place for {f.departed} is open again.", _asked_words(f.opened)) if w)
+                    for f in freed)
 
 
 # --- A standby's answer to being asked again ------------------------------------------

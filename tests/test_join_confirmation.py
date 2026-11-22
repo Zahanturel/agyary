@@ -22,12 +22,36 @@ import pytest
 from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import Agyary, AgyaryUser, FuneralRequestBook, FuneralRequestRecipient, User
+from agyary.models import (
+    Agyary,
+    AgyaryUser,
+    Customer,
+    FuneralRecord,
+    FuneralRequest,
+    FuneralRequestBook,
+    FuneralRequestRecipient,
+    User,
+)
 from agyary.services import funeral_whatsapp as fw
-from agyary.services import panthaky, prayer_callout
+from agyary.services import panthaky, prayer_callout, standbys
 from tests.conftest import sign_in
 from tests.funeral_helpers import agyari, auth, form, manager, member
-from tests.test_prayer_callout import ADMIN, LIVE, MOBED, PANTHAKY, RECORDS, Meta, _answers, _as, _list, _send
+from tests.test_prayer_callout import (
+    ADMIN,
+    LISTED,
+    LIVE,
+    MOBED,
+    PANTHAKY,
+    RECORDS,
+    SECOND,
+    Meta,
+    _answers,
+    _as,
+    _list,
+    _send,
+    _signed_tap,
+)
+from tests.test_standbys import _all_set, _reasks
 
 LATE, NEW, OTHER = "+919822200401", "+919822200402", "+919822200403"
 REQUESTS = "/api/mobed/requests"
@@ -502,3 +526,91 @@ async def test_a_sign_up_still_waiting_tells_no_panthaky_and_is_confirmed_by_the
     await _approve(client, await _as(client, ADMIN), body["user"]["id"])
     page = (await client.get(_list(aid), headers=await _as(client, PANTHAKY))).json()
     assert page["joined"]["waiting"] == [] and "Er. New Mobed" in [m["name"] for m in page["mobeds"]]
+
+
+# --- A place held is freed as Can't go frees it (lead's decision, 22 Nov 2026) ----------
+
+async def _departed(db, rid) -> str:
+    request = await db.get(FuneralRequest, rid, populate_existing=True)
+    return fw.departed(await db.get(FuneralRecord, request.funeral_record_id))
+
+
+def _sent_to(meta, phone) -> list[dict]:
+    return [m for m in meta.sent if m.get("to", "").lstrip("+") == phone.lstrip("+")]
+
+
+async def test_taking_off_someone_going_frees_their_place_and_the_standby_is_asked(
+    client, db, seeded, meta, pushes, live,
+):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)      # Er. Listed and Kias going, Er. Second on standby
+    kias, hormuz = await _user(db, MOBED), await _user(db, PANTHAKY)
+    (book,) = (await db.execute(select(FuneralRequestBook).where(
+        FuneralRequestBook.funeral_request_id == rid, FuneralRequestBook.user_id == kias.id))).scalars()
+    asked, to_kias = len(_reasks(meta, SECOND)), len(_sent_to(meta, MOBED))
+
+    r = await client.post(_member_url(aid, kias.id, "off"), headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200, r.text
+    departed = await _departed(db, rid)
+    assert r.json()["done"]["message"] == (
+        f"Er. Pervez Kias is off the list. Their place for {departed} is open again. We have asked Er. Second.")
+    request = await db.get(FuneralRequest, rid, populate_existing=True)
+    assert request.status == "waiting" and request.all_set_at is not None
+    row = (await _answers(db))[MOBED]
+    assert row.backed_out_at is not None and row.backed_out_by_user_id == hormuz.id
+    assert len(_reasks(meta, SECOND)) == asked + 1
+    # Their own book keeps the family (D8), and nothing more goes to them.
+    assert (await db.get(Customer, book.customer_id)).is_active is True
+    assert len(_sent_to(meta, MOBED)) == to_kias
+    # The panthaky saw it on screen, so is not told again.
+    assert await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED) == []
+
+    # The standby says yes: all set again, without them.
+    await _signed_tap(client, SECOND, f"pca:{(await _answers(db))[SECOND].reask_token}:y")
+    assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "all_set"
+    board = (await client.get(f"{REQUESTS}/{rid}/board", headers=await _as(client, PANTHAKY))).json()
+    assert [g["name"] for g in board["all_set"]["going"]] == ["Er. Listed", "Er. Second"]
+
+
+async def test_removing_a_mobed_added_by_hand_frees_their_place(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, standby=False)
+    listed = (await _answers(db))[LISTED]
+    r = await client.delete(f"{_list(aid)}/{listed.contact_id}", headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200, r.text
+    departed = await _departed(db, rid)
+    assert r.json()["done"]["message"] == (
+        f"Er. Listed is off the list. Their place for {departed} is open again. "
+        "Nobody is on standby: please find someone.")
+    assert (await _answers(db))[LISTED].backed_out_at is not None
+    assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "waiting"
+    # Removing one who holds no place says only that.
+    r = await client.post(_list(aid), json={"name": "Er. Third", "phone": OTHER, "agreed": True},
+                          headers=await _as(client, PANTHAKY))
+    added = r.json()["added"]
+    r = await client.delete(f"{_list(aid)}/{added}", headers=await _as(client, PANTHAKY))
+    assert r.json()["done"] == {"message": "Er. Third is off the list.", "places_freed": 0}
+
+
+async def test_switching_off_someone_going_frees_their_place_and_the_panthaky_is_told(
+    client, db, seeded, meta, pushes, live,
+):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)
+    kias = await _user(db, MOBED)
+    admin = await _as(client, ADMIN)
+    admin_id = (await _user(db, ADMIN)).id
+    r = await client.post(f"/api/mobed/admin/mobeds/{kias.id}/access", json={"access": "off"}, headers=admin)
+    assert r.status_code == 200, r.text
+    departed = await _departed(db, rid)
+    assert r.json()["access"] == "off"
+    assert r.json()["freed"] == f"Their place for {departed} is open again. We have asked Er. Second."
+    row = (await _answers(db))[MOBED]
+    assert row.backed_out_at is not None and row.backed_out_by_user_id == admin_id
+    (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert note.title == "Er. Pervez Kias can't go; we have asked Er. Second"
+    # Turned on again, nothing more is freed or said.
+    r = await client.post(f"/api/mobed/admin/mobeds/{kias.id}/access", json={"access": "on"}, headers=admin)
+    assert r.status_code == 200 and r.json()["freed"] is None
+    r = await client.post(f"/api/mobed/admin/mobeds/{kias.id}/access", json={"access": "off"}, headers=admin)
+    assert r.json()["freed"] is None
