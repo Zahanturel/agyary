@@ -286,7 +286,8 @@ async def update_record(
     acting: Acting = Depends(get_acting_manager),
 ) -> dict:
     """Change a record until a fire temple has accepted it. If it is waiting
-    at a fire temple, those asked are sent the new details (``told``)."""
+    at a fire temple, those asked are sent the new details (``told``); the
+    family's number then stays as it was sent (409, naming the field)."""
     user = acting.user
     rate_limit.enforce_key(f"funeral_record_save:{user.id}", max_requests=60, window_seconds=3600)
     record = await _own_record(db, acting, record_id)
@@ -294,7 +295,8 @@ async def update_record(
     try:
         changed = await funeral_records.update(db, record, user, values)
     except funeral_records.LockedError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        headers = {FIELD_HEADER: exc.field} if exc.field else None
+        raise HTTPException(status_code=409, detail=str(exc), headers=headers) from exc
     told = await funeral_requests.tell_of_change(db, get_settings(), record) if changed else 0
     await db.commit()
     return {**await _record_response(db, record), "told": told}

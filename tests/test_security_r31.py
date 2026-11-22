@@ -12,11 +12,11 @@ import pytest
 from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import Agyary, AppNotification, FuneralRequest, ReminderOptOut, User
+from agyary.models import Agyary, AppNotification, FuneralRecord, FuneralRequest, ReminderOptOut, User
 from agyary.services import funeral_whatsapp as fw
-from agyary.services import prayer_callout, standbys
-from tests.funeral_helpers import FAMILY, agyari, member
-from tests.test_prayer_callout import LISTED, LIVE, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
+from agyary.services import funeral_records, prayer_callout, standbys
+from tests.funeral_helpers import FAMILY, agyari, form, member
+from tests.test_prayer_callout import LISTED, LIVE, RECORDS, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
 from tests.test_standbys import OTHER_MOBED, REQUESTS, THIRD, _all_set, _b, _reasks, _to, _tomorrow
 
 
@@ -305,6 +305,30 @@ async def test_someone_going_whose_access_goes_off_is_not_named_and_their_number
         assert MOBED[3:] not in json.dumps(m) and KIAS not in json.dumps(m)
     (family,) = _templates(meta, FAMILY, "prayers_all_set_family")
     assert "Er. Listed" in json.dumps(family)
+
+
+# --- 8. The family's number stays the one their agreement was for, while a request waits --
+
+async def test_a_waiting_requests_family_number_cannot_be_changed(client, db, seeded, meta, pushes):
+    aid = seeded["agyary_id"]
+    rid, res, mgr = await _send(client, db, aid)
+    record_id = res["record"]["id"]
+    r = await client.put(f"{RECORDS}/{record_id}", json=form(family_contact_phone="+919822200044"), headers=mgr)
+    assert r.status_code == 409 and r.headers.get("x-field") == "family_contact_phone"
+    assert r.json()["detail"] == funeral_records.NUMBER_LOCKED == (
+        "The family agreed to share the number this request was sent with. "
+        "Withdraw the request first, then change the number.")
+    record = await db.get(FuneralRecord, record_id, populate_existing=True)
+    assert record.family_contact_phone == FAMILY
+    # Anything else can still be changed while it waits.
+    r = await client.put(f"{RECORDS}/{record_id}", json=form(mobeds_wanted=3), headers=mgr)
+    assert r.status_code == 200, r.text
+    # Withdrawn, the number can be changed, and a new Send asks for the tick again.
+    assert (await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)).status_code == 200
+    r = await client.put(f"{RECORDS}/{record_id}", json=form(family_contact_phone="+919822200044"), headers=mgr)
+    assert r.status_code == 200, r.text
+    r = await client.post(f"{RECORDS}/{record_id}/requests", headers=mgr, json={"agyary_id": aid})
+    assert r.status_code == 400 and r.headers.get("x-field") == "family_agreed"
 
 
 # --- 4. The funeral place learns no mobed's name before All set --------------------------

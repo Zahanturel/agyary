@@ -322,16 +322,35 @@ async def create(db: AsyncSession, user: User, place: FuneralPlace, values: dict
 
 
 class LockedError(ValueError):
-    """The record cannot be changed now; the message is for the manager."""
+    """The record cannot be changed now; the message is for the manager, and
+    ``field`` the form's field it is about, if one."""
+
+    def __init__(self, message: str, field: str | None = None):
+        super().__init__(message)
+        self.field = field
+
+
+# While a request waits (or is waiting again after someone going backed out,
+# which accepted() locks anyway), the family's number stays the one the
+# family's agreement was ticked for at Send.
+NUMBER_LOCKED = ("The family agreed to share the number this request was sent with. "
+                 "Withdraw the request first, then change the number.")
 
 
 async def update(db: AsyncSession, record: FuneralRecord, user: User, values: dict) -> bool:
     """Change a record that no fire temple has accepted yet. Returns whether
-    anything changed (those asked by a waiting request are then told again)."""
+    anything changed (those asked by a waiting request are then told again).
+    While a request waits, the family's number is not changed (NUMBER_LOCKED):
+    the family agreed to share the number it was sent with."""
     await db.refresh(record, with_for_update=True)
-    if accepted((await requests_of(db, [record.id]))[record.id]):
+    requests = (await requests_of(db, [record.id]))[record.id]
+    if accepted(requests):
         raise LockedError("A fire temple has accepted this request, so the record can no longer be changed here. "
                           "Please tell them of any change yourself.")
+    if (waiting(requests) is not None and "family_contact_phone" in values
+            and values["family_contact_phone"] != record.family_contact_phone):
+        # The family's agreement, ticked at Send, is for the number it was sent with.
+        raise LockedError(NUMBER_LOCKED, field="family_contact_phone")
     changed = any(getattr(record, key) != value for key, value in values.items())
     if not changed:
         return False
