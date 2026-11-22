@@ -321,6 +321,15 @@ grants nobody's behdins. For prayer requests it counts only once confirmed and n
   panthaky or else the agyari's name), or leave it.
 - **The standby's 30 minutes** to answer before the next is asked (the lead's default).
 - Every choice in the section above.
+- **Joining needs the panthaky's confirmation (built 22-23 Nov, choices to confirm):** a sign-up
+  still waiting for the admin shows in the panthaky's "Joined, waiting for you" by name, with no
+  notice; a mobed taken off the list is not told (only confirming or putting back tells them);
+  turning an account off and on again does not re-confirm a fire temple joined meanwhile; a
+  panthaky can never be taken off; erasing a number does not free a place they held.
+- **New words since the review page was made** (security fixes and joining): add them to the
+  review page before going through it, so every text is checked (D11).
+- **Not walked in a browser yet:** the security fixes and the joining screens (Mobeds page
+  "Joined, waiting for you", Admin -> Mobeds): one walk-through before R3.1 is pushed.
 
 ## Data changes
 
