@@ -283,6 +283,36 @@ answers. The one medium finding needing a decision (joining another agyari) went
 **The lead's choice:** someone holding a place who is taken off the list, removed, or switched off
 frees the place exactly as "Can't go" does (the standbys are asked).
 
+## Joining needs the panthaky's confirmation (22 Nov 2026)
+
+Built in local commits after the security pass (D10, owner 22 Nov 2026). Joining a fire temple stays
+open (D1.4): the membership is there for Settings, machis and the mobed's own book as before, and
+grants nobody's behdins. For prayer requests it counts only once confirmed and not taken off the list
+(`panthaky.counts_for_requests`, the one rule every request path reads).
+
+- **Who is confirmed:** every membership from before (migration `b6c7d8e9f0a5`); the fire temple a
+  new sign-up chose, when the admin approves them; whoever adds a brand-new fire temple (nobody else
+  is there to); someone the owner confirms as its panthaky; an admin, wherever they are a member.
+  Anyone joining later, from Settings, waits.
+- **Not confirmed (or taken off):** not a recipient of a request (at a fire temple with no panthaky,
+  only confirmed mobeds count; with none, the Doongerwadi is told nobody is in the app), not asked by
+  Ask everyone or the safety net, not on the board or the Mobeds list, cannot answer in the app (no
+  red count), and never put in a book or named at All set.
+- **Telling people:** a later join tells the fire temple's confirmed panthakys (in the app and on
+  their phones, no number) "Er. A has joined <agyari>" / "Confirm them on Mobeds to send them prayer
+  requests."; with no panthaky in the app, every admin, for Admin -> Mobeds. A mobed confirmed (or put
+  back) is told "<agyari> has confirmed you: you will now get its prayer requests."
+- **Mobeds page:** "Joined, waiting for you" (names only, no number) with Confirm and Not one of
+  ours; "Take off the list" (asked first) on each app mobed but a panthaky; "Off the list" with Put
+  back. A number the panthaky added by hand goes off the list with the app mobed of that number.
+- **Admin -> Mobeds:** the same for fire temples with no confirmed panthaky (access on).
+- **Freeing a held place:** taken off the list, a hand-added mobed Removed, or access switched off
+  by the admin: their place is freed through the same code as Can't go (`standbys.free_places_of`),
+  before the prayers begin; their own book keeps the family (D8).
+- Routes: `POST /api/mobed/agyaries/{id}/members/{user_id}/confirm | off | on` (its confirmed
+  panthakys or the admin; anyone else gets the list's 404) and `POST /api/mobed/admin/mobeds/{user_id}/requests`
+  (`{agyary_id, action}`). Tests: `tests/test_join_confirmation.py`.
+
 ## Open for the owner (next session)
 
 - **No panthaky in the app:** templates 5, 6 and 8 name "the panthaky"; at an agyari with none
