@@ -7,7 +7,14 @@ the names recited at their ceremonies, the notes, and every message sent to them
 
 A Doongerwadi's funeral record that named them as the family's contact keeps the
 death (the place's record, D8) but loses the contact's name and number, and a
-funeral place's book of behdins loses them altogether (19 Nov 2026).
+funeral place's book of behdins loses them altogether (19 Nov 2026). The record
+of the WhatsApp messages about that record's requests - the details to the
+mobeds going and the panthaky, which carry the family's name - keeps the fact
+that they went but not the name (the number was never kept in them).
+
+A number a panthaky added by hand to a fire temple's list of mobeds (D10) is
+taken off the list, kept as a row (D8) without the name or number, and so are
+their answers to its requests and the record of messages to them.
 
 A ceremony that was performed is the mobed's history and a slip must still
 print, so a record that events or payments point at stays, called "Erased", with
@@ -27,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.models import (
     AgyaryCustomer,
+    AgyaryMobedContact,
     Booking,
     CeremonyName,
     Customer,
@@ -35,10 +43,12 @@ from agyary.models import (
     FuneralRecord,
     Machi,
     Memorial,
+    FuneralRequest,
     Notification,
     Payment,
+    PrayerCalloutAnswer,
 )
-from agyary.services import reminders
+from agyary.services import funeral_whatsapp, reminders
 
 ERASED = "Erased"
 KIND_ERASED = "behdin_erased"
@@ -67,6 +77,9 @@ async def what_we_hold(db: AsyncSession, phone: str) -> dict:
         "messages": await _count(db, Notification, _sent_to(phone, records)),
         "funeral_records": await _count(db, FuneralRecord, FuneralRecord.family_contact_phone == phone),
         "funeral_books": await _count(db, FuneralBehdin, FuneralBehdin.phone == phone),
+        # On a fire temple's list of mobeds, added by hand (D10).
+        "mobed_contacts": await _count(db, AgyaryMobedContact, AgyaryMobedContact.phone == phone,
+                                       AgyaryMobedContact.is_active.is_(True)),
     }
 
 
@@ -76,7 +89,55 @@ def _sent_to(phone: str, records: list[int]):
         & or_(Notification.recipient_phone == phone, Notification.recipient_id.in_(records)),
         # A family messaged from a Doongerwadi's request (D10, Step 5b).
         (Notification.recipient_type == "family") & (Notification.recipient_phone == phone),
+        # A mobed a panthaky added by hand, asked on WhatsApp (D10).
+        (Notification.recipient_type == "contact") & (Notification.recipient_phone == phone),
     )
+
+
+async def _blank_family_name(db: AsyncSession, record_ids: list[int]) -> None:
+    """The family's name in what is kept of the WhatsApp messages about these
+    funeral records' requests (templates 1-3 and 5-8: the details to the
+    mobeds going and to the panthaky name the family's contact). The fact that
+    each went stays; the number in them was never kept ("[number]")."""
+    if not record_ids:
+        return
+    names = {n for n in (await db.execute(
+        select(FuneralRecord.family_contact_name).where(FuneralRecord.id.in_(record_ids))
+    )).scalars() if n}
+    names |= {funeral_whatsapp.clean(n) for n in names}
+    names.discard("")
+    request_ids = [str(i) for i in (await db.execute(
+        select(FuneralRequest.id).where(FuneralRequest.funeral_record_id.in_(record_ids))
+    )).scalars()]
+    if not names or not request_ids:
+        return
+    rows = (await db.execute(select(Notification).where(
+        Notification.notification_type.in_(funeral_whatsapp.TYPES),
+        Notification.template_params["request"].astext.in_(request_ids),
+    ))).scalars().all()
+    for n in rows:
+        params = dict(n.template_params or {})
+        blanks = {k: ERASED for k, v in params.items() if k.isdigit() and v in names}
+        if blanks:
+            n.template_params = {**params, **blanks}
+    await db.flush()
+
+
+async def _erase_mobed_contact(db: AsyncSession, phone: str) -> None:
+    """A number a panthaky added by hand to a fire temple's list of mobeds:
+    off the list, the row kept (D8) without the name or number, as their
+    answers to its requests are (the fire temple's record, like a deleted
+    account's)."""
+    contacts = (await db.execute(
+        select(AgyaryMobedContact.id).where(AgyaryMobedContact.phone == phone)
+    )).scalars().all()
+    for contact_id in contacts:
+        await db.execute(update(AgyaryMobedContact).where(AgyaryMobedContact.id == contact_id).values(
+            name=ERASED, phone=_no_ones_number(contact_id), is_active=False, user_id=None,
+        ))
+    await db.execute(update(PrayerCalloutAnswer).where(
+        PrayerCalloutAnswer.phone == phone, PrayerCalloutAnswer.user_id.is_(None),
+    ).values(name=ERASED, phone=None))
 
 
 async def _erase_record(db: AsyncSession, customer_id: int) -> None:
@@ -119,12 +180,16 @@ async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = N
     funeral = (await db.execute(
         select(FuneralRecord.id).where(FuneralRecord.family_contact_phone == phone)
     )).scalars().all()
+    # Their name, first, in what is kept of the messages about those records' requests.
+    await _blank_family_name(db, list(funeral))
     for record_id in funeral:
         await db.execute(update(FuneralRecord).where(FuneralRecord.id == record_id).values(
             family_contact_name=ERASED, family_contact_phone=_no_ones_number(record_id),
         ))
     # A funeral place's book of behdins: the family's name and number, nothing more.
     await db.execute(delete(FuneralBehdin).where(FuneralBehdin.phone == phone))
+    # A fire temple's list of mobeds, if a panthaky added the number by hand (D10).
+    await _erase_mobed_contact(db, phone)
     for owner in {owner for _i, owner in rows if owner is not None}:
         await reminders.notify(
             db, owner, KIND_ERASED, "A family's details were erased",

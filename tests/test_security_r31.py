@@ -331,6 +331,56 @@ async def test_a_waiting_requests_family_number_cannot_be_changed(client, db, se
     assert r.status_code == 400 and r.headers.get("x-field") == "family_agreed"
 
 
+# --- 9. Erasing a number reaches the Doongerwadi's messages and the lists of mobeds -------
+
+async def test_erasing_a_family_blanks_their_name_in_the_record_of_messages(client, db, seeded, meta, pushes, live):
+    from agyary.models import Notification
+    from agyary.services import erasure
+
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, standby=False)
+    about = (await db.execute(select(Notification).where(
+        Notification.notification_type.in_(fw.TYPES)))).scalars().all()
+    assert any("Test Family" in json.dumps(n.template_params) for n in about)
+    assert (await erasure.what_we_hold(db, FAMILY))["funeral_records"] == 1
+    await erasure.erase_number(db, FAMILY)
+    await db.commit()
+    db.expire_all()
+    kept = (await db.execute(select(Notification).where(Notification.notification_type.in_(fw.TYPES)))).scalars().all()
+    assert kept and all("Test Family" not in json.dumps(n.template_params) for n in kept)
+    assert all(FAMILY[3:] not in json.dumps(n.template_params) for n in kept)
+    details = [n for n in kept if n.notification_type == fw.TYPE_ALL_SET_DETAILS]
+    assert details and all(n.template_params["5"] == erasure.ERASED for n in details)
+    # The message to the family itself goes, as for any family (it was to them).
+    assert not [n for n in kept if n.notification_type == fw.TYPE_ALL_SET_FAMILY]
+
+
+async def test_erasing_a_number_a_panthaky_added_takes_it_off_every_list(client, db, seeded, meta, pushes, live):
+    from agyary.models import AgyaryMobedContact, Notification, PrayerCalloutAnswer
+    from agyary.services import erasure
+
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, standby=False)       # Er. Listed, added by hand, going
+    assert (await erasure.what_we_hold(db, LISTED))["mobed_contacts"] == 1
+    await erasure.erase_number(db, LISTED)
+    await db.commit()
+    db.expire_all()
+    contacts = {c.name: c for c in (await db.execute(select(AgyaryMobedContact))).scalars()}
+    contact = contacts[erasure.ERASED]
+    assert contacts["Er. Second"].phone == SECOND and contacts["Er. Second"].is_active is True     # not theirs
+    assert contact.is_active is False and contact.name == erasure.ERASED and contact.phone.startswith("+999")
+    assert contact.user_id is None
+    rows = (await db.execute(select(PrayerCalloutAnswer).where(PrayerCalloutAnswer.contact_id == contact.id))
+            ).scalars().all()
+    assert rows and all(r.name == erasure.ERASED and r.phone is None for r in rows)
+    assert not (await db.execute(select(Notification).where(Notification.recipient_phone == LISTED))).scalars().all()
+    # Off the list, and named nowhere any more.
+    panthaky = await _as(client, PANTHAKY)
+    got = (await client.get(_list(aid), headers=panthaky)).json()
+    assert [m["name"] for m in got["mobeds"] if m["kind"] == "contact"] == ["Er. Second"]
+    assert "Er. Listed" not in json.dumps((await client.get(_b(rid), headers=panthaky)).json())
+
+
 # --- 4. The funeral place learns no mobed's name before All set --------------------------
 
 async def test_the_place_is_told_counts_not_names_before_all_set(client, db, seeded, meta, pushes):

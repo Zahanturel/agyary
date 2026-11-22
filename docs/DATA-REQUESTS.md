@@ -24,6 +24,12 @@ In the app, as an admin: **Menu, Admin, Erase a family.**
 memorials and dates, the names recited at their ceremonies, the notes and location on their events,
 and the record of messages sent to them.
 
+**And from the Doongerwadi side:** their name and number as the family contact on a Doongerwadi's
+record (the record of the death stays), their entry in a Doongerwadi's book of behdins, and their
+name in the record of the WhatsApp messages about that record's requests. If a panthaky added the
+number to a fire temple's list of mobeds, it comes off the list, and its name and number go from
+that list, from the answers to requests, and from the record of messages sent to it.
+
 **What stays:**
 - A past or booked event stays on the mobed's calendar, marked "Erased". The slip still prints.
 - If they replied STOP, that stays, so we go on honouring it.
