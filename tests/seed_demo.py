@@ -12,6 +12,7 @@ Run with:  uv run python -m tests.seed_demo
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -78,7 +79,9 @@ async def seed(db: AsyncSession) -> None:
             )
         ).scalar_one_or_none()
         if junction is None:
-            db.add(AgyaryUser(agyary_id=agyary.id, user_id=user.id, role=spec["role"]))
+            # Confirmed for its prayer requests, as every membership from before was (D10).
+            db.add(AgyaryUser(agyary_id=agyary.id, user_id=user.id, role=spec["role"],
+                              requests_confirmed_at=datetime.now(timezone.utc)))
             print(f"  -> {spec['role']} at {agyary.name}")
 
     for order, (name, price, min_mobeds, offsite) in enumerate(SEED_SERVICES):

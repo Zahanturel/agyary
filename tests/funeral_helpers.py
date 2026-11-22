@@ -64,11 +64,16 @@ async def agyari(db, name: str, position: tuple[float, float] | None, *, city="M
     return a
 
 
-async def member(db, agyary: Agyary, phone: str, role: str = "mobed", *, access="on", name=None) -> User:
+async def member(db, agyary: Agyary, phone: str, role: str = "mobed", *, access="on", name=None,
+                 confirmed: bool = True) -> User:
+    """A member of ``agyary``, confirmed for its prayer requests unless
+    ``confirmed`` is False (D10, 22 Nov 2026: one who joined from Settings and
+    waits for the panthaky)."""
     u = User(name=name or f"Er. Member {phone[-3:]}", phone=phone, access=access)
     db.add(u)
     await db.flush()
-    db.add(AgyaryUser(agyary_id=agyary.id, user_id=u.id, role=role))
+    db.add(AgyaryUser(agyary_id=agyary.id, user_id=u.id, role=role,
+                      requests_confirmed_at=datetime.now(timezone.utc) if confirmed else None))
     await db.flush()
     return u
 

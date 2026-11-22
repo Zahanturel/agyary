@@ -27,6 +27,10 @@ from agyary.models.enums import (
 )
 
 
+REQUESTS_CONFIRMED_BY_CHECK = "requests_confirmed_by_user_id IS NULL OR requests_confirmed_at IS NOT NULL"
+REQUESTS_OFF_BY_CHECK = "requests_off_by_user_id IS NULL OR requests_off_at IS NOT NULL"
+
+
 class User(Base):
     """Operators: panthakys, mobeds, caretakers. Global entity; role is per-agyary."""
 
@@ -132,6 +136,26 @@ class AgyaryUser(Base):
     claim_decided_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
+    # Whether they are one of this fire temple's mobeds for prayer requests
+    # (DECISIONS D10, owner 22 Nov 2026: joining another agyari needs its
+    # panthaky's confirmation). Joining stays open (D1.4) and gives the
+    # membership as before; prayer requests reach it only once it is confirmed:
+    # by the admin's approval of a sign-up (the fire temple they signed up at),
+    # by that fire temple's confirmed panthaky on the Mobeds page, or by the admin
+    # when it has none (services/join_confirmation.py). Memberships from before
+    # were all confirmed by the migration. Who confirmed is cleared if their
+    # account goes. The one rule that reads these is panthaky.counts_for_requests.
+    requests_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    requests_confirmed_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Taken off the list for prayer requests ("Not one of ours", "Take off the
+    # list") by the panthaky or the admin, and by whom; NULL while on it. They
+    # stay a member of the fire temple, and "Put back" clears it.
+    requests_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    requests_off_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (
         CheckConstraint(f"role IN ({sql_in(USER_ROLES)})", name="role"),
@@ -139,5 +163,8 @@ class AgyaryUser(Base):
         CheckConstraint(f"claim_decision IN ({sql_in(CLAIM_DECISIONS)})", name="claim_decision"),
         CheckConstraint("(claimed_role IS NULL) = (claimed_at IS NULL)", name="claimed_at"),
         CheckConstraint("(claim_decision IS NULL) = (claim_decided_at IS NULL)", name="claim_decided_at"),
+        # Who did it only with when (the migration, b6c7d8e9f0a5, uses this same text).
+        CheckConstraint(REQUESTS_CONFIRMED_BY_CHECK, name="requests_confirmed_by"),
+        CheckConstraint(REQUESTS_OFF_BY_CHECK, name="requests_off_by"),
         Index("idx_agyary_users_user", "user_id"),
     )

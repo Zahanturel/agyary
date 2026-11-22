@@ -831,3 +831,60 @@ async def test_the_nobody_could_migration_marks_only_a_declined_request_and_come
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_join_confirmation_migration_confirms_every_membership_from_before_and_comes_off_cleanly():
+    """b6c7d8e9f0a5 (D10, owner 22 Nov 2026): every membership that exists when it runs is
+    confirmed for prayer requests (memberships from before stay confirmed), with nobody
+    recorded as confirming it and nobody taken off; who did it is kept only with when, and
+    goes without the membership if their account does; the downgrade takes it off and
+    keeps every membership as it was."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "a5b6c7d8e9f4"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        for phone in ("+919000000001", "+919000000002", "+919000000003"):
+            await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Er. Test', :p)", {"p": phone})
+        u1, u2, admin = [u for (u,) in await _scratch_execute("SELECT id FROM users ORDER BY id")]
+        await _scratch_execute("INSERT INTO agyary_users (agyary_id, user_id, role) VALUES (1, :u, 'panthaky')",
+                               {"u": u1})
+        await _scratch_execute("INSERT INTO agyary_users (agyary_id, user_id, role, is_active)"
+                               " VALUES (1, :u, 'mobed', false)", {"u": u2})
+        _ok(_alembic("upgrade", "head"))
+
+        rows = await _scratch_execute(
+            "SELECT user_id, role, is_active, requests_confirmed_at IS NOT NULL, requests_confirmed_by_user_id,"
+            " requests_off_at, requests_off_by_user_id FROM agyary_users ORDER BY user_id")
+        assert rows == [(u1, "panthaky", True, True, None, None, None), (u2, "mobed", False, True, None, None, None)]
+        # A membership made afterwards is not confirmed until someone confirms it.
+        await _scratch_execute("INSERT INTO agyary_users (agyary_id, user_id, role) VALUES (1, :u, 'mobed')",
+                               {"u": admin})
+        assert await _scratch_execute(
+            "SELECT requests_confirmed_at FROM agyary_users WHERE user_id = :u", {"u": admin}) == [(None,)]
+        await _refused("UPDATE agyary_users SET requests_confirmed_by_user_id = :a, requests_confirmed_at = NULL"
+                       " WHERE user_id = :u", {"a": u1, "u": u2}, "confirmed by someone, with no time")
+        await _refused("UPDATE agyary_users SET requests_off_by_user_id = :a WHERE user_id = :u",
+                       {"a": u1, "u": u2}, "taken off by someone, with no time")
+        await _scratch_execute("UPDATE agyary_users SET requests_off_at = :at, requests_off_by_user_id = :a"
+                               " WHERE user_id = :u", {"at": AT, "a": admin, "u": u2})
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'agyary_users'::regclass")
+        assert {"ck_agyary_users_requests_confirmed_by", "ck_agyary_users_requests_off_by",
+                "fk_agyary_users_requests_confirmed_by_user_id_users",
+                "fk_agyary_users_requests_off_by_user_id_users"} <= {n for (n,) in names}
+        # Whoever took them off goes; the membership and when stay.
+        await _scratch_execute("DELETE FROM agyary_users WHERE user_id = :u", {"u": admin})
+        await _scratch_execute("DELETE FROM users WHERE id = :u", {"u": admin})
+        assert await _scratch_execute(
+            "SELECT requests_off_at IS NOT NULL, requests_off_by_user_id FROM agyary_users WHERE user_id = :u",
+            {"u": u2}) == [(True, None)]
+
+        _ok(_alembic("downgrade", "a5b6c7d8e9f4"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'agyary_users'")
+        assert not {"requests_confirmed_at", "requests_confirmed_by_user_id", "requests_off_at",
+                    "requests_off_by_user_id"} & {c for (c,) in cols}
+        assert await _scratch_execute("SELECT user_id, role, is_active FROM agyary_users ORDER BY user_id") == [
+            (u1, "panthaky", True), (u2, "mobed", False)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

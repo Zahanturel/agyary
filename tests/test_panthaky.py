@@ -480,7 +480,8 @@ async def _person(db, aid, phone, name, role="mobed", *, access="on", active=Tru
     await db.flush()
     db.add(AgyaryUser(agyary_id=aid, user_id=user.id, role=role, is_active=member_active,
                       claimed_role=claimed_role,
-                      claimed_at=datetime.now(timezone.utc) if claimed_role else None))
+                      claimed_at=datetime.now(timezone.utc) if claimed_role else None,
+                      requests_confirmed_at=datetime.now(timezone.utc)))
     await db.commit()
     return user
 
