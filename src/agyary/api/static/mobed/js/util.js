@@ -8,6 +8,21 @@ export function esc(s) {
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Words that may come before a name as typed ("Er. Hormuz ...", "Ervad Hormuz ..."): not the
+// first name itself.
+const NAME_PREFIXES = new Set(["er", "ervad", "mobed", "mobedji", "dastur", "dasturji", "dr", "behdin",
+  "osta", "osti", "khud", "mr", "mrs", "ms", "shri", "smt"]);
+
+/** The first name, for "Sahebji <first name>" when one mobed writes to another (owner, 22 Nov
+ *  2026): a title typed before it ("Er.", "Ervad", "Dasturji", ...) is skipped. Falls back to the
+ *  whole name when nothing else is left. A family is always addressed by their full name. */
+export function firstName(full) {
+  const words = String(full || "").trim().split(/\s+/).filter(Boolean);
+  let i = 0;
+  while (i < words.length && NAME_PREFIXES.has(words[i].replace(/\./g, "").toLowerCase())) i += 1;
+  return words[i] || words.join(" ");
+}
+
 // Every date the app reasons about is an IST calendar day: the fire temple
 // is in India, the Parsi day is anchored to sunrise there, and a mobed
 // travelling shouldn't see their day shift.

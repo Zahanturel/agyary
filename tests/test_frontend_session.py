@@ -277,3 +277,19 @@ def test_the_slip_delete_question_is_brought_into_view_and_focused():
     opener = slip[slip.index('getElementById("slipDeleteOpen")'):]
     assert 'id="delAsk" tabindex="-1"' in opener
     assert "panel.scrollIntoView(" in opener and 'getElementById("delAsk").focus(' in opener
+
+
+def test_a_mobed_is_written_to_as_sahebji_and_their_first_name_never_namaste():
+    """Owner, 22 Nov 2026: a Parsi app greets a mobed "Sahebji <first name>". The manager's ready
+    message to the mobed who accepted said "Namaste <full name>". A title typed before the name
+    is skipped."""
+    out = _node(STORAGE + f"""
+const {{ firstName }} = await import({json.dumps(_module(JS / "util.js"))});
+console.log(JSON.stringify(["Er. Hormuz Dadachanji", "Ervad Hormuz Dadachanji", "Dasturji Dr. Hormuz D",
+  "Hormuz Dadachanji", "Er.", "", "  Hormuz  "].map(firstName)));
+""")
+    assert out == ["Hormuz", "Hormuz", "Hormuz", "Hormuz", "Er.", "", "Hormuz"]
+    record = (JS / "screens" / "manager_record.js").read_text(encoding="utf-8")
+    assert "Sahebji ${firstName(q.accepted_by)}" in record
+    for path in JS.rglob("*.js"):
+        assert "namaste" not in path.read_text(encoding="utf-8").lower(), path
