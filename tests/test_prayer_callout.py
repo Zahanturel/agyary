@@ -327,7 +327,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
         assert number not in caplog.text and number.lstrip("+") not in caplog.text
 
 
-async def test_two_go_when_nobody_said_how_many_and_after_accepting_too(client, db, seeded, meta, pushes, live):
+async def test_two_go_when_nobody_said_how_many(client, db, seeded, meta, pushes, live):
     aid = seeded["agyary_id"]
     panthaky = await _as(client, PANTHAKY)
     for name, phone in (("Er. Listed", LISTED), ("Er. Second", SECOND)):
@@ -335,8 +335,6 @@ async def test_two_go_when_nobody_said_how_many_and_after_accepting_too(client, 
         assert r.status_code == 200, r.text
     rid, res, _ = await _send(client, db, aid, mobeds_wanted=None)
     assert res["callout"]["asked"] == 3
-    # The panthaky had accepted it the old way, before R3.1; the mobeds' answers still count.
-    await accepted_the_old_way(db, rid, PANTHAKY, share=False)
     meta.sent.clear()
     answers = await _answers(db)
     for phone in (SECOND, MOBED, LISTED):
@@ -349,8 +347,29 @@ async def test_two_go_when_nobody_said_how_many_and_after_accepting_too(client, 
     page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
     assert page["callout"] == {"asked": 3, "yes": 3, "going": 2, "wanted": prayer_callout.DEFAULT_WANTED}
     assert prayer_callout.DEFAULT_WANTED == 2
-    # Accepted the old way before R3.1: it keeps its state when its places fill (D8), and the
-    # accepter still reads the family's contact on it.
+    assert page["status"] == "all_set"
+
+
+async def test_a_request_accepted_the_old_way_is_closed_for_answers(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_list(aid), json={"name": "Er. Listed", "phone": LISTED, "agreed": True}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=None)
+    # The panthaky had accepted it the old way, before R3.1 (security pass, 22 Nov 2026): a late
+    # yes on it takes no place and is sent nothing, since only the accepter has the details.
+    await accepted_the_old_way(db, rid, PANTHAKY, share=False)
+    meta.sent.clear()
+    answers = await _answers(db)
+    for phone in (MOBED, LISTED):
+        await _signed_tap(client, phone, f"pca:{answers[phone].token}:y")
+    assert meta.sent == []
+    answers = await _answers(db)
+    assert all(answers[p].answer is None and answers[p].picked_at is None for p in (MOBED, LISTED))
+    assert await _notes(db, PANTHAKY, prayer_callout.KIND_GOING) == []
+    page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
+    assert page["callout"]["going"] == 0 and page["callout"]["yes"] == 0
+    # It keeps its state (D8), and the accepter still reads the family's contact on it.
     assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "accepted"
     assert page["status"] == "accepted" and page["accepted_by_me"] is True
     assert page["family_contact"]["phone"] == FAMILY and page["all_set"] is None

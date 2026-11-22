@@ -115,6 +115,9 @@ KIND_MY_YES = "prayer_callout_my_yes"
 DEFAULT_WANTED = 2
 # A request that still wants mobeds: waiting for the fire temple, or accepted.
 OPEN = (REQUEST_WAITING, REQUEST_ACCEPTED, REQUEST_TAKEN)
+# Accepted before R3.1 (D8: kept as it was): closed for answers, so no late yes
+# takes a place on it - only the one who accepted has the details.
+ACCEPTED_THE_OLD_WAY = (REQUEST_ACCEPTED, REQUEST_TAKEN)
 NOTICE_TTL = timedelta(days=3)
 NO_TICK = "Please tick that they agreed to get WhatsApp messages from Mobed Diary about prayers."
 CONSENT_WORDS = "They agreed to get WhatsApp messages from Mobed Diary about prayers"
@@ -876,7 +879,8 @@ async def record_answer(
     only the first answer of that person, whichever way it came (R3.1: an
     answer in the app first makes this one "already answered"), and nothing
     from someone who can no longer take part (left_out: taken off the list
-    since, say), who is sent nothing back. A yes then goes through ``fill``;
+    since, say), who is sent nothing back, nor on a request accepted the old
+    way (ACCEPTED_THE_OLD_WAY). A yes then goes through ``fill``;
     "I can't go any more" through standbys.back_out_on_whatsapp. Returns what
     happened, for the log (no numbers)."""
     from agyary.services import standbys   # here: standbys reads this module
@@ -899,6 +903,9 @@ async def record_answer(
         return f"answer {answer.id}: not from the number asked"
     request = await db.get(FuneralRequest, await _request_id(db, answer))
     answer_id = answer.id   # what follows may roll the session back, which forgets it
+    if request.status in ACCEPTED_THE_OLD_WAY:
+        # Its accepter has the details already, and nobody else is to (R3.1): closed for answers.
+        return f"answer {answer_id}: the request was accepted the old way, so nothing changed"
     why = (await left_out(db, settings, request.agyary_id, [answer])).get(answer.id)
     if why:
         # Taken off the list since they were asked (or no longer there): their old
@@ -980,6 +987,7 @@ async def fill(
 
     - The request withdrawn or declined: nothing fills; a WhatsApp Yes is told
       "This prayer request was withdrawn." (inside the 24 hours it opened).
+      One accepted the old way, before R3.1: nothing fills, nothing is sent.
     - A place free (``wanted`` places): the row is one of those going
       (``picked_at``). Nobody is sent the details now - they go only at All
       set (Step 5). The panthakys are told in the app and on their phones
@@ -1008,6 +1016,10 @@ async def fill(
             await fw.deliver(db, settings, [_text_send(row, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT)],
                              now=now, client=client)
         return "yes, to a closed request"
+    if request.status in ACCEPTED_THE_OLD_WAY:
+        # Closed for answers (record_answer): no place, and nothing is sent.
+        await db.commit()
+        return "yes, to a request accepted the old way"
     want, going = wanted(record), await _going(db, request.id)
     skip = by_user.id if by_user is not None else None
     if is_open(request) and going < want:

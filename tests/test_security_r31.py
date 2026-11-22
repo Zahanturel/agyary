@@ -564,3 +564,22 @@ async def test_an_app_mobed_marked_going_by_phone_gets_the_request_and_its_card(
     assert card["my_answer"]["state"] == "going" and card["all_set"] is not None
     (note,) = await _notes(db, MOBED, "funeral_request_all_set")
     assert note.link == f"#/requests/{rid}"
+
+
+# --- 11. A request accepted the old way is closed for answers ---------------------------
+
+async def test_no_answer_counts_on_a_request_accepted_the_old_way(client, db, seeded, meta, pushes, live):
+    """(The yes is in tests/test_prayer_callout.py.) A no, or "I can't go any more", on it: nothing either."""
+    from tests.funeral_helpers import accepted_the_old_way
+
+    aid = seeded["agyary_id"]
+    rid, _, _ = await _send(client, db, aid)
+    await accepted_the_old_way(db, rid, PANTHAKY, share=False, book=False)
+    token = (await _answers(db))[MOBED].token
+    settings = config.get_settings()
+    meta.sent.clear()
+    for choice in ("n", "x", "y"):
+        outcome = await prayer_callout.record_answer(db, settings, f"pca:{token}:{choice}", MOBED)
+        assert outcome.endswith("accepted the old way, so nothing changed"), outcome
+    assert (await _answers(db))[MOBED].answer is None and meta.sent == []
+    assert (await _request(db, rid)).status == "accepted"
