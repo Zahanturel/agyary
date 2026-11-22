@@ -12,11 +12,16 @@
  * until "Confirm as panthaky" here, because the panthaky sees every machi at
  * their temple (D7). A confirmed panthaky can be made a mobed again.
  *
+ * And who joined a fire temple with no panthaky in the app (D10, 22 Nov 2026): they
+ * get its prayer requests only once confirmed, which the admin does here (Confirm or
+ * Not one of ours; Put back for one taken off). Where it has a panthaky, the
+ * panthaky does it on their Mobeds page.
+ *
  * For the numbers in ADMIN_PHONES only; the server answers anyone else with a
  * 404, so hiding the way here is a courtesy and not the protection.
  */
 
-import { adminMobeds, adminSetMobedAccess, adminDecidePanthaky } from "../api.js";
+import { adminMobeds, adminSetMobedAccess, adminDecidePanthaky, adminDecideRequests } from "../api.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed } from "../ui.js";
 import { esc, istShortWhen } from "../util.js";
 import { navGuard } from "../router.js";
@@ -114,6 +119,16 @@ export async function renderAdminMobeds() {
   const claims = data.mobeds.filter(m => m.access !== "pending" && m.panthaky_claim_waiting);
   const rest = data.mobeds.filter(m => m.access !== "pending" && !m.panthaky_claim_waiting && !isManager(m));
   const managers = data.mobeds.filter(m => m.access !== "pending" && isManager(m));
+  // Joined a fire temple with no panthaky in the app, or taken off its list there: the
+  // admin decides who gets its prayer requests. A sign-up still waiting is confirmed by
+  // the approval itself, so is not here.
+  const joins = [];
+  for (const m of data.mobeds) {
+    if (m.access === "pending" || isManager(m) || m.is_admin) continue;
+    for (const t of m.memberships) {
+      if (!t.has_panthaky && (t.requests === "waiting" || t.requests === "off")) joins.push({ m, t });
+    }
+  }
 
   mainEl.innerHTML = `
     <div class="card">
@@ -127,6 +142,22 @@ export async function renderAdminMobeds() {
       <h2>Waiting for approval${waiting.length ? ` (${waiting.length})` : ""}</h2>
       ${waiting.length ? waiting.map(row).join("") : `<p class="meta">Nobody is waiting.</p>`}
     </div>
+
+    ${joins.length ? `<div class="card">
+      <h2>Joined, waiting for you (${joins.length})</h2>
+      <p class="meta" style="margin:4px 0 0">These fire temples have no panthaky in the app, so you confirm who
+        gets their prayer requests.</p>
+      ${joins.map(({ m, t }) => `<div class="list-row" style="flex-wrap:wrap;gap:8px">
+        <div class="lr-main"><b>${esc(m.name)}</b>
+          <span style="display:block">${t.requests === "off" ? `Off the list at ${esc(t.name)}`
+            : `Joined ${esc(t.name)}`}</span></div>
+        <div class="row tight">${t.requests === "off"
+          ? `<button class="secondary small" data-ract="on" data-id="${m.id}" data-aid="${t.agyary_id}">Put back</button>`
+          : `<button class="small" data-ract="confirm" data-id="${m.id}" data-aid="${t.agyary_id}">Confirm</button>
+             <button class="ghost small" data-ract="off" data-id="${m.id}" data-aid="${t.agyary_id}">Not one of ours</button>`}
+        </div>
+      </div>`).join("")}
+    </div>` : ""}
 
     ${claims.length ? `<div class="card">
       <h2>Say they are the panthaky (${claims.length})</h2>
@@ -152,13 +183,15 @@ export async function renderAdminMobeds() {
    *  change is made, and back on if it fails. */
   const apply = async (m, access, btn) => {
     btn.disabled = true;
+    let res;
     try {
-      await adminSetMobedAccess(m.id, access);
+      res = await adminSetMobedAccess(m.id, access);
     } catch (e) {
       btn.disabled = false;
       return showError(e.message);
     }
-    showInfo(access === "off" ? `${m.name} is turned off.`
+    // Turned off, a place they held on a request is freed, and the server says so (D10, 22 Nov 2026).
+    showInfo(access === "off" ? `${m.name} is turned off.${res && res.freed ? ` ${res.freed}` : ""}`
       : m.access === "pending" ? `${m.name} is approved. They are told when they next open the app.`
       : `${m.name} is turned on again.`);
     if (!alive()) return;
@@ -185,6 +218,27 @@ export async function renderAdminMobeds() {
     await renderAdminMobeds();
     if (alive()) window.scrollTo(0, y);
   };
+
+  /** Whether one who joined gets the fire temple's prayer requests; the server's words say what happened. */
+  mainEl.querySelectorAll("[data-ract]").forEach(btn => {
+    btn.onclick = async () => {
+      const m = byId.get(btn.dataset.id);
+      if (!m || btn.disabled) return;
+      btn.disabled = true;
+      let res;
+      try {
+        res = await adminDecideRequests(m.id, Number(btn.dataset.aid), btn.dataset.ract);
+      } catch (e) {
+        btn.disabled = false;
+        return showError(e.message);
+      }
+      showInfo(res.done.message);
+      if (!alive()) return;
+      const y = window.scrollY;
+      await renderAdminMobeds();
+      if (alive()) window.scrollTo(0, y);
+    };
+  });
 
   mainEl.querySelectorAll("[data-pact]").forEach(btn => {
     btn.onclick = () => {
