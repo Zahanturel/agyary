@@ -71,7 +71,6 @@ from agyary.services import (
     funeral_answers,
     funeral_requests,
     mobed_access,
-    mobed_dashboard,
     panthaky,
     prayer_callout,
     reminders,
@@ -178,8 +177,10 @@ async def book_people(
         if user is None or not user.is_active or not mobed_access.has_access(settings, user):
             logger.info("Request %s: no book for user %s, whose access is not on", request.id, row.user_id)
             continue
-        if not await mobed_dashboard.is_active_member(db, request.agyary_id, user.id):
-            logger.info("Request %s: no book for user %s, no longer at the fire temple", request.id, user.id)
+        if not await panthaky.is_request_member(db, settings, request.agyary_id, user.id):
+            # No longer at the fire temple, or not (any more) one of its mobeds for
+            # requests: taken off its list, say (D10, 22 Nov 2026).
+            logger.info("Request %s: no book for user %s, not on the fire temple's list", request.id, user.id)
             continue
         going.append(user)
     return panthakys, going

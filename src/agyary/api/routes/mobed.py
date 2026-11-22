@@ -819,19 +819,31 @@ class JoinAgyaryIn(BaseModel):
 
 
 async def _joined(
-    db: AsyncSession, user: User, agyary: Agyary, claimed_role: str | None, *, first: bool
+    db: AsyncSession, user: User, agyary: Agyary, claimed_role: str | None, *, first: bool,
+    created: bool = False,
 ) -> None:
     """Join ``user`` to ``agyary`` as a plain mobed and keep what they said they
     are there - a claim only, ``role`` stays mobed (D10). A new mobed has then
     finished signing up and the admins are asked to approve them (D9), told
     too if they say they are the panthaky; a mobed already using the app who
-    says so has the admins told on its own."""
+    says so has the admins told on its own.
+
+    Joining stays open (D1.4) and grants nobody's behdins (D2); for prayer
+    requests the membership waits to be confirmed (D10, 22 Nov 2026): at a
+    sign-up, by the admin's approval. ``created``: they have just added this
+    fire temple, so there is nobody else there to confirm them, and they are
+    confirmed for it now (still nothing reaches them until their own access is
+    on, D9)."""
     # Locked, so this and becoming a Doongerwadi manager cannot both happen at
     # once (services/funeral_places.join_as_manager locks the same row).
     await db.refresh(user, with_for_update=True)
     if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
         raise HTTPException(status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind})
     membership = await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
+    if created and membership.requests_confirmed_at is None:
+        membership.requests_confirmed_at = datetime.now(timezone.utc)
+        membership.requests_confirmed_by_user_id = user.id
+        await db.flush()
     claimed = bool(claimed_role) and await panthaky.record_claim(db, membership, claimed_role)
     settings = get_settings()
     if first:
@@ -1072,7 +1084,8 @@ async def create_agyari(
     first = not await _has_membership(db, user)
     # Adding a fire temple makes nobody its panthaky: they join as a mobed like
     # anyone else, and saying "panthaky" is a claim for the admin to confirm.
-    await _joined(db, user, agyary, payload.claimed_role, first=first)
+    # They are confirmed for its prayer requests: nobody else is there to (D10).
+    await _joined(db, user, agyary, payload.claimed_role, first=first, created=True)
     await db.commit()
     return {"user": await _serialize_user(db, user), "agyary": _agyary_summary(agyary)}
 

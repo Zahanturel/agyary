@@ -10,7 +10,7 @@ panthaky power anywhere; and a confirmed claim grants exactly the panthaky's.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 
 from agyary.core import config
 from agyary.models import Agyary, AgyaryUser, AppNotification, User
@@ -543,6 +543,11 @@ async def test_a_confirmed_claim_moves_requests_to_the_new_panthaky(client, db, 
     aid = r.json()["agyary"]["id"]
     colleague, mate = await _new(client, phone="+919911100089", name="Er. Colleague", approve=True)
     await client.post(f"/api/mobed/agyaries/{aid}/join", json={"claimed_role": "mobed"}, headers=colleague)
+    # The one who added it is confirmed for it; a mobed joining later waits to be (D10, 22 Nov 2026).
+    assert [u.id for u in await panthaky.request_recipients(db, s, aid)] == [user["id"]]
+    await db.execute(update(AgyaryUser).where(AgyaryUser.user_id == mate["id"])
+                     .values(requests_confirmed_at=func.now()))
+    await db.commit()
     assert [u.id for u in await panthaky.request_recipients(db, s, aid)] == [user["id"], mate["id"]]
 
     admin = await _admin(client, seeded)

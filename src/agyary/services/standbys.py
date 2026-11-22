@@ -78,7 +78,6 @@ from agyary.services import (
     funeral_answers,
     funeral_requests,
     mobed_access,
-    mobed_dashboard,
     panthaky,
     reminders,
     template_text,
@@ -295,7 +294,7 @@ async def _send_reask(db: AsyncSession, settings: Settings, request: FuneralRequ
     reached = False
     account = await db.get(User, row.user_id) if row.user_id else None
     if (account is not None and account.is_active and mobed_access.has_access(settings, account)
-            and await mobed_dashboard.is_active_member(db, agyary.id, account.id)):
+            and await panthaky.is_request_member(db, settings, agyary.id, account.id)):
         if (await db.execute(select(FuneralRequestRecipient.user_id).where(
                 FuneralRequestRecipient.funeral_request_id == request.id,
                 FuneralRequestRecipient.user_id == account.id))).first() is None:

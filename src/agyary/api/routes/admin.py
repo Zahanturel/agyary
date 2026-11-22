@@ -280,7 +280,7 @@ async def set_mobed_access(
     if user is None or not user.is_active:
         raise HTTPException(status_code=404, detail="That mobed could not be found.")
     try:
-        await mobed_access.set_access(db, get_settings(), user, payload.access)
+        await mobed_access.set_access(db, get_settings(), user, payload.access, by=admin)
     except mobed_access.AccessError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await db.commit()

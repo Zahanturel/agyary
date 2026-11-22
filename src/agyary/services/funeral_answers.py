@@ -122,13 +122,24 @@ def _asked(user_id: int):
     return select(FuneralRequestRecipient.funeral_request_id).where(FuneralRequestRecipient.user_id == user_id)
 
 
+def _listed_at(user_id: int):
+    """The fire temples this person is one of the mobeds of for prayer requests
+    (panthaky.counts_for_requests; D10, 22 Nov 2026)."""
+    from agyary.services import panthaky   # here: panthaky reaches mobed_access, which this module reads too
+
+    return select(AgyaryUser.agyary_id).join(User, User.id == AgyaryUser.user_id).where(
+        AgyaryUser.user_id == user_id, AgyaryUser.is_active.is_(True), panthaky.counts_clause(get_settings()))
+
+
 async def waiting_count(db: AsyncSession, user_id: int) -> int:
     """The red count on the Requests tab: how many requests wait for this
     person (R3.1 step 4). For a confirmed panthaky of the fire temple, its
     waiting requests nobody has taken on the board yet (Ask everyone, I'll
     pray, a call's result). For anyone else it reached - an app mobed - its
     waiting requests they have not answered, in the app or on WhatsApp, and
-    (step 5b) those where, a standby asked again, they have not answered that."""
+    (step 5b) those where, a standby asked again, they have not answered that.
+    Never one at a fire temple where they are no longer one of its mobeds for
+    requests (taken off its list since): they cannot answer it."""
     panthaky_at = select(AgyaryUser.agyary_id).where(
         AgyaryUser.user_id == user_id, AgyaryUser.role == ROLE_PANTHAKY, AgyaryUser.is_active.is_(True))
     answered = (
@@ -143,6 +154,7 @@ async def waiting_count(db: AsyncSession, user_id: int) -> int:
         await db.execute(
             select(func.count()).select_from(FuneralRequest)
             .where(FuneralRequest.id.in_(_asked(user_id)), FuneralRequest.status == REQUEST_WAITING,
+                   FuneralRequest.agyary_id.in_(_listed_at(user_id)),
                    or_(and_(FuneralRequest.agyary_id.in_(panthaky_at), FuneralRequest.taken_at.is_(None)),
                        and_(FuneralRequest.agyary_id.not_in(panthaky_at), FuneralRequest.id.not_in(answered))))
         )
@@ -151,11 +163,14 @@ async def waiting_count(db: AsyncSession, user_id: int) -> int:
 
 async def for_user(db: AsyncSession, user_id: int) -> tuple[list[FuneralRequest], list[FuneralRequest]]:
     """The requests waiting for this person (oldest first: the soonest
-    prayers), and the last EARLIER they were asked that are answered or
-    withdrawn (newest first)."""
+    prayers) at fire temples where they are one of the mobeds for requests,
+    and the last EARLIER they were asked that are answered or withdrawn
+    (newest first)."""
     mine = select(FuneralRequest).where(FuneralRequest.id.in_(_asked(user_id)))
     waiting = (
-        await db.execute(mine.where(FuneralRequest.status == REQUEST_WAITING).order_by(FuneralRequest.sent_at))
+        await db.execute(mine.where(FuneralRequest.status == REQUEST_WAITING,
+                                    FuneralRequest.agyary_id.in_(_listed_at(user_id)))
+                         .order_by(FuneralRequest.sent_at))
     ).scalars().all()
     earlier = (
         await db.execute(

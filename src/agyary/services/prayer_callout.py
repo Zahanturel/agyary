@@ -58,7 +58,7 @@ import httpx
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agyary.core.config import Settings
+from agyary.core.config import Settings, get_settings
 from agyary.models import (
     Agyary,
     AgyaryMobedContact,
@@ -224,11 +224,20 @@ async def our_mobeds(
     the Mobeds page and the board pass (owner, 21 Nov 2026): their routes let
     in only the fire temple's confirmed panthakys (the board: those the
     request reached) and the admin (routes/callouts.py). Everywhere else -
-    asking everyone, a call's result - it stays None."""
+    asking everyone, a call's result - it stays None.
+
+    App mobeds are only those who count for the fire temple's requests
+    (panthaky.counts_for_requests, D10 22 Nov 2026): one who joined and is
+    not confirmed yet, or was taken off the list, is not on it - not asked,
+    not on the board - and is on the Mobeds page apart, by name only
+    (join_confirmation.not_on_the_list). A number the panthaky added by hand
+    stays on the list as that, until it is confirmed as an app mobed."""
+    from agyary.services import panthaky   # here: panthaky reaches mobed_access, which this module reads too
+
     members = (await db.execute(
         select(User).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
             AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
-            User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED,
+            User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED, panthaky.counts_clause(settings),
         ).order_by(User.name, User.id)
     )).scalars().all()
     contacts = (await db.execute(
@@ -352,13 +361,17 @@ async def left_out(
     has (accounts_by_phone) - is waiting for approval or switched off. Their
     old buttons count for nothing (record_answer), they are not asked again as
     a standby, and at All set they are neither named nor sent the details, and
-    their number goes nowhere (services/all_set.py)."""
+    their number goes nowhere (services/all_set.py). An app mobed there who
+    no longer counts for its requests (taken off the list since: D10, 22 Nov
+    2026; panthaky.counts_for_requests) is no longer on it either."""
+    from agyary.services import panthaky   # here: as in our_mobeds
+
     if not rows:
         return {}
     members = (await db.execute(
         select(User.id, User.phone).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
             AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
-            User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED)
+            User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED, panthaky.counts_clause(settings))
     )).all()
     member_ids, member_phones = {i for i, _ in members}, {p for _, p in members}
     contact_ids = {r.contact_id for r in rows if r.contact_id}
@@ -1104,8 +1117,10 @@ async def _after_no(db: AsyncSession, settings: Settings, request: FuneralReques
     if not rows or any(r.answer != CALLOUT_NO for r in rows):
         await db.commit()
         return "no"
-    members = set((await db.execute(select(AgyaryUser.user_id).where(
-        AgyaryUser.agyary_id == request.agyary_id, AgyaryUser.is_active.is_(True)))).scalars())
+    # Those who can still answer: its mobeds for requests (counts_for_requests).
+    members = set((await db.execute(select(AgyaryUser.user_id).join(User, User.id == AgyaryUser.user_id).where(
+        AgyaryUser.agyary_id == request.agyary_id, AgyaryUser.is_active.is_(True),
+        panthaky.counts_clause(settings)))).scalars())
     said_no = {r.user_id for r in rows if r.user_id}
     if any(u.id not in said_no and u.id in members and u.is_active and mobed_access.has_access(settings, u)
            for u in await funeral_requests.asked(db, request)):
@@ -1605,6 +1620,12 @@ PANTHAKY_USES_BOARD = "As the panthaky, please answer on the request's board: I'
 NO_WORDS = "Noted: you cannot pray this time."
 
 
+def not_on_the_list_words(agyary: Agyary) -> str:
+    """Why an app mobed who no longer counts for the fire temple's requests
+    (taken off its list) cannot answer for one."""
+    return f"You are not on {agyary.name}'s list for prayer requests, so you cannot answer for it."
+
+
 def _mine_already(row: PrayerCalloutAnswer) -> str:
     if backed_out(row):
         return "You have said you can't go any more."
@@ -1629,7 +1650,7 @@ async def answer_in_app(
     while the request is waiting, or all set (a yes is then a standby). A
     standby asked again when a place opened answers that instead
     (standbys.answer_reask_in_app, step 5b)."""
-    from agyary.services import mobed_dashboard, standbys   # here: as the rest of the app's answering
+    from agyary.services import mobed_dashboard, panthaky, standbys   # here: as the rest of the app's answering
 
     now = now or _now()
     # What follows may roll the session back, which forgets the account and the request.
@@ -1646,6 +1667,9 @@ async def answer_in_app(
     agyary = await db.get(Agyary, request.agyary_id)
     if not agyary.is_active or not await mobed_dashboard.is_active_member(db, agyary.id, user.id):
         raise CalloutError(f"You are no longer at {agyary.name} in Mobed Diary, so you cannot answer for it.")
+    if not await panthaky.is_request_member(db, settings, agyary.id, user.id):
+        # Taken off its list for prayer requests since they were asked (D10, 22 Nov 2026).
+        raise CalloutError(not_on_the_list_words(agyary))
     row = _find(await _request_rows(db, request.id), f"u{user.id}", user.phone)
     if row is not None and standbys.awaiting_answer(row):
         # A standby asked again when a place opened (step 5b): this answers that.
@@ -1683,7 +1707,7 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
     their own answer and where they stand - asked, going, standby, said no,
     or (step 5b) said they can't go - whether they can still answer, back out,
     or answer being asked again. Never anyone else's name or number."""
-    from agyary.services import standbys   # here: standbys reads this module
+    from agyary.services import panthaky, standbys   # here: standbys reads this module
 
     record = await db.get(FuneralRecord, request.funeral_record_id)
     rows = await _request_rows(db, request.id)
@@ -1694,9 +1718,11 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
         answered = row is not None and row.answer is not None
         state = ("asked" if not answered else BACKED_OUT if backed_out(row) else GOING if row.picked_at is not None
                  else STANDBY if row.answer == CALLOUT_YES else SAID_NO)
+        # Only one of the fire temple's mobeds for its requests may answer (D10, 22 Nov 2026).
+        listed = await panthaky.is_request_member(db, get_settings(), request.agyary_id, user.id)
         out["my_answer"] = {
             "state": state, "answer": row.answer if answered else None, "how": row.how if answered else None,
-            "may_answer": not answered and request.status in (REQUEST_WAITING, REQUEST_ALL_SET),
+            "may_answer": listed and not answered and request.status in (REQUEST_WAITING, REQUEST_ALL_SET),
             # "I can't go any more" (step 5b): someone going, before the prayers begin.
             "may_back_out": state == GOING and may_back_out(request, record, _now()),
         }
@@ -1704,7 +1730,7 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
             # Asked again when a place opened (step 5b): where it stands, and whether
             # "A place has opened: can you still pray?" waits for their answer.
             out["my_answer"]["reask"] = standbys.reask_state(row)
-            out["my_answer"]["may_answer_again"] = (standbys.awaiting_answer(row)
+            out["my_answer"]["may_answer_again"] = (listed and standbys.awaiting_answer(row)
                                                     and request.status == REQUEST_WAITING)
         if state in (GOING, BACKED_OUT):
             # Who "Tell <panthaky or fire temple> you can't go?" names.

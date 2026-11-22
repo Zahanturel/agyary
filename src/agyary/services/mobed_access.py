@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
@@ -91,11 +91,32 @@ class AccessError(ValueError):
     """A change the admin may not make; the message is for them."""
 
 
+async def _confirm_sign_up(db: AsyncSession, user: User, by: User | None, now: datetime) -> int:
+    """The admin's approval of a new sign-up confirms them for the prayer
+    requests of the fire temple(s) they chose while waiting - the one they
+    signed up at - unless taken off its list meanwhile. A fire temple joined
+    later, from Settings, waits for its panthaky (services/join_confirmation.py).
+    Returns how many memberships it confirmed."""
+    done = (await db.execute(
+        update(AgyaryUser)
+        .where(AgyaryUser.user_id == user.id, AgyaryUser.is_active.is_(True),
+               AgyaryUser.requests_confirmed_at.is_(None), AgyaryUser.requests_off_at.is_(None))
+        .values(requests_confirmed_at=now, requests_confirmed_by_user_id=by.id if by is not None else None)
+        .returning(AgyaryUser.agyary_id)
+    )).scalars().all()
+    if done:
+        logger.info("Mobed %s approved: confirmed for the requests of fire temple(s) %s", user.id, sorted(done))
+    return len(done)
+
+
 async def set_access(
-    db: AsyncSession, settings: Settings, user: User, access: str, *, now: datetime | None = None
+    db: AsyncSession, settings: Settings, user: User, access: str, *, now: datetime | None = None,
+    by: User | None = None,
 ) -> User:
     """Turn a mobed or a Doongerwadi manager on or off (the same one switch,
-    D9, D10). Turning one on tells them in the app."""
+    D9, D10). Turning one on tells them in the app. Approving a new sign-up
+    (waiting -> on) also confirms them for the prayer requests of the fire
+    temple they signed up at (D10, owner 22 Nov 2026), by admin ``by``."""
     if access not in (ACCESS_ON, ACCESS_OFF):
         raise AccessError("Access can only be turned on or off.")
     if access == ACCESS_OFF and guardrails.is_admin(settings, user.phone):
@@ -106,6 +127,8 @@ async def set_access(
     before = user.access
     user.access = access
     user.access_changed_at = now
+    if access == ACCESS_ON and before == ACCESS_PENDING:
+        await _confirm_sign_up(db, user, by, now)
     if access == ACCESS_ON:
         await reminders.notify(
             db, user.id, KIND_APPROVED,

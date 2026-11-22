@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
@@ -162,6 +162,12 @@ async def confirm(
     if membership.role != ROLE_MOBED or membership.claimed_role != ROLE_PANTHAKY:
         raise ClaimError("Only a mobed who says they are the panthaky can be confirmed as panthaky.")
     membership.role = ROLE_PANTHAKY
+    # The owner's word that they are its panthaky confirms them for its prayer
+    # requests too (D10, 22 Nov 2026), so made a mobed again later they stay one
+    # of its mobeds rather than waiting to be confirmed.
+    if membership.requests_confirmed_at is None:
+        membership.requests_confirmed_at = now or _now()
+        membership.requests_confirmed_by_user_id = admin.id
     await _decided(db, membership, CLAIM_CONFIRMED, admin, now)
     await reminders.notify(
         db, membership.user_id, KIND_DECISION, f"You are the panthaky of {agyary.name}",
@@ -209,10 +215,67 @@ async def remove(
     )
 
 
+# --- Who counts for a fire temple's prayer requests (D10, owner 22 Nov 2026) ----
+# Joining another agyari needs its panthaky's confirmation. A membership is
+# there for Settings, machis (D7) and the mobed's own behdins (D1.4, D2) as it
+# always was, but for prayer requests only once it is confirmed and not taken
+# off the list. This is the one rule; everything that lists a fire temple's
+# mobeds for its requests reads it (request recipients, ask everyone and the
+# safety net, the board and the Mobeds page, answering in the app, a standby
+# asked again, the books at All set, the Requests tab's count).
+REQUESTS_CONFIRMED, REQUESTS_WAITING, REQUESTS_OFF = "confirmed", "waiting", "off"
+
+
+def counts_for_requests(settings: Settings, membership: AgyaryUser, user: User) -> bool:
+    """Whether ``membership`` (of ``user``) is one of its fire temple's mobeds
+    for prayer requests: an active membership that is its confirmed panthaky
+    (role panthaky, which only the owner's confirmation sets), or one that is
+    confirmed (the admin's approval of the sign-up, the panthaky or the admin
+    on a Mobeds page, the migration for those from before) and not taken off
+    the list. An admin (ADMIN_PHONES) is confirmed wherever they are a member.
+    Access (D9) is the caller's to check, as before."""
+    if not membership.is_active:
+        return False
+    if membership.role == ROLE_PANTHAKY:
+        return True
+    if membership.requests_off_at is not None:
+        return False
+    return membership.requests_confirmed_at is not None or guardrails.is_admin(settings, user.phone)
+
+
+def request_state(settings: Settings, membership: AgyaryUser, user: User) -> str:
+    """For the Mobeds pages: "confirmed" (counts_for_requests), "off" (taken
+    off the list) or "waiting" (joined, not confirmed yet)."""
+    if counts_for_requests(settings, membership, user):
+        return REQUESTS_CONFIRMED
+    return REQUESTS_OFF if membership.requests_off_at is not None else REQUESTS_WAITING
+
+
+def counts_clause(settings: Settings):
+    """counts_for_requests in SQL, for a query that joins agyary_users and
+    users (the membership's is_active is the query's own)."""
+    confirmed = AgyaryUser.requests_confirmed_at.is_not(None)
+    admins = guardrails.admin_phones(settings)
+    if admins:
+        confirmed = or_(confirmed, User.phone.in_(admins))
+    return or_(AgyaryUser.role == ROLE_PANTHAKY, and_(AgyaryUser.requests_off_at.is_(None), confirmed))
+
+
+async def is_request_member(db: AsyncSession, settings: Settings, agyary_id: int, user_id: int) -> bool:
+    """Whether this account is one of the fire temple's mobeds for its prayer
+    requests now (counts_for_requests; the account itself still there)."""
+    row = (await db.execute(
+        select(AgyaryUser, User).join(User, User.id == AgyaryUser.user_id)
+        .where(AgyaryUser.agyary_id == agyary_id, AgyaryUser.user_id == user_id)
+    )).first()
+    return row is not None and row[1].is_active and counts_for_requests(settings, row[0], row[1])
+
+
 # --- Who a fire temple's requests go to (D10; used from Step 4) ----------------
 async def _members(db: AsyncSession, settings: Settings, agyary_id: int, role: str) -> list[User]:
-    """Active members of ``agyary_id`` with ``role`` whose access is on (D9:
-    nothing goes to an account that is not on), oldest member first."""
+    """Active members of ``agyary_id`` with ``role`` who count for its
+    requests (counts_for_requests) and whose access is on (D9: nothing goes
+    to an account that is not on), oldest member first."""
     rows = (
         await db.execute(
             select(User)
@@ -222,6 +285,7 @@ async def _members(db: AsyncSession, settings: Settings, agyary_id: int, role: s
                 AgyaryUser.role == role,
                 AgyaryUser.is_active.is_(True),
                 User.is_active.is_(True),
+                counts_clause(settings),
             )
             .order_by(AgyaryUser.joined_at, User.id)
         )
@@ -240,14 +304,17 @@ async def panthakys_of(db: AsyncSession, settings: Settings, agyary_id: int) -> 
 
 async def request_recipients(db: AsyncSession, settings: Settings, agyary_id: int) -> list[User]:
     """Who a request to this fire temple goes to: its confirmed panthakys, or
-    if it has none whose access is on, its mobeds whose access is on. A claim
-    to be panthaky changes nothing here until it is confirmed."""
+    if it has none whose access is on, its mobeds whose access is on and who
+    are confirmed for its requests (with none, nobody: the fire temple has
+    nobody in the app for requests). A claim to be panthaky changes nothing
+    here until it is confirmed."""
     return await panthakys_of(db, settings, agyary_id) or await _members(db, settings, agyary_id, ROLE_MOBED)
 
 
 # Whether a fire temple can be reached at all, for the manager's list (Step 4),
 # by the same rule as request_recipients: "panthaky" (a confirmed panthaky whose
-# access is on), else "mobeds" (approved mobeds only), else "nobody" in the app.
+# access is on), else "mobeds" (approved mobeds confirmed for its requests
+# only), else "nobody" in the app.
 REACH_PANTHAKY, REACH_MOBEDS, REACH_NOBODY = "panthaky", "mobeds", "nobody"
 
 
@@ -268,6 +335,7 @@ async def reach_of(db: AsyncSession, settings: Settings, agyary_ids) -> dict[int
                 AgyaryUser.role.in_((ROLE_PANTHAKY, ROLE_MOBED)),
                 AgyaryUser.is_active.is_(True),
                 User.is_active.is_(True),
+                counts_clause(settings),
             )
         )
     ).all()
