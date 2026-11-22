@@ -854,8 +854,11 @@ function mobedRowHtml(b, m) {
       <a class="button secondary" href="${esc(waLink(m.phone, askText(b)))}" target="_blank" rel="noopener"
         data-chat="${esc(m.key)}" aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
     </div>` : "";
-  const going = MAY_MARK.has(m.state) ? `<button type="button" class="secondary" data-going="${esc(m.key)}"
-      style="width:100%;margin-top:8px" aria-label="Is ${esc(m.name)} going?">Going?</button>` : "";
+  // Not for someone whose account is waiting or switched off (D9): said why instead.
+  if (MAY_MARK.has(m.state) && m.may_place === false && m.no_place) notes.push(esc(sentence(m.no_place)) + ".");
+  const going = MAY_MARK.has(m.state) && m.may_place !== false ? `<button type="button" class="secondary"
+      data-going="${esc(m.key)}" style="width:100%;margin-top:8px" aria-label="Is ${esc(m.name)} going?">Going?</button>`
+    : "";
   return `<div class="fact">
       <div><b>${esc(m.name)}</b></div>
       <div class="meta"><b>${esc(mobedStateText(m))}</b></div>
@@ -1071,6 +1074,7 @@ function askAbout(view, call) {
   if (!here(view) || view.b.status !== "waiting") return;
   const m = view.b.mobeds.find(x => x.key === call.key);
   if (!m) return;
+  if (MAY_MARK.has(m.state) && m.may_place === false) return showInfo(`${m.name} ${m.no_place}.`);
   if (MAY_MARK.has(m.state)) return askGoing(view, m);
   showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on standby already.`);
 }

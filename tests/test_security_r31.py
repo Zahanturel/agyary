@@ -12,12 +12,12 @@ import pytest
 from sqlalchemy import select, update
 
 from agyary.core import config
-from agyary.models import AppNotification, FuneralRequest, ReminderOptOut, User
+from agyary.models import Agyary, AppNotification, FuneralRequest, ReminderOptOut, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import prayer_callout, standbys
 from tests.funeral_helpers import FAMILY, agyari, member
 from tests.test_prayer_callout import LISTED, LIVE, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
-from tests.test_standbys import REQUESTS, THIRD, _all_set, _b, _reasks, _to
+from tests.test_standbys import OTHER_MOBED, REQUESTS, THIRD, _all_set, _b, _reasks, _to
 
 
 @pytest.fixture
@@ -215,10 +215,10 @@ async def test_a_standby_whose_number_has_an_account_waiting_is_not_asked_again(
     r = await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))
     assert r.status_code == 200, r.text
     assert len(_reasks(meta, SECOND)) == asked
-    row = (await _answers(db))[SECOND]
-    assert row.reasked_at is not None and row.reask_passed_at is not None     # passed over
+    # Not asked again at all (D9: nothing to an account that is not on), so nobody is on standby.
+    assert (await _answers(db))[SECOND].reasked_at is None
     (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
-    assert "nobody on standby could be asked" in note.title
+    assert "nobody is on standby" in note.title
 
 
 # --- 6. Adding a mobed by hand never tells the panthaky about an account -----------------
@@ -243,3 +243,65 @@ async def test_adding_a_number_says_a_stop_but_never_what_account_it_has(client,
         assert got[phone]["why_not"] == prayer_callout.CANNOT_ASK_NOW == "cannot be asked on WhatsApp now"
     # A STOP is said: the panthaky needs to know the number cannot be asked.
     assert got[THIRD]["stopped"] is True and "STOP" in got[THIRD]["why_not"]
+
+
+# --- 3. Someone whose access is waiting or off cannot take a place -----------------------
+
+async def test_a_mobed_waiting_for_approval_cannot_be_marked_going(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    goti = await db.get(Agyary, aid)
+    waiting = await member(db, goti, THIRD, access="pending", name="Er. Waiting")
+    off = await member(db, goti, OTHER_MOBED, access="off", name="Er. Switched Off")
+    await db.commit()
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    panthaky = await _as(client, PANTHAKY)
+    board = (await client.get(_b(rid), headers=panthaky)).json()
+    by_key = {m["key"]: m for m in board["mobeds"]}
+    assert by_key[f"u{waiting.id}"]["may_place"] is False
+    assert by_key[f"u{waiting.id}"]["no_place"] == "cannot be marked Going until the admin approves them"
+    assert by_key[f"u{off.id}"]["may_place"] is False
+    assert by_key[f"u{off.id}"]["no_place"] == "cannot be marked Going while their Mobed Diary access is switched off"
+    kias = await _user(db, MOBED)
+    assert by_key[f"u{kias.id}"]["may_place"] is True and by_key[f"u{kias.id}"]["no_place"] is None
+
+    for who, words in ((waiting, "Er. Waiting cannot be marked Going until the admin approves them."),
+                       (off, "Er. Switched Off cannot be marked Going while their Mobed Diary access is switched off.")):
+        r = await client.post(_b(rid, "call-result"), json={"key": f"u{who.id}", "result": "going"}, headers=panthaky)
+        assert r.status_code == 409 and r.json()["detail"] == words
+    assert board["places"] == [] and (await client.get(_b(rid), headers=panthaky)).json()["places"] == []
+    # What a call says otherwise is still noted.
+    r = await client.post(_b(rid, "call-result"), json={"key": f"u{off.id}", "result": "not_going"}, headers=panthaky)
+    assert r.status_code == 200, r.text
+
+
+async def test_a_yes_on_whatsapp_from_an_account_switched_off_fills_no_place(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=1)
+    token = (await _answers(db))[MOBED].token
+    await db.execute(update(User).where(User.phone == MOBED).values(access="off"))
+    await db.commit()
+    sent = len(meta.sent)
+    await _signed_tap(client, MOBED, f"pca:{token}:y")
+    row = (await _answers(db))[MOBED]
+    assert row.answer is None and row.picked_at is None
+    assert len(meta.sent) == sent and (await _request(db, rid)).status == "waiting"
+
+
+async def test_someone_going_whose_access_goes_off_is_not_named_and_their_number_goes_nowhere(client, db, seeded, meta,
+                                                                                            pushes, live):
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _add(client, aid, panthaky, "Er. Listed", LISTED)
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    answers = await _answers(db)
+    await _signed_tap(client, MOBED, f"pca:{answers[MOBED].token}:y")
+    await db.execute(update(User).where(User.phone == MOBED).values(access="off"))
+    await db.commit()
+    meta.sent.clear()
+    await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
+    assert (await _request(db, rid)).status == "all_set"
+    assert _to(meta, MOBED) == []
+    for m in meta.sent:
+        assert MOBED[3:] not in json.dumps(m) and KIAS not in json.dumps(m)
+    (family,) = _templates(meta, FAMILY, "prayers_all_set_family")
+    assert "Er. Listed" in json.dumps(family)

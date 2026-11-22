@@ -181,6 +181,20 @@ def _off_words(user: User, settings: Settings) -> str | None:
 CANNOT_ASK_NOW = "cannot be asked on WhatsApp now"
 
 
+def _no_place_words(user: User | None, settings: Settings, *, hidden: bool = False) -> str | None:
+    """Why someone cannot be given a place now (D9: nothing to or under an
+    account that is not on, and their number never reaches the family), or
+    None. ``hidden``: a mobed added by hand, whose account's state is never
+    said (CANNOT_ASK_NOW)."""
+    if user is None or account_on(settings, user):
+        return None
+    if hidden:
+        return "cannot be marked Going now"
+    if mobed_access.effective(settings, user) == ACCESS_PENDING:
+        return "cannot be marked Going until the admin approves them"
+    return "cannot be marked Going while their Mobed Diary access is switched off"
+
+
 def account_on(settings: Settings, user: User | None) -> bool:
     """An account whose access is on (D9), and not gone."""
     return user is not None and user.is_active and mobed_access.has_access(settings, user)
@@ -239,10 +253,13 @@ async def our_mobeds(
         # numbers"): not one still waiting for the admin, and not the panthaky's own.
         shown = (with_numbers and not (me is not None and u.id == me.id)
                  and mobed_access.effective(settings, u) != ACCESS_PENDING)
+        no_place = _no_place_words(u, settings)
         out.append({"key": f"u{u.id}", "kind": "app", "id": u.id, "name": u.name,
                     "phone": u.phone if shown else None,
                     "stopped": u.phone in stopped, "is_me": me is not None and u.id == me.id,
-                    "can_message": why is None, "why_not": why})
+                    "can_message": why is None, "why_not": why,
+                    # Whether a call's Going may give them a place (D9), and if not, why.
+                    "may_place": no_place is None, "no_place": no_place})
     for c in contacts:
         if c.phone in member_phones:
             continue    # they joined the app: listed once, as an app mobed
@@ -251,8 +268,10 @@ async def our_mobeds(
         # the number has a Mobed Diary account, or what state it is in (D2's spirit).
         why = ("they replied STOP to Mobed Diary" if c.phone in stopped
                else CANNOT_ASK_NOW if account is not None and not account_on(settings, account) else None)
+        no_place = _no_place_words(account, settings, hidden=True)
         out.append({"key": f"c{c.id}", "kind": "contact", "id": c.id, "name": c.name, "phone": c.phone,
                     "stopped": c.phone in stopped, "is_me": False, "can_message": why is None, "why_not": why,
+                    "may_place": no_place is None, "no_place": no_place,
                     "agreed_at": c.consent_at.isoformat() if c.consent_at else None,
                     "added_by": adders.get(c.consent_by_user_id)})
     return out
@@ -315,6 +334,7 @@ async def remove_contact(db: AsyncSession, agyary_id: int, contact_id: int, user
 
 # Why someone asked for a request can no longer take part in it (left_out).
 LEFT_THE_LIST = "no longer on the fire temple's list"
+ACCESS_NOT_ON = "their Mobed Diary access is not on"
 
 
 async def left_out(
@@ -323,10 +343,13 @@ async def left_out(
     """Those of ``rows`` (one request's, at fire temple ``agyary_id``) who can
     no longer take part in it, by row id, with why (for the log): a mobed added
     by hand whom the panthaky took off the list since (unless that number is
-    one of its app mobeds now), an app mobed no longer at the fire temple, or
-    a row whose account is gone. Their old buttons count for nothing
-    (record_answer), they are not asked again as a standby, and at All set
-    they are neither named nor sent the details (services/all_set.py)."""
+    one of its app mobeds now), an app mobed no longer at the fire temple, a
+    row whose account is gone, or (D9: nothing to or under an account that is
+    not on) someone whose account - an app mobed's, or the one their number
+    has (accounts_by_phone) - is waiting for approval or switched off. Their
+    old buttons count for nothing (record_answer), they are not asked again as
+    a standby, and at All set they are neither named nor sent the details, and
+    their number goes nowhere (services/all_set.py)."""
     if not rows:
         return {}
     members = (await db.execute(
@@ -339,18 +362,25 @@ async def left_out(
     listed = set((await db.execute(select(AgyaryMobedContact.id).where(
         AgyaryMobedContact.id.in_(contact_ids), AgyaryMobedContact.agyary_id == agyary_id,
         AgyaryMobedContact.is_active.is_(True)))).scalars()) if contact_ids else set()
+    user_ids = {r.user_id for r in rows if r.user_id}
+    users = {u.id: u for u in (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars()} \
+        if user_ids else {}
+    by_phone = await accounts_by_phone(db, {r.phone for r in rows if not r.user_id and r.contact_id})
     out = {}
     for r in rows:
         if r.user_id:
             on = r.user_id in member_ids
+            account = users.get(r.user_id)
         elif r.contact_id:
             on = r.contact_id in listed or bool(r.phone and r.phone in member_phones)
+            account = by_phone.get(r.phone) if r.phone else None
         else:
-            on = False      # the account was deleted
+            on, account = False, None      # the account was deleted
         if not on:
             out[r.id] = LEFT_THE_LIST
+        elif account is not None and not account_on(settings, account):
+            out[r.id] = ACCESS_NOT_ON
     return out
-
 
 
 # --- The call-out -----------------------------------------------------------------
@@ -1427,7 +1457,8 @@ async def call_result(
     by the panthaky when back in the app: "going" (a yes by phone, recorded
     by them, through ``fill``), "not_going" (a no by phone), or "no_answer"
     (nothing kept). Any of them takes the request. Only someone on the fire
-    temple's list, and only their first answer (an answer on WhatsApp or in
+    temple's list, never "going" for someone whose account is waiting or
+    switched off (D9; our_mobeds' ``may_place``), and only their first answer (an answer on WhatsApp or in
     the app first is "already answered") - except that "going" may turn an
     earlier no into a yes (lead's choice, 21 Nov 2026: people change their
     mind on the phone), and the same for someone who had said they can't go
@@ -1452,6 +1483,9 @@ async def call_result(
                            field="key")
     if m["is_me"]:
         raise CalloutError("That is you: tap I'll pray to fill a place yourself.", status=400, field="key")
+    if result == "going" and not m["may_place"]:
+        # D9: nothing to or under an account that is not on, and their number never reaches the family.
+        raise CalloutError(f"{m['name']} {m['no_place']}.")
     if result == "no_answer":
         await take_request(db, request, user, now)
         await db.commit()

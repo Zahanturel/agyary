@@ -629,7 +629,9 @@ async def test_switched_off_nothing_is_sent_or_written_and_paused_nothing_goes(c
     assert meta.sent == []
 
 
-async def test_a_mobed_whose_access_is_off_is_named_but_not_messaged(client, db, seeded, meta, pushes, live):
+async def test_a_mobed_whose_access_goes_off_is_neither_named_nor_messaged(client, db, seeded, meta, pushes, live):
+    """D9 (security pass, 22 Nov 2026): nothing to or under an account that is
+    not on - their name and number reach nobody, the family included."""
     from sqlalchemy import update
 
     aid = seeded["agyary_id"]
@@ -642,10 +644,11 @@ async def test_a_mobed_whose_access_is_off_is_named_but_not_messaged(client, db,
     assert (await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))).status_code == 200
     details = _to(meta, "prayer_details_mobed_v3")
     assert set(details) == {PANTHAKY}
-    assert "Er. Pervez Kias (+91 9800000002)" in _body(details[PANTHAKY])[6]
-    (row,) = [n for n in await fw.rows_for(db, request_id=rid, kinds=(fw.TYPE_ALL_SET_DETAILS,))
-              if n.status == "failed"]
-    assert "access is not on" in row.error_message
+    assert "Er. Pervez Kias" not in _body(details[PANTHAKY])[6]
+    for m in meta.sent:
+        assert "Er. Pervez Kias" not in json.dumps(m) and MOBED[3:] not in json.dumps(m)
+    assert [n for n in await fw.rows_for(db, request_id=rid, kinds=(fw.TYPE_ALL_SET_DETAILS,))
+            if n.status == "failed"] == []
 
 
 def test_the_people_blank_is_built_by_the_server():
