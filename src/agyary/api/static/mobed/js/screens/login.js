@@ -443,12 +443,14 @@ function renderWaConfirmStep() {
   document.getElementById("waConfirmRestart").onclick = () => renderLogin();
 }
 
+/** Asked of a brand-new account before it says what it is (a mobed, or a Doongerwadi or
+ *  prayer hall manager: onboarding.js), so the words fit both. */
 function renderWaNameStep() {
   mainEl.innerHTML = `
     <div class="card">
       <h2>What should we call you?</h2>
       <p class="meta">
-        This is the name that will appear on your slips.
+        This is your name in Mobed Diary. For a mobed, it is also the name on your slips.
       </p>
       <label>Name</label>
       <input type="text" id="waName" placeholder="e.g. Er. Pervez Kias" autocomplete="name">

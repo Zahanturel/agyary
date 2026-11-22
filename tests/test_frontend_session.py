@@ -277,3 +277,15 @@ def test_the_slip_delete_question_is_brought_into_view_and_focused():
     opener = slip[slip.index('getElementById("slipDeleteOpen")'):]
     assert 'id="delAsk" tabindex="-1"' in opener
     assert "panel.scrollIntoView(" in opener and 'getElementById("delAsk").focus(' in opener
+
+
+def test_the_sign_up_name_step_fits_a_doongerwadi_manager_too():
+    """The name is asked before a new account says what it is, so a Doongerwadi or prayer
+    hall manager read that it was for "your slips" (a mobed's thing). A mobed still reads
+    about slips; a manager's own screens never mention them."""
+    login = (JS / "screens" / "login.js").read_text(encoding="utf-8")
+    step = login[login.index("function renderWaNameStep"):login.index("async function finishSignIn")]
+    assert "This is the name that will appear on your slips." not in step
+    assert "This is your name in Mobed Diary. For a mobed, it is also the name on your slips." in step
+    for screen in ("manager.js", "manager_record.js", "manager_behdins.js", "waiting.js"):
+        assert "slip" not in (JS / "screens" / screen).read_text(encoding="utf-8").lower(), screen
