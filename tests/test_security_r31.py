@@ -305,3 +305,52 @@ async def test_someone_going_whose_access_goes_off_is_not_named_and_their_number
         assert MOBED[3:] not in json.dumps(m) and KIAS not in json.dumps(m)
     (family,) = _templates(meta, FAMILY, "prayers_all_set_family")
     assert "Er. Listed" in json.dumps(family)
+
+
+# --- 2. "This prayer request was withdrawn" goes only to a yes that came on WhatsApp -----
+
+async def test_withdrawn_text_only_to_whatsapp_yeses_others_are_told_in_the_app(client, db, seeded, meta, pushes,
+                                                                                live):
+    from tests.test_prayer_callout import _way
+
+    aid = seeded["agyary_id"]
+    panthaky = await _as(client, PANTHAKY)
+    await _add(client, aid, panthaky, "Er. Listed", LISTED)
+    await _add(client, aid, panthaky, "Er. Second", SECOND)
+    await _way(db, aid, "panthaky_first")
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=5)
+    kias = await _user(db, MOBED)
+    # Kias marked Going after a call; the panthaky prays; Er. Second said yes on the phone.
+    for key in (f"u{kias.id}", None):
+        if key:
+            r = await client.post(_b(rid, "call-result"), json={"key": key, "result": "going"}, headers=panthaky)
+        else:
+            r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+        assert r.status_code == 200, r.text
+    board = (await client.get(_b(rid), headers=panthaky)).json()
+    second = next(m for m in board["mobeds"] if m["name"] == "Er. Second")
+    r = await client.post(_b(rid, "call-result"), json={"key": second["key"], "result": "going"}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    # Er. Listed is asked on WhatsApp and says yes there.
+    assert (await client.post(_b(rid, "ask-everyone"), headers=panthaky)).status_code == 200
+    await _signed_tap(client, LISTED, f"pca:{(await _answers(db))[LISTED].token}:y")
+    meta.sent.clear()
+
+    r = await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)
+    assert r.status_code == 200, r.text
+    # Only the WhatsApp yes, inside the 24 hours they opened.
+    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(LISTED, fw.WITHDRAWN_TEXT)]
+    # Kias (a yes by phone) is told in the app, once.
+    notes = await _notes(db, MOBED, "funeral_request_withdrawn")
+    assert len(notes) == 1 and notes[0].title == "A request for prayers was withdrawn"
+
+
+async def test_withdrawn_text_never_to_an_account_switched_off(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _, mgr = await _send(client, db, aid, mobeds_wanted=3)
+    await _signed_tap(client, MOBED, f"pca:{(await _answers(db))[MOBED].token}:y")
+    await db.execute(update(User).where(User.phone == MOBED).values(access="off"))
+    await db.commit()
+    meta.sent.clear()
+    assert (await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)).status_code == 200
+    assert meta.texts() == []

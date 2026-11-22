@@ -1699,18 +1699,51 @@ async def after_closed(
     client: httpx.AsyncClient | None = None,
 ) -> int:
     """Once a request is withdrawn or declined and that is committed: each
-    mobed who said yes is told "This prayer request was withdrawn." - only
-    inside WhatsApp's 24 hours from their answer; after that nothing can be
-    sent, and nothing is. Not someone who said they can't go any more: nothing
-    else is sent to them (step 5b). Returns how many went. Never raises."""
+    mobed whose yes came on WhatsApp is told "This prayer request was
+    withdrawn." - only inside WhatsApp's 24 hours from their answer (they
+    wrote to us, which is what lets a plain text go); after that nothing can
+    be sent, and nothing is. Not someone who said they can't go any more:
+    nothing else is sent to them (step 5b); nor anyone who can no longer take
+    part (left_out: taken off the list, or an account that is not on, D9).
+
+    A yes that came another way - in the app, by phone, the panthaky's own
+    "I'll pray" - opened no WhatsApp window, so nothing goes on WhatsApp: an
+    app mobed is told in the app (those the request reached are told by the
+    withdrawing or declining itself, so only the others), and someone added by
+    hand is not told by Mobed Diary. Returns how many went on WhatsApp. Never
+    raises."""
+    from agyary.services import funeral_answers, funeral_requests   # here: they read this module
+
     now = now or _now()
     try:
         request = await db.get(FuneralRequest, request_id)
-        answered = await _answers(db, request_id)
+        rows = [a for a, _ in await _answers(db, request_id)]
+        out_of_it = await left_out(db, settings, request.agyary_id, rows)
+        yeses = [a for a in rows if a.answer == CALLOUT_YES and not backed_out(a) and a.id not in out_of_it]
         done = _latest(await fw.rows_for(db, request_id=request_id, kinds=(fw.TYPE_WITHDRAWN,)))
-        sends = [_text_send(a, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT) for a, _ in answered
-                 if a.answer == CALLOUT_YES and not backed_out(a) and a.phone and fw.in_window(a.answered_at, now)
+        sends = [_text_send(a, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT) for a in yeses
+                 if a.how == HOW_WHATSAPP and a.phone and fw.in_window(a.answered_at, now)
                  and (fw.TYPE_WITHDRAWN, str(a.id)) not in done]
+        reached = set((await db.execute(select(FuneralRequestRecipient.user_id).where(
+            FuneralRequestRecipient.funeral_request_id == request_id))).scalars())
+        in_app = sorted({a.user_id for a in yeses if a.how != HOW_WHATSAPP and a.user_id
+                         and a.user_id not in reached and a.user_id != request.decided_by_user_id})
+        if in_app:
+            record = await db.get(FuneralRecord, request.funeral_record_id)
+            place = await db.get(FuneralPlace, record.funeral_place_id)
+            agyary = await db.get(Agyary, request.agyary_id)
+            departed = fw.departed(record)
+            if request.status == REQUEST_WITHDRAWN:
+                kind, title = funeral_requests.KIND_WITHDRAWN, "A request for prayers was withdrawn"
+                body = f"{place.name} withdrew its request to {agyary.name} for {departed}. Nothing more is needed for it."
+            else:
+                kind, title = funeral_answers.KIND_ANSWERED, "A request for prayers was declined"
+                body = (f"{agyary.name} declined {place.name}'s request for {departed}. "
+                        "Nothing more is needed from you.")
+            for user_id in in_app:
+                await reminders.notify(db, user_id, kind, title, body, agyary_id=request.agyary_id, now=now,
+                                       ttl=NOTICE_TTL)
+            await db.commit()
         rows = await fw.deliver(db, settings, sends, now=now, client=client)
         went = sum(1 for n in rows if fw.went(n))
         if sends:
