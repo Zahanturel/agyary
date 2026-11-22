@@ -83,10 +83,16 @@ async def get_scoped(
     return customer
 
 
+# Every one of a mobed's behdins is listed (22 Nov 2026: the list stopped at 30 with no word of
+# it, so a mobed with more never saw the rest). This is only a guard far above any real book.
+LIST_CAP = 5000
+
+
 async def search_mine(
-    db: AsyncSession, agyary_id: int, user_id: int, query: str, limit: int = 30
+    db: AsyncSession, agyary_id: int, user_id: int, query: str, limit: int = LIST_CAP
 ) -> list[Customer]:
-    """This mobed's own behdins at this fire temple, optionally filtered.
+    """This mobed's own behdins at this fire temple, optionally filtered: all
+    of them (up to LIST_CAP), never a silent first page.
 
     Not the temple's register. A behdin's name and phone number belong to
     them, not to everyone who happens to work at the same fire temple, so
@@ -94,6 +100,7 @@ async def search_mine(
     ago and never booked for - which is exactly who you are looking for right
     after adding them, and which a booking-derived list cannot see.
     """
+    limit = max(1, min(limit, LIST_CAP))
     q = query.strip()
     stmt = (
         select(Customer)

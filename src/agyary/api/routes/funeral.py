@@ -339,7 +339,9 @@ async def list_book(
     place's), by name; with ``q``, those whose name or number has it."""
     rate_limit.enforce_key(f"funeral_book_search:{acting.user.id}", max_requests=120, window_seconds=60)
     rows = await funeral_book.listed(db, acting.place_ids, q)
-    return {"behdins": await funeral_book.serialize(db, rows), "more": len(rows) == funeral_book.PAGE}
+    # Every family is listed (22 Nov 2026); "more" stays for older screens and is true only
+    # when the book is at its cap.
+    return {"behdins": await funeral_book.serialize(db, rows), "more": len(rows) >= funeral_book.MAX_PER_PLACE}
 
 
 @router.post("/manager/behdins")
