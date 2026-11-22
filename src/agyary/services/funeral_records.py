@@ -431,8 +431,11 @@ async def _standing(
     called = set((await db.execute(
         select(PrayerCallout.funeral_request_id).where(PrayerCallout.funeral_request_id.in_(ids))
     )).scalars())
-    # At All set only: the panthaky (or panthakys) the family went to, with their number.
-    all_set_ids = [q.id for q in requests if q.status == REQUEST_ALL_SET]
+    # Once it has been all set: the panthaky (or panthakys) the family went to, with their
+    # number - at All set, and still when a place has opened again (R3.1 step 7: the place
+    # saw them at All set). Never before the first All set.
+    all_set_ids = [q.id for q in requests if q.status == REQUEST_ALL_SET
+                   or (q.status == REQUEST_WAITING and q.all_set_at is not None)]
     heads: dict[int, list[dict]] = {i: [] for i in all_set_ids}
     if all_set_ids:
         for rid, user in (await db.execute(
@@ -466,7 +469,8 @@ async def _standing(
         if q.status == REQUEST_ALL_SET:
             stage, names, panthakys = STAGE_ALL_SET, [a.name for a in going], heads[q.id]
         elif q.status == REQUEST_WAITING and q.all_set_at is not None:
-            stage = STAGE_REOPENED
+            # A place has opened again: who is still going and the panthaky stay shown.
+            stage, names, panthakys = STAGE_REOPENED, [a.name for a in going], heads[q.id]
         elif q.status == REQUEST_WAITING and touched:
             stage = STAGE_FINDING
         elif q.status == REQUEST_WAITING:
@@ -491,7 +495,7 @@ async def _standing(
             # How many are going of how many wanted: what the board shows, without who.
             "going": len(going) if stage in (STAGE_FINDING, STAGE_REOPENED, STAGE_ALL_SET) else None,
             "wanted": wanted,
-            # Only once it is all set: who is going (names only) and the panthaky's contact.
+            # Only once it has been all set: who is going (names only) and the panthaky's contact.
             "going_names": names,
             "panthakys": panthakys,
             "confirmed_short": stage == STAGE_ALL_SET and bool(q.confirmed_short),

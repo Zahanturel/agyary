@@ -601,7 +601,12 @@ function standingHtml(rec, q) {
   const where = q.agyari ? q.agyari.name : "the fire temple";
   const lines = [`Sent ${esc(when(q.sent_at))}.`];
   if (q.stage === "reopened") {
+    // Seen at All set, so still shown: who is going now, and the panthaky with Call and WhatsApp.
     lines.push("Someone going can no longer go, so their place is being filled.");
+    const names = q.going_names || [];
+    return `<p class="meta" style="margin:4px 0 0">${lines.join(" ")}</p>
+      ${names.length ? `<p style="margin:6px 0 0">Still going: <b>${esc(names.join(", "))}</b></p>` : ""}
+      ${panthakysHtml(rec, q)}`;
   } else if (q.no_answer_told_at) {
     lines.push(`Nobody at ${esc(where)} has answered in an hour. You can send it to another agyari.`);
   } else if (q.stage === "waiting" || q.stage === "panthaky_first") {

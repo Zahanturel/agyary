@@ -194,13 +194,23 @@ async def test_confirmed_short_reopened_and_with_no_panthaky_just_the_names(clie
     assert q["headline"] == f"All set at Goti Adarian: {GOING} is going (confirmed with 1 of 2)"
     assert q["panthakys"] == [{"name": HEAD, "phone": PANTHAKY}] and q["going_names"] == [GOING]
 
-    # The mobed going can no longer go: a place has opened, and the place learns only how many.
+    # The mobed going can no longer go: a place has opened. The place saw the names and the
+    # panthaky at All set, so it keeps the panthaky's name and number and who is still going
+    # (R3.1 step 7) - never the one who can't go.
     r = await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))
     assert r.status_code == 200, r.text
     q = await _latest(client, record_id, mgr)
     assert (q["stage"], q["headline"]) == ("reopened", "A place has opened at Goti Adarian: 0 of 2 going")
     assert q["going"] == 0 and q["may_withdraw"] is True and q["confirmed_short"] is False
-    _nothing_of_who(q)
+    assert q["panthakys"] == [{"name": HEAD, "phone": PANTHAKY}] and q["going_names"] == []
+    _no_mobed_contact(json.dumps(q))
+    assert GOING not in json.dumps(q)
+    # The panthaky fills a place themselves: still open, and the place reads who is going.
+    await _board(client, rid, "self")
+    q = await _latest(client, record_id, mgr)
+    assert (q["stage"], q["headline"]) == ("reopened", "A place has opened at Goti Adarian: 1 of 2 going")
+    assert q["going_names"] == [HEAD] and q["panthakys"] == [{"name": HEAD, "phone": PANTHAKY}]
+    assert GOING not in json.dumps(q)
 
     # A fire temple with no panthaky in the app: all set reads the names and no panthaky.
     only = await agyari(db, "Mobeds Only Agyari (test)", None)
