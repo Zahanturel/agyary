@@ -30,7 +30,7 @@ from agyary.api.routes.mobed import get_current_user
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, User
-from agyary.services import funeral_whatsapp, prayer_callout, request_settings, standbys
+from agyary.services import funeral_whatsapp, join_confirmation, prayer_callout, request_settings, standbys
 from agyary.services.phone import Phone
 
 router = APIRouter(prefix="/api/mobed", tags=["callouts"])
@@ -56,11 +56,14 @@ async def _managed_agyary(db: AsyncSession, user: User, agyary_id: int, missing:
 async def _list(db: AsyncSession, user: User, agyary: Agyary) -> dict:
     """The Mobeds page. Only ever called with an ``agyary`` from
     _managed_agyary, so the app mobeds' numbers reach only that fire temple's
-    confirmed panthakys and the admin (owner, 21 Nov 2026)."""
+    confirmed panthakys and the admin (owner, 21 Nov 2026). Those who joined
+    and wait to be confirmed, and those taken off the list (D10, 22 Nov 2026),
+    are there apart by name only."""
     settings = get_settings()
     return {
         "agyari": {"id": agyary.id, "name": agyary.name},
         "mobeds": await prayer_callout.our_mobeds(db, settings, agyary.id, me=user, with_numbers=True),
+        "joined": await join_confirmation.not_on_the_list(db, settings, agyary.id),
         "whatsapp": await funeral_whatsapp.status(db, settings),
         "consent_words": prayer_callout.CONSENT_WORDS,
     }
@@ -109,6 +112,48 @@ async def remove_our_mobed(agyary_id: int, contact_id: int, db: AsyncSession = D
         raise _error(exc) from exc
     await db.commit()
     return await _list(db, user, agyary)
+
+
+# --- Joined, waiting for you; Off the list (D10, owner 22 Nov 2026) ----------------
+# A mobed who joins the fire temple gets its prayer requests only once one of its
+# confirmed panthakys (access on) - or the admin - confirms them here. The same
+# 404 as for a list that does not exist to anyone else, and for someone who is not
+# an app mobed of the fire temple.
+async def _member_action(db: AsyncSession, user: User, agyary_id: int, act) -> dict:
+    agyary = await _managed_agyary(db, user, agyary_id)
+    rate_limit.enforce_key(f"our_mobeds_member:{user.id}", max_requests=60, window_seconds=3600)
+    try:
+        done = await act(agyary)
+    except join_confirmation.JoinError as exc:   # refused before anything changed
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    await db.commit()
+    await db.refresh(user)
+    return {**await _list(db, user, agyary), "done": done}
+
+
+@router.post("/agyaries/{agyary_id}/members/{user_id}/confirm")
+async def confirm_member(agyary_id: int, user_id: int, db: AsyncSession = Depends(get_db),
+                         user: User = Depends(get_current_user)) -> dict:
+    """ "Confirm": one who joined becomes one of its mobeds for prayer requests."""
+    return await _member_action(db, user, agyary_id, lambda agyary: join_confirmation.confirm(
+        db, get_settings(), user, agyary, user_id))
+
+
+@router.post("/agyaries/{agyary_id}/members/{user_id}/off")
+async def take_member_off(agyary_id: int, user_id: int, db: AsyncSession = Depends(get_db),
+                          user: User = Depends(get_current_user)) -> dict:
+    """ "Not one of ours" or "Take off the list": no more prayer requests from
+    this fire temple; they stay a member, and nothing else changes for them."""
+    return await _member_action(db, user, agyary_id, lambda agyary: join_confirmation.take_off(
+        db, get_settings(), user, agyary, user_id))
+
+
+@router.post("/agyaries/{agyary_id}/members/{user_id}/on")
+async def put_member_back(agyary_id: int, user_id: int, db: AsyncSession = Depends(get_db),
+                          user: User = Depends(get_current_user)) -> dict:
+    """ "Put back": one taken off the list is one of its mobeds again."""
+    return await _member_action(db, user, agyary_id, lambda agyary: join_confirmation.put_back(
+        db, get_settings(), user, agyary, user_id))
 
 
 # --- How a prayer request reaches the fire temple (R3.1) --------------------------

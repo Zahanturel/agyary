@@ -48,6 +48,7 @@ from agyary.services import (
     behdin_directory,
     funeral_places,
     guardrails,
+    join_confirmation,
     mobed_access,
     mobed_auth,
     mobed_dashboard,
@@ -839,6 +840,8 @@ async def _joined(
     await db.refresh(user, with_for_update=True)
     if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
         raise HTTPException(status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind})
+    before = await mobed_auth.get_membership(db, agyary.id, user.id)
+    joined_now = before is None or not before.is_active
     membership = await mobed_auth.ensure_agyary_membership(db, agyary.id, user)
     if created and membership.requests_confirmed_at is None:
         membership.requests_confirmed_at = datetime.now(timezone.utc)
@@ -852,6 +855,10 @@ async def _joined(
         )
     elif claimed and panthaky.waiting(membership) and mobed_access.has_access(settings, user):
         await panthaky.tell_admins_of_claim(db, settings, user, agyary)
+    if joined_now:
+        # Already using the app and not confirmed here: its panthaky (or, with none,
+        # the admin) is told, to confirm them on the Mobeds page (D10, 22 Nov 2026).
+        await join_confirmation.tell_of_join(db, settings, user, agyary, membership)
 
 
 @router.post("/agyaries/{agyary_id}/join")

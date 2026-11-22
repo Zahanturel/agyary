@@ -234,12 +234,14 @@ async def our_mobeds(
     stays on the list as that, until it is confirmed as an app mobed."""
     from agyary.services import panthaky   # here: panthaky reaches mobed_access, which this module reads too
 
-    members = (await db.execute(
-        select(User).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
+    member_rows = (await db.execute(
+        select(User, AgyaryUser.role).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
             AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
             User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED, panthaky.counts_clause(settings),
         ).order_by(User.name, User.id)
-    )).scalars().all()
+    )).all()
+    members = [u for u, _ in member_rows]
+    roles = {u.id: role for u, role in member_rows}
     contacts = (await db.execute(
         select(AgyaryMobedContact).where(AgyaryMobedContact.agyary_id == agyary_id,
                                          AgyaryMobedContact.is_active.is_(True))
@@ -271,7 +273,10 @@ async def our_mobeds(
                     "stopped": u.phone in stopped, "is_me": me is not None and u.id == me.id,
                     "can_message": why is None, "why_not": why,
                     # Whether a call's Going may give them a place (D9), and if not, why.
-                    "may_place": no_place is None, "no_place": no_place})
+                    "may_place": no_place is None, "no_place": no_place,
+                    # "Take off the list" (D10, 22 Nov 2026): never the panthaky's own row,
+                    # nor a panthaky of the fire temple.
+                    "may_take_off": not (me is not None and u.id == me.id) and roles.get(u.id) != ROLE_PANTHAKY})
     for c in contacts:
         if c.phone in member_phones:
             continue    # they joined the app: listed once, as an app mobed
@@ -303,14 +308,25 @@ async def add_contact(
         raise CalloutError(str(exc), status=400, field="name") from exc
     if not name:
         raise CalloutError("Please enter the mobed's name.", status=400, field="name")
+    from agyary.services import panthaky   # here: as in our_mobeds
+
     now = now or _now()
     member = (await db.execute(
-        select(User.name).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
+        select(AgyaryUser, User).join(User, User.id == AgyaryUser.user_id).where(
             AgyaryUser.agyary_id == agyary.id, AgyaryUser.is_active.is_(True), User.phone == phone)
-    )).scalar_one_or_none()
+    )).first()
     if member is not None:
-        raise CalloutError(f"{member} uses Mobed Diary at {agyary.name}, so they are on the list already.",
-                           field="phone")
+        # One of its app mobeds already, or one who joined and is not on its list (D10, 22 Nov 2026):
+        # confirmed, or put back, on the Mobeds page rather than added a second time.
+        state = panthaky.request_state(settings, member[0], member[1])
+        who = member[1].name
+        raise CalloutError(
+            f"{who} uses Mobed Diary at {agyary.name}, so they are on the list already."
+            if state == panthaky.REQUESTS_CONFIRMED else
+            f"{who} is off the list. Tap Put back to send them prayer requests."
+            if state == panthaky.REQUESTS_OFF else
+            f"{who} has joined {agyary.name} in Mobed Diary. Tap Confirm to send them prayer requests.",
+            field="phone")
     existing = (await db.execute(select(AgyaryMobedContact).where(
         AgyaryMobedContact.agyary_id == agyary.id, AgyaryMobedContact.phone == phone))).scalar_one_or_none()
     if existing is not None and existing.is_active:

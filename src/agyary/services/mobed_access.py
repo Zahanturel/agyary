@@ -149,8 +149,12 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
     for a Doongerwadi manager, which place they manage (D10)."""
     users = (await db.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
     names = {u.id: u.name for u in users}
+    by_id = {u.id: u for u in users}
     rows_by_user: dict[int, list[tuple[AgyaryUser, Agyary]]] = {}
     panthakys: dict[int, list[int]] = {}
+    # Fire temples with a confirmed panthaky whose access is on: they confirm who joins
+    # there; at the others the admin does, here (D10, 22 Nov 2026).
+    headed: set[int] = set()
     for m, a in (
         await db.execute(
             select(AgyaryUser, Agyary)
@@ -162,6 +166,8 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
         rows_by_user.setdefault(m.user_id, []).append((m, a))
         if m.role == ROLE_PANTHAKY:
             panthakys.setdefault(a.id, []).append(m.user_id)
+            if m.user_id in by_id and has_access(settings, by_id[m.user_id]):
+                headed.add(a.id)
     places_by_user: dict[int, list[FuneralPlace]] = {}
     for link, place in (
         await db.execute(
@@ -173,7 +179,7 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
     ).all():
         places_by_user.setdefault(link.user_id, []).append(place)
 
-    def membership(m: AgyaryUser, a: Agyary) -> dict:
+    def membership(m: AgyaryUser, a: Agyary, u: User) -> dict:
         # What they are at each fire temple, what they said, and the owner's
         # last decision on it (D10) - with the temple's other panthakys, so the
         # admin knows before confirming a second one.
@@ -186,6 +192,10 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
             "claim_decision": m.claim_decision,
             "claim_decided_at": m.claim_decided_at.isoformat() if m.claim_decided_at else None,
             "other_panthakys": [names[uid] for uid in panthakys.get(a.id, []) if uid != m.user_id and uid in names],
+            # For its prayer requests (D10, 22 Nov 2026): "confirmed", "waiting" or "off";
+            # and whether a confirmed panthaky (access on) there decides that, not the admin.
+            "requests": panthaky.request_state(settings, m, u),
+            "has_panthaky": a.id in headed,
         }
 
     def row(u: User) -> dict:
@@ -203,7 +213,7 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
                 for p in places_by_user.get(u.id, [])
             ],
             "agyaries": [a.name for _, a in mine],
-            "memberships": [membership(m, a) for m, a in mine],
+            "memberships": [membership(m, a, u) for m, a in mine],
             "panthaky_claim_waiting": any(panthaky.waiting(m) for m, _ in mine),
             "signed_up": u.created_at.isoformat() if u.created_at else None,
             "access_changed_at": u.access_changed_at.isoformat() if u.access_changed_at else None,

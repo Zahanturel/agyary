@@ -302,3 +302,203 @@ async def test_one_taken_off_since_cannot_answer_and_gets_no_book_or_name_at_all
     assert r.status_code == 409
     assert r.json()["detail"] == prayer_callout.not_on_the_list_words(await db.get(Agyary, aid))
     assert r.json()["detail"] == "You are not on Goti Adarian's list for prayer requests, so you cannot answer for it."
+
+
+# --- The panthaky confirms, on the Mobeds page ------------------------------------------
+
+def _member_url(aid, uid, what) -> str:
+    return f"/api/mobed/agyaries/{aid}/members/{uid}/{what}"
+
+
+async def _notes(db, phone, kind) -> list:
+    from agyary.models import AppNotification
+
+    user = await _user(db, phone)
+    return list((await db.execute(select(AppNotification).where(
+        AppNotification.user_id == user.id, AppNotification.kind == kind).order_by(AppNotification.id))).scalars())
+
+
+async def test_the_panthaky_is_told_of_a_later_join_and_confirms_them(client, db, seeded, admin_phone, pushes):
+    aid = seeded["agyary_id"]
+    late, uid, _ = await _later_join(client, db, aid)
+    hormuz = await _user(db, PANTHAKY)
+    (note,) = await _notes(db, PANTHAKY, "member_joined")
+    assert (note.title, note.body, note.link) == (
+        "Er. Late Joiner has joined Goti Adarian", "Confirm them on Mobeds to send them prayer requests.", "#/mobeds")
+    (push,) = [p for p in pushes if p["tag"].startswith("member-joined")]
+    assert push["to"] == [hormuz.id] and push["title"] == note.title and push["body"] == note.body
+    assert LATE[3:] not in json.dumps(push)
+    # Nobody else: not the mobed there, not the admin (who approved them already).
+    assert await _notes(db, MOBED, "member_joined") == [] and await _notes(db, ADMIN, "member_joined") == []
+
+    panthaky_h = await _as(client, PANTHAKY)
+    page = (await client.get(_list(aid), headers=panthaky_h)).json()
+    assert [(w["id"], w["name"]) for w in page["joined"]["waiting"]] == [(uid, LATE_NAME)]
+    assert page["joined"]["off"] == []
+    # Their number is nowhere on the page until they are confirmed.
+    assert LATE[3:] not in json.dumps(page)
+
+    # Only that fire temple's confirmed panthaky (or the admin): to anyone else it does not exist.
+    other = await agyari(db, "Other Agyari (test)", None)
+    await member(db, other, OTHER, "panthaky", name="Er. Other Panthaky")
+    await db.commit()
+    for phone in (MOBED, OTHER):
+        for what in ("confirm", "off", "on"):
+            r = await client.post(_member_url(aid, uid, what), headers=await _as(client, phone))
+            assert r.status_code == 404 and r.json()["detail"] == "That list could not be found.", (phone, what)
+    for what in ("confirm", "off", "on"):
+        assert (await client.post(_member_url(aid, uid, what), headers=late)).status_code == 404
+    # Someone who is not an app mobed there is not found either.
+    r = await client.post(_member_url(aid, (await _user(db, OTHER)).id, "confirm"), headers=panthaky_h)
+    assert r.status_code == 404 and r.json()["detail"] == "That mobed could not be found at this fire temple."
+    assert (await _membership(db, uid, aid)).requests_confirmed_at is None
+
+    r = await client.post(_member_url(aid, uid, "confirm"), headers=panthaky_h)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["done"]["message"] == "Er. Late Joiner is confirmed: they will now get prayer requests."
+    assert got["joined"] == {"waiting": [], "off": []}
+    (row,) = [m for m in got["mobeds"] if m["kind"] == "app" and m["id"] == uid]
+    assert row["phone"] == LATE and row["may_take_off"] is True
+    m = await _membership(db, uid, aid)
+    assert m.requests_confirmed_at is not None and m.requests_confirmed_by_user_id == hormuz.id
+    (told,) = await _notes(db, LATE, "requests_confirmed")
+    assert (told.title, told.body) == (
+        "Confirmed for prayer requests", "Goti Adarian has confirmed you: you will now get its prayer requests.")
+    r = await client.post(_member_url(aid, uid, "confirm"), headers=panthaky_h)
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Late Joiner is on the list already."
+
+    # And now a request reaches them.
+    rid, res, _ = await _send(client, db, aid)
+    assert res["callout"]["asked_in_app"] == 2
+    assert (await client.get(f"{REQUESTS}/{rid}", headers=late)).status_code == 200
+
+
+async def test_not_one_of_ours_take_off_the_list_and_put_back(client, db, seeded, admin_phone, pushes):
+    aid = seeded["agyary_id"]
+    panthaky_h = await _as(client, PANTHAKY)
+    late, uid, _ = await _later_join(client, db, aid)
+    r = await client.post(_member_url(aid, uid, "off"), headers=panthaky_h)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["done"]["message"] == "Er. Late Joiner is off the list."
+    assert got["joined"]["waiting"] == [] and [o["name"] for o in got["joined"]["off"]] == [LATE_NAME]
+    assert LATE[3:] not in json.dumps(got)
+    m = await _membership(db, uid, aid)
+    assert m.is_active and m.requests_off_at is not None and m.requests_off_by_user_id == (await _user(db, PANTHAKY)).id
+    # Still a member, as before: only prayer requests are not theirs. They are not told.
+    me = (await client.get("/api/mobed/auth/me", headers=late)).json()
+    assert aid in [a["id"] for a in me["agyaries"]]
+    assert await _notes(db, LATE, "requests_confirmed") == []
+    for what, words in (("off", "Er. Late Joiner is off the list already."),
+                        ("confirm", "Er. Late Joiner is off the list. Tap Put back to send them prayer requests.")):
+        r = await client.post(_member_url(aid, uid, what), headers=panthaky_h)
+        assert r.status_code == 409 and r.json()["detail"] == words
+    # Joining again changes nothing, and tells nobody again.
+    await _join(client, aid, late)
+    assert (await _membership(db, uid, aid)).requests_off_at is not None
+    assert len(await _notes(db, PANTHAKY, "member_joined")) == 1
+
+    r = await client.post(_member_url(aid, uid, "on"), headers=panthaky_h)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == "Er. Late Joiner is back on the list: they will get prayer requests."
+    assert r.json()["joined"] == {"waiting": [], "off": []}
+    assert await panthaky.is_request_member(db, config.get_settings(), aid, uid)
+    assert len(await _notes(db, LATE, "requests_confirmed")) == 1
+    r = await client.post(_member_url(aid, uid, "on"), headers=panthaky_h)
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Late Joiner is not off the list."
+
+    # One of its mobeds from before can be taken off the list too; a panthaky cannot be.
+    kias = await _user(db, MOBED)
+    page = (await client.get(_list(aid), headers=panthaky_h)).json()
+    rows = {m["name"]: m for m in page["mobeds"] if m["kind"] == "app"}
+    assert rows["Er. Pervez Kias"]["may_take_off"] is True and rows["Er. Hormuz Dadachanji"]["may_take_off"] is False
+    r = await client.post(_member_url(aid, kias.id, "off"), headers=panthaky_h)
+    assert r.status_code == 200, r.text
+    assert "Er. Pervez Kias" not in [m["name"] for m in r.json()["mobeds"]]
+    r = await client.post(_member_url(aid, (await _user(db, PANTHAKY)).id, "off"), headers=await _as(client, ADMIN))
+    assert r.status_code == 409 and r.json()["detail"] == (
+        "Er. Hormuz Dadachanji is a panthaky of Goti Adarian, so they stay on the list.")
+    rid, res, _ = await _send(client, db, aid)
+    assert res["callout"]["asked_in_app"] == 1      # the late joiner, put back; not Kias
+    assert MOBED not in await _answers(db)
+
+
+async def test_a_number_added_by_hand_goes_off_the_list_with_them(client, db, seeded, admin_phone, pushes):
+    aid = seeded["agyary_id"]
+    panthaky_h = await _as(client, PANTHAKY)
+    r = await client.post(_list(aid), json={"name": "Er. Listed First", "phone": LATE, "agreed": True},
+                          headers=panthaky_h)
+    assert r.status_code == 200, r.text
+    _, uid, _ = await _later_join(client, db, aid)
+    page = (await client.get(_list(aid), headers=panthaky_h)).json()
+    # Until confirmed they are on the list as the panthaky added them, and waiting apart.
+    assert [m["name"] for m in page["mobeds"] if m["kind"] == "contact"] == ["Er. Listed First"]
+    assert [w["id"] for w in page["joined"]["waiting"]] == [uid]
+    r = await client.post(_list(aid), json={"name": "Er. Again", "phone": LATE, "agreed": True}, headers=panthaky_h)
+    assert r.status_code == 409 and r.json()["detail"] == (
+        "Er. Late Joiner has joined Goti Adarian in Mobed Diary. Tap Confirm to send them prayer requests.")
+    r = await client.post(_member_url(aid, uid, "off"), headers=panthaky_h)
+    assert r.status_code == 200, r.text
+    assert [m for m in r.json()["mobeds"] if m["kind"] == "contact"] == []
+    r = await client.post(_list(aid), json={"name": "Er. Again", "phone": LATE, "agreed": True}, headers=panthaky_h)
+    assert r.status_code == 409 and r.json()["detail"] == (
+        "Er. Late Joiner is off the list. Tap Put back to send them prayer requests.")
+
+
+async def test_with_no_panthaky_the_admin_is_told_and_confirms_on_admin_mobeds(client, db, seeded, admin_phone, pushes):
+    lonely = await agyari(db, "Lonely Agyari (test)", None)
+    await member(db, lonely, OTHER, name="Er. Already There")
+    await db.commit()
+    late, uid, _ = await _later_join(client, db, lonely.id)
+    admin = await _as(client, ADMIN)
+    admin_id = (await _user(db, ADMIN)).id
+    (note,) = await _notes(db, ADMIN, "member_joined")
+    assert note.title == "Er. Late Joiner has joined Lonely Agyari (test)" and note.link == "#/admin/mobeds"
+    assert note.body == ("Lonely Agyari (test) has no panthaky in the app. "
+                         "Confirm them on the Mobeds page to send them prayer requests.")
+    (push,) = [p for p in pushes if p["tag"].startswith("member-joined")]
+    assert push["to"] == [admin_id] and push["body"] == "Confirm them on the Mobeds page to send them prayer requests."
+    assert await _notes(db, OTHER, "member_joined") == []
+
+    listed = (await client.get("/api/mobed/admin/mobeds", headers=admin)).json()["mobeds"]
+    (row,) = [m for m in listed if m["id"] == uid]
+    there = {t["name"]: t for t in row["memberships"]}
+    assert there["Lonely Agyari (test)"]["requests"] == "waiting"
+    assert there["Lonely Agyari (test)"]["has_panthaky"] is False
+    assert there["Elsewhere Agyari (test)"]["requests"] == "confirmed"
+    goti = [t for m in listed for t in m["memberships"] if t["name"] == "Goti Adarian"]
+    assert goti and all(t["has_panthaky"] for t in goti)
+
+    url = f"/api/mobed/admin/mobeds/{uid}/requests"
+    # Only the admin.
+    r = await client.post(url, json={"agyary_id": lonely.id, "action": "confirm"}, headers=await _as(client, OTHER))
+    assert r.status_code == 404
+    for action, state, words in (
+            ("off", "off", "Er. Late Joiner is off the list."),
+            ("on", "confirmed", "Er. Late Joiner is back on the list: they will get prayer requests.")):
+        r = await client.post(url, json={"agyary_id": lonely.id, "action": action}, headers=admin)
+        assert r.status_code == 200, r.text
+        assert r.json()["requests"] == state and r.json()["done"]["message"] == words
+    r = await client.post(url, json={"agyary_id": lonely.id, "action": "confirm"}, headers=admin)
+    assert r.status_code == 409
+    r = await client.post(url, json={"agyary_id": 999999, "action": "confirm"}, headers=admin)
+    assert r.status_code == 404
+    assert [u.id for u in await panthaky.request_recipients(db, config.get_settings(), lonely.id)] == [
+        (await _user(db, OTHER)).id, uid]
+    m = await _membership(db, uid, lonely.id)
+    assert m.requests_confirmed_by_user_id == admin_id
+
+
+async def test_a_sign_up_still_waiting_tells_no_panthaky_and_is_confirmed_by_the_approval(
+    client, db, seeded, admin_phone, pushes,
+):
+    aid = seeded["agyary_id"]
+    body = await sign_in(client, NEW, "Er. New Mobed", approve=False)
+    await _join(client, aid, auth(body))
+    assert await _notes(db, PANTHAKY, "member_joined") == []
+    page = (await client.get(_list(aid), headers=await _as(client, PANTHAKY))).json()
+    assert [w["name"] for w in page["joined"]["waiting"]] == ["Er. New Mobed"]
+    await _approve(client, await _as(client, ADMIN), body["user"]["id"])
+    page = (await client.get(_list(aid), headers=await _as(client, PANTHAKY))).json()
+    assert page["joined"]["waiting"] == [] and "Er. New Mobed" in [m["name"] for m in page["mobeds"]]

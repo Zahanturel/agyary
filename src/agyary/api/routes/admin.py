@@ -39,6 +39,7 @@ from agyary.services import (
     erasure,
     funeral_places,
     guardrails,
+    join_confirmation,
     mobed_access,
     mobed_auth,
     panthaky,
@@ -318,6 +319,38 @@ async def decide_panthaky(
     await db.commit()
     return {"id": user.id, "agyary_id": agyary.id, "role": membership.role,
             "claim_decision": membership.claim_decision}
+
+
+class RequestsDecisionIn(BaseModel):
+    agyary_id: int
+    # "confirm" (one who joined), "off" (Not one of ours / Take off the list), "on" (Put back).
+    action: Literal["confirm", "off", "on"]
+
+
+@router.post("/mobeds/{user_id}/requests")
+async def decide_requests(
+    user_id: int, payload: RequestsDecisionIn, db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> dict:
+    """The admin's word on whether a mobed gets one fire temple's prayer
+    requests (D10, 22 Nov 2026): the same actions as a confirmed panthaky's on
+    the Mobeds page, for the fire temples that have none in the app. ``done``
+    says what happened; the mobed is told in the app when confirmed."""
+    rate_limit.enforce_key(f"admin_requests:{admin.id}", max_requests=60, window_seconds=60)
+    agyary = await db.get(Agyary, payload.agyary_id)
+    if agyary is None or not agyary.is_active:
+        raise HTTPException(status_code=404, detail="That mobed is not at that fire temple.")
+    act = {"confirm": join_confirmation.confirm, "off": join_confirmation.take_off,
+           "on": join_confirmation.put_back}[payload.action]
+    try:
+        done = await act(db, get_settings(), admin, agyary, user_id)
+    except join_confirmation.JoinError as exc:   # refused before anything changed
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    await db.commit()
+    membership = await mobed_auth.get_membership(db, agyary.id, user_id)
+    user = await db.get(User, user_id)
+    return {"id": user_id, "agyary_id": agyary.id,
+            "requests": panthaky.request_state(get_settings(), membership, user), "done": done}
 
 
 # ---------------------------------------------------------------------------
