@@ -992,7 +992,8 @@ async def _after_no(db: AsyncSession, settings: Settings, request: FuneralReques
         return "no"
     closed = (await db.execute(
         update(FuneralRequest).where(FuneralRequest.id == request.id, FuneralRequest.status == REQUEST_WAITING)
-        .values(status=REQUEST_DECLINED, decided_at=now, decided_by_user_id=None).returning(FuneralRequest.id)
+        .values(status=REQUEST_DECLINED, decided_at=now, decided_by_user_id=None, nobody_could=True)
+        .returning(FuneralRequest.id)
     )).scalar_one_or_none()
     await db.commit()
     await db.refresh(request)

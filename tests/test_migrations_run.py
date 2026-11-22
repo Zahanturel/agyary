@@ -790,3 +790,44 @@ async def test_the_no_answer_migration_adds_when_the_place_was_told_and_comes_of
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_nobody_could_migration_marks_only_a_declined_request_and_comes_off_cleanly():
+    """a5b6c7d8e9f4 (R3.1 step 7): every request from before reads false (declined by
+    someone, even with who declined gone); only a declined request can be marked as closed
+    because nobody could take it; the downgrade takes it off and keeps the requests."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "f4a5b6c7d8e2"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        for _ in range(2):
+            await _scratch_execute(
+                "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+                " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+                " VALUES (1, 'behdin', 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+                " '+919000000009')")
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at,"
+                               " sent_at, decided_at) VALUES (1, 1, 'declined', :at, :at, :at)", {"at": AT})
+        await _scratch_execute("INSERT INTO funeral_requests (funeral_record_id, agyary_id, status, family_share_agreed_at,"
+                               " sent_at) VALUES (2, 1, 'waiting', :at, :at)", {"at": AT})
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute("SELECT status, nobody_could FROM funeral_requests ORDER BY id") == [
+            ("declined", False), ("waiting", False)]
+        await _refused("UPDATE funeral_requests SET nobody_could = true WHERE status = 'waiting'", {},
+                       "nobody could, on a request still waiting")
+        await _refused("UPDATE funeral_requests SET nobody_could = NULL", {}, "no answer", needle="not-null")
+        await _scratch_execute("UPDATE funeral_requests SET nobody_could = true WHERE status = 'declined'")
+        assert await _scratch_execute("SELECT nobody_could FROM funeral_requests ORDER BY id") == [(True,), (False,)]
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'funeral_requests'::regclass")
+        assert "ck_funeral_requests_nobody_could_declined" in {n for (n,) in names}
+
+        _ok(_alembic("downgrade", "f4a5b6c7d8e2"))
+        cols = await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'funeral_requests'")
+        assert "nobody_could" not in {c for (c,) in cols}
+        assert await _scratch_execute("SELECT status FROM funeral_requests ORDER BY id") == [("declined",), ("waiting",)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

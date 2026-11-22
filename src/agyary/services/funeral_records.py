@@ -481,8 +481,10 @@ async def _standing(
                 if chosen:
                     stage = STAGE_PANTHAKY_FIRST
         elif q.status == REQUEST_DECLINED:
-            # Closed with nobody deciding: no panthaky in the app, and everyone asked said no.
-            stage = STAGE_DECLINED if q.decided_by_user_id is not None else STAGE_NOBODY
+            # Closed because nobody could take it (no panthaky in the app, and everyone asked
+            # said no) - its own mark, never guessed from nobody being recorded as declining
+            # (who declined may have deleted their account since).
+            stage = STAGE_NOBODY if q.nobody_could else STAGE_DECLINED
         elif q.status == REQUEST_WITHDRAWN:
             stage = STAGE_WITHDRAWN
         else:

@@ -182,6 +182,10 @@ class FuneralRequest(Base):
     # answered or taken it (services/prayer_timers.py). Set once, before anyone
     # is told; never before it was sent.
     no_answer_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # R3.1 step 7: declined because nobody at the fire temple could take it - no
+    # panthaky in the app, and everyone asked said no (prayer_callout._after_no) -
+    # rather than by someone's "We can't take this". Only on a declined request.
+    nobody_could: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
     __table_args__ = (
         CheckConstraint(f"status IN ({sql_in(REQUEST_STATUSES)})", name="status"),
@@ -190,6 +194,7 @@ class FuneralRequest(Base):
             "accepter_shared_contact IS NULL OR status IN ('accepted', 'taken')", name="shared_contact"
         ),
         CheckConstraint("no_answer_alert_at IS NULL OR no_answer_alert_at >= sent_at", name="no_answer_after_sent"),
+        CheckConstraint("NOT nobody_could OR status = 'declined'", name="nobody_could_declined"),
         Index(
             "uq_funeral_requests_one_waiting", "funeral_record_id", unique=True,
             postgresql_where=text("status = 'waiting'"),

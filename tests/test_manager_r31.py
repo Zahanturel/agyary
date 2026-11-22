@@ -236,6 +236,13 @@ async def test_declined_nobody_withdrawn_and_accepted_the_old_way(client, db, se
     assert (q["stage"], q["headline"]) == ("declined", "Declined by Goti Adarian: No mobed is free that day")
     assert q["may_withdraw"] is False and rec["may_send"] is True
     _nothing_of_who(q)
+    assert (await _request(db, rid)).nobody_could is False
+    # The panthaky who declined deletes their account later (who declined goes empty): it still
+    # reads Declined by the agyari, never Nobody can take it (R3.1 step 7).
+    await db.execute(update(FuneralRequest).where(FuneralRequest.id == rid).values(decided_by_user_id=None))
+    await db.commit()
+    q = await _latest(client, record_id, mgr)
+    assert (q["stage"], q["headline"]) == ("declined", "Declined by Goti Adarian: No mobed is free that day")
 
     # At a fire temple with no panthaky, everyone asked said no.
     only = await agyari(db, "Mobeds Only Agyari (test)", None)
@@ -243,7 +250,7 @@ async def test_declined_nobody_withdrawn_and_accepted_the_old_way(client, db, se
     await db.commit()
     rid2, _, _ = await _send(client, db, only.id, mgr)
     await _yes(client, rid2, ONLY, answer="no")
-    assert (await _request(db, rid2)).status == "declined"
+    assert (await _request(db, rid2)).status == "declined" and (await _request(db, rid2)).nobody_could is True
     record2 = (await _request(db, rid2)).funeral_record_id
     q = await _latest(client, record2, mgr)
     assert (q["stage"], q["headline"]) == ("nobody", "Nobody at Mobeds Only Agyari (test) can take it")
