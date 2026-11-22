@@ -406,6 +406,30 @@ async def test_no_answer_never_once_the_prayers_have_begun(client, db, seeded, p
     assert len(await _notes(db, MANAGER)) == 1
 
 
+async def test_no_answer_only_up_to_a_day_after_it_was_sent(client, db, seeded, pushes):
+    """R3.1 step 7: between 1 and 24 hours after sending. An older request is never
+    told, so old records left waiting bring no burst of alerts when this goes live."""
+    aid = seeded["agyary_id"]
+    today = funeral_records.today_ist()
+    far = {"geh_saarnu_date": (today + timedelta(days=5)).isoformat(),
+           "uthamna_date": (today + timedelta(days=6)).isoformat()}
+    rid, _, mgr = await _send(client, db, aid, **far)
+    now = datetime.now(prayer_timers.IST)
+    for hours in (25, 24):
+        await db.execute(update(FuneralRequest).where(FuneralRequest.id == rid).values(
+            sent_at=now - timedelta(hours=hours)))
+        await db.commit()
+        assert await _no_answer(db, now) == 0, hours
+    assert (await _request(db, rid)).no_answer_alert_at is None and await _notes(db, MANAGER) == []
+    # Inside the day it is told, once.
+    await db.execute(update(FuneralRequest).where(FuneralRequest.id == rid).values(
+        sent_at=now - timedelta(hours=23, minutes=59)))
+    await db.commit()
+    assert await _no_answer(db, now) == 1
+    assert (await _request(db, rid)).no_answer_alert_at == now and len(await _notes(db, MANAGER)) == 1
+    assert await _no_answer(db, now + timedelta(minutes=1)) == 0
+
+
 async def test_no_answer_in_come_to_me_first_and_to_the_admin_who_sent_it(client, db, seeded, pushes, admin):
     aid = seeded["agyary_id"]
     await _way(db, aid, "panthaky_first")

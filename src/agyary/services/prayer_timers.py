@@ -49,7 +49,9 @@ or by phone - and no call's result, which takes it), is told once to the
 funeral place's managers, and the admin who sent it acting for the place, in
 the app and on their phones: "No answer yet from <agyari>", with the record's
 link, so they can send it to another fire temple. The request stays open
-there until they withdraw it. Never for a request whose prayers have begun.
+there until they withdraw it. Never for a request whose prayers have begun,
+nor for one sent more than 24 hours ago (R3.1 step 7: no burst of alerts on old
+records when it goes live).
 Claimed by a conditional update of no_answer_alert_at (only while still
 unanswered and untaken) before anyone is told, so it is told once, two loops
 included.
@@ -329,6 +331,9 @@ async def _tell_short(db: AsyncSession, settings: Settings, request_id: int, now
 
 KIND_NO_ANSWER = "funeral_request_no_answer"
 NO_ANSWER_AFTER = timedelta(hours=1)
+# Only up to this long after it was sent (R3.1 step 7): an older request is never
+# told, so records from before (old test ones left waiting) bring no burst of alerts.
+NO_ANSWER_WITHIN = timedelta(hours=24)
 
 
 def _unanswered():
@@ -350,9 +355,9 @@ _UNTOUCHED = (FuneralRequest.status == REQUEST_WAITING, FuneralRequest.all_set_a
 
 
 async def _no_answer_due(db: AsyncSession, now: datetime) -> list[int]:
-    """The requests sent an hour ago or more that nobody at the fire temple
-    has touched, not told yet, whose prayers have not begun. Those whose first
-    day is before today have begun: they are not even read."""
+    """The requests sent between an hour and a day ago that nobody at the fire
+    temple has touched, not told yet, whose prayers have not begun. Those whose
+    first day is before today have begun: they are not even read."""
     today = now.astimezone(IST).date()
     first_day = func.coalesce(FuneralRecord.geh_saarnu_date, FuneralRecord.uthamna_date)
     rows = (await db.execute(
@@ -360,7 +365,7 @@ async def _no_answer_due(db: AsyncSession, now: datetime) -> list[int]:
                FuneralRecord.uthamna_date, FuneralRecord.uthamna_time)
         .join(FuneralRecord, FuneralRecord.id == FuneralRequest.funeral_record_id)
         .where(*_UNTOUCHED, FuneralRequest.no_answer_alert_at.is_(None),
-               FuneralRequest.sent_at <= now - NO_ANSWER_AFTER,
+               FuneralRequest.sent_at <= now - NO_ANSWER_AFTER, FuneralRequest.sent_at > now - NO_ANSWER_WITHIN,
                or_(first_day.is_(None), first_day >= today), _unanswered())
         .order_by(FuneralRequest.sent_at, FuneralRequest.id)
     )).all()
