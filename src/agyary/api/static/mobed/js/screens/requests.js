@@ -1020,8 +1020,9 @@ async function tick(view) {
 // --- "Is <name> going?": back from a call or a chat started on the board -------------
 
 // Whose answer a call can still give: not someone going or on standby. (Going may turn an
-// earlier no into a yes: people change their mind on the phone.)
-const MAY_MARK = new Set(["not_asked", "asked_app", "asked_whatsapp", "said_no"]);
+// earlier no into a yes - people change their mind on the phone - and the same for someone
+// who had said they can't go any more.)
+const MAY_MARK = new Set(["not_asked", "asked_app", "asked_whatsapp", "said_no", "backed_out"]);
 // A call or chat is asked about when the panthaky is back in the app within this.
 const CALL_WITHIN_MS = 30 * 60 * 1000;
 // Kept for this tab too: a phone short of memory may close the app during a long call.
@@ -1063,8 +1064,7 @@ function askAbout(view, call) {
   const m = view.b.mobeds.find(x => x.key === call.key);
   if (!m) return;
   if (MAY_MARK.has(m.state)) return askGoing(view, m);
-  showInfo(m.state === "going" ? `${m.name} is going already.`
-    : m.state === "backed_out" ? `${m.name} has said they can't go.` : `${m.name} is on standby already.`);
+  showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on standby already.`);
 }
 
 /** Back in the app: the board read again (answers may have come meanwhile), then the

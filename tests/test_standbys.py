@@ -408,11 +408,7 @@ async def test_someone_who_backed_out_counts_as_going_nowhere(client, db, seeded
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
     assert [s["name"] for s in board["standbys"]] == ["Er. Second"]
     assert MOBED_NAME not in [p["name"] for p in board["places"] + board["standbys"]]
-    # A call cannot mark them going again by mistake.
-    r = await client.post(_b(rid, "call-result"), json={"key": f"u{kias.id}", "result": "going"},
-                          headers=await _as(client, PANTHAKY))
-    assert r.status_code == 409 and r.json()["detail"] == f"{MOBED_NAME} has said they can't go."
-    # Their own answer again in the app is refused in the same words.
+    # Their own answer again in the app is refused (a call can bring them back: below).
     r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=mobed)
     assert r.status_code == 409 and r.json()["detail"] == "You have said you can't go any more."
     # Their red count holds nothing for it.
@@ -422,6 +418,61 @@ async def test_someone_who_backed_out_counts_as_going_nowhere(client, db, seeded
     assert await prayer_callout.after_closed(db, config.get_settings(), rid) == 2
     told = {"+" + m["to"].lstrip("+") for m in meta.sent[sent:]}
     assert told == {LISTED, SECOND}
+
+
+async def test_a_call_can_bring_back_someone_who_said_they_cant_go(client, db, seeded, meta, pushes, live):
+    """Lead's rule (R3.1 step 7): a phone call can turn "can't go" into Going, as it can a
+    no. It fills the place through the one rule for a yes - all set again here - and never
+    touches someone going or on standby; "Not this time" says what they said already."""
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)
+    mobed, panthaky = await _as(client, MOBED), await _as(client, PANTHAKY)
+    assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=mobed)).status_code == 200
+    kias, hormuz = await _user(db, MOBED), await _user(db, PANTHAKY)
+    listed, second = (await _answers(db))[LISTED], (await _answers(db))[SECOND]
+    key_of = {LISTED: f"c{listed.contact_id}", SECOND: f"c{second.contact_id}", MOBED: f"u{kias.id}"}
+    assert (await _request(db, rid)).status == "waiting"
+
+    async def call(phone: str, result: str):
+        return await client.post(_b(rid, "call-result"), json={"key": key_of[phone], "result": result},
+                                 headers=panthaky)
+
+    # Someone going, or on standby, is never touched by a call.
+    r = await call(LISTED, "going")
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Listed is already going."
+    r = await call(SECOND, "going")
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Second already said yes and is on standby."
+    # "Not this time" for the one who can't go: noted quietly, nothing changes.
+    r = await call(MOBED, "not_going")
+    assert r.status_code == 200 and r.json()["done"]["message"] == f"Noted: {MOBED_NAME} cannot pray this time."
+    row = (await _answers(db))[MOBED]
+    assert row.backed_out_at is not None and row.picked_at is not None
+
+    # Going: the back-out is cleared and the place filled, by phone - all set again.
+    sent = len(meta.sent)
+    r = await call(MOBED, "going")
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == f"{MOBED_NAME} is going. All the places are filled: it is all set."
+    board = r.json()
+    assert board["status"] == "all_set" and board["backed_out"] == []
+    assert [p["name"] for p in board["places"]] == ["Er. Listed", MOBED_NAME]
+    row = (await _answers(db))[MOBED]
+    assert row.backed_out_at is None and row.backed_out_by_user_id is None and row.picked_at is not None
+    assert (row.answer, row.how, row.recorded_by_user_id) == ("yes", "phone", hormuz.id)
+    request = await _request(db, rid)
+    assert request.status == "all_set" and request.decided_at is not None
+    # Their own book, which kept the family, is theirs again: the family's contact is back on
+    # their card, and they can say they can't go again.
+    assert await _count(db, FuneralRequestBook, FuneralRequestBook.user_id == kias.id) == 1
+    assert (await all_set.contacts_for(db, request, kias))["family_contact"]["phone"] == FAMILY
+    card = (await client.get(f"{REQUESTS}/{rid}", headers=mobed)).json()["request"]
+    assert card["my_answer"]["state"] == "going" and card["my_answer"]["may_back_out"] is True
+    # Their details went at the first All set: not again. The family hears the names again.
+    details = config.get_settings().whatsapp_all_set_details_template
+    assert not [m for m in meta.sent[sent:] if m.get("type") == "template" and m["template"]["name"] == details]
+    family = config.get_settings().whatsapp_all_set_family_template
+    assert [m["template"]["name"] for m in _to(meta, FAMILY)[-1:]] == [family]
+    assert len([m for m in meta.sent[sent:] if "+" + m["to"].lstrip("+") == FAMILY]) == 1
 
 
 async def test_backing_out_before_all_set_tells_the_panthaky_to_find_someone(client, db, seeded, meta, pushes, live):

@@ -1355,10 +1355,11 @@ async def call_result(
     temple's list, and only their first answer (an answer on WhatsApp or in
     the app first is "already answered") - except that "going" may turn an
     earlier no into a yes (lead's choice, 21 Nov 2026: people change their
-    mind on the phone). Someone already going or on standby is never
-    touched; "not_going" for them stays refused (backing out is Step 5b).
-    "not_going" for someone who had said no already is noted quietly, the
-    same as the first time (step 5)."""
+    mind on the phone), and the same for someone who had said they can't go
+    any more (lead's rule, R3.1 step 7: _back_in). Someone already going or
+    on standby is never touched; "not_going" for them stays refused (backing
+    out is Step 5b). "not_going" for someone who had said no, or that they
+    can't go, already is noted quietly, the same as the first time (step 5)."""
     now = now or _now()
     # What follows may roll the session back, which forgets the account and the request.
     user_id, request_id = user.id, request.id
@@ -1386,6 +1387,25 @@ async def call_result(
     yes = result == "going"
     rows = await _request_rows(db, request.id)
     row = _find(rows, key, phone)
+    if (row is not None and backed_out(row)
+            and not any(holds_place(r) or is_standby(r) for r in rows if _same_person(r, row))):
+        # They had said they can't go any more (step 5b). It takes the request.
+        await take_request(db, request, user, now)
+        if not yes:
+            # The call says the same: noted quietly, as for an earlier no.
+            await db.commit()
+            logger.info("Request %s: user %s called %s, who had said they can't go", request_id, user_id, key)
+            return {"outcome": "can't go, already", "message": f"Noted: {m['name']} cannot pray this time."}
+        outcome = await _back_in(db, settings, request, row, by_user=user, now=now, client=client)
+        await db.refresh(request)
+        await db.refresh(row)
+        if outcome == "already answered":
+            raise CalloutError(_already(m["name"], row))
+        logger.info("Request %s: user %s marked %s going by phone after they had said they can't go (%s)",
+                    request_id, user_id, key, outcome)
+        record = await db.get(FuneralRecord, request.funeral_record_id)
+        return {"outcome": outcome,
+                "message": _done_words(row, request, await _going(db, request_id), wanted(record), me=False)}
     if (not yes and row is not None and row.answer == CALLOUT_NO
             and not any(r.answer == CALLOUT_YES for r in rows if _same_person(r, row))):
         # They had said no already (on WhatsApp, in the app, or an earlier call): the call says
@@ -1417,6 +1437,37 @@ async def call_result(
     record = await db.get(FuneralRecord, request.funeral_record_id)
     return {"outcome": outcome,
             "message": _done_words(row, request, await _going(db, request_id), wanted(record), me=False)}
+
+
+async def _back_in(
+    db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *, by_user: User,
+    now: datetime, client: httpx.AsyncClient | None,
+) -> str:
+    """A call's Going for someone who had said they can't go any more (lead's
+    rule, R3.1 step 7: a call can turn a no into Going, and the same for a
+    back-out). The request is locked first, then the row; the back-out is
+    cleared and their yes is marked as by phone, now - so with no place free
+    they are a standby, last in the order - and committed; then it goes
+    through ``fill``: a place, which may make the request all set again (their
+    details went at the first All set and are not sent twice), or a standby.
+    Their own book kept the family (D8) and is theirs again. Returns what
+    happened, for the log; "already answered" if they were no longer out."""
+    row_id, request_id = row.id, request.id
+    await db.refresh(request, with_for_update=True)
+    await db.refresh(row, with_for_update=True)
+    if not backed_out(row):
+        await db.commit()
+        return "already answered"
+    row.backed_out_at = row.backed_out_by_user_id = row.picked_at = None
+    row.answer, row.answered_at, row.how, row.recorded_by_user_id = CALLOUT_YES, now, HOW_PHONE, by_user.id
+    await db.commit()
+    logger.info("Answer %s on request %s: can't go any more becomes a yes by phone", row_id, request_id)
+    try:
+        return await fill(db, settings, request, row, HOW_PHONE, by_user, now, client)
+    except Exception:   # noqa: BLE001 - the yes is kept; what did not follow is on the board
+        logger.exception("After answer %s on request %s came back by phone", row_id, request_id)
+        await db.rollback()
+        return "yes again, but what follows failed"
 
 
 # --- App mobeds answer in the app too (owner, 21 Nov 2026, third round) ---------------
