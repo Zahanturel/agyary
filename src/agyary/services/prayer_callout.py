@@ -984,7 +984,9 @@ async def fill(
       (``picked_at``). Nobody is sent the details now - they go only at All
       set (Step 5). The panthakys are told in the app and on their phones
       "<name> is going (1 of 2)", with nothing about the family on the lock
-      screen; an app mobed going is told so in the app.
+      screen; an app mobed going is told so in the app, and the request
+      reaches them if it had not (a call's Going in Come to me first), so
+      their card and the All set notice open it.
     - The places full: the row stays a Yes without ``picked_at``, a standby,
       in ``answered_at`` order (Step 5b asks them when a place opens). A
       WhatsApp Yes gets the "Enough mobeds" text inside the 24 hours; an app
@@ -1010,6 +1012,12 @@ async def fill(
     skip = by_user.id if by_user is not None else None
     if is_open(request) and going < want:
         row.picked_at = now
+        if row.user_id and (await db.execute(select(FuneralRequestRecipient.user_id).where(
+                FuneralRequestRecipient.funeral_request_id == request.id,
+                FuneralRequestRecipient.user_id == row.user_id))).first() is None:
+            # Given a place without being asked in the app (marked Going after a call in Come to
+            # me first, say): the request reaches them now, so their card and notices open it.
+            db.add(FuneralRequestRecipient(funeral_request_id=request.id, user_id=row.user_id, notified_at=now))
         await db.commit()
         going += 1
         await _tell_panthakys(

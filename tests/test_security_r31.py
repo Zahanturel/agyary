@@ -542,3 +542,25 @@ async def test_withdrawn_text_never_to_an_account_switched_off(client, db, seede
     meta.sent.clear()
     assert (await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)).status_code == 200
     assert meta.texts() == []
+
+
+# --- 10. An app mobed given a place by phone can open the request ------------------------
+
+async def test_an_app_mobed_marked_going_by_phone_gets_the_request_and_its_card(client, db, seeded, meta, pushes):
+    from tests.test_prayer_callout import _way
+
+    aid = seeded["agyary_id"]
+    await _way(db, aid, "panthaky_first")
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=1)
+    mobed = await _as(client, MOBED)
+    assert (await client.get(f"{REQUESTS}/{rid}", headers=mobed)).status_code == 404     # not asked: not theirs
+    kias = await _user(db, MOBED)
+    r = await client.post(_b(rid, "call-result"), json={"key": f"u{kias.id}", "result": "going"},
+                          headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
+    r = await client.get(f"{REQUESTS}/{rid}", headers=mobed)
+    assert r.status_code == 200, r.text
+    card = r.json()["request"]
+    assert card["my_answer"]["state"] == "going" and card["all_set"] is not None
+    (note,) = await _notes(db, MOBED, "funeral_request_all_set")
+    assert note.link == f"#/requests/{rid}"
