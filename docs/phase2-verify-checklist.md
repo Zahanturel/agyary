@@ -1,109 +1,166 @@
 # Phase 2: what is built, and how to try it (owner's checklist)
 
-Live as of 18 Nov 2026: R1 (99d3cea), R2 (425078f), R3 (ca2743e), app version v82.
-Being built now, not live: Steps 5b and 5c (WhatsApp on accept, and the panthaky's call-out).
+**Live now:** R1, R2 and R3 with the changes of 19 Nov 2026 (Khud title, no bungli, the call-out
+at Send, the Doongerwadi's book of behdins), app version **v85** (161e2d6).
 
-## What is built (live)
+**Built, not live yet: R3.1** (21-22 Nov 2026, steps 1-7), app version **v86**. It goes live in
+one push, only with your yes, after the lead's walk-through in a browser. Until then the 19 Nov
+rules stay live.
 
-**R1: fire temples on the map, and "mobed or panthaky"**
-- Settings -> Location -> **Edit location**: a map to put the fire temple's pin; "I'm at the agyari
-  now" (phone's location); search an address or area; "Find on Google" (only once the Google key is
-  on the server). Any approved mobed of that temple, or you, can move the pin.
-- Adding a new fire temple at sign-up has the same map.
-- Sign-up asks **"Are you a mobed here, or the panthaky?"**. Mobeds who joined earlier see "Are you
-  the panthaky of X? Tell us" in Settings. It is only a claim until **you confirm** it on
-  Admin -> Mobeds ("Confirm as panthaky" / "Not the panthaky" / later "Remove as panthaky").
-  Settings shows "You are: Mobed / Panthaky".
+## What R3.1 changed
 
-**R2: Doongerwadis and their managers**
-- **Admin -> Doongerwadis**: add / change / turn off a Doongerwadi, prayer hall or aramgah (name,
-  kind, town, address, run by, map pin).
-- A **new** account first chooses "I am a mobed or panthaky" or "I work at a Doongerwadi or prayer
-  hall". A manager picks their place and waits; you approve them on **Admin -> Mobeds** (same
-  Approve / on-off switch; in-app notice and phone notification "A new Doongerwadi manager is
-  waiting").
-- A manager has their own home, no Machi / Calendar / Behdins, and cannot open anything of a mobed's.
-- Admin -> "In the app": counts of mobeds, panthakys, fire temples in use, Doongerwadis, managers.
+- **The panthaky chooses how requests reach their agyari** (Settings -> Prayer requests):
+  **Everyone at once** (every mobed is asked as soon as the request comes; the default) or
+  **Come to me first** (only the panthaky is told), with an optional **safety net** (if the
+  panthaky has not acted in 15 minutes, 30 minutes or 1 hour, all the mobeds are asked).
+- **One board, "Who will pray: 1 of 2"**, on the request: **Ask everyone**, **I'll pray**, and the
+  agyari's mobeds with **Call** and **WhatsApp** from the panthaky's own phone; back in the app
+  after a call, a sheet asks **"Is <name> going?"**. **We can't take this** at the bottom. There is
+  **no Accept any more**: the panthaky's first action takes the request.
+- **App mobeds answer in the app too** (I can pray / Not this time), as well as on WhatsApp.
+- **All set** when the places fill (or with **Confirm with who's going** if short): the family goes
+  into the panthaky's own book and each praying app mobed's own book (reminders off), the days go
+  on their calendars, **Make the memorial** is one tap away, and everyone is connected: the
+  family's contact, the mobeds going and the panthaky, each with Call and WhatsApp.
+- **Standbys and backing out:** a Yes after the places are full is kept as a standby, in order.
+  Someone going can say **I can't go any more** (or the panthaky marks **Can't go**); the place
+  reopens and the first standby is asked again (30 minutes each). A phone call can also bring
+  back someone who said they can't go (the panthaky marks them Going).
+- **The Doongerwadi's side** reads where each request stands in plain words: Waiting at, Sent to
+  the panthaky of, Finding mobeds: 1 of 2 going, A place has opened, All set (with the names and
+  the panthaky's number), Declined, Nobody at <agyari> can take it, Withdrawn. **Send to another
+  agyari** while it waits. **No answer yet** if nobody at the agyari has done anything an hour
+  after sending (only for requests sent in the last 24 hours).
+- **Our mobeds** becomes **Mobeds**, for panthakys: the agyari's approved mobeds with their
+  numbers, and those you add by hand.
+- **Gone:** the Accept button, the old call-out screen ("Who is going"), and the bungli field
+  (19 Nov). Templates 1-3 are no longer sent. Requests accepted the old way still read as before.
+- **WhatsApp:** new templates 4 v2 and 5-8 to submit (`docs/phase2-whatsapp-templates.md`).
+  Until they are approved and switched on, nothing goes on WhatsApp.
 
-**R3: a death, sent to an agyari, accepted**
-- Manager: **Record a death** (prayed name with title, father's or husband's name, by date or by
-  Roj and Mah, four days or one, bungli, Geh-saarnu day and geh, Uthamna day and time, mobeds
-  wanted, the family's fire temple, one family contact). Then **choose the agyari**: Suggested
-  (nearest first, km) or Search all; the tick "The family agreed to share their name and number with
-  this agyari"; **Send**. They see each request's state; can withdraw and send to another.
-- Who gets it: that agyari's **confirmed panthakys**; if it has none, **all its approved mobeds**.
-  They get an in-app notice and a phone notification (lock screen: "A request for prayers").
-- Mobeds: a fourth tab **Requests** with a red count. No family details until accepting.
-  **Accept** (tick "Share my name and number", on by default) adds the family to their own
-  Behdins (reminders off), puts the Geh-saarnu and Uthamna on their calendar, and opens the
-  memorial form filled in. Then: **Message the family on WhatsApp** (from their own WhatsApp, text
-  ready to edit) and **Call**. **Decline** with an optional reason.
-- Manager: "Accepted by <name> of <agyari>", with their number, Call and WhatsApp only if they
-  ticked share; a notice on accept or decline.
-- Settings: **Notifications on this phone** for everyone (not only you).
-- Admin -> Erase a number now also clears that number from Doongerwadi records.
+## Trying R3.1 on your phone
 
-## Before you try it: three things that decide whether it works
+You are the admin and Goti Adarian's confirmed panthaky, so one phone can play both sides:
+**Admin -> Doongerwadis -> Act for this place** gives you the Doongerwadi's screens (a strip says
+you are acting as admin), and your Requests tab is the panthaky's. For the app mobed's side (I can
+pray, I can't go any more) a **second phone** helps: an approved mobed of Goti Adarian whose
+access is on (your second number, or a mobed who agrees to help).
 
-1. **Phone notifications** reach only phones where that person turned on Settings -> **Notifications
-   on this phone**. Use the app in **Chrome**: the Android app we shared was built with notifications
-   off, so it may not show them. Everyone else still sees the in-app notice and the red count.
-2. **Who at Goti Adarian gets the request:** if Goti Adarian has a **confirmed panthaky**, only the
-   panthaky(s) get it. If you want **every mobed there** to get it, confirm nobody as panthaky for
-   this test (all approved mobeds then get it). Each must be approved and on.
-3. **Records are kept for good (D8).** Use a clearly test name (e.g. "Behdin Test Run") unless it
-   is a real death the family agreed to. Tell me afterwards and I can remove test records on the
-   server.
+**While WhatsApp sending is off** (it is, until Meta approves the new templates), these work **in
+the app only**:
 
-## Trying it alone (v84, 18 Nov 2026): "Act for this place"
+- Nobody is asked on WhatsApp: not at Send, not by Ask everyone, not by the safety net. Only the
+  agyari's **app mobeds** are asked, in their Requests tab and on their phones. The board says
+  "WhatsApp messages from Mobed Diary start once Meta approves them."
+- Mobeds you **added by hand** on the Mobeds page cannot be asked by Mobed Diary: **call** them
+  (or WhatsApp them from your own phone) and mark them **Going** on the board.
+- At All set **the family is not messaged** by Mobed Diary, nor the mobeds or the Doongerwadi:
+  everyone sees it in the app, and you reach the family from the family's contact (Call, or your
+  own WhatsApp with the message ready to edit).
+- **I can't go any more** is on the mobed's request card only (the WhatsApp button comes with
+  template 6). A standby is asked again in the app only.
 
-Without a manager's phone: Admin -> Doongerwadis -> **Act for this place** opens that place's
-manager screens with a strip "You are acting for <place> as admin". Record a death, send it to
-Goti Adarian, then accept it yourself on the Requests tab as its confirmed panthaky. The record
-says "Recorded by the admin". The WhatsApp templates (all four submitted 18 Nov) have no
-"Message them" buttons: Meta refuses buttons that link to WhatsApp, so the number in the text is
-tappable instead.
+Before you start, on each phone: reload the app until **Menu -> App version** says **v86**, then
+**Settings -> Notifications on this phone**. Use a clearly test name (e.g. "Behdin Test Run") and
+your own second number as the family contact: records are kept for good (D8), and I can remove
+the test ones afterwards.
 
-## Trying the whole run (Surat Doongerwadi -> Goti Adarian)
+### A. Settings
 
-On each phone first: reload the app once (to get v82), then Settings -> Notifications on this phone.
+1. **Settings -> Prayer requests.** [ ] Both ways are there: **Everyone at once** (chosen) and
+   **Come to me first**. [ ] Choosing Come to me first shows the safety net: Never, 15 minutes,
+   30 minutes, 1 hour. Save it, open it again: [ ] it kept your choice. Set it back to
+   **Everyone at once** for part B.
+2. **Settings -> Mobeds.** [ ] Goti Adarian's mobeds in Mobed Diary with their numbers, each with
+   Call and WhatsApp (your own phone). [ ] **Added by me**: add a test mobed (name, number, the
+   tick that they agreed; Import from contacts is in the form). [ ] Remove takes them off.
 
-1. **You:** Admin -> Doongerwadis -> Add: name (e.g. "Surat Doongerwadi"), kind Doongerwadi, town
-   Surat, run by (e.g. Surat Parsi Panchayat), the pin (on the map, or "I'm there now" when there).
-   [ ] It appears in the list.
-2. **The Surat manager**, on their phone: open mobed.gotiadarian.com/mobed in Chrome, sign in with
-   WhatsApp, choose **"I work at a Doongerwadi or prayer hall"**, pick Surat Doongerwadi.
-   [ ] They see the waiting screen.  [ ] You get "A new Doongerwadi manager is waiting".
-3. **You:** Admin -> Mobeds -> approve them.  [ ] They see "You're in" and their home.
-4. **Goti Adarian:** make sure its pin is set (any of its mobeds: Settings -> Edit location), and
-   that the people who should get it are approved and on (and, if you want only the panthaky to
-   get it, confirm them as panthaky).
-5. **Manager:** Record a death -> fill it in -> Save -> choose **Goti Adarian** (Suggested or Search
-   all) -> tick -> Send.  [ ] The record says "Waiting at Goti Adarian".
-6. **Each person at Goti Adarian:**  [ ] phone notification (if turned on)  [ ] in-app notice
-   [ ] red count on Requests  [ ] the request shows no family name or number.
-7. **One of them:** Accept (share ticked).  [ ] Family appears in their Behdins  [ ] Geh-saarnu and
-   Uthamna on their calendar  [ ] memorial form filled in -> save it  [ ] "Message the family on
-   WhatsApp" opens their WhatsApp with the text ready.
-8. **Others asked:**  [ ] see "Accepted by <name>".
-9. **Manager:**  [ ] "Accepted by <name> of Goti Adarian" with the number  [ ] notice.
-10. Also try: Decline with a reason (manager sees it); Withdraw and send to another agyari.
+### B. Everyone at once
+
+3. **As the Doongerwadi** (Act for this place): **Record a death** (2 mobeds wanted, the
+   Geh-saarnu tomorrow), then choose **Goti Adarian** (Suggested or Search all). [ ] The sheet
+   before Send says its mobeds are asked at once, in the app only while WhatsApp sending is off,
+   and that the family's name and number are shared only once enough mobeds are going. Tick, Send.
+   [ ] The record reads **Waiting at Goti Adarian** (sent when).
+4. **As the panthaky** (Requests tab): [ ] red count, phone notification. Open it: [ ] the board,
+   **Who will pray: 0 of 2**, with no family name or number. [ ] The Mobeds list with each one's
+   state (asked in the app, not asked yet). [ ] **Ask everyone** is greyed, saying everyone in the
+   app has been asked already (Everyone at once asked them at Send).
+5. **Second phone:** [ ] the request in Requests, with no family details. Tap **I can pray**.
+   [ ] It says you are going. [ ] Your board shows **1 of 2** within about 10 seconds.
+   [ ] The Doongerwadi's record reads **Finding mobeds at Goti Adarian: 1 of 2 going** (no names).
+6. **A call:** on the board tap **Call** for a mobed (a test one), come back to the app: [ ] a
+   sheet asks **Is <name> going?** with Going / Not this time / No answer. Try **No answer**, then
+   the **Going?** button and **Not this time**: [ ] each is noted in plain words.
+7. **I'll pray:** [ ] the last place fills and it is **All set: 2 going**: [ ] the family's
+   contact with Call and **WhatsApp** (your WhatsApp opens with the message ready to edit,
+   "...has asked me to perform the prayers..." since you pray yourself), who is praying and the
+   panthaky, each with Call and WhatsApp. [ ] **Make the memorial** opens filled in; save it, and
+   it becomes **Open the memorial**, with **Open in Behdins**. [ ] Behdins has the family
+   (reminders off); the Calendar has the Geh-saarnu and the Uthamna.
+   [ ] **Second phone:** All set on their card with the family's contact and Make the memorial;
+   the family is in their own Behdins too. [ ] Everyone gets an **All set** notice; the lock
+   screen names only who is going and the place, never the departed or the family.
+8. **As the Doongerwadi:** [ ] **All set at Goti Adarian: <names> are going**, with the panthaky's
+   name and number, Call and WhatsApp.
+
+### C. Backing out, standbys, and a call that brings someone back
+
+9. **Second phone:** on the card, **I can't go any more** -> the sheet "Tell <panthaky> you can't
+   go?" -> yes. [ ] It says you have been noted. [ ] The panthaky is told. [ ] The board reads
+   **A place has opened: 1 of 2 going**, with their name under the places as **Can't go**, and
+   the actions back. [ ] The Doongerwadi's record reads **A place has opened** and still shows who
+   is going and the panthaky.
+10. **The panthaky calls them back:** **Call** (or **Going?**) for the one who can't go -> **Going**.
+    [ ] All set again; their card has the family's contact again. (Or mark a place **Can't go** on
+    the board, for someone who phoned you.)
+11. **Standbys** need a third mobed in the app: their I can pray after All set reads **Standby**.
+    When someone going can't go, the first standby is asked again in the app ("A place has opened:
+    can you still pray?"); no answer in 30 minutes asks the next; with nobody left, you are told to
+    find someone.
+12. **Confirm with who's going:** a new test record (2 wanted); tap **I'll pray** only. [ ] The
+    board has **Confirm with who's going** -> the sheet "Confirm with 1 of 2 going?" -> yes.
+    [ ] All set with 1 of 2; the Doongerwadi reads "(confirmed with 1 of 2)".
+
+### D. Come to me first
+
+13. **Settings -> Prayer requests -> Come to me first**, safety net **15 minutes**. Send a new test
+    record. [ ] The sheet before Send says its panthaky is told and chooses who to ask. [ ] The
+    record reads **Sent to the panthaky of Goti Adarian**. [ ] The second phone gets nothing.
+14. Either tap **Ask everyone** on the board ([ ] the second phone gets it now), or do nothing for
+    15 minutes: [ ] the safety net asks everyone and tells you "All your mobeds were asked".
+
+### E. The Doongerwadi's other answers
+
+15. **No answer yet:** with Come to me first and the safety net on **Never**, send a test record and
+    leave it alone for an hour. [ ] The Doongerwadi gets **No answer yet from Goti Adarian** (in
+    the app and on the phone) and the record says so. (Only for requests sent in the last 24 hours;
+    older ones are never told.)
+16. **Send to another agyari** (on the record, while it waits): [ ] the sheet "Withdraw the request
+    from Goti Adarian and send it to another?" -> it is withdrawn, and choosing a fire temple opens.
+17. **Decline:** as the panthaky, **We can't take this** at the bottom of the board, with a reason.
+    [ ] The Doongerwadi reads **Declined by Goti Adarian: <reason>** and can send it elsewhere.
+18. **Withdraw:** as the Doongerwadi, **Withdraw** a waiting request. [ ] The panthaky's board says
+    it was withdrawn and nothing more can be done; the mobeds asked are told in the app.
+
+Tell me afterwards which test records to remove.
 
 ## Still for you on the server / Meta
 
-- [ ] Starting positions: `cd ~/agyary`, then
+- [ ] Starting positions of the fire temples (if not done): `cd ~/agyary`, then
       `docker compose exec -T app python -m agyary.scripts.seed_fire_temple_locations` (dry run),
       then the same with `--write`.
-- [ ] Google: `GOOGLE_PLACES_API_KEY=` in `.env`, then `docker compose up -d app`.
-- [ ] Meta: submit the four templates in `docs/phase2-whatsapp-templates.md` (WhatsApp messages
-      start only after they are approved and Steps 5b/5c are live and switched on).
+- [ ] Google: `GOOGLE_PLACES_API_KEY=` in `.env`, then `docker compose up -d app` (if wanted).
+- [ ] Choose the wording for an agyari with no panthaky (templates 5, 6 and 8), then submit
+      **4 v2 and 5-8** in WhatsApp Manager (`docs/phase2-whatsapp-templates.md`). Switch on only
+      when all are approved, as that document says.
+- [ ] Your yes for the push that makes R3.1 (v86) live.
 
-## What remains to build
+## What remains
 
-- **Steps 5b and 5c** (being built): WhatsApp on accept; "Our mobeds" list and the call-out.
-- **Step 6**: STATUS.md, a security pass over everything new, a real-phone check of notifications.
-- **Small follow-ups**: the name screen still says "slips" for managers; sign-up dates shown in UK
-  time; a manager cannot change their place in the app; one decline closes a request for that
-  agyari (could stay open until everyone answers).
-- **Before real deaths at scale**: the lawyer's question on the departed's data (research doc).
-- **Later (to discuss)**: the behdin app (R4); payments through a gateway with your fee.
+- **R3.1 step 8:** the templates submitted and approved, then a live test with your own numbers.
+- A real-phone check of notifications; a security pass over everything new.
+- **Small follow-ups:** the name screen still says "slips" for managers; sign-up dates shown in UK
+  time; a manager cannot change their place in the app.
+- **Before real deaths at scale:** the lawyer's question on the departed's data (research doc).
+- **Later (to discuss):** the behdin app (R4); payments through a gateway with your fee.
