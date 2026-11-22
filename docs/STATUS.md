@@ -16,6 +16,54 @@ file refers to them by role.
 
 ---
 
+## 0. Latest: R3.1 built, not live (22 Nov 2026)
+
+Phase 2 (the Doongerwadi side, D10) is live up to the 19 Nov 2026 changes, app version
+**v85** (161e2d6). **R3.1**, the redesign of how a prayer request reaches an agyari
+([phase2-requests-redesign.md](phase2-requests-redesign.md); D10, "Changed 21 Nov 2026"), is
+**built** (steps 1-7, 21-22 Nov 2026) and committed, but **not live**: it goes in one push after
+the lead's browser walk-through, and **every push needs the owner's yes** (a push to master
+deploys).
+
+What it contains:
+
+- Settings -> Prayer requests: **Everyone at once** or **Come to me first**, with an optional
+  safety net (15 / 30 / 60 minutes, default Never), checked by the one-minute loop.
+- The **Mobeds** page for confirmed panthakys (replaces "Our mobeds"), with app mobeds' numbers.
+- The **Who will pray** board on a request: Ask everyone, I'll pray, Call / WhatsApp and "Is X
+  going?", We can't take this; the first action takes the request. App mobeds answer in the app
+  as well as on WhatsApp. The old Accept and the old call-out screen are gone (step 7).
+- **All set** when the places fill or on Confirm with who's going: the family into the
+  panthaky's and each praying app mobed's own book, calendars, the memorial one tap away, notices
+  and phone notifications; "Still short" 4 hours before the Geh-saarnu.
+- **Standbys and backing out**: I can't go any more (app card, WhatsApp button, or the board's
+  Can't go), standbys asked again in order (30 minutes each), all set again; a phone call can
+  bring back someone who said they can't go.
+- The **Doongerwadi's side** in plain words, Send to another agyari, "No answer yet" after an hour
+  (only for requests sent in the last 24 hours), "Nobody at <agyari> can take it".
+- WhatsApp: templates **4 v2 and 5-8** are written into the code behind `FUNERAL_WHATSAPP_MODE`
+  (off); 1-3 are no longer sent. The owner submits 4 v2 and 5-8 (step 8,
+  [phase2-whatsapp-templates.md](phase2-whatsapp-templates.md)); sending stays off until they
+  are approved.
+
+Migrations added by R3.1, in order (each with a working downgrade, proved by
+`tests/test_migrations_run.py`; the deploy runs them before the new version serves):
+
+| Revision | Down revision | What |
+|---|---|---|
+| `a9b0c1d2e3f6` | `f8a9b0c1d2e5` | `agyaries.request_mode`, `request_escalate_minutes` |
+| `b0c1d2e3f4a7` | `a9b0c1d2e3f6` | `funeral_requests.escalated_at` (the safety net) |
+| `c1d2e3f4a5b9` | `b0c1d2e3f4a7` | the board: `taken_at` / `taken_by_user_id`, `all_set_at`, state `all_set`, how each answer came |
+| `d2e3f4a5b6c0` | `c1d2e3f4a5b9` | `funeral_request_books`, `confirmed_short`, `short_alert_at` |
+| `e3f4a5b6c7d1` | `d2e3f4a5b6c0` | backing out and standbys asked again |
+| `f4a5b6c7d8e2` | `e3f4a5b6c7d1` | `funeral_requests.no_answer_alert_at` |
+| `a5b6c7d8e9f4` | `f4a5b6c7d8e2` | `funeral_requests.nobody_could` (head) |
+
+App version: **v86** (`CACHE_NAME = "mobed-shell-v86"` in `mobed-sw.js`; Menu -> App version).
+The owner's checklist for trying it is [phase2-verify-checklist.md](phase2-verify-checklist.md).
+
+---
+
 ## 1. What the product is
 
 A calendar and booking tool for the priests (mobeds, and the panthaky who runs a
