@@ -3,7 +3,7 @@
 **Live now:** R1, R2 and R3 with the changes of 19 Nov 2026 (Khud title, no bungli, the call-out
 at Send, the Doongerwadi's book of behdins), app version **v85** (161e2d6).
 
-**Built, not live yet: R3.1** (21-22 Nov 2026, steps 1-7), app version **v86**. It goes live in
+**Built, not live yet: R3.1** (21-22 Nov 2026, steps 1-7), app version **v87** (v86 went live on 22 Nov with the lists and Sahebji fixes alone). It goes live in
 one push, only with your yes, after the lead's walk-through in a browser. Until then the 19 Nov
 rules stay live.
 
@@ -60,7 +60,7 @@ the app only**:
 - **I can't go any more** is on the mobed's request card only (the WhatsApp button comes with
   template 6). A standby is asked again in the app only.
 
-Before you start, on each phone: reload the app until **Menu -> App version** says **v86**, then
+Before you start, on each phone: reload the app until **Menu -> App version** says **v87**, then
 **Settings -> Notifications on this phone**. Use a clearly test name (e.g. "Behdin Test Run") and
 your own second number as the family contact: records are kept for good (D8), and I can remove
 the test ones afterwards.
@@ -154,7 +154,7 @@ Tell me afterwards which test records to remove.
 - [ ] Choose the wording for an agyari with no panthaky (templates 5, 6 and 8), then submit
       **4 v2 and 5-8** in WhatsApp Manager (`docs/phase2-whatsapp-templates.md`). Switch on only
       when all are approved, as that document says.
-- [ ] Your yes for the push that makes R3.1 (v86) live.
+- [ ] Your yes for the push that makes R3.1 (v87) live.
 
 ## What remains
 
