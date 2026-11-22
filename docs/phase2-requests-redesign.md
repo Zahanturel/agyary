@@ -2,8 +2,9 @@
 
 The owner's idea of 21 Nov 2026, raised during the guided run of Phase 2, and the answers to
 the questions that followed. The decisions are recorded in `docs/DECISIONS.md` (D10, "Changed
-21 Nov 2026"). Not built yet: until it is, the 19 Nov rules stay live (the call-out at Send,
-the first Yeses get the details, the panthaky accepts separately).
+21 Nov 2026"). Built 21-22 Nov 2026 (steps 1-7), not live until the owner's push; until then
+the 19 Nov rules stay live (the call-out at Send, the first Yeses get the details, the panthaky
+accepts separately).
 
 ## Why
 
