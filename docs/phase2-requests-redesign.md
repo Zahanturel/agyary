@@ -267,6 +267,22 @@ Fixed at once: the "Everyone at once" words in Settings now say "asked, in the a
   card, standbys being asked again, the safety net firing, Everyone at once at Send, a decline,
   and a withdraw.
 
+## Security pass (22 Nov 2026)
+
+A read-only review of every Phase 2 and R3.1 route (60) found nothing critical or high. Its clear
+findings are fixed in local commits (5a6be60 to 3e89137): a mobed taken off the Mobeds list can no
+longer answer with an old WhatsApp button; hand-added mobeds are matched to accounts by number each
+time; adding by hand no longer reveals an account's state; nobody waiting or switched off can be
+given a place; the "withdrawn" text goes only to WhatsApp yeses; the Doongerwadi hears no mobed's
+name before All set; the family number cannot change under a waiting request; erasure covers the
+stored messages and hand-added mobeds; signing out also stops that phone's notifications; an app
+mobed marked Going by phone gets the request in their tab; old accepted requests are closed for
+answers. The one medium finding needing a decision (joining another agyari) went to the owner
+(D10, 22 Nov 2026) and is being built.
+
+**The lead's choice:** someone holding a place who is taken off the list, removed, or switched off
+frees the place exactly as "Can't go" does (the standbys are asked).
+
 ## Open for the owner (next session)
 
 - **No panthaky in the app:** templates 5, 6 and 8 name "the panthaky"; at an agyari with none
