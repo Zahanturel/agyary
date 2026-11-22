@@ -312,6 +312,15 @@ Decided, not built. The research, the sources and the full design are in
       The request stays open there until the Doongerwadi withdraws it.
     - **If the panthaky's own account is switched off after a request reached them**, the safety
       net (if set) still asks everyone, since nobody else could act (lead's choice, step 2).
+  - **Joining another agyari needs its panthaky's confirmation (owner, 22 Nov 2026, from the
+    security pass).** Until now an approved mobed could join any agyari and at once receive its
+    prayer requests (and, by taking a place, the family's contact in their book). From now: a
+    mobed who joins an agyari gets its prayer requests, is asked in its call-outs and appears on
+    its Mobeds page as one of its mobeds **only after that agyari's confirmed panthaky confirms
+    them** on the Mobeds page (with no panthaky in the app, the admin confirms). The admin's
+    approval of a new sign-up confirms the agyari they signed up at. Memberships from before stay
+    confirmed. The panthaky can also take an app mobed off the list for requests. Joining itself
+    stays open (D1.4) and still never grants anyone's behdins.
 
 ## D11. Words, greetings and names: a Parsi app (22 Nov 2026)
 
