@@ -342,3 +342,19 @@ def test_the_bell_and_the_red_count_are_read_again_after_a_request_is_acted_on()
         body = body[:body.index(end)]
         call = "await managerSend(" if start == "function confirmSend(" else "await managerWithdraw("
         assert body.index(call) < body.index("refreshAfterAction();"), start
+
+
+def test_a_mobed_is_written_to_as_sahebji_and_their_first_name_never_namaste():
+    """Owner, 22 Nov 2026: a Parsi app greets a mobed "Sahebji <first name>". The manager's ready
+    message to the mobed or panthaky said "Namaste <full name>". A title typed before the name
+    is skipped; a family is always addressed by their full name (not tested here)."""
+    out = _node(STORAGE + f"""
+const {{ firstName }} = await import({json.dumps(_module(JS / "util.js"))});
+console.log(JSON.stringify(["Er. Hormuz Dadachanji", "Ervad Hormuz Dadachanji", "Dasturji Dr. Hormuz D",
+  "Hormuz Dadachanji", "Er.", "", "  Hormuz  "].map(firstName)));
+""")
+    assert out == ["Hormuz", "Hormuz", "Hormuz", "Hormuz", "Er.", "", "Hormuz"]
+    record = (JS / "screens" / "manager_record.js").read_text(encoding="utf-8")
+    assert "Sahebji ${firstName(name)}" in record
+    for path in JS.rglob("*.js"):
+        assert "namaste" not in path.read_text(encoding="utf-8").lower(), path

@@ -42,7 +42,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, openSheet, flashInfo,
   flashError,
 } from "../ui.js";
-import { esc, gregLabel, istHm, istYmd, todayIst, phoneField, readPhone, setPhoneField, MAH_NAMES_JS } from "../util.js";
+import { esc, firstName, gregLabel, istHm, istYmd, todayIst, phoneField, readPhone, setPhoneField, MAH_NAMES_JS } from "../util.js";
 import { navigate, navGuard, returnTo } from "../router.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
 import { managerHash, managerPlaces } from "../acting.js";
@@ -559,7 +559,8 @@ export async function renderRecordEdit({ id }) {
 function reachHtml(rec, name, phone, idPrefix) {
   const me = state.user ? state.user.name : "";
   const place = rec.funeral_place ? rec.funeral_place.name : "";
-  const text = `Namaste ${name}, about the prayers for ${rec.prayed_name} - ${[me, place].filter(Boolean).join(", ")}.`;
+  // "Sahebji <first name>" (owner, 22 Nov 2026): the Parsi way one addresses a mobed.
+  const text = `Sahebji ${firstName(name)}, about the prayers for ${rec.prayed_name} - ${[me, place].filter(Boolean).join(", ")}.`;
   const digits = phone.replace(/\D/g, "");
   return `
     <p style="margin:6px 0 0"><a class="tel" href="tel:${esc(phone)}">${esc(phone)}</a></p>
