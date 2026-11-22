@@ -61,9 +61,12 @@ async def _agyari(db: AsyncSession, agyary_id: int | None) -> int | None:
     return agyary.id
 
 
-async def listed(db: AsyncSession, place_ids: list[int], q: str = "", *, limit: int = PAGE) -> list[FuneralBehdin]:
+async def listed(db: AsyncSession, place_ids: list[int], q: str = "", *,
+                 limit: int = MAX_PER_PLACE) -> list[FuneralBehdin]:
     """The families in these places' books, by name; those whose name has
-    every word of ``q`` in it, or whose number has its digits (three or more)."""
+    every word of ``q`` in it, or whose number has its digits (three or more).
+    All of them (22 Nov 2026: the list stopped at PAGE with no word of it, and
+    the screen never asked for more): a book holds at most MAX_PER_PLACE."""
     if not place_ids:
         return []
     stmt = select(FuneralBehdin).where(FuneralBehdin.funeral_place_id.in_(place_ids), FuneralBehdin.is_active.is_(True))

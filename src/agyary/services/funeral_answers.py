@@ -87,8 +87,9 @@ from agyary.services import (
 
 logger = logging.getLogger(__name__)
 
-# How many answered requests the Requests tab shows under "Earlier".
-EARLIER = 20
+# How many answered requests the Requests tab shows under "Earlier": far more than a person
+# meets in years (22 Nov 2026: it was 20, and older ones vanished with no word of it).
+EARLIER = 500
 REASON_MAX = 200
 NOTICE_TTL = funeral_requests.NOTICE_TTL
 KIND_DECLINED = "funeral_request_declined"
