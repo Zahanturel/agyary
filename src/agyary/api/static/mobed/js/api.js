@@ -161,6 +161,10 @@ export const adminSetMobedAccess = (userId, access) => post(`/admin/mobeds/${use
 // decision: "confirm" (make panthaky), "decline" (not the panthaky) or "remove" (a mobed again).
 export const adminDecidePanthaky = (userId, agyaryId, decision) =>
   post(`/admin/mobeds/${userId}/panthaky`, { agyary_id: agyaryId, decision });
+/** Admin only (D10, 22 Nov 2026): at a fire temple with no panthaky in the app, whether one who
+ *  joined gets its prayer requests. action: "confirm", "off" (Not one of ours) or "on" (Put back). */
+export const adminDecideRequests = (userId, agyaryId, action) =>
+  post(`/admin/mobeds/${userId}/requests`, { agyary_id: agyaryId, action });
 /** Admin only: the Doongerwadis, prayer halls and aramgahs (D10). Turned off, never deleted. */
 export const adminFuneralPlaces = () => get("/admin/funeral-places");
 export const adminFuneralPlace = (id) => get(`/admin/funeral-places/${id}`);
@@ -263,6 +267,9 @@ export const backOutRequest = (id) => post(`/requests/${id}/back-out`, {});
 export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
 export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });
 export const removeOurMobed = (aid, id) => del(`/agyaries/${aid}/our-mobeds/${id}`);
+/** Joining needs the panthaky's confirmation (D10, 22 Nov 2026): "confirm" one who joined,
+ *  "off" (Not one of ours / Take off the list) or "on" (Put back). The Mobeds page comes back. */
+export const memberRequests = (aid, userId, what) => post(`/agyaries/${aid}/members/${userId}/${what}`, {});
 /** How a prayer request reaches the fire temple (R3.1): mode "everyone" or "panthaky_first",
  *  and the safety net's minutes (15, 30, 60; null is Never). Its confirmed panthakys and the admin. */
 export const getRequestSettings = (aid) => get(`/agyaries/${aid}/request-settings`);
