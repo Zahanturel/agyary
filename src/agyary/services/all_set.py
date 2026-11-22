@@ -52,7 +52,7 @@ import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agyary.core.config import Settings
+from agyary.core.config import Settings, get_settings
 from agyary.messaging.geh_times import IST
 from agyary.models import (
     Agyary,
@@ -236,13 +236,24 @@ async def set_up_book(
 
 # --- What those people are given ---------------------------------------------------
 
-async def going_people(db: AsyncSession, request_id: int) -> list[dict]:
+async def going_people(db: AsyncSession, request_id: int, settings: Settings | None = None) -> list[dict]:
     """Those going, in the order the places filled: the row, their name, and
     their number where known - an account's sign-in number, or the number a
     panthaky entered for a mobed added by hand (cleaned by services/phone.py),
-    never free text."""
+    never free text. Never someone who can no longer take part
+    (prayer_callout.left_out: a mobed taken off the list since, say): they are
+    not named to anyone, their number goes nowhere, and they are not sent the
+    details."""
+    settings = settings or get_settings()
+    request = await db.get(FuneralRequest, request_id)
+    rows = await _going_rows(db, request_id)
+    out_of_it = await prayer_callout.left_out(db, settings, request.agyary_id, rows)
+    for row_id, why in out_of_it.items():
+        logger.info("Request %s: answer %s holds a place but is left out at All set (%s)", request_id, row_id, why)
     out = []
-    for row in await _going_rows(db, request_id):
+    for row in rows:
+        if row.id in out_of_it:
+            continue
         phone = row.phone
         if row.user_id:
             user = await db.get(User, row.user_id)
@@ -362,7 +373,7 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
     record = await db.get(FuneralRecord, request.funeral_record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
     agyary = await db.get(Agyary, request.agyary_id)
-    going = [g["name"] for g in await going_people(db, request_id)]
+    going = [g["name"] for g in await going_people(db, request_id, settings)]
     prayed = fw.departed(record)
     head = "All set again" if again else "All set"
     title = fit_title(f"{head}: {going_words(going)} for {prayed}",
@@ -379,7 +390,7 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
         if u.id in confirmed:
             told[u.id] = (f"{said} The family's contact and everyone going are on the request from {place.name}."
                           if u.id in books else f"{said} The request from {place.name} is all set. {NOTHING_MORE}")
-    going_ids = {g["row"].user_id for g in await going_people(db, request_id) if g["row"].user_id}
+    going_ids = {g["row"].user_id for g in await going_people(db, request_id, settings) if g["row"].user_id}
     for uid in books:
         # The app mobeds going; never someone who said they can't go any more (step 5b).
         if uid not in told and uid in going_ids:
@@ -449,7 +460,7 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
     record = await db.get(FuneralRecord, request.funeral_record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
     agyary = await db.get(Agyary, request.agyary_id)
-    going = await going_people(db, request_id)
+    going = await going_people(db, request_id, settings)
     people = [fw.Person(g["name"], g["phone"]) for g in going]
     panthakys = await request_panthakys(db, request_id)
     heads = [fw.Person(p.name, p.phone) for p in panthakys]

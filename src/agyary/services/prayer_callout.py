@@ -278,6 +278,10 @@ async def add_contact(
 
 
 async def remove_contact(db: AsyncSession, agyary_id: int, contact_id: int, user: User) -> AgyaryMobedContact:
+    """Take a mobed added by hand off the list. What they were sent before
+    counts for nothing from now on (left_out): their buttons change nothing,
+    they are not asked again as a standby, and at All set they are neither
+    named nor sent the details."""
     contact = await db.get(AgyaryMobedContact, contact_id)
     if contact is None or contact.agyary_id != agyary_id or not contact.is_active:
         raise CalloutError("That mobed could not be found on the list.", status=404)
@@ -285,6 +289,45 @@ async def remove_contact(db: AsyncSession, agyary_id: int, contact_id: int, user
     await db.flush()
     logger.info("Mobed contact %s taken off fire temple %s's list by user %s", contact.id, agyary_id, user.id)
     return contact
+
+
+# Why someone asked for a request can no longer take part in it (left_out).
+LEFT_THE_LIST = "no longer on the fire temple's list"
+
+
+async def left_out(
+    db: AsyncSession, settings: Settings, agyary_id: int, rows: list[PrayerCalloutAnswer],
+) -> dict[int, str]:
+    """Those of ``rows`` (one request's, at fire temple ``agyary_id``) who can
+    no longer take part in it, by row id, with why (for the log): a mobed added
+    by hand whom the panthaky took off the list since (unless that number is
+    one of its app mobeds now), an app mobed no longer at the fire temple, or
+    a row whose account is gone. Their old buttons count for nothing
+    (record_answer), they are not asked again as a standby, and at All set
+    they are neither named nor sent the details (services/all_set.py)."""
+    if not rows:
+        return {}
+    members = (await db.execute(
+        select(User.id, User.phone).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
+            AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
+            User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED)
+    )).all()
+    member_ids, member_phones = {i for i, _ in members}, {p for _, p in members}
+    contact_ids = {r.contact_id for r in rows if r.contact_id}
+    listed = set((await db.execute(select(AgyaryMobedContact.id).where(
+        AgyaryMobedContact.id.in_(contact_ids), AgyaryMobedContact.agyary_id == agyary_id,
+        AgyaryMobedContact.is_active.is_(True)))).scalars()) if contact_ids else set()
+    out = {}
+    for r in rows:
+        if r.user_id:
+            on = r.user_id in member_ids
+        elif r.contact_id:
+            on = r.contact_id in listed or bool(r.phone and r.phone in member_phones)
+        else:
+            on = False      # the account was deleted
+        if not on:
+            out[r.id] = LEFT_THE_LIST
+    return out
 
 
 
@@ -779,10 +822,11 @@ async def record_answer(
     can't go any more" (the details at All set, step 5b). Only a well-formed
     token of a row that exists, from the number it was sent to, counts, and
     only the first answer of that person, whichever way it came (R3.1: an
-    answer in the app first makes this one "already answered"). A yes then
-    goes through ``fill``; "I can't go any more" through
-    standbys.back_out_on_whatsapp. Returns what happened, for the log (no
-    numbers)."""
+    answer in the app first makes this one "already answered"), and nothing
+    from someone who can no longer take part (left_out: taken off the list
+    since, say), who is sent nothing back. A yes then goes through ``fill``;
+    "I can't go any more" through standbys.back_out_on_whatsapp. Returns what
+    happened, for the log (no numbers)."""
     from agyary.services import standbys   # here: standbys reads this module
 
     now = now or _now()
@@ -803,6 +847,11 @@ async def record_answer(
         return f"answer {answer.id}: not from the number asked"
     request = await db.get(FuneralRequest, await _request_id(db, answer))
     answer_id = answer.id   # what follows may roll the session back, which forgets it
+    why = (await left_out(db, settings, request.agyary_id, [answer])).get(answer.id)
+    if why:
+        # Taken off the list since they were asked (or no longer there): their old
+        # buttons count for nothing, and nothing is sent back (the quietest).
+        return f"answer {answer_id}: {why}, so nothing changed"
     if reask:
         if choice == BACK_OUT:
             return f"answer {answer_id}: not a button of the re-ask"
@@ -1170,7 +1219,10 @@ async def board(db: AsyncSession, settings: Settings, user: User, request: Funer
     reached = set((await db.execute(select(FuneralRequestRecipient.user_id).where(
         FuneralRequestRecipient.funeral_request_id == request.id))).scalars())
     places = sorted((r for r in rows if holds_place(r)), key=lambda r: (r.picked_at, r.id))
-    standbys = sorted((r for r in rows if is_standby(r)), key=lambda r: (r.answered_at, r.id))
+    # Not a standby who can no longer take part (taken off the list since): never asked again.
+    out_of_it = await left_out(db, settings, agyary.id, rows)
+    standbys = sorted((r for r in rows if is_standby(r) and r.id not in out_of_it),
+                      key=lambda r: (r.answered_at, r.id))
     gone = sorted((r for r in rows if backed_out(r)), key=lambda r: (r.backed_out_at, r.id))
     waiting = request.status == REQUEST_WAITING
     plan = await _plan(db, settings, request, agyary, by_user=user) if waiting else None

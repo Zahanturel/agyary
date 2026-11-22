@@ -175,7 +175,8 @@ def _waited_on(row: PrayerCalloutAnswer) -> bool:
 
 def _askable(row: PrayerCalloutAnswer, panthaky_ids: set[int]) -> bool:
     """A standby who may be asked again now: not asked yet, or a late yes
-    since (a standby again); never the panthaky, who uses the board."""
+    since (a standby again); never the panthaky, who uses the board (nor
+    anyone prayer_callout.left_out leaves out: _choose)."""
     if not pc.is_standby(row) or row.how == HOW_SELF or (row.user_id and row.user_id in panthaky_ids):
         return False
     return row.reasked_at is None or row.reask_answer == CALLOUT_YES
@@ -253,7 +254,10 @@ async def _choose(db: AsyncSession, settings: Settings, request: FuneralRequest,
         await db.commit()
         return []
     heads = {p.id for p in await panthaky.panthakys_of(db, settings, request.agyary_id)}
-    chosen = sorted((r for r in rows if _askable(r, heads)), key=lambda r: (r.answered_at, r.id))[:need]
+    # Never someone who can no longer take part: taken off the list since, say.
+    out = await pc.left_out(db, settings, request.agyary_id, rows)
+    chosen = sorted((r for r in rows if _askable(r, heads) and r.id not in out),
+                    key=lambda r: (r.answered_at, r.id))[:need]
     for r in chosen:
         r.reask_token, r.reasked_at = pc._new_token(), now
         r.reask_answer = r.reask_answered_at = r.reask_passed_at = None
