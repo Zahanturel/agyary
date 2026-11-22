@@ -277,7 +277,8 @@ async def contacts_for(db: AsyncSession, request: FuneralRequest, user: User) ->
     """What this person is given once the request is all set, if the family is
     in their book for it: the family's contact with the short message to them
     that their own WhatsApp opens with (the same words as for a request
-    accepted the old way), the panthaky, everyone going (with numbers where
+    accepted the old way; for a panthaky not praying themselves, that the
+    agyari was asked and who will pray), the panthaky, everyone going (with numbers where
     known), their own record of the family and the memorial they made from
     it, and the memorial form's fields. None for anyone else, and for everyone
     before All set. Nor for a mobed who said they can't go any more (step 5b):
@@ -293,13 +294,18 @@ async def contacts_for(db: AsyncSession, request: FuneralRequest, user: User) ->
     place = await db.get(FuneralPlace, record.funeral_place_id)
     agyary = await db.get(Agyary, request.agyary_id)
     own = await db.get(Customer, mine.customer_id) if mine.customer_id else None
+    going = await going_people(db, request.id)
+    # A panthaky not praying themselves words it as the agyari asked, with who will pray
+    # (R3.1 step 7); a mobed going, or a panthaky who prays, as "asked me".
+    praying = any(g["row"].user_id == user.id for g in going)
+    names = [g["name"] for g in going] if mine.is_panthaky and not praying else None
     return {
         "family_contact": {"name": record.family_contact_name, "phone": record.family_contact_phone},
-        "family_message": funeral_answers.family_message(record, place, agyary, user),
+        "family_message": funeral_answers.family_message(record, place, agyary, user, going=names),
         "panthakys": [{"name": p.name, "phone": p.phone, "is_me": p.id == user.id}
                       for p in await request_panthakys(db, request.id)],
         "going": [{"name": g["name"], "phone": g["phone"], "how": g["row"].how, "is_me": g["row"].user_id == user.id}
-                  for g in await going_people(db, request.id)],
+                  for g in going],
         "confirmed_short": bool(request.confirmed_short),
         "is_panthaky": mine.is_panthaky,
         # Their own record of the family, if it is still in their book.

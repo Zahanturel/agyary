@@ -406,3 +406,22 @@ def test_the_family_message_leaves_out_what_is_not_known():
                      "the prayers for Khud Rustom. Please call or message me here for anything you need. "
                      "May the ruvan of Khud Rustom attain Garothman Behesht.")
     assert "Our prayers" not in words and "Geh-saarnu" not in words
+
+
+def test_the_family_message_of_a_panthaky_not_praying_says_the_agyari_was_asked():
+    """R3.1 step 7: for a panthaky whose book got the family but who is not one of those
+    going: the agyari was asked, these will pray, and the same ending."""
+    from types import SimpleNamespace as NS
+
+    from agyary.services.funeral_answers import family_message
+
+    record = NS(departed_title="khud", departed_name="Rustom", departed_parent_name=None, family_contact_name="Test Family",
+                geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None)
+    place, agyary, panthaky = NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test")
+    words = family_message(record, place, agyary, panthaky, going=["Er. A"])
+    assert words == ("Sahebji Test Family, I am Er. Test of Goti Adarian. Doongerwadi (test) has asked Goti Adarian "
+                     "to perform the prayers for Khud Rustom. Er. A will pray. Please call or message me here for "
+                     "anything you need. May the ruvan of Khud Rustom attain Garothman Behesht.")
+    assert "Er. A, Er. B and Er. C will pray." in family_message(record, place, agyary, panthaky,
+                                                                 going=["Er. A", "Er. B", "Er. C"])
+    assert "has asked me" in family_message(record, place, agyary, panthaky)

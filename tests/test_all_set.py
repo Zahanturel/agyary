@@ -936,3 +936,29 @@ async def test_a_tap_still_answers_when_what_follows_it_breaks(client, db, seede
     assert r.status_code == 200 and r.json()["request"]["status"] == "waiting", r.text
     assert [(await _request(db, i)).status for i in (rid, rid2, rid3, rid4)] == [
         "waiting", "all_set", "all_set", "waiting"]
+
+
+async def test_a_panthaky_not_praying_tells_the_family_the_agyari_was_asked_and_who_will_pray(
+    client, db, seeded, meta, pushes, live,
+):
+    """R3.1 step 7: the message a panthaky's own WhatsApp opens with, when the family went
+    into their book but they are not one of those going, says the agyari was asked and
+    names who will pray; a mobed going (and a panthaky who prays) keeps "has asked me"."""
+    rid = await _two_yes(client, db, seeded["agyary_id"])
+    today = funeral_records.today_ist()
+
+    def day(d) -> str:
+        return f"{d:%a} {d.day} {d:%b}"
+
+    when = (f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, "
+            "4:00 pm. Please call or message me here for anything you need. "
+            "May the ruvan of Behdin Rustom Jamshed attain Garothman Behesht.")
+    board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
+    assert board["all_set"]["is_panthaky"] is True
+    assert board["all_set"]["family_message"] == (
+        "Sahebji Test Family, I am Er. Hormuz Dadachanji of Goti Adarian. Doongerwadi (test) has asked Goti Adarian "
+        "to perform the prayers for Behdin Rustom Jamshed. Er. Listed and Er. Pervez Kias will pray. " + when)
+    card = (await client.get(f"{REQUESTS}/{rid}", headers=await _as(client, MOBED))).json()["request"]
+    assert card["all_set"]["family_message"] == (
+        "Sahebji Test Family, I am Er. Pervez Kias of Goti Adarian. Doongerwadi (test) has asked me to perform the "
+        "prayers for Behdin Rustom Jamshed. " + when)
