@@ -17,7 +17,7 @@ from agyary.services import funeral_whatsapp as fw
 from agyary.services import prayer_callout, standbys
 from tests.funeral_helpers import FAMILY, agyari, member
 from tests.test_prayer_callout import LISTED, LIVE, MOBED, PANTHAKY, SECOND, Meta, _answers, _as, _list, _send, _signed_tap
-from tests.test_standbys import OTHER_MOBED, REQUESTS, THIRD, _all_set, _b, _reasks, _to
+from tests.test_standbys import OTHER_MOBED, REQUESTS, THIRD, _all_set, _b, _reasks, _to, _tomorrow
 
 
 @pytest.fixture
@@ -305,6 +305,38 @@ async def test_someone_going_whose_access_goes_off_is_not_named_and_their_number
         assert MOBED[3:] not in json.dumps(m) and KIAS not in json.dumps(m)
     (family,) = _templates(meta, FAMILY, "prayers_all_set_family")
     assert "Er. Listed" in json.dumps(family)
+
+
+# --- 4. The funeral place learns no mobed's name before All set --------------------------
+
+async def test_the_place_is_told_counts_not_names_before_all_set(client, db, seeded, meta, pushes):
+    from tests.funeral_helpers import MANAGER
+
+    only = await agyari(db, "Mobeds Only Agyari (test)", None)
+    await member(db, only, "+919822200111", name="Er. Only One")
+    await member(db, only, "+919822200112", name="Er. Only Two")
+    await db.commit()
+    rid, _, mgr = await _send(client, db, only.id, mobeds_wanted=2, geh_saarnu_date=_tomorrow())
+    one = await _as(client, "+919822200111")
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=one)).status_code == 200
+    pushes.clear()
+    assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=one)).status_code == 200
+    (note,) = await _notes(db, MANAGER, standbys.KIND_PLACE_OPENED)
+    assert note.title == "A mobed can't go at Mobeds Only Agyari (test); 0 of 2 going"
+    assert "Er. Only" not in note.title + note.body and "0 of 2 going" in note.body
+    manager = await _user(db, MANAGER)
+    (push,) = [p for p in pushes if p["to"] == [manager.id]]
+    assert "Er. Only" not in push["title"] + push["body"] and push["title"] == "A mobed can't go"
+
+    # All set, the place has learned who is going: someone going who backs out is named.
+    two = await _as(client, "+919822200112")
+    assert (await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=two)).status_code == 200
+    rid2, _, _ = await _send(client, db, only.id, mgr, mobeds_wanted=1, geh_saarnu_date=_tomorrow())
+    assert (await client.post(f"{REQUESTS}/{rid2}/answer", json={"answer": "yes"}, headers=two)).status_code == 200
+    assert (await _request(db, rid2)).status == "all_set"
+    assert (await client.post(f"{REQUESTS}/{rid2}/back-out", headers=two)).status_code == 200
+    notes = await _notes(db, MANAGER, standbys.KIND_PLACE_OPENED)
+    assert notes[-1].title == "Er. Only Two can't go: nobody is on standby at Mobeds Only Agyari (test)"
 
 
 # --- 2. "This prayer request was withdrawn" goes only to a yes that came on WhatsApp -----

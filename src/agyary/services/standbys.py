@@ -44,7 +44,9 @@ can reach is passed over. Not the panthaky, who fills a place from the board.
   asked <B>", "<B> said no / did not answer; we have asked <C>", and with
   nobody left "<A> can't go and nobody is on standby: please find someone",
   with the board. With no confirmed panthaky, the funeral place's managers are
-  told only that (they can send the request elsewhere).
+  told only that (they can send the request elsewhere) - by name only of
+  someone the place learned was going at All set; otherwise "A mobed can't
+  go" and how many are going (D10: the place learns names only at All set).
 - Once the places are filled again, nobody more is asked; a late answer still
   counts as above.
 """
@@ -335,14 +337,25 @@ async def _send_reask(db: AsyncSession, settings: Settings, request: FuneralRequ
 
 # --- Telling the panthaky -----------------------------------------------------------
 
+def _named_to_the_place(request: FuneralRequest, row: PrayerCalloutAnswer, first: bool) -> bool:
+    """Whether the funeral place may be told this person's name: only someone
+    who was going when the request was last all set, which is when the place
+    learned who is going (D10: names only at All set). Never a standby."""
+    return (first and request.all_set_at is not None and row.picked_at is not None
+            and row.picked_at <= request.all_set_at)
+
+
 async def _tell_step(
     db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *, lead: str,
-    asked: Asked, first: bool, now: datetime, skip_user_id: int | None = None,
+    unnamed: str, asked: Asked, first: bool, now: datetime, skip_user_id: int | None = None,
 ) -> Opened:
     """The panthakys the request reached (not ``skip_user_id``, who did it on
     screen), and with none, the funeral place's managers when nobody is left:
     ``lead`` ("Er. A can't go", "Er. B said no", "Er. B did not answer") and
-    what was done. Commits. ``first``: the place has just opened."""
+    what was done. Commits. ``first``: the place has just opened. The place
+    is told the name only of someone it learned was going at All set
+    (_named_to_the_place); otherwise ``unnamed`` ("A mobed can't go") and how
+    many are going, never a name."""
     record = await db.get(FuneralRecord, request.funeral_record_id)
     agyary = await db.get(Agyary, request.agyary_id)
     out = Opened(has_panthaky=bool(await panthaky.panthakys_of(db, settings, agyary.id)), asked=asked)
@@ -369,13 +382,21 @@ async def _tell_step(
             db, settings, request, row, KIND_PLACE_OPENED, title, body, push=f"{nobody[0].upper()}{nobody[1:]}: "
             "please find someone.", push_title=push_title, now=now, skip_user_id=skip_user_id, link=link)
         if not out.has_panthaky:
+            if _named_to_the_place(request, row, first):
+                title = all_set.fit_title(f"{lead}: nobody is on standby at {agyary.name}",
+                                          f"A mobed can't go at {agyary.name}", "A mobed can't go")
+                said, place_push = lead, push_title
+            else:
+                # Before All set the place learns only how many are going, never who (D10).
+                going = sum(1 for r in await pc._request_rows(db, request.id) if pc.holds_place(r))
+                count = f"{going} of {pc.wanted(record)} going"
+                title = all_set.fit_title(f"{unnamed} at {agyary.name}; {count}", f"{unnamed}; {count}", unnamed)
+                said, place_push = f"{unnamed[0].lower()}{unnamed[1:]} ({count})", unnamed
             await funeral_answers._tell_managers(
-                db, settings, record, request, kind=KIND_PLACE_OPENED,
-                title=all_set.fit_title(f"{lead}: nobody is on standby at {agyary.name}",
-                                        f"A mobed can't go at {agyary.name}", "A mobed can't go"),
-                body=(f"For the prayers for {departed}: {lead}, and nobody at {agyary.name} is on standby: please "
+                db, settings, record, request, kind=KIND_PLACE_OPENED, title=title,
+                body=(f"For the prayers for {departed}: {said}, and nobody at {agyary.name} is on standby: please "
                       "find someone. You can withdraw the request and send it to another fire temple."),
-                push=(push_title, f"The request to {agyary.name}: nobody is on standby."), now=now)
+                push=(place_push, f"The request to {agyary.name}: nobody is on standby."), now=now)
             out.managers = True
     elif first:
         # Filled again at the same moment by other means: said so, and nobody is asked.
@@ -394,18 +415,18 @@ async def place_opened(
     """A place opened because ``row`` can't go: the standbys are asked, and
     the panthakys told. Commits."""
     asked = await ask_standbys(db, settings, request, now=now, client=client)
-    return await _tell_step(db, settings, request, row, lead=f"{row.name} can't go", asked=asked, first=True,
-                            now=now, skip_user_id=skip_user_id)
+    return await _tell_step(db, settings, request, row, lead=f"{row.name} can't go", unnamed="A mobed can't go",
+                            asked=asked, first=True, now=now, skip_user_id=skip_user_id)
 
 
 async def _move_on(db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *,
-                   lead: str, now: datetime, client: httpx.AsyncClient | None) -> Asked:
+                   lead: str, unnamed: str, now: datetime, client: httpx.AsyncClient | None) -> Asked:
     """Past ``row`` (who said no, or did not answer): the next standby is
     asked, and the panthakys told - unless the places are filled meanwhile
     (or the request is no longer waiting), when nobody more is asked or told."""
     asked = await ask_standbys(db, settings, request, now=now, client=client)
     if asked.open > 0:
-        await _tell_step(db, settings, request, row, lead=lead, asked=asked, first=False, now=now)
+        await _tell_step(db, settings, request, row, lead=lead, unnamed=unnamed, asked=asked, first=False, now=now)
     return asked
 
 
@@ -607,7 +628,8 @@ async def answer_reask(
         if yes:
             return "yes again, " + await pc.fill(db, settings, request, row, how, by_user, now, client)
         if moved:
-            await _move_on(db, settings, request, row, lead=f"{row.name} said no", now=now, client=client)
+            await _move_on(db, settings, request, row, lead=f"{row.name} said no",
+                           unnamed="A mobed on standby said no", now=now, client=client)
         return "no again"
     except Exception:   # noqa: BLE001 - the answer is kept; what did not follow is on the board
         logger.exception("After standby %s answered again on request %s", row.id, request.id)
@@ -659,7 +681,8 @@ async def timed_out(db: AsyncSession, now: datetime, settings: Settings, client:
         try:
             request = await db.get(FuneralRequest, request_id, populate_existing=True)
             logger.warning("Request %s: standby %s did not answer in 30 minutes", request_id, row_id)
-            await _move_on(db, settings, request, row, lead=f"{row.name} did not answer", now=now, client=client)
+            await _move_on(db, settings, request, row, lead=f"{row.name} did not answer",
+                           unnamed="A mobed on standby did not answer", now=now, client=client)
         except Exception:   # noqa: BLE001 - it is claimed (once); the next one still goes
             logger.exception("Moving on past standby %s of request %s failed", row_id, request_id)
             await db.rollback()
