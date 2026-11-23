@@ -147,7 +147,8 @@ async def test_a_removed_mobed_holding_a_place_is_not_named_or_sent_the_details(
     aid = seeded["agyary_id"]
     panthaky = await _as(client, PANTHAKY)
     contact = await _add(client, aid, panthaky, "Er. Listed", LISTED)
-    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    # The Geh-saarnu tomorrow, so the prayers have not begun at whatever time this runs.
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2, geh_saarnu_date=_tomorrow())
     answers = await _answers(db)
     await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
     assert (await _answers(db))[LISTED].picked_at is not None
