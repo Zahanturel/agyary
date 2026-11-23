@@ -25,10 +25,10 @@ import { convertDate, memorialDayStatus } from "./api.js";
 // The named days a family can add on top of the opening. The spellings are
 // provisional (the mobeds settle them) and mirror NAMED_DAYS in
 // calendar/memorial.py, which is what labels the saved schedule. The 10th is
-// Dasmi is the 10th day, chosen here like the rest; days 1 to 9 are not offered.
+// Dasmu is the 10th day, chosen here like the rest; days 1 to 9 are not offered.
 const NAMED_DAYS = [
-  [10, "Dasmi"], [29, "Deci"], [30, "Masiso"], [60, "Bamsi"],
-  [179, "Deci"], [180, "Chamsi"], [359, "Deci"], [360, "Varsi"],
+  [10, "Dasmu"], [29, "Deci"], [30, "Masiso"], [60, "Bamsi"],
+  [179, "Deci"], [180, "Chhamsi"], [359, "Deci"], [360, "Varsi"],
 ];
 
 // Prayers for an old person can run for decades, so these go up to 100 years
@@ -59,7 +59,7 @@ export function blankMemorialDraft() {
     deathBy: "date", deathRoj: "", deathMah: "",
     monthly: false, months: "", yearly: false, years: "",
     fravRoj: false, fravRojMonths: "",
-    fiveToNine: false,   // the 5th to 9th days, before the Dasmi
+    fiveToNine: false,   // the 5th to 9th days, before the Dasmu
     // Days 1 to 10: no longer offered, but a memorial saved with them keeps them
     // when it is edited (only shown then).
     oneToTen: false,
@@ -203,7 +203,7 @@ export function memorialFormHtml(draft, services, { heading = "", intro = "", ed
           ${radio("mmAgo", "mmAgoYes", "yes", draft.longAgo, "Yes, more than a year ago")}
         </div>
         <p class="meta" id="mmAgoNote" style="margin:6px 0 0;${draft.longAgo ? "" : "display:none"}">Only the Roj and Mah
-          of the death are needed. The first year's days (the 5th to 9th, Dasmi, Masiso, Varsi and the rest) are over,
+          of the death are needed. The first year's days (the 5th to 9th, Dasmu, Masiso, Varsi and the rest) are over,
           so what repeats - the monthly and yearly prayers - is carried on from today.</p>
         </div>
         <div class="mstep" data-mstep="2">

@@ -16,7 +16,7 @@ cycle (12 Mah x 30 Roj), identical in all three calendar systems. The system
 only decides which Gregorian date a given Roj and Mah lands on.
 
 The named days are month multiples, which is what their names mean: Masiso
-is the monthly (the 30th day), Bamsi is two months (60th), Chamsi six months
+is the monthly (the 30th day), Bamsi is two months (60th), Chhamsi six months
 (180th) and Varsi a year (360th). Each lands on the SAME Roj, that many Mahs
 on. The Deci is the day before: the 29th before Masiso, and so on.
 
@@ -61,26 +61,26 @@ CYCLE_DAYS = DAYS_PER_MONTH * MONTHS_PER_YEAR  # 360
 # 10th alone. Days 1-4 are not a separate option - they are part of "all".
 OPENING_ALL = "days_1_to_10"
 OPENING_TENTH = "tenth_only"
-# No opening at all: the family picks the Dasmi (10th day) like any other
+# No opening at all: the family picks the Dasmu (10th day) like any other
 # named day. The two above are kept so memorials saved earlier still read.
 OPENING_NONE = "none"
-# Days 5 to 9, each on its own, before the Dasmi (which is chosen separately).
+# Days 5 to 9, each on its own, before the Dasmu (which is chosen separately).
 OPENING_5_TO_9 = "days_5_to_9"
 OPENINGS = (OPENING_ALL, OPENING_TENTH, OPENING_NONE, OPENING_5_TO_9)
 
 # The named observances, in the mobed's own words, keyed by the family's name
-# for the day ("the 30th"). 10 is the Dasmi, a literal day. 30/60/180/360 are
-# Masiso, Bamsi, Chamsi and Varsi - one, two, six and twelve months on, on the
+# for the day ("the 30th"). 10 is the Dasmu, a literal day. 30/60/180/360 are
+# Masiso, Bamsi, Chhamsi and Varsi - one, two, six and twelve months on, on the
 # same Roj - and 29/59/179/359 are the Deci, the day before each. The labels
 # are spellings and live ONLY here, so changing one is a one-line change.
 NAMED_DAYS: dict[int, str] = {
-    10: "Dasmi",
+    10: "Dasmu",
     29: "Deci",
     30: "Masiso",
     59: "Deci",
     60: "Bamsi",
     179: "Deci",
-    180: "Chamsi",
+    180: "Chhamsi",
     359: "Deci",
     360: "Varsi",
 }
@@ -265,7 +265,7 @@ def _birthday_observances(
 
 
 # The named days that are month multiples, as ("m", months) / ("y", years):
-# Masiso is the monthly, Bamsi two months, Chamsi six, Varsi a year. Each Deci
+# Masiso is the monthly, Bamsi two months, Chhamsi six, Varsi a year. Each Deci
 # is the day before its named day.
 _NAMED_SPAN = {30: ("m", 1), 60: ("m", 2), 180: ("m", 6), 360: ("y", 1)}
 _DECI_OF = {29: 30, 59: 60, 179: 180, 359: 360}
@@ -330,7 +330,7 @@ def build_schedule(
 
     ``opening`` is OPENING_ALL (days 1-10) or OPENING_TENTH. ``day_counts``
     picks from DAY_COUNT_CHOICES; the 10th is already covered by the opening
-    and is never listed twice. Masiso, Bamsi, Chamsi and Varsi are the same
+    and is never listed twice. Masiso, Bamsi, Chhamsi and Varsi are the same
     days as the monthly and yearly observances, so when both are chosen each
     date appears once, under its own name. ``monthly_months`` is how many monthly
     observances follow the death (day 31, 61, ...), and ``yearly_years`` how
@@ -343,7 +343,7 @@ def build_schedule(
 
     ``start_from`` is for a family that arrives late: the schedule is still
     counted from the death, but nothing before that date is booked. A named day
-    that has already passed (Dasmi, a Deci, Masiso...) is simply left out, and
+    that has already passed (Dasmu, a Deci, Masiso...) is simply left out, and
     each repeating series (monthly, yearly, Parabs, birthday) runs for its
     chosen length starting from the first date that is still to come - "6
     months" is six months of observances ahead, not six counted from the death.
@@ -362,7 +362,7 @@ def build_schedule(
 
     Only one observance is kept per date. When several land on the same day
     the highest wins: the opening days, then the yearly (Varsi included), then
-    the monthly (Masiso, Bamsi and Chamsi included), then a Deci, then a Parab.
+    the monthly (Masiso, Bamsi and Chhamsi included), then a Deci, then a Parab.
 
     ``death_mah`` 13 means a Gatha day, with the Gatha number in ``death_roj``.
 

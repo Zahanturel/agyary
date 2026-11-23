@@ -99,7 +99,7 @@ def test_all_opening_gives_ten_consecutive_days():
         opening=OPENING_ALL,
     )
     assert [o.day_number for o in sched] == list(range(1, 11))
-    assert sched[-1].label == "Dasmi"
+    assert sched[-1].label == "Dasmu"
     assert all(b.gregorian_date - a.gregorian_date == timedelta(days=1)
                for a, b in zip(sched, sched[1:]))
 
@@ -130,16 +130,16 @@ def test_month_twelve_and_year_one_are_the_same_day_named_as_the_year():
 
 
 @pytest.mark.parametrize("system", SYSTEMS)
-def test_masiso_bamsi_chamsi_varsi_are_months_on_at_the_same_roj(system):
-    # Masiso is the monthly, Bamsi two months, Chamsi six, Varsi a year.
+def test_masiso_bamsi_chhamsi_varsi_are_months_on_at_the_same_roj(system):
+    # Masiso is the monthly, Bamsi two months, Chhamsi six, Varsi a year.
     sched = build_schedule(
         death_roj=9, death_mah=3, death_year=YEAR, system=system,
         opening=OPENING_TENTH, day_counts=(30, 60, 180, 360),
     )
-    named = {o.label: o for o in sched if o.label != "Dasmi"}
+    named = {o.label: o for o in sched if o.label != "Dasmu"}
     assert {k: (v.roj, v.mah, v.year) for k, v in named.items()} == {
         "Masiso": (9, 4, YEAR), "Bamsi": (9, 5, YEAR),
-        "Chamsi": (9, 9, YEAR), "Varsi": (9, 3, YEAR + 1),
+        "Chhamsi": (9, 9, YEAR), "Varsi": (9, 3, YEAR + 1),
     }
     for o in named.values():
         assert o.gregorian_date == parsi_to_gregorian(o.year, system, mah=o.mah, roj=o.roj)
@@ -150,9 +150,9 @@ def test_deci_is_the_day_before_each():
         death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
         opening=OPENING_TENTH, day_counts=(29, 30, 59, 60, 179, 180, 359, 360),
     )
-    named = [o for o in sched if o.label != "Dasmi"]
+    named = [o for o in sched if o.label != "Dasmu"]
     assert [o.label for o in named] == [
-        "Deci", "Masiso", "Deci", "Bamsi", "Deci", "Chamsi", "Deci", "Varsi"]
+        "Deci", "Masiso", "Deci", "Bamsi", "Deci", "Chhamsi", "Deci", "Varsi"]
     for deci, day in zip(named[0::2], named[1::2]):
         assert day.gregorian_date - deci.gregorian_date == timedelta(days=1)
         assert (deci.roj, day.roj) == (8, 9)
@@ -163,7 +163,7 @@ def test_masiso_is_the_first_monthly_so_the_date_is_listed_once_under_its_name()
         death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
         opening=OPENING_TENTH, day_counts=(30,), monthly_months=3,
     )
-    labels = [o.label for o in sched if o.label != "Dasmi"]
+    labels = [o.label for o in sched if o.label != "Dasmu"]
     assert labels == ["Masiso", "Month 2", "Month 3"]
     assert len({o.gregorian_date for o in sched}) == len(sched)
 
@@ -172,9 +172,9 @@ def test_varsi_is_the_first_yearly_and_keeps_its_own_name():
     kw = dict(death_roj=9, death_mah=3, death_year=YEAR, system=CalendarSystem.SHENSHAI,
               opening=OPENING_TENTH, yearly_years=2)
     with_varsi = build_schedule(**kw, day_counts=(360,))
-    assert [o.label for o in with_varsi if o.label != "Dasmi"] == ["Varsi", "Year 2"]
+    assert [o.label for o in with_varsi if o.label != "Dasmu"] == ["Varsi", "Year 2"]
     without = build_schedule(**kw)
-    assert [o.label for o in without if o.label != "Dasmi"] == ["Year 1", "Year 2"]
+    assert [o.label for o in without if o.label != "Dasmu"] == ["Year 1", "Year 2"]
     # And with monthly running through the year, the year still wins that day.
     labels = [o.label for o in build_schedule(**kw, monthly_months=12)]
     assert "Year 1" in labels and "Month 12" not in labels
@@ -340,7 +340,7 @@ def test_the_opening_beats_a_parab_on_the_same_day():
         parabs=PARAB_FRAVARDIN_TIR, parab_years=1, **KW,
     )
     on_that_day = [o for o in sched if (o.mah, o.roj) == (1, 19)]
-    assert [o.label for o in on_that_day] == ["Dasmi"]
+    assert [o.label for o in on_that_day] == ["Dasmu"]
 
 
 def test_a_deci_beats_a_parab_on_the_same_day():
@@ -495,14 +495,14 @@ def test_a_gatha_death_in_the_sixth_gatha_of_a_fasli_leap_cycle():
     raise AssertionError("no leap Fasli year found")
 
 
-def test_dasmi_is_chosen_like_any_named_day_with_no_opening():
+def test_dasmu_is_chosen_like_any_named_day_with_no_opening():
     from agyary.calendar.memorial import OPENING_NONE
     kw = dict(death_roj=2, death_mah=1, death_year=YEAR, system=CalendarSystem.SHENSHAI,
               opening=OPENING_NONE)
     assert build_schedule(**kw) == []
     only = build_schedule(**kw, day_counts=(10, 30))
     assert [o.day_number for o in only] == [10, 31]
-    assert only[0].label == "Dasmi"
+    assert only[0].label == "Dasmu"
 
 
 def test_birthday_repeats_on_its_roj_and_mah_after_the_death():
@@ -548,7 +548,7 @@ def test_starting_late_leaves_out_passed_days_and_counts_series_from_the_next_on
 
 def test_starting_late_keeps_named_days_still_to_come():
     whole = _late(day_counts=(10, 30, 60))
-    start = whole[0].gregorian_date          # Dasmi itself is not before the start
+    start = whole[0].gregorian_date          # Dasmu itself is not before the start
     late = _late(day_counts=(10, 30, 60), start_from=start)
     assert [o.code for o in late] == [o.code for o in whole]
 
@@ -611,8 +611,8 @@ def test_parabs_need_one_length_only():
         _late(parabs="all", parab_years=1, parab_count=3)
 
 
-def test_days_5_to_9_are_literal_days_and_leave_the_dasmi_to_its_own_choice():
+def test_days_5_to_9_are_literal_days_and_leave_the_dasmu_to_its_own_choice():
     sched = _late(opening="days_5_to_9", day_counts=(10,))
     assert [o.day_number for o in sched] == [5, 6, 7, 8, 9, 10]
-    assert [o.label for o in sched] == ["Day 5", "Day 6", "Day 7", "Day 8", "Day 9", "Dasmi"]
+    assert [o.label for o in sched] == ["Day 5", "Day 6", "Day 7", "Day 8", "Day 9", "Dasmu"]
     assert [o.day_number for o in _late(opening="days_5_to_9")] == [5, 6, 7, 8, 9]

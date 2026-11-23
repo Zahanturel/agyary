@@ -64,7 +64,7 @@ class MemorialIn(BaseModel):
     death_mah: int | None = None
     death_year: int | None = None
     # The old 1-10 openings are still accepted; new memorials send none and pick
-    # the Dasmi among the named days.
+    # the Dasmu among the named days.
     opening: Literal[OPENING_ALL, OPENING_TENTH, OPENING_NONE, OPENING_5_TO_9] = OPENING_NONE
     day_counts: list[int] = []
     monthly: SeriesIn | None = None   # count = months
@@ -182,7 +182,7 @@ async def memorial_day_status(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """Which of the days a family can pick (5th to 9th, Dasmi, the Decis, Masiso
+    """Which of the days a family can pick (5th to 9th, Dasmu, the Decis, Masiso
     ... Varsi) have already passed for this death, so the form can show them
     lighter and keep them from being ticked. Saves nothing."""
     await _require_membership(db, agyary_id, user)

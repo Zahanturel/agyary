@@ -31,7 +31,7 @@ bookings on the calendar, tagged with the memorial.
   how many months / years at creation; the API refuses a series without it.
   "N years" of Parabs is day 2 through the Nth anniversary (day 360*N + 1),
   i.e. each Parab exactly N times.
-- Masiso, Bamsi, Chamsi and Varsi are month multiples, which is what the
+- Masiso, Bamsi, Chhamsi and Varsi are month multiples, which is what the
   names mean: the monthly (30th day), two months (60th), six months (180th)
   and a year (360th), each on the SAME Roj. The Deci (29th, 59th, 179th,
   359th) is the day before each. Masiso is therefore the first monthly and
@@ -40,7 +40,7 @@ bookings on the calendar, tagged with the memorial.
   10th day with the death day as day 1.)
 - One observance per date. When several land on the same day the highest
   wins: the opening days, then yearly (Varsi included), then monthly (Masiso,
-  Bamsi, Chamsi included), then a Deci, then a Parab. A Parab hidden under a
+  Bamsi, Chhamsi included), then a Deci, then a Parab. A Parab hidden under a
   higher one is not shown elsewhere.
 - A death on a Gatha day: that Gatha day is day 1 and the opening carries on
   from it. The monthly is then Roj Hormazd (Roj 1) of each Mah, from Mah 2 of
@@ -54,7 +54,7 @@ bookings on the calendar, tagged with the memorial.
 monthly and yearly prayers have run for years)
 - The form first asks "Did they pass away more than a year ago?". If yes, only the Roj and Mah of
   the death are given: no date and no Parsi year (the optional year field is gone from the form).
-- The opening days and the named days (5th to 9th, Dasmi, the Decis, Masiso, Bamsi, Chamsi, Varsi)
+- The opening days and the named days (5th to 9th, Dasmu, the Decis, Masiso, Bamsi, Chhamsi, Varsi)
   are over, so they are listed but lighter, marked "already passed", and cannot be ticked. What
   repeats stays: monthly, yearly, Roj Fravardin, Parabs, the birthday. Everything runs from today.
 - The same greying applies to a recent death, day by day, as each named day goes by: the server says
@@ -125,8 +125,10 @@ monthly and yearly prayers have run for years)
 
 ## ON HOLD
 
-1. **Gujarati spellings** (Dasmi, Deci, Masiso, Bamsi, Chamsi, Varsi, and the
-   Parab names). Confirmed fine for now; all in `NAMED_DAYS`.
+1. **Gujarati spellings** (Dasmu, Deci, Masiso, Bamsi, Chhamsi, Varsi, and the
+   Parab names). Confirmed fine for now; all in `NAMED_DAYS`. The owner's word review
+   (23 Nov 2026) changed Dasmi to Dasmu and Chamsi to Chhamsi (migration `d8e9f0a1b2c7`
+   renamed the saved days' labels).
 2. **Gatha-death monthly starting point.** The first monthly (Masiso) after a
    Gatha death is Mah 2 Roj 1 of the next year, about a month on. Mah 1 Roj 1
    would be only a few days after the death, so it was not used. Confirm.

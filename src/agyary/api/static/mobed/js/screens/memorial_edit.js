@@ -33,7 +33,7 @@ import { blankMemorialDraft, buildMemorialBody, memorialFormHtml, wireMemorialFo
 function draftFrom(form) {
   const s = (n) => (n == null ? "" : String(n));
   const days = [...form.day_counts];
-  // "10th only", from before the Dasmi was a named day, is the Dasmi.
+  // "10th only", from before the Dasmu was a named day, is the Dasmu.
   if (form.opening === "tenth_only" && !days.includes(10)) days.push(10);
   return {
     ...blankMemorialDraft(),

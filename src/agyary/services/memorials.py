@@ -295,7 +295,7 @@ def plan(
     if choice.long_ago:
         if choice.opening != OPENING_NONE or choice.day_counts:
             raise MemorialError(
-                "The opening days and the named days (Dasmi, Masiso, Varsi...) have passed for someone who "
+                "The opening days and the named days (Dasmu, Masiso, Varsi...) have passed for someone who "
                 "died more than a year ago. Choose what repeats instead.")
         # Everything runs from today: the monthly and yearly days still to come.
         choice = replace(choice, start_from=choice.start_from or today or today_ist())
@@ -346,7 +346,7 @@ async def _validated_services(db: AsyncSession, agyary_id: int, service_ids: lis
     return found
 
 
-# The codes (see calendar.memorial) of the anniversaries: Masiso / Bamsi / Chamsi
+# The codes (see calendar.memorial) of the anniversaries: Masiso / Bamsi / Chhamsi
 # / Varsi, the monthly and the yearly series.
 _ANNIVERSARY_DAYS = {"day_30", "day_60", "day_180", "day_360"}
 

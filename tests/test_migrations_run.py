@@ -920,3 +920,44 @@ async def test_the_lagan_and_vendidad_migration_renames_only_the_standard_names_
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_dasmu_and_chhamsi_migration_relabels_only_those_days_and_comes_off_cleanly():
+    """d8e9f0a1b2c7 (D11, the owner's word review of 23 Nov 2026): a memorial's day labelled
+    exactly "Dasmi" or "Chamsi", past or to come, reads "Dasmu" or "Chhamsi"; its date, Roj,
+    Mah, code and everything else stay; any other label is untouched; the downgrade gives
+    the old spelling back, exact matches only."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "c7d8e9f0a1b6"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Er. Test', '+919000000001')")
+        await _scratch_execute("INSERT INTO customers (owner_user_id, name, phone) VALUES (1, 'Family', '+919000000009')")
+        await _scratch_execute(
+            "INSERT INTO memorials (agyary_id, customer_id, created_by_user_id, departed_name, death_gregorian,"
+            " death_roj, death_mah, death_year, calendar_system, opening)"
+            " VALUES (1, 1, 1, 'Rustom', '2026-05-01', 3, 10, 1395, 'shenshai', 'none')")
+        before = [("day_10", "Dasmi", 10, date(2026, 5, 10)), ("day_29", "Deci", 29, date(2026, 5, 29)),
+                  ("day_30", "Masiso", 30, date(2026, 5, 30)), ("day_180", "Chamsi", 180, date(2026, 10, 27)),
+                  ("year_1", "Year 1", 361, date(2027, 4, 26)), ("day_9", "dasmi", 9, date(2026, 5, 9))]
+        for code, label, day_number, when in before:
+            await _scratch_execute(
+                "INSERT INTO memorial_observances (memorial_id, code, label, day_number, gregorian_date,"
+                " parsi_roj, parsi_mah, parsi_year, paid_at) VALUES (1, :c, :l, :n, :d, 3, 10, 1395, :paid)",
+                {"c": code, "l": label, "n": day_number, "d": when, "paid": AT if code == "day_10" else None})
+        read = ("SELECT code, label, day_number, gregorian_date, parsi_roj, parsi_mah, parsi_year, paid_at IS NOT NULL"
+                " FROM memorial_observances ORDER BY id")
+        kept = [(c, n, d, 3, 10, 1395, c == "day_10") for c, _, n, d in before]
+        _ok(_alembic("upgrade", "head"))
+
+        rows = await _scratch_execute(read)
+        assert [r[1] for r in rows] == ["Dasmu", "Deci", "Masiso", "Chhamsi", "Year 1", "dasmi"]
+        assert [(r[0], *r[2:]) for r in rows] == kept
+
+        _ok(_alembic("downgrade", "c7d8e9f0a1b6"))
+        rows = await _scratch_execute(read)
+        assert [r[1] for r in rows] == [label for _, label, _, _ in before]
+        assert [(r[0], *r[2:]) for r in rows] == kept
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)

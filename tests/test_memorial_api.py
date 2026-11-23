@@ -488,7 +488,7 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     assert parse_qs(link.query)["text"] == [text]
 
 
-async def test_no_opening_dasmi_birthday_and_removed_dates(client, db, seeded):
+async def test_no_opening_dasmu_birthday_and_removed_dates(client, db, seeded):
     aid, cid, headers = await _setup(client, db, seeded)
     ids = await _service_ids(db, aid, "Afringan", "Satum")
     body = _body(DEATH, opening="none", day_counts=[10, 30], monthly=None,
@@ -497,14 +497,14 @@ async def test_no_opening_dasmi_birthday_and_removed_dates(client, db, seeded):
                           json=body, headers=headers)
     assert r.status_code == 200, r.text
     labels = [o["label"] for o in r.json()["observances"]]
-    assert labels.count("Birthday") == 2 and "Dasmi" in labels and "Masiso" in labels
+    assert labels.count("Birthday") == 2 and "Dasmu" in labels and "Masiso" in labels
     assert not any(label.startswith("Day ") for label in labels)
 
     r = await client.post(f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials",
                           json={**body, "exclude_codes": ["day_10"]}, headers=headers)
     assert r.status_code == 200, r.text
     saved = [o["label"] for o in r.json()["observances"]]
-    assert "Dasmi" not in saved and "Masiso" in saved and saved.count("Birthday") == 2
+    assert "Dasmu" not in saved and "Masiso" in saved and saved.count("Birthday") == 2
 
     # a birthday given as a date is turned into its Roj and Mah; with no length it is refused
     bad = {**body, "birthday": {"roj": 9, "mah": 5, "years": 0}}
@@ -595,9 +595,9 @@ async def test_prayers_changed_for_single_dates_on_the_review_screen_are_saved(c
     url = f"/api/mobed/agyaries/{aid}/behdins/{cid}/memorials"
     body = _body(DEATH, opening="none", day_counts=[10, 30], monthly=None, service_ids=[afr, far])
     pv = (await client.post(url + "/preview", json=body, headers=headers)).json()
-    assert [o["anniversary"] for o in pv["observances"]] == [False, True]      # Dasmi, Masiso
+    assert [o["anniversary"] for o in pv["observances"]] == [False, True]      # Dasmu, Masiso
     r = await client.post(url, json={**body, "service_overrides": {
-        "day_10": [afr, jash],          # Jashan added on the Dasmi, Farokshi taken off it
+        "day_10": [afr, jash],          # Jashan added on the Dasmu, Farokshi taken off it
         "day_30": [far],                # only Farokshi on the Masiso
         "day_999": [afr],               # a date that does not exist is ignored
     }}, headers=headers)
