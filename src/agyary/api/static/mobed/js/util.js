@@ -58,20 +58,26 @@ export function shiftYmd(ymd, delta) {
   dt.setUTCDate(dt.getUTCDate() + delta);
   return dt.toISOString().slice(0, 10);
 }
-export function gregLabel(ymd) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString([], {
-    weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
-  });
-}
+const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const two = n => String(n).padStart(2, "0");
+/** A day as numbers, day/month/year: "24/11/2026" (owner, 24 Nov 2026, D12). */
 export function gregShort(ymd) {
   const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString([], {
-    day: "numeric", month: "short", timeZone: "UTC",
-  });
+  return `${two(d)}/${two(m)}/${y}`;
+}
+/** The same with the weekday in front: "Tue 24/11/2026". */
+export function gregLabel(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const wd = WEEKDAYS_SHORT[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${wd} ${gregShort(ymd)}`;
+}
+/** Day and month only, for a calendar cell with no room for the year: "24/11". */
+export function gregCell(ymd) {
+  const [, m, d] = ymd.split("-").map(Number);
+  return `${two(d)}/${two(m)}`;
 }
 /** A moment the server sent (an ISO timestamp, in UTC) as its day and time in India:
- *  "22 Nov, 01:30". Never the timestamp's own first ten characters: that is the day in
+ *  "22/11/2026, 01:30". Never the timestamp's own first ten characters: that is the day in
  *  UTC (UK time), a day early for anything before 5:30 am in India. */
 export function istShortWhen(iso) {
   return `${gregShort(istYmd(iso))}, ${istHm(iso)}`;

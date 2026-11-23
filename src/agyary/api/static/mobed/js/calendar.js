@@ -17,7 +17,7 @@ import { navigate } from "./router.js";
 import { payChipHtml, flipPaidChip } from "./paid_chip.js";
 import { loadFailedHtml, wireRetry, showError, showInfo, openSheet } from "./ui.js";
 import {
-  esc, todayIst, shiftYmd, gregLabel, gregShort,
+  esc, todayIst, shiftYmd, gregLabel, gregShort, gregCell,
   parsiLabel, stepParsiMonth, monthYearLabel, MAH_NAMES_JS,
 } from "./util.js";
 
@@ -162,7 +162,7 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
       // The day number alone, except where the Gregorian month turns over.
       const dayNo = Number(day.slice(8));
       const withMonth = idx === 0 || dayNo === 1;
-      const numLabel = withMonth ? gregShort(day) : String(dayNo);
+      const numLabel = withMonth ? gregCell(day) : String(dayNo);
       const shown = dayItems.slice(0, maxChips)
         .map(it => `<span class="pg-event${KIND_CLASS[it.kind] || ""}"
           title="${esc(it.label)}${it.sublabel ? " - " + esc(it.sublabel) : ""}">${esc(it.short || it.label)}</span>`)
@@ -306,7 +306,7 @@ export async function renderCalendar(container, opts) {
     : monthYearLabel(view.parsiMonth.mah, view.parsiMonth.year);
   const secondaryLabel = view.mode === "day"
     ? await parsiLabel(view.focus, system)
-    : `${gregShort(range.from)} - ${gregShort(range.to)} ${range.to.slice(0, 4)}`;
+    : `${gregShort(range.from)} - ${gregShort(range.to)}`;
 
   const notice = failed ? loadFailedHtml(what, { whole: !items.length }) : "";
   let body;
@@ -433,7 +433,7 @@ function goToMonthsHtml(anchor, year, system) {
       spans && today >= s.start && today <= s.end ? "now" : ""].filter(Boolean).join(" ");
     return `<button type="button" class="${cls}" data-goto-mah="${mah}">
       <b>${mah === 13 ? "Gatha days" : esc(rojForCell(MAH_NAMES_JS[mah - 1]))}</b>
-      ${spans ? `<span>${esc(gregShort(s.start))} - ${esc(gregShort(s.end))}</span>` : ""}
+      ${spans ? `<span>${esc(gregCell(s.start))} - ${esc(gregCell(s.end))}</span>` : ""}
     </button>`;
   };
   const from = monthSpan(anchor, 1, year).start.slice(0, 4);
