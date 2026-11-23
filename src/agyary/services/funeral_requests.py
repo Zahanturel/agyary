@@ -1,9 +1,9 @@
 """Sending a funeral record to a fire temple (DECISIONS D10, Phase 2 Step 4).
 
-Choosing the fire temple: "Suggested" lists every fire temple in the app with a
-position, nearest first by straight-line distance from the funeral place,
-within NEAR_KM; the family's preferred one goes first whatever its distance.
-"Search all" finds any of them by name or town. Each says whether a request
+Choosing the fire temple: the list lists every fire temple that has someone in
+the app, the family's usual one first, then nearest first by straight-line
+distance from the funeral place where both have a position, then the rest by
+town (D12). A search finds any of them by name or town. Each says whether a request
 would reach anyone: a confirmed panthaky, only mobeds, or nobody in the app yet
 (services/panthaky.py, the same rule as who it is sent to).
 
@@ -52,7 +52,7 @@ from agyary.services import (
 logger = logging.getLogger(__name__)
 
 NEAR_KM = 500
-MAX_SUGGESTED = 100
+MAX_SUGGESTED = 300
 SEARCH_LIMIT = 20
 EARTH_RADIUS_KM = 6371.0
 
@@ -119,29 +119,25 @@ async def _rows(
 async def suggested(
     db: AsyncSession, settings: Settings, place: FuneralPlace, preferred_id: int | None = None,
 ) -> dict:
-    """The fire temples to suggest for a record at ``place``: the family's
-    preferred one first, then those within NEAR_KM, nearest first. With no
-    position for the place there is nothing to measure from: only the
-    preferred one, and ``place_has_position`` False (the app offers search)."""
-    chosen: list[tuple[float, Agyary]] = []
-    if _has_position(place):
-        candidates = (
-            await db.execute(
-                select(Agyary).where(
-                    Agyary.is_active.is_(True), Agyary.latitude.is_not(None), Agyary.longitude.is_not(None)
-                )
-            )
-        ).scalars().all()
-        for a in candidates:
-            d = _distance(place, a)
-            if d is not None and d <= NEAR_KM and a.id != preferred_id:
-                chosen.append((d, a))
-        chosen.sort(key=lambda pair: (pair[0], pair[1].name))
-    agyaries = [a for _, a in chosen[:MAX_SUGGESTED]]
-    if preferred_id is not None:
-        preferred = await db.get(Agyary, preferred_id)
-        if preferred is not None and preferred.is_active:
-            agyaries.insert(0, preferred)
+    """The fire temples to choose from for a record at ``place`` (D12): every
+    active fire temple that has someone in Mobed Diary (a request would reach
+    somebody), so the list is full the moment it opens. The family's usual one
+    first; then those with a position, nearest first (with no cap, and the
+    funeral place needs no position of its own: without one they follow the
+    others by town); then those without a position, by town and name."""
+    candidates = list((await db.execute(select(Agyary).where(Agyary.is_active.is_(True)))).scalars().all())
+    reach = await panthaky.reach_of(db, settings, [a.id for a in candidates])
+    here = [a for a in candidates if reach[a.id] != panthaky.REACH_NOBODY]
+    first = next((a for a in here if a.id == preferred_id), None)
+    if first is None and preferred_id is not None:
+        # The usual one may have nobody in the app: it is not offered (it could not be sent to).
+        preferred_id = None
+
+    rest = sorted((a for a in here if a.id != preferred_id), key=lambda a: (
+        (0, _distance(place, a), "", a.name.lower()) if _distance(place, a) is not None
+        else (1, 0.0, (a.city or "").lower(), a.name.lower())
+    ))
+    agyaries = ([first] if first is not None else []) + rest[:MAX_SUGGESTED]
     return {
         "place_has_position": _has_position(place),
         "near_km": NEAR_KM,

@@ -90,7 +90,6 @@ async def test_a_gatha_day_is_a_death_day_too(client, db, seeded):
     ({"death_date": None, "death_roj": 31, "death_mah": 4}, "death"),
     ({"calendar": "fasli"}, "calendar"),                              # no Fasli (D5)
     ({"departed_title": "mister"}, "departed_title"),
-    ({"departed_name": "  "}, "departed_name"),
     ({"departed_name": "Rustom www.example.com"}, "departed_name"),
     ({"departed_parent_name": "@someone"}, "departed_parent_name"),
     ({"departed_name": "R" * 70}, "departed_name"),                   # with the title and parent, over 80
@@ -112,6 +111,36 @@ async def test_each_field_that_will_not_do_is_named(client, db, seeded, changes,
     assert r.status_code == 400, (changes, r.text)
     assert r.headers["X-Field"] == field, (changes, r.json())
     assert (await db.execute(select(FuneralRecord))).first() is None
+
+
+async def test_the_departeds_names_are_optional_and_never_read_empty(client, db, seeded):
+    """D12: a name not known is left empty; the prayed name is then readable
+    (never empty: WhatsApp refuses an empty variable), the parent left out."""
+    from agyary.services import funeral_records, funeral_whatsapp
+
+    headers, _ = await manager(client, db)
+    r = await client.post(RECORDS, json=form(departed_name="", departed_parent_name=""), headers=headers)
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["prayed_name"] == "Behdin (name not known)"
+    row = (await db.execute(select(FuneralRecord).where(FuneralRecord.id == rec["id"]))).scalar_one()
+    assert funeral_whatsapp.departed(row) == "Behdin (name not known)"
+    r = await client.post(RECORDS, json=form(departed_title="osta", departed_name="  ", departed_parent_name=None),
+                          headers=headers)
+    assert r.json()["record"]["prayed_name"] == "Osta (name not known)"
+    # Only the name empty, or only the father's or husband's name empty.
+    assert funeral_records.prayed_name("behdin", "Rustom", None) == "Behdin Rustom"
+    assert funeral_records.prayed_name("khud", "", None) == "Khud (name not known)"
+    assert funeral_records.prayed_name("khud", None, "Jamshed").startswith("Khud (name not known)")
+
+
+async def test_the_family_contact_stays_required(client, db, seeded):
+    headers, _ = await manager(client, db)
+    r = await client.post(RECORDS, json=form(departed_name="", family_contact_name="", family_contact_phone=""),
+                          headers=headers)
+    assert r.status_code == 400 and r.headers["X-Field"] == "family_contact_name"
+    r = await client.post(RECORDS, json=form(departed_name="", family_contact_phone=""), headers=headers)
+    assert r.status_code == 400 and r.headers["X-Field"] == "family_contact_phone"
 
 
 async def test_what_is_not_recorded_has_nowhere_to_go(client, db, seeded):

@@ -1,8 +1,8 @@
 """A manager chooses a fire temple and sends a funeral record to it (DECISIONS
 D10, D2, D9; Phase 2 Step 4).
 
-Suggested: nearest first, by straight-line distance, within 500 km, with the
-family's preferred fire temple first; and a search over all of them. Each says
+The list (D12): every fire temple with someone in the app, the family's usual one
+first, then nearest first, then by town; and a search over all of them. Each says
 whether a request reaches a confirmed panthaky, only mobeds, or nobody.
 
 Sending needs the tick that the family agreed; it goes to the confirmed
@@ -65,50 +65,63 @@ async def _temples(db):
     return near, navsari, empty, delhi, nowhere
 
 
-async def test_suggested_nearest_first_within_500_km_with_who_it_reaches(client, db, seeded):
+async def test_suggested_lists_every_in_app_fire_temple_nearest_first_then_by_town(client, db, seeded):
     near, navsari, empty, delhi, nowhere = await _temples(db)
+    # Delhi (over 500 km away) now has a mobed, so it is listed too: there is no distance cap.
+    await member(db, delhi, "+919822200006", "mobed")
+    # One with no pin and a mobed, in a town that sorts before Goti's, goes with the unpinned ones.
+    ahmed = await agyari(db, "Ahmed Agyari (test)", None, city="Ahmedabad")
+    await member(db, ahmed, "+919822200007", "mobed")
+    await db.commit()
     headers, _ = await manager(client, db)
     rec = (await client.post(RECORDS, json=form(), headers=headers)).json()["record"]
     got = (await client.get(f"{RECORDS}/{rec['id']}/agyaries", headers=headers)).json()
-    assert got["place_has_position"] is True and got["near_km"] == 500
+    assert got["place_has_position"] is True
     rows = got["agyaries"]
-    # Delhi is too far, the closed one and the ones not on the map are not there.
-    assert [r["name"] for r in rows] == ["Near Agyari (test)", "Quiet Agyari (test)", "Navsari Agyari (test)"]
-    assert rows[0]["km"] < rows[1]["km"] < rows[2]["km"] and 215 < rows[2]["km"] < 230
-    # A confirmed panthaky; only mobeds (a claim is not a panthaky); nobody whose access is on.
-    assert [r["reach"] for r in rows] == ["panthaky", "nobody", "mobeds"]
-    assert [r["may_send"] for r in rows] == [True, False, True]
+    # With someone in the app only: not the ones with nobody (Quiet, Unmapped), nor the closed one.
+    # Pinned first, nearest first; then the unpinned by town (Ahmedabad, then Goti's town).
+    names = [r["name"] for r in rows]
+    assert names[:3] == ["Near Agyari (test)", "Navsari Agyari (test)", "Delhi Agyari (test)"]
+    assert names[3] == "Ahmed Agyari (test)" and "Goti Adarian" in names[4:]
+    assert not {"Quiet Agyari (test)", "Unmapped Agyari (test)", "Closed Agyari (test)"} & set(names)
+    assert rows[0]["km"] < rows[1]["km"] < rows[2]["km"] and 215 < rows[1]["km"] < 230 and rows[2]["km"] > 1000
+    assert [r["reach"] for r in rows[:3]] == ["panthaky", "mobeds", "mobeds"]
+    assert all(r["may_send"] and r["reach"] != "nobody" for r in rows)
     assert not any(r["preferred"] for r in rows)
 
 
-async def test_the_familys_preferred_fire_temple_is_first_wherever_it_is(client, db, seeded):
-    near, navsari, empty, delhi, nowhere = await _temples(db)
-    headers, _ = await manager(client, db)
-    for preferred, first_km in ((delhi, lambda k: k > 1000), (navsari, lambda k: 215 < k < 230)):
-        rec = (await client.post(RECORDS, json=form(preferred_agyary_id=preferred.id), headers=headers)).json()
-        rows = (await client.get(f"{RECORDS}/{rec['record']['id']}/agyaries", headers=headers)).json()["agyaries"]
-        assert rows[0]["id"] == preferred.id and rows[0]["preferred"] is True and first_km(rows[0]["km"])
-        assert [r["id"] for r in rows].count(preferred.id) == 1
-        assert rec["record"]["preferred_agyari"]["name"] == preferred.name
-    # One not on the map is still first, with no distance.
-    rec = (await client.post(RECORDS, json=form(preferred_agyary_id=nowhere.id), headers=headers)).json()
-    rows = (await client.get(f"{RECORDS}/{rec['record']['id']}/agyaries", headers=headers)).json()["agyaries"]
-    assert rows[0]["id"] == nowhere.id and rows[0]["km"] is None and rows[0]["reach"] == "nobody"
-
-
-async def test_a_place_with_no_pin_says_so_and_suggests_only_the_preferred(client, db, seeded):
-    near, *_ = await _temples(db)
+async def test_a_place_with_no_pin_still_gets_the_full_list_by_town(client, db, seeded):
+    near, navsari, *_ = await _temples(db)
     unpinned = await place(db, "Aramgah (test)", position=None, kind="aramgah")
     headers, _ = await manager(client, db, at=unpinned)
     rec = (await client.post(RECORDS, json=form(), headers=headers)).json()["record"]
     got = (await client.get(f"{RECORDS}/{rec['id']}/agyaries", headers=headers)).json()
-    assert got["place_has_position"] is False and got["agyaries"] == []
-    rec = (await client.post(RECORDS, json=form(preferred_agyary_id=near.id), headers=headers)).json()["record"]
-    got = (await client.get(f"{RECORDS}/{rec['id']}/agyaries", headers=headers)).json()
-    assert [r["id"] for r in got["agyaries"]] == [near.id] and got["agyaries"][0]["km"] is None
-    # Search still finds them all.
+    assert got["place_has_position"] is False
+    names = [r["name"] for r in got["agyaries"]]
+    # Nothing to measure from: every one with someone in the app, by town then name, no distances.
+    assert {"Near Agyari (test)", "Navsari Agyari (test)", "Goti Adarian"} <= set(names)
+    assert "Quiet Agyari (test)" not in names and all(r["km"] is None for r in got["agyaries"])
+    cities = [(r["city"] or "").lower() for r in got["agyaries"]]
+    assert cities == sorted(cities)
+    # Search still finds them all, including ones nobody uses yet.
     found = (await client.get("/api/mobed/manager/agyaries/search?q=agyari", headers=headers)).json()["agyaries"]
     assert {"Near Agyari (test)", "Delhi Agyari (test)"} <= {r["name"] for r in found}
+
+
+async def test_the_familys_usual_fire_temple_is_first_if_someone_there_is_in_the_app(client, db, seeded):
+    near, navsari, empty, delhi, nowhere = await _temples(db)
+    await member(db, delhi, "+919822200006", "mobed")
+    await db.commit()
+    headers, _ = await manager(client, db)
+    rec = (await client.post(RECORDS, json=form(preferred_agyary_id=delhi.id), headers=headers)).json()["record"]
+    rows = (await client.get(f"{RECORDS}/{rec['id']}/agyaries", headers=headers)).json()["agyaries"]
+    assert rows[0]["id"] == delhi.id and rows[0]["preferred"] is True and rows[0]["km"] > 1000
+    assert [r["id"] for r in rows].count(delhi.id) == 1
+    assert rec["preferred_agyari"]["name"] == delhi.name
+    # One nobody uses cannot be sent to, so it is not offered first (or at all).
+    rec = (await client.post(RECORDS, json=form(preferred_agyary_id=nowhere.id), headers=headers)).json()["record"]
+    rows = (await client.get(f"{RECORDS}/{rec['id']}/agyaries", headers=headers)).json()["agyaries"]
+    assert nowhere.id not in [r["id"] for r in rows] and not any(r["preferred"] for r in rows)
 
 
 async def test_search_all_finds_any_fire_temple_by_name_or_town(client, db, seeded):

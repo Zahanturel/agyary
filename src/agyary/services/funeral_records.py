@@ -115,9 +115,17 @@ def _text(value: str | None, field: str, what: str, max_len: int, *, required: b
         raise RecordError(field, str(exc)) from exc
 
 
-def prayed_name(title: str, name: str, parent: str | None) -> str:
-    """The departed's name as it is prayed: "Behdin Rustom Jamshed"."""
-    return " ".join(p for p in (TITLE_LABELS.get(title, ""), name, parent or "") if p)
+NAME_NOT_KNOWN = "(name not known)"
+
+
+def prayed_name(title: str, name: str | None, parent: str | None) -> str:
+    """The departed's name as it is prayed: "Behdin Rustom Jamshed". The name
+    and the father's or husband's name may be unknown (D12): the father's or
+    husband's name is then simply left out, and a missing name reads
+    "Behdin (name not known)" - never empty, because WhatsApp refuses an empty
+    template variable."""
+    own = (name or "").strip()
+    return " ".join(p for p in (TITLE_LABELS.get(title, "") or "Behdin", own or NAME_NOT_KNOWN, parent or "") if p)
 
 
 @dataclass(frozen=True)
@@ -193,7 +201,8 @@ async def checked(db: AsyncSession, data: dict, *, today: date | None = None) ->
     title = data.get("departed_title")
     if title not in DEPARTED_TITLES:
         raise RecordError("departed_title", "Please choose the title: Behdin, Ervad, Osta, Osti or Khud.")
-    name = _text(data.get("departed_name"), "departed_name", "departed's name", PRAYED_NAME_MAX, required=True)
+    # Both names may be left empty when not known (D12); an unknown name is kept as "".
+    name = _text(data.get("departed_name"), "departed_name", "departed's name", PRAYED_NAME_MAX) or ""
     parent = _text(data.get("departed_parent_name"), "departed_parent_name", "father's or husband's name",
                    PRAYED_NAME_MAX)
     whole = prayed_name(title, name, parent)

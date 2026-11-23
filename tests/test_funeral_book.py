@@ -16,7 +16,7 @@ from agyary.core import config
 from agyary.models import FuneralBehdin
 from agyary.services import erasure
 from tests.conftest import sign_in
-from tests.funeral_helpers import MUMBAI, agyari, auth, form, manager, place
+from tests.funeral_helpers import MUMBAI, agyari, auth, form, manager, member, place
 
 BOOK = "/api/mobed/manager/behdins"
 RECORDS = "/api/mobed/manager/records"
@@ -106,6 +106,7 @@ async def test_the_book_is_the_places_alone(client, db, seeded, monkeypatch):
 async def test_a_family_from_the_book_has_their_usual_fire_temple_suggested_first(client, db, seeded):
     headers, _ = await manager(client, db)
     far = await agyari(db, "Far Agyari (test)", (23.0, 72.6), city="Ahmedabad")
+    await member(db, far, "+919822200009", "mobed")
     await db.commit()
     await client.post(BOOK, json={"name": "Test Family", "phone": FAMILY, "usual_agyary_id": far.id}, headers=headers)
     rec = (await client.post(RECORDS, json=form(family_contact_phone=FAMILY), headers=headers)).json()["record"]
