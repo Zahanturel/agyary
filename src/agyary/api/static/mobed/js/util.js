@@ -92,7 +92,7 @@ export function stepParsiMonth(mah, year, delta) {
   return { mah: mah - 1, year };
 }
 export function monthYearLabel(mah, year) {
-  return mah === 13 ? `Gatha days, Y${year}` : `${MAH_NAMES_JS[mah - 1]}, Y${year}`;
+  return mah === 13 ? `Gatha days, Y.Z. ${year}` : `${MAH_NAMES_JS[mah - 1]}, Y.Z. ${year}`;
 }
 
 /** A Parsi day's reading in one system, cached - the mapping never changes. */
@@ -102,8 +102,8 @@ export async function parsiLabel(ymd, system) {
   try {
     const p = await convertDate(ymd, system);
     const label = p.is_gatha
-      ? `${p.gatha_name || "Extra day"} (Gatha), Y${p.year}`
-      : `Roj ${p.roj_name}, Mah ${p.mah_name}, Y${p.year}`;
+      ? `${p.gatha_name || "Extra day"} (Gatha), Y.Z. ${p.year}`
+      : `Roj ${p.roj_name}, Mah ${p.mah_name}, Y.Z. ${p.year}`;
     state.parsiCache[key] = label;
     return label;
   } catch (e) {

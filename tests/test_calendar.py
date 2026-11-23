@@ -238,4 +238,4 @@ async def test_the_date_line_a_mobed_reads_names_the_calendar_properly(client):
     """Shown under the date in the event form: "(Shenshai)", not the raw "[shenshai]"."""
     r = await client.get("/api/calendar/convert", params={"date": "2026-12-01", "system": "shenshai"})
     assert r.status_code == 200, r.text
-    assert r.json()["display"] == "Roj 19 Fravardin, Mah 4 Tir, Y1396 (Shenshai)"
+    assert r.json()["display"] == "Roj 19 Fravardin, Mah 4 Tir, Y.Z. 1396 (Shenshai)"

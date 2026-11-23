@@ -143,8 +143,8 @@ class DeathDay:
 def parsi_label(when: date, system: CalendarSystem) -> str:
     p = gregorian_to_parsi(when, system)
     if p.is_gatha:
-        return f"{p.gatha_name} (Gatha day), Y{p.year}"
-    return f"Roj {p.roj_name}, Mah {p.mah_name}, Y{p.year}"
+        return f"{p.gatha_name} (Gatha day), Y.Z. {p.year}"
+    return f"Roj {p.roj_name}, Mah {p.mah_name}, Y.Z. {p.year}"
 
 
 def death_day(

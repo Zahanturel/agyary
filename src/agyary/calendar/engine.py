@@ -85,8 +85,8 @@ class ParsiDate:
 
     def __str__(self) -> str:
         if self.is_gatha:
-            return f"{self.gatha_name} (Gatha {self.gatha_index}), Y{self.year} [{self.calendar.value}]"
-        return f"Roj {self.roj} {self.roj_name}, Mah {self.mah} {self.mah_name}, Y{self.year} [{self.calendar.value}]"
+            return f"{self.gatha_name} (Gatha {self.gatha_index}), Y.Z. {self.year} [{self.calendar.value}]"
+        return f"Roj {self.roj} {self.roj_name}, Mah {self.mah} {self.mah_name}, Y.Z. {self.year} [{self.calendar.value}]"
 
 
 # ---------------------------------------------------------------------------

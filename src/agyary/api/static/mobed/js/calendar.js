@@ -441,7 +441,7 @@ function goToMonthsHtml(anchor, year, system) {
   return `
     <div class="goto-year">
       <button type="button" class="ghost small" data-goto-year="-1" aria-label="Previous year">&lsaquo;</button>
-      <div class="gy-label"><b>Y${year}</b>${spans ? `<span>${from === to ? from : `${from} - ${to}`}</span>` : ""}</div>
+      <div class="gy-label"><b>Y.Z. ${year}</b>${spans ? `<span>${from === to ? from : `${from} - ${to}`}</span>` : ""}</div>
       <button type="button" class="ghost small" data-goto-year="1" aria-label="Next year">&rsaquo;</button>
     </div>
     <div class="goto-months">${Array.from({ length: 13 }, (_, i) => tile(i + 1)).join("")}</div>`;
