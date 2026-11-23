@@ -190,7 +190,7 @@ function drawRecord(rec, alive) {
         ${fact("Geh-saarnu", esc(gehSaarnuText(rec.geh_saarnu)))}
         ${fact("Uthamna", esc(uthamnaText(rec.uthamna)))}
         ${rec.mobeds_wanted ? fact("Mobeds wanted", String(rec.mobeds_wanted)) : ""}
-        ${fact("The family's fire temple", esc(rec.preferred_agyari ? rec.preferred_agyari.name : "Not named"))}
+        ${rec.preferred_agyari ? fact("The family's fire temple", esc(rec.preferred_agyari.name)) : ""}
         ${fact("Family contact", `${esc(rec.family_contact.name)}<br><span class="meta">${esc(rec.family_contact.phone)}</span>`)}
       </div>
     </div>
