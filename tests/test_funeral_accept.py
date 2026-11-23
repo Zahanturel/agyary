@@ -174,7 +174,7 @@ async def test_one_accepted_the_old_way_reads_as_before_and_its_book_is_the_acce
         "to perform the prayers for Behdin Rustom Jamshed. "
         f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, 4:00 pm. "
         "Please call or message me here for anything you need. "
-        "May the ruvan of Behdin Rustom Jamshed attain Garothman Behesht.")
+        "May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
     assert req["memorial_prefill"] == {
         "name": "Behdin Rustom Jamshed", "calendar": "shenshai", "deathBy": "date",
         "death": rec["death"]["date"], "deathRoj": "", "deathMah": "",
@@ -404,7 +404,7 @@ def test_the_family_message_leaves_out_what_is_not_known():
     words = family_message(record, NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test"))
     assert words == ("Sahebji Test Family, I am Er. Test of Goti Adarian. Doongerwadi (test) has asked me to perform "
                      "the prayers for Khud Rustom. Please call or message me here for anything you need. "
-                     "May the ruvan of Khud Rustom attain Garothman Behesht.")
+                     "May the ruvan of the late Khud Rustom attain Garothman Behesht.")
     assert "Our prayers" not in words and "Geh-saarnu" not in words
 
 
@@ -421,7 +421,7 @@ def test_the_family_message_of_a_panthaky_not_praying_says_the_agyari_was_asked(
     words = family_message(record, place, agyary, panthaky, going=["Er. A"])
     assert words == ("Sahebji Test Family, I am Er. Test of Goti Adarian. Doongerwadi (test) has asked Goti Adarian "
                      "to perform the prayers for Khud Rustom. Er. A will pray. Please call or message me here for "
-                     "anything you need. May the ruvan of Khud Rustom attain Garothman Behesht.")
+                     "anything you need. May the ruvan of the late Khud Rustom attain Garothman Behesht.")
     assert "Er. A, Er. B and Er. C will pray." in family_message(record, place, agyary, panthaky,
                                                                  going=["Er. A", "Er. B", "Er. C"])
     assert "has asked me" in family_message(record, place, agyary, panthaky)

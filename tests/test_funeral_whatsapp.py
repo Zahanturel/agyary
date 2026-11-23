@@ -252,3 +252,21 @@ async def test_a_name_that_breaks_the_rules_is_not_sent_and_says_why(client, db,
     assert _all_set_sent(meta) == []
     rows = await _rows(db)
     assert len(rows) == 3 and all(n.status == "failed" and "link" in n.error_message for n in rows)
+
+
+def test_the_first_name_skips_only_a_title_typed_before_it():
+    """As util.js firstName (D11): "Sahebji <first name>"."""
+    assert fw.first_name("Er. Pervez Kias") == "Pervez"
+    assert fw.first_name("Dasturji Dr. Hormuz D") == "Hormuz"
+    assert fw.first_name("  Ervad   Jehangir Mistry ") == "Jehangir"
+    assert fw.first_name("Rustom Mistry") == "Rustom"
+    assert fw.first_name("Er.") == "Er."            # nothing else left: the whole name
+    assert fw.first_name("") == "" and fw.first_name(None) == ""
+
+
+def test_the_text_when_a_yes_is_no_longer_needed():
+    """The owner's words (word review, 23 Nov 2026)."""
+    assert fw.withdrawn_text("Er. Pervez Kias") == (
+        "Sahebji Pervez, this prayer request has been closed, so you are not needed for now, "
+        "but we will keep you updated. Thank you.")
+    assert fw.withdrawn_text("").startswith("Sahebji, this prayer request has been closed, ")

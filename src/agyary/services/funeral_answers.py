@@ -232,7 +232,7 @@ def family_message(record: FuneralRecord, place: FuneralPlace, agyary: Agyary, m
     elif ut:
         parts.append(f"The Uthamna is {ut}.")
     parts.append("Please call or message me here for anything you need.")
-    parts.append(f"May the ruvan of {departed} attain Garothman Behesht.")
+    parts.append(f"May the ruvan of the late {departed} attain Garothman Behesht.")
     return " ".join(parts)
 
 

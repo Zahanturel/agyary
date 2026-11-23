@@ -1216,6 +1216,7 @@ async def reminders_due(
         text = reminder_message.manual_text(reminder_message.build_parts(
             agyary_name, obs, memorial.departed_name,
             [s["name"] for s in serialized["services"]], today,
+            family=behdin_name, mobed=me.name if me is not None else "",
         ))
         items.append({
             **serialized,

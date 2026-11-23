@@ -71,6 +71,8 @@ async def test_the_message_lists_every_date_and_carries_the_note(client, db, see
     body = r.json()
     assert "Memorial prayers for Dinshaw" in body["text"] and "Please come at 7am" in body["text"]
     assert body["text"].count("\n- ") >= 13        # days 1-10, Masiso and the months
+    # The owner's closing line (D11, 23 Nov 2026).
+    assert body["text"].endswith("\n\nMay the ruvan of the late Dinshaw attain Garothman Behesht.")
     assert body["phone"] == PHONE
     # Not switched on (the default) and the family has not agreed: both are said.
     assert body["can_send"] is False and body["cannot_send_because"]
@@ -212,6 +214,7 @@ async def test_the_short_message_is_short_and_carries_the_note(client, db, seede
     short = r.json()["short_text"]
     assert "Memorial prayers for Dinshaw" in short and "Please come at 7am" in short
     assert "in the PDF" in short and len(short) < 400 and "\n- " not in short
+    assert short.endswith("\n\nMay the ruvan of the late Dinshaw attain Garothman Behesht.")
 
 
 async def test_the_pdf_downloads_for_a_name_in_gujarati(client, db, seeded):

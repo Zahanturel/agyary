@@ -21,6 +21,9 @@ DEPARTED_MAX = 80
 # The mobed's own name is a blank too: "from {{2}}" in the schedule a mobed
 # sends from our number (services/memorial_share.py).
 MOBED_NAME_MAX = 60
+# The family's own name: "Sahebji {{1}}" in the reminder template v2
+# (services/reminder_message.py).
+FAMILY_MAX = 100
 
 _LINK = re.compile(
     r"://|\bwww\.|\b[a-z0-9-]+\.(?:com|net|org|in|co|io|me|ly|info|biz|xyz|app|site|online|shop|top|"

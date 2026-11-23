@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -327,7 +328,7 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert got["memorial_prefill"]["name"] == "Behdin Rustom Jamshed"
     # The message their own WhatsApp opens with, to the family, in their own name.
     assert got["family_message"].startswith("Sahebji Test Family, I am Er. Hormuz Dadachanji of ")
-    assert got["family_message"].endswith("May the ruvan of Behdin Rustom Jamshed attain Garothman Behesht.")
+    assert got["family_message"].endswith("May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
     assert (await client.get(f"{REQUESTS}/{rid}", headers=panthaky)).json()["request"]["all_set"] == got
     assert (await _books(db, rid))[PANTHAKY].user_id == hormuz.id
 
@@ -519,7 +520,9 @@ async def test_live_each_one_gets_their_template_with_the_blanks_in_order(client
 
     (family,) = meta.templates("prayers_all_set_family")
     assert _e164(family) == FAMILY
-    assert _body(family) == ["Behdin Rustom Jamshed", mobeds, "Goti Adarian", gs, ut, head] and _buttons(family) == []
+    # "For anything else, please contact {{6}}. May the ruvan of the late {{7}} ..." (D11, 23 Nov 2026).
+    assert _body(family) == ["Behdin Rustom Jamshed", mobeds, "Goti Adarian", gs, ut, head, "Behdin Rustom Jamshed"]
+    assert _buttons(family) == []
 
     details = _to(meta, "prayer_details_mobed_v3")
     assert set(details) == {LISTED, MOBED}           # each going with a number, app or added by hand
@@ -658,6 +661,30 @@ def test_the_people_blank_is_built_by_the_server():
     assert kept == "Er. A Name ([number]), Er. B, Er. C ([number])"
     assert fw.people_blank([]) == ("not fixed yet", "not fixed yet")
     assert fw.names_blank(people) == "Er. A Name, Er. B and Er. C" and fw.names_blank([]) == "not fixed yet"
+
+
+def test_for_anything_else_the_panthaky_else_the_first_mobed_going():
+    """Templates 5, 6 and 8: "For anything else, please contact {contact}" (owner's word
+    review, 23 Nov 2026): the panthaky with their number; with no confirmed panthaky in
+    the app, the first mobed going - never "not fixed yet" while someone is going."""
+    head = fw.Person("Er. Head", "+919800000001")
+    going = [fw.Person("Er. First", "+919800000002"), fw.Person("Er. Second", "+919800000003")]
+    assert fw.contact_people([head], going) == [head]
+    assert fw.contact_people([], going) == [going[0]]
+    assert fw.contact_people([], []) == []
+    record = SimpleNamespace(id=1, departed_title="behdin", departed_name="Rustom", departed_parent_name="Jamshed",
+                             geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None,
+                             family_contact_name="Test Family", family_contact_phone="+919800000009")
+    agyary, place = SimpleNamespace(id=2, name="Goti Adarian"), SimpleNamespace(name="Doongerwadi (test)")
+    family = fw.all_set_family_send(record, agyary, going=going, panthakys=[], refs={})
+    assert family.params[5] == "Er. First (+91 9800000002)" and family.params[6] == "Behdin Rustom Jamshed"
+    assert family.recorded[6] == "Er. First ([number])"
+    details = fw.all_set_details_send(record, place, going=going, panthakys=[], phone="+919800000003",
+                                      recipient_type="user", recipient_id=3, agyary_id=2, back_out="pca:x:x", refs={})
+    assert details.params[7] == "Er. First (+91 9800000002)"
+    to_place = fw.all_set_manager_send(record, agyary, going=going, panthakys=[], phone="+919800000004",
+                                       recipient_id=4, refs={})
+    assert to_place.params[3] == "Er. First (+91 9800000002)" and to_place.recorded[4] == "Er. First ([number])"
 
 
 # --- Confirm with who's going -------------------------------------------------------------
@@ -955,7 +982,7 @@ async def test_a_panthaky_not_praying_tells_the_family_the_agyari_was_asked_and_
 
     when = (f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, "
             "4:00 pm. Please call or message me here for anything you need. "
-            "May the ruvan of Behdin Rustom Jamshed attain Garothman Behesht.")
+            "May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
     assert board["all_set"]["is_panthaky"] is True
     assert board["all_set"]["family_message"] == (

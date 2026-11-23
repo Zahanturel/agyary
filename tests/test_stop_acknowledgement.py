@@ -50,7 +50,7 @@ async def test_a_first_stop_gets_one_kind_reply_naming_the_mobed(client, db, see
     assert (await client.post("/webhooks/whatsapp", content=raw, headers=h)).status_code == 200
     name = await _mobed_name(db)
     assert sent == [(BEHDIN_PHONE, reminders.STOP_ACK_TEXT.format(mobed=name))]
-    assert "May you and your family be in peace." in sent[0][1]
+    assert sent[0][1].endswith(". Ushta te.")          # D6, changed 23 Nov 2026 (D11)
     row = await db.get(ReminderOptOut, BEHDIN_PHONE)
     await db.refresh(row)
     assert row.acknowledged_at is not None

@@ -19,19 +19,22 @@ Utility templates, and short text replies:
 
 At All set (R3.1 step 5, services/all_set.py):
 
-  5  prayers_all_set_family    to the family: who will pray, the times, the panthaky
+  5  prayers_all_set_family    to the family: who will pray, the times, who to
+                               contact (the panthaky, else the first mobed going)
   6  prayer_details_mobed_v3   to each mobed going: the details, the family's
-                               contact, everyone going, the panthaky; with the
+                               contact, everyone going, who to contact; with the
                                button "I can't go any more" ("pca:<token>:x")
   7  prayers_all_set_panthaky  to the panthaky not going: who is going, the family
   8  funeral_accepted_manager_v2  to the funeral place's managers: who will pray,
-                               the panthaky's name and number
+                               who to contact, with their number
 
      "Thank you. Enough mobeds are going this time. If a place opens, we may
      ask you again."           plain text to a mobed who said yes once enough
                                were going (a standby, R3.1)
-     "This prayer request was withdrawn."  plain text to a mobed who said yes,
-                               when the request is withdrawn or declined
+     "Sahebji <first name>, this prayer request has been closed, so you are
+     not needed for now, but we will keep you updated. Thank you."  plain
+                               text to a mobed who said yes, when the
+                               request is withdrawn or declined
      "Thank you for letting us know. The panthaky has been told."  plain text
                                to a tap on "I can't go any more" (step 5b), or
                                why it cannot be done (the prayers have begun)
@@ -107,7 +110,12 @@ NOT_SET_UP = "WhatsApp sending is not set up on this server."
 PAUSED = "All WhatsApp sending from Mobed Diary is paused at the moment."
 NOT_FIXED = "not fixed yet"
 ENOUGH_TEXT = "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again."
-WITHDRAWN_TEXT = "This prayer request was withdrawn."
+# To a mobed whose yes is no longer needed because the request was withdrawn or
+# declined: the owner's words (D11, word review of 23 Nov 2026), via withdrawn_text.
+WITHDRAWN_TEXT = ("Sahebji {first_name}, this prayer request has been closed, so you are not needed for now, "
+                  "but we will keep you updated. Thank you.")
+WITHDRAWN_NO_NAME_TEXT = ("Sahebji, this prayer request has been closed, so you are not needed for now, "
+                          "but we will keep you updated. Thank you.")
 # To a tap on "I can't go any more" (step 5b); without "The panthaky has been
 # told." at a fire temple with no panthaky in the app, where nobody is.
 BACKED_OUT_TEXT = "Thank you for letting us know. The panthaky has been told."
@@ -155,6 +163,31 @@ async def status(db: AsyncSession, settings: Settings) -> dict:
 def digits(phone: str) -> str:
     """A number as a wa.me link wants it: digits only, no "+"."""
     return "".join(c for c in phone if c.isdigit())
+
+
+# Titles typed before a mobed's name, left out of "Sahebji <first name>": the
+# same list as util.js NAME_PREFIXES (compared without dots, in any case).
+NAME_PREFIXES = frozenset({"er", "ervad", "mobed", "mobedji", "dastur", "dasturji", "dr", "behdin",
+                           "osta", "osti", "khud", "mr", "mrs", "ms", "shri", "smt"})
+
+
+def first_name(full: str | None) -> str:
+    """The first name, for "Sahebji <first name>" (D11), as util.js firstName:
+    a title typed before it ("Er.", "Ervad", "Dasturji", ...) is skipped, and
+    the whole name is used when nothing else is left."""
+    words = str(full or "").split()
+    i = 0
+    while i < len(words) and words[i].replace(".", "").lower() in NAME_PREFIXES:
+        i += 1
+    return words[i] if i < len(words) else " ".join(words)
+
+
+def withdrawn_text(name: str | None) -> str:
+    """The text to a mobed whose yes is no longer needed (the request was
+    withdrawn or declined): "Sahebji <first name>, this prayer request has
+    been closed, ..."; "Sahebji, this prayer request ..." with no name."""
+    first = first_name(name)
+    return WITHDRAWN_TEXT.format(first_name=first) if first else WITHDRAWN_NO_NAME_TEXT
 
 
 # --- The words in the blanks ------------------------------------------------------
@@ -548,6 +581,14 @@ def people_blank(people: list[Person]) -> tuple[str, str]:
     return (sent, kept) if sent else (NOT_FIXED, NOT_FIXED)
 
 
+def contact_people(panthakys: list[Person], going: list[Person]) -> list[Person]:
+    """Who "For anything else, please contact {contact}" names in templates 5, 6
+    and 8 (owner's word review, 23 Nov 2026): the request's panthaky (or
+    panthakys) with their number; at a fire temple with no confirmed panthaky
+    in the app, the first mobed going."""
+    return list(panthakys) if panthakys else list(going[:1])
+
+
 def names_blank(people: list[Person]) -> str:
     """Names only: "Er. A and Er. B"."""
     names = [clean(p.name) for p in people if clean(p.name)]
@@ -574,15 +615,18 @@ def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Pe
                         refs: dict) -> Send:
     """Template 5 (prayers_all_set_family): "The prayers for {{1 departed}} will
     be offered by {{2 mobeds with numbers}} of {{3 agyari}}. Geh-saarnu: {{4}}.
-    Uthamna: {{5}}. For anything else, the panthaky is {{6 panthaky, number}}.
-    May the ruvan of the departed attain Garothman Behesht." No button."""
+    Uthamna: {{5}}. For anything else, please contact {{6 contact}}. May the
+    ruvan of the late {{7 departed}} attain Garothman Behesht." No button.
+    {{6}} is the panthaky with their number, else the first mobed going
+    (``contact_people``); {{7}} is {{1}} again (each blank is numbered once)."""
     mobeds, mobeds_kept = people_blank(going)
-    pk, pk_kept = people_blank(panthakys)
+    contact, contact_kept = people_blank(contact_people(panthakys, going))
     return Send(
         kind=TYPE_ALL_SET_FAMILY, phone=record.family_contact_phone, recipient_type="family", recipient_id=record.id,
         agyary_id=agyary.id,
-        params=[clean(departed(record)), mobeds, clean(agyary.name), geh_saarnu_text(record), uthamna_text(record), pk],
-        recorded={2: mobeds_kept, 6: pk_kept}, refs=refs,
+        params=[clean(departed(record)), mobeds, clean(agyary.name), geh_saarnu_text(record), uthamna_text(record),
+                contact, clean(departed(record))],
+        recorded={2: mobeds_kept, 6: contact_kept}, refs=refs,
         names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
         + _people_checks(panthakys, "the panthaky's name"),
     )
@@ -595,17 +639,20 @@ def all_set_details_send(
     """Template 6 (prayer_details_mobed_v3): "You will pray for {{1 departed}} at
     {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}. The family's contact is
     {{5 family name}}, {{6 family number}}. Mobeds going: {{7 mobeds with
-    numbers}}. The panthaky is {{8 panthaky, number}}. Thank you for your
-    service." One quick-reply button, "I can't go any more", whose payload is
-    ``back_out`` (prayer_callout.back_out_payload: Step 5b reads it)."""
+    numbers}}. For anything else, please contact {{8 contact}}. Thank you for
+    your service." One quick-reply button, "I can't go any more", whose
+    payload is ``back_out`` (prayer_callout.back_out_payload: Step 5b reads
+    it). {{8}} is the panthaky with their number, else the first mobed going
+    (``contact_people``)."""
     mobeds, mobeds_kept = people_blank(going)
-    pk, pk_kept = people_blank(panthakys)
+    contact, contact_kept = people_blank(contact_people(panthakys, going))
     return Send(
         kind=TYPE_ALL_SET_DETAILS, phone=phone, recipient_type=recipient_type, recipient_id=recipient_id,
         agyary_id=agyary_id,
         params=[clean(departed(record)), clean(place.name), geh_saarnu_text(record), uthamna_text(record),
-                clean(record.family_contact_name) or NOT_FIXED, record.family_contact_phone, mobeds, pk],
-        hidden=(6,), recorded={7: mobeds_kept, 8: pk_kept}, quick_replies=(back_out,), refs=refs, why_not=why_not,
+                clean(record.family_contact_name) or NOT_FIXED, record.family_contact_phone, mobeds, contact],
+        hidden=(6,), recorded={7: mobeds_kept, 8: contact_kept}, quick_replies=(back_out,), refs=refs,
+        why_not=why_not,
         names=_record_checks(record, place, None, True) + _people_checks(going, "the name of a mobed going")
         + _people_checks(panthakys, "the panthaky's name"),
     )
@@ -631,13 +678,14 @@ def all_set_panthaky_send(record: FuneralRecord, place: FuneralPlace, *, going: 
 def all_set_manager_send(record: FuneralRecord, agyary: Agyary, *, going: list[Person], panthakys: list[Person],
                          phone: str, recipient_id: int, refs: dict) -> Send:
     """Template 8 (funeral_accepted_manager_v2): "The prayers for {{1 departed}}
-    will be offered by {{2 mobeds' names}} of {{3 agyari}}. The panthaky is
-    {{4 panthaky, number}}, by phone or WhatsApp." No button."""
-    pk, pk_kept = people_blank(panthakys)
+    will be offered by {{2 mobeds' names}} of {{3 agyari}}. For anything else,
+    please contact {{4 contact}}." No button. {{4}} is the panthaky with their
+    number, else the first mobed going (``contact_people``)."""
+    contact, contact_kept = people_blank(contact_people(panthakys, going))
     return Send(
         kind=TYPE_ALL_SET_MANAGER, phone=phone, recipient_type="user", recipient_id=recipient_id, agyary_id=agyary.id,
-        params=[clean(departed(record)), names_blank(going), clean(agyary.name), pk],
-        recorded={4: pk_kept}, refs=refs,
+        params=[clean(departed(record)), names_blank(going), clean(agyary.name), contact],
+        recorded={4: contact_kept}, refs=refs,
         names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
         + _people_checks(panthakys, "the panthaky's name"),
     )

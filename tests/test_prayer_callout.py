@@ -392,11 +392,11 @@ async def test_withdrawing_tells_those_who_said_yes_inside_24_hours(client, db, 
     meta.sent.clear()
     r = await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)
     assert r.status_code == 200, r.text
-    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(MOBED, fw.WITHDRAWN_TEXT)]
+    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(MOBED, fw.withdrawn_text("Er. Pervez Kias"))]
     # A yes after it is withdrawn is told so, and nobody more goes.
     meta.sent.clear()
     await _signed_tap(client, SECOND, f"pca:{answers[SECOND].token}:y")
-    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(SECOND, fw.WITHDRAWN_TEXT)]
+    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(SECOND, fw.withdrawn_text("Er. Second"))]
     assert (await _answers(db))[SECOND].picked_at is None
     # Closed: nobody more is asked, and the board says it is withdrawn.
     board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
@@ -404,7 +404,7 @@ async def test_withdrawing_tells_those_who_said_yes_inside_24_hours(client, db, 
     assert "withdrew" in board["ask_everyone"]["why_not"]
     r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
     assert r.status_code == 409 and "withdrew" in r.json()["detail"]
-    assert {(m["to"], m["text"]["body"]) for m in meta.texts()} == {(SECOND, fw.WITHDRAWN_TEXT)}
+    assert {(m["to"], m["text"]["body"]) for m in meta.texts()} == {(SECOND, fw.withdrawn_text("Er. Second"))}
 
 
 async def test_declining_tells_them_too(client, db, seeded, meta, pushes, live):
@@ -414,7 +414,7 @@ async def test_declining_tells_them_too(client, db, seeded, meta, pushes, live):
     r = await client.post(f"/api/mobed/requests/{rid}/decline", json={"reason": None},
                           headers=await _as(client, PANTHAKY))
     assert r.status_code == 200, r.text
-    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(MOBED, fw.WITHDRAWN_TEXT)]
+    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(MOBED, fw.withdrawn_text("Er. Pervez Kias"))]
 
 
 async def test_a_call_out_that_breaks_never_stops_the_request(client, db, seeded, meta, pushes, live, monkeypatch):

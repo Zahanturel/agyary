@@ -47,7 +47,7 @@ import { state, saveSession } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, toTop,
 } from "../ui.js";
-import { esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
+import { esc, firstName, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { refreshRequestCount } from "../requests_count.js";
@@ -829,10 +829,12 @@ function mobedStateText(m) {
   return "Not asked yet";
 }
 
-/** What the panthaky's own WhatsApp opens with, to one of their mobeds: no family details. */
-function askText(b) {
+/** What the panthaky's own WhatsApp opens with, to one of their mobeds: no family details.
+ *  "Sahebji <first name>, ..." (D11, owner's word review of 23 Nov 2026). */
+function askText(b, m) {
+  const first = firstName(m && m.name);
   return [
-    `A prayer request has come to ${b.agyari.name} for ${b.prayed_name} at ${b.place.name}.`,
+    `${first ? `Sahebji ${first}` : "Sahebji"}, a prayer request has come to ${b.agyari.name} for ${b.prayed_name} at ${b.place.name}.`,
     b.geh_saarnu ? `Geh-saarnu: ${b.geh_saarnu.text}.` : "",
     b.uthamna ? `Uthamna: ${b.uthamna.text}.` : "",
     "Can you pray?",
@@ -851,7 +853,7 @@ function mobedRowHtml(b, m) {
   const reach = m.phone ? `<div class="row" style="margin-top:8px">
       <a class="button secondary" href="tel:${esc(m.phone)}" data-call="${esc(m.key)}"
         aria-label="Call ${esc(m.name)}">Call</a>
-      <a class="button secondary" href="${esc(waLink(m.phone, askText(b)))}" target="_blank" rel="noopener"
+      <a class="button secondary" href="${esc(waLink(m.phone, askText(b, m)))}" target="_blank" rel="noopener"
         data-chat="${esc(m.key)}" aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
     </div>` : "";
   // Not for someone whose account is waiting or switched off (D9): said why instead.

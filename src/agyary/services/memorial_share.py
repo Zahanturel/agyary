@@ -95,8 +95,14 @@ def passed_away(m: dict) -> str:
     return f"Passed away on {long_date(m['death_date'])} ({death_day(m)})"
 
 
+def closing_line(m: dict) -> str:
+    """The last line of what goes to the family (D11, word review of 23 Nov 2026)."""
+    return f"May the ruvan of the late {m['departed_name']} attain Garothman Behesht."
+
+
 def message_text(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
-    """The message to send the family: who it is for, then every date."""
+    """The message to send the family: who it is for, then every date, then the
+    closing line."""
     note = clean_note(note)
     lines = [
         f"Memorial prayers for {m['departed_name']}",
@@ -113,17 +119,18 @@ def message_text(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") 
             + (f" ({parsi_day(o['roj'], o['mah'], o['gatha_index'])})" if o["roj"] or o["gatha_index"] else "")
             + (f" - {prayers}" if prayers else "")
         )
+    lines += ["", closing_line(m)]
     return "\n".join(lines)
 
 
 def short_message(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
     """A few lines that always fit in a WhatsApp link or next to an attached PDF:
-    who it is for, the mobed's note, and where the dates are."""
+    who it is for, the mobed's note, where the dates are, and the closing line."""
     note = clean_note(note)
     lines = [f"Memorial prayers for {m['departed_name']}", f"{agyary_name} - {mobed_name}"]
     if note:
         lines += ["", note]
-    lines += ["", "All the dates are in the PDF."]
+    lines += ["", "All the dates are in the PDF.", "", closing_line(m)]
     return "\n".join(lines)
 
 
@@ -155,7 +162,7 @@ def render_pdf(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") ->
     if note:
         story += [Paragraph(esc(note), body), Spacer(1, 5 * mm)]
 
-    rows = [[Paragraph("Date", bold), Paragraph("Day", bold), Paragraph("Observance", bold), Paragraph("Prayers", bold)]]
+    rows = [[Paragraph("Date", bold), Paragraph("Day", bold), Paragraph("Prayer", bold), Paragraph("Prayers", bold)]]
     for o in m["observances"]:
         rows.append([
             Paragraph(esc(table_date(o["date"])), cell),

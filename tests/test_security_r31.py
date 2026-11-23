@@ -533,7 +533,7 @@ async def test_withdrawn_text_only_to_whatsapp_yeses_others_are_told_in_the_app(
     r = await client.post(f"/api/mobed/manager/requests/{rid}/withdraw", headers=mgr)
     assert r.status_code == 200, r.text
     # Only the WhatsApp yes, inside the 24 hours they opened.
-    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(LISTED, fw.WITHDRAWN_TEXT)]
+    assert [(m["to"], m["text"]["body"]) for m in meta.texts()] == [(LISTED, fw.withdrawn_text("Er. Listed"))]
     # Kias (a yes by phone) is told in the app, once.
     notes = await _notes(db, MOBED, "funeral_request_withdrawn")
     assert len(notes) == 1 and notes[0].title == "A request for prayers was withdrawn"

@@ -35,8 +35,8 @@ panthakys are told "<name> is going (1 of 2)" in the app and on their phones
 the details at a yes any more - they go only at All set (services/all_set.py,
 Step 5), which the last place filling calls. A later yes is a standby, told
 "Thank you. Enough mobeds are going this time. If a place opens, we may ask
-you again." If the request is withdrawn or declined, each yes is told "This
-prayer request was withdrawn." - both plain text, so only inside WhatsApp's 24
+you again." If the request is withdrawn or declined, each yes is told "Sahebji <first
+name>, this prayer request has been closed, ..." - both plain text, so only inside WhatsApp's 24
 hours from the answer; otherwise nothing is sent. A no answers only for the
 one who said it; at a fire temple with no panthaky, everyone asked saying no
 closes the request there (_after_no). Payment stays with the panthaky, outside
@@ -1015,7 +1015,8 @@ async def fill(
     marked Going after a call. ``row`` has said yes and is committed.
 
     - The request withdrawn or declined: nothing fills; a WhatsApp Yes is told
-      "This prayer request was withdrawn." (inside the 24 hours it opened).
+      "Sahebji <first name>, this prayer request has been closed, ..." (inside
+      the 24 hours it opened).
       One accepted the old way, before R3.1: nothing fills, nothing is sent.
     - A place free (``wanted`` places): the row is one of those going
       (``picked_at``). Nobody is sent the details now - they go only at All
@@ -1042,7 +1043,7 @@ async def fill(
     if request.status in (REQUEST_WITHDRAWN, REQUEST_DECLINED):
         await db.commit()
         if how == HOW_WHATSAPP and row.phone:
-            await fw.deliver(db, settings, [_text_send(row, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT)],
+            await fw.deliver(db, settings, [_text_send(row, request, fw.TYPE_WITHDRAWN, fw.withdrawn_text(row.name))],
                              now=now, client=client)
         return "yes, to a closed request"
     if request.status in ACCEPTED_THE_OLD_WAY:
@@ -1783,7 +1784,7 @@ async def after_closed(
         out_of_it = await left_out(db, settings, request.agyary_id, rows)
         yeses = [a for a in rows if a.answer == CALLOUT_YES and not backed_out(a) and a.id not in out_of_it]
         done = _latest(await fw.rows_for(db, request_id=request_id, kinds=(fw.TYPE_WITHDRAWN,)))
-        sends = [_text_send(a, request, fw.TYPE_WITHDRAWN, fw.WITHDRAWN_TEXT) for a in yeses
+        sends = [_text_send(a, request, fw.TYPE_WITHDRAWN, fw.withdrawn_text(a.name)) for a in yeses
                  if a.how == HOW_WHATSAPP and a.phone and fw.in_window(a.answered_at, now)
                  and (fw.TYPE_WITHDRAWN, str(a.id)) not in done]
         reached = set((await db.execute(select(FuneralRequestRecipient.user_id).where(

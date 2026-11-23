@@ -1,10 +1,13 @@
 """The words of a reminder, in one place.
 
-The same message reaches a family two ways: as a wa.me message the mobed
-sends from their own WhatsApp, and automatically through the WhatsApp Business
-API. Meta only allows the second as an approved *template* - fixed text with
-numbered blanks - so the message is built as four parts that fill either one.
-That keeps what a mobed sees today exactly what the automatic sender would say.
+A reminder reaches a family two ways: as a wa.me message the mobed sends from
+their own WhatsApp, and automatically through the WhatsApp Business API. Meta
+only allows the second as an approved *template* - fixed text with numbered
+blanks - so the message is built from parts that fill the manual message and
+either template. Since the owner's word review (D11, 23 Nov 2026) the manual
+message and template v2 greet the family and close with "May the ruvan of the
+late <departed> attain Garothman Behesht."; the live template keeps its words
+until v2 is approved.
 
 The mobed has already booked these prayers, so a reminder never asks for
 anything. It says which fire temple, when, what and for whom, and that the
@@ -39,32 +42,33 @@ TEMPLATE_BODY = (
 )
 
 # The next version, to be submitted to Meta as a Utility template under this
-# name: the same four blanks in the same order (so nothing about sending
-# changes), one warm closing line that invites nothing and asks for nothing, a
-# footer saying how to stop, and a "Stop reminders" quick-reply button (its tap
-# arrives as that text, which counts as a STOP). The current template keeps
+# name, in the owner's words (D11, word review of 23 Nov 2026): the family
+# greeted by their name, the prayers and the day, and the closing line of
+# every message the app writes; a footer saying how to stop, and a "Stop
+# reminders" quick-reply button (its tap arrives as that text, which counts as
+# a STOP). Its blanks are not the current template's (``Parts.params_for``):
+#   {{1}} the family's name   {{2}} the fire temple   {{3}} the prayers
+#   {{4}} the departed        {{5}} the day, its Roj and Mah and the time,
+#   e.g. "Thu 15 Oct (Roj Hormazd, Mah Fravardin) at 9:00 am"
+#   {{6}} the departed again (Meta numbers every blank once)
+# One blank for the day, the Parsi date and the time, because the time is
+# not always set and Meta refuses an empty blank. Fixed words between every
+# two blanks, and none at the very start or end. The current template keeps
 # working until this one is APPROVED; then WHATSAPP_REMINDER_TEMPLATE is set to
-# this name - a setting, not a deploy.
+# this name - a setting, not a deploy (each reminder is planned with the blanks
+# of the template it goes on).
 TEMPLATE_V2_NAME = "memorial_reminder_v2"
 TEMPLATE_V2_BODY = (
-    "Reminder from {{1}}.\n\n"
-    "This is a notice of prayers scheduled at the fire temple.\n\n"
-    "When: {{2}} ({{3}})\n"
-    "Prayers: {{4}}\n\n"
-    "Our prayers are with your family."
+    "Sahebji {{1}}, a reminder from {{2}}: {{3}} for {{4}} on {{5}}. "
+    "May the ruvan of the late {{6}} attain Garothman Behesht."
 )
 TEMPLATE_V2_FOOTER = "To stop these reminders, reply STOP"
 TEMPLATE_V2_BUTTON = "Stop reminders"
 
-# The manual message: the same, without the STOP line. A reply to a message a
-# mobed sends from their own WhatsApp goes to the mobed, not to us, so "reply
-# STOP" would promise something we cannot honour.
-MANUAL_BODY = (
-    "Reminder from {{1}}.\n\n"
-    "This is a notice of prayers scheduled at the fire temple.\n\n"
-    "When: {{2}} ({{3}})\n"
-    "Prayers: {{4}}"
-)
+# The manual message, which the mobed sends from their own WhatsApp, in the
+# owner's words (D11, 23 Nov 2026). No STOP line: a reply to it goes to the
+# mobed, not to us, so "reply STOP" would promise something we cannot honour.
+CLOSING = "May the ruvan of the late {departed} attain Garothman Behesht."
 
 
 @dataclass(frozen=True)
@@ -73,9 +77,26 @@ class Parts:
     when: str
     parsi: str
     what: str
+    # For the manual message and the reminder template v2.
+    prayer: str = ""
+    departed: str = ""
+    day: str = ""            # "Thu 15 Oct", without "Today" or "Tomorrow"
+    at: str = ""             # "9:00 am", or "" when no time is set
+    family: str = ""         # the behdin's own name, as saved
+    mobed: str = ""          # the mobed's own name
 
     def as_params(self) -> list[str]:
+        """The current template's four blanks (memorial_reminder)."""
         return [self.agyary, self.when, self.parsi, self.what]
+
+    def v2_params(self) -> list[str]:
+        """The six blanks of memorial_reminder_v2, in order."""
+        on = f"{self.day} ({self.parsi})" + (f" at {self.at}" if self.at else "")
+        return [self.family, self.agyary, self.prayer, self.departed, on, self.departed]
+
+    def params_for(self, template_name: str) -> list[str]:
+        """The blanks of the template a reminder goes out on."""
+        return self.v2_params() if template_name == TEMPLATE_V2_NAME else self.as_params()
 
 
 def _tidy(text: str) -> str:
@@ -101,9 +122,11 @@ def _clock(t: time) -> str:
 
 
 def build_parts(
-    agyary_name: str, obs, departed: str, service_names: list[str], today: date
+    agyary_name: str, obs, departed: str, service_names: list[str], today: date, *,
+    family: str = "", mobed: str = "",
 ) -> Parts:
-    """The four blanks for ``obs`` as it reads on ``today``.
+    """The blanks for ``obs`` as it reads on ``today``: ``family`` is the
+    behdin's own name as saved, ``mobed`` the mobed's.
 
     "Tomorrow" and "Today" appear only when true; a message built for a
     further-off date just gives the date, so a mobed who taps the manual
@@ -113,12 +136,19 @@ def build_parts(
     date_text = f"{d:%a} {d.day} {d:%b}"
     when = {0: f"Today, {date_text}", 1: f"Tomorrow, {date_text}"}.get((d - today).days, date_text)
     what = _list_and(service_names) or obs.label
-    at = f" at {_clock(obs.time_of_day)}" if obs.time_of_day else ""
+    clock = _clock(obs.time_of_day) if obs.time_of_day else ""
+    at = f" at {clock}" if clock else ""
     return Parts(
         agyary=_tidy(agyary_name),
         when=when,
         parsi=parsi_text(obs),
         what=_tidy(f"{what} for {departed}{at}."),
+        prayer=_tidy(what),
+        departed=_tidy(departed),
+        day=date_text,
+        at=clock,
+        family=_tidy(family),
+        mobed=_tidy(mobed),
     )
 
 
@@ -130,7 +160,19 @@ def render(body: str, params: list[str]) -> str:
 
 
 def manual_text(parts: Parts) -> str:
-    return render(MANUAL_BODY, parts.as_params())
+    """The message the mobed sends from their own WhatsApp ("Remind on
+    WhatsApp"): "Sahebji <family>, a reminder from <mobed> of <fire temple>:",
+    the prayers and the day, and the closing line. "Sahebji, a reminder ..."
+    when the behdin's name is blank."""
+    greeting = f"Sahebji {parts.family}" if parts.family else "Sahebji"
+    sender = f"{parts.mobed} of {parts.agyary}" if parts.mobed else parts.agyary
+    at = f", at {parts.at}" if parts.at else ""
+    return (
+        f"{greeting}, a reminder from {sender}:\n\n"
+        f"{parts.prayer} for {parts.departed}\n"
+        f"{parts.when} ({parts.parsi}){at}\n\n"
+        + CLOSING.format(departed=parts.departed)
+    )
 
 
 def template_body(name: str) -> str:
@@ -140,4 +182,4 @@ def template_body(name: str) -> str:
 
 def template_text(parts: Parts, name: str = "") -> str:
     """What the family will see from the automatic sender."""
-    return render(template_body(name), parts.as_params())
+    return render(template_body(name), parts.params_for(name))

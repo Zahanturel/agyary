@@ -133,14 +133,21 @@ def _masked(phone: str) -> str:
     return f"{phone[:3]}...{phone[-2:]}" if len(phone) > 6 else "..."
 
 
-def _text_problem(agyary_name: str, departed: str, services: list[str]) -> str | None:
+def _text_problem(agyary_name: str, departed: str, services: list[str], *, family: str | None = None
+                  ) -> str | None:
     """Why this reminder's free text cannot go out, or None. The same rules as
-    where the text is typed (template_text), for anything saved before them."""
+    where the text is typed (template_text), for anything saved before them.
+    ``family``, the behdin's name, only for the template that greets them by
+    it (memorial_reminder_v2)."""
     checks = [(agyary_name, template_text.TEMPLE_MAX), (departed, template_text.DEPARTED_MAX)]
     checks += [(name, template_text.SERVICE_MAX) for name in services]
     for text_, max_len in checks:
         if template_text.problem(text_, max_len=max_len):
             return "its wording cannot be sent automatically (a temple, service or departed name)"
+    if family is not None:
+        # A blank may not be empty, and the name is text a mobed typed.
+        if not " ".join(family.split()) or template_text.problem(family, max_len=template_text.FAMILY_MAX):
+            return "its wording cannot be sent automatically (the family's name)"
     return None
 
 
@@ -231,7 +238,9 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
         services = [names.get(s.service_id, "") for s in sorted(obs.services, key=lambda s: s.service_id)
                     if names.get(s.service_id)]
 
-        why = _text_problem(agyary_name, memorial.departed_name, services)
+        greets = settings.whatsapp_reminder_template == reminder_message.TEMPLATE_V2_NAME
+        why = _text_problem(agyary_name, memorial.departed_name, services,
+                            family=customer.name if greets else None)
         if why is None and customer.phone in reminded:
             why = "only one automatic reminder goes to a number each day"
         if why is not None:
@@ -251,7 +260,8 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
                 await _record_not_sent(db, settings, obs, memorial, customer, f"{limit} was reached", now)
             continue
 
-        parts = reminder_message.build_parts(agyary_name, obs, memorial.departed_name, services, today)
+        parts = reminder_message.build_parts(agyary_name, obs, memorial.departed_name, services, today,
+                                             family=customer.name)
 
         if mode == "dry_run":
             # The loop runs every minute for two hours; say it once. The words
@@ -273,7 +283,9 @@ async def plan_tomorrow(db: AsyncSession, now: datetime, settings: Settings) -> 
                 recipient_id=customer.id,
                 notification_type=TYPE,
                 template_name=settings.whatsapp_reminder_template,
-                template_params={str(i): v for i, v in enumerate(parts.as_params(), start=1)},
+                # The blanks of the template it goes on (v2's are not v1's).
+                template_params={str(i): v for i, v in enumerate(
+                    parts.params_for(settings.whatsapp_reminder_template), start=1)},
                 memorial_observance_id=obs.id,
                 scheduled_at=now,
                 created_at=now,
