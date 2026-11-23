@@ -182,13 +182,17 @@ async def set_reminders(
     *,
     confirm_restart: bool = False,
     consent_version: str | None = None,
+    lift_number: bool = False,
     now: datetime | None = None,
 ) -> dict:
     """Turn reminders on or off for one of this mobed's behdins.
 
     Lifting a STOP ("they asked me to") lifts it for this mobed's record only:
     the person asked this mobed. Every other mobed's record of the number stays
-    stopped, and so does the number itself for anyone who adds it later."""
+    stopped, and so does the number itself for anyone who adds it later - unless
+    the mobed is the panthaky (``lift_number``, owner 24 Nov 2026: the behdin can
+    stop, and once the panthaky starts it, it starts again): then the number's
+    own STOP goes too, so prayer requests can reach it as well."""
     now = now or _now()
     if customer.owner_user_id != user_id:
         raise ReminderError("That behdin is not in your book.", "not_in_book")
@@ -208,6 +212,10 @@ async def set_reminders(
                     "stopped",
                 )
             customer.reminders_stopped_at = None
+            if lift_number:
+                opt_out = await db.get(ReminderOptOut, customer.phone)
+                if opt_out is not None:
+                    await db.delete(opt_out)
         customer.reminders_enabled = True
         customer.reminders_enabled_at = now
         customer.reminders_consent_version = CONSENT_VERSION

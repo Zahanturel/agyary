@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.api.routes.mobed import _require_behdin, get_current_account, get_current_user
 from agyary.core.database import get_db
 from agyary.models import AppNotification, User
-from agyary.services import reminders
+from agyary.services import prayer_callout, reminders
 
 router = APIRouter(prefix="/api/mobed", tags=["reminders"])
 
@@ -47,6 +47,8 @@ async def set_behdin_reminders(
         state = await reminders.set_reminders(
             db, user.id, customer, payload.enabled, confirm_restart=payload.confirm_restart,
             consent_version=payload.consent_version,
+            # The panthaky's start clears the number's STOP too (owner, 24 Nov 2026).
+            lift_number=await prayer_callout.is_confirmed_panthaky(db, agyary_id, user.id),
         )
     except reminders.ReminderError as exc:
         status = 409 if exc.code in ("stopped", "stale_consent") else 400

@@ -616,9 +616,14 @@ export async function renderBehdinDetail({ id }) {
       } finally {
         box.disabled = false;
       }
+      // Someone who replied STOP is asked about once: the same sheet carries the warning, and its yes
+      // is also the "they asked me to" (owner, 24 Nov 2026: it was two prompts, one after the other).
+      const stoppedBefore = !!reminders.stopped_at;
       note.innerHTML = `<div class="card" style="margin:8px 0 0">
           <p style="margin:0 0 8px"><b>Before you turn this on, please ask ${esc(record.name)}:</b></p>
           <p style="margin:0 0 12px">"${esc(wording.text)}"</p>
+          ${stoppedBefore ? `<p style="margin:0 0 12px"><b>${esc(record.name)} replied STOP on
+            ${esc(gregShort(istYmd(reminders.stopped_at)))}.</b> Turn this on only if they have asked you to.</p>` : ""}
           <div class="row tight">
             <button class="small" id="bdConsentYes">They said yes</button>
             <button class="ghost small" id="bdConsentNo">Cancel</button>
@@ -626,7 +631,7 @@ export async function renderBehdinDetail({ id }) {
         </div>`;
       document.getElementById("bdConsentYes").onclick = (ev) => {
         consentVersion = wording.version;
-        apply(true, false, ev.currentTarget);
+        apply(true, stoppedBefore, ev.currentTarget);
       };
       document.getElementById("bdConsentNo").onclick = () => { box.checked = false; paintNote(); };
     };

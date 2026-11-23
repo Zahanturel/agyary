@@ -346,6 +346,44 @@ async def add_contact(
     return existing
 
 
+NOT_STOPPED = "WhatsApp is not stopped for them."
+
+
+async def start_again(db: AsyncSession, settings: Settings, agyary_id: int, key: str, user: User) -> str:
+    """The panthaky turns WhatsApp back on for a number that replied STOP (owner, 24 Nov 2026:
+    "the behdin can stop, but once the panthaky starts it, it starts again"). ``key`` is the
+    row's own key on the Mobeds page ("u12" an app mobed, "c3" one added by hand), so it can only
+    be someone on this fire temple's list, whoever the number belongs to. Only the number's STOP
+    is lifted: every mobed's own record of it stays as it is, and they can reply STOP again any
+    time. Returns the name, for the words. The route has checked the panthaky."""
+    from agyary.services import panthaky   # here: as in our_mobeds
+
+    phone = name = None
+    kind, raw = key[:1], key[1:]
+    if kind in ("u", "c") and raw.isdigit():
+        if kind == "u":
+            row = (await db.execute(
+                select(User).join(AgyaryUser, AgyaryUser.user_id == User.id).where(
+                    User.id == int(raw), AgyaryUser.agyary_id == agyary_id, AgyaryUser.is_active.is_(True),
+                    User.is_active.is_(True), User.account_kind == ACCOUNT_MOBED, panthaky.counts_clause(settings))
+            )).scalar_one_or_none()
+            if row is not None:
+                phone, name = row.phone, row.name
+        else:
+            contact = await db.get(AgyaryMobedContact, int(raw))
+            if contact is not None and contact.agyary_id == agyary_id and contact.is_active:
+                phone, name = contact.phone, contact.name
+    if phone is None:
+        raise CalloutError("That mobed could not be found on the list.", status=404)
+    opt_out = await db.get(ReminderOptOut, phone)
+    if opt_out is None:
+        raise CalloutError(NOT_STOPPED, status=400)
+    await db.delete(opt_out)
+    await db.flush()
+    logger.info("STOP of a number on fire temple %s's list lifted by its panthaky, user %s", agyary_id, user.id)
+    return name
+
+
 async def rename_contact(db: AsyncSession, agyary_id: int, contact_id: int, name: str, user: User) -> AgyaryMobedContact:
     """Change the name of a mobed added by hand (the pen on the Mobeds page; owner,
     24 Nov 2026). The number stays: a new number is a different person's, so it

@@ -241,3 +241,59 @@ async def test_the_pen_renames_a_mobed_and_a_new_number_needs_the_tick(client, d
     r = await client.put(path, json={"name": "X", "phone": NEW, "agreed": True}, headers=await _as(client, MOBED))
     assert r.status_code == 404
     assert (await db.execute(select(Notification.id))).first() is None
+
+
+async def test_the_panthaky_turns_whatsapp_back_on_for_a_number_that_replied_stop(client, db, seeded):
+    """"The behdin can stop, but once the panthaky starts it, it starts again" (owner, 24 Nov 2026):
+    the Mobeds page's Turn WhatsApp back on clears the number's STOP; only a confirmed panthaky of
+    that fire temple reaches it, and only for someone on its list."""
+    aid = seeded["agyary_id"]
+    ids = await _people(client, db, aid)
+    panthaky = await _as(client, PANTHAKY)
+    page = (await client.get(_page(aid), headers=panthaky)).json()
+    stopped = next(m for m in page["mobeds"] if m["name"] == "Er. Stopped")
+    assert stopped["stopped"] and stopped["key"].startswith("u")
+    start = f"{_page(aid)}/{stopped['key']}/start"
+
+    # A plain mobed there, and another fire temple's panthaky, get the 404 of a list that is not there.
+    assert (await client.post(start, headers=await _as(client, MOBED))).status_code == 404
+    assert (await client.post(start, headers=await _as(client, OTHER_PANTHAKY))).status_code == 404
+
+    r = await client.post(start, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert "Er. Stopped" in r.json()["done"]["message"]
+    now_stopped = {m["name"]: m["stopped"] for m in r.json()["mobeds"]}
+    assert now_stopped["Er. Stopped"] is False
+    assert (await db.get(ReminderOptOut, STOPPED)) is None
+
+    # Not stopped any more: nothing to start. A key that is not on this list: 404.
+    assert (await client.post(start, headers=panthaky)).status_code == 400
+    assert (await client.post(f"{_page(aid)}/c{ids['contact']}/start", headers=panthaky)).status_code == 404
+    assert (await client.post(f"{_page(aid)}/zz/start", headers=panthaky)).status_code == 404
+    # One added by hand, who replied STOP, can be started again the same way.
+    db.add(ReminderOptOut(phone=LISTED, stopped_at=datetime.now(timezone.utc)))
+    await db.commit()
+    r = await client.post(f"{_page(aid)}/c{ids['listed']}/start", headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert (await db.get(ReminderOptOut, LISTED)) is None
+    assert (await db.execute(select(Notification.id))).first() is None   # nothing is sent by it
+
+
+async def test_the_panthakys_they_asked_me_to_clears_the_numbers_stop_and_a_plain_mobeds_does_not(
+        client, db, seeded):
+    from agyary.services import reminders
+
+    aid = seeded["agyary_id"]
+    BEHDIN = "+919822200341"
+    for who, lifts in ((PANTHAKY, True), (MOBED, False)):
+        headers = await _as(client, who)
+        made = await client.post(f"/api/mobed/agyaries/{aid}/behdins", json={"name": "Test Behdin", "phone": BEHDIN},
+                                 headers=headers)
+        assert made.status_code == 200, made.text
+        url = f"/api/mobed/agyaries/{aid}/behdins/{made.json()['id']}/reminders"
+        await reminders.record_stop(db, BEHDIN)
+        await db.commit()
+        r = await client.put(url, json={"enabled": True, "confirm_restart": True}, headers=headers)
+        assert r.status_code == 200, r.text
+        db.expire_all()
+        assert ((await db.get(ReminderOptOut, BEHDIN)) is None) is lifts, who

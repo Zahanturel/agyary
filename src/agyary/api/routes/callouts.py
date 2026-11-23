@@ -139,6 +139,24 @@ async def edit_our_mobed(agyary_id: int, contact_id: int, payload: ContactIn, db
     return {**await _list(db, user, agyary), "done": {"message": words, "places_freed": len(freed)}}
 
 
+@router.post("/agyaries/{agyary_id}/our-mobeds/{key}/start")
+async def start_our_mobed_again(agyary_id: int, key: str, db: AsyncSession = Depends(get_db),
+                                user: User = Depends(get_current_user)) -> dict:
+    """"Turn WhatsApp back on" for someone on the list who replied STOP (owner, 24 Nov 2026): the
+    panthaky's choice, since they asked them. The person can reply STOP again any time."""
+    agyary = await _managed_agyary(db, user, agyary_id)
+    rate_limit.enforce_key(f"our_mobeds_member:{user.id}", max_requests=60, window_seconds=3600)
+    try:
+        name = await prayer_callout.start_again(db, get_settings(), agyary.id, key, user)
+    except prayer_callout.CalloutError as exc:
+        raise _error(exc) from exc
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(agyary)
+    return {**await _list(db, user, agyary),
+            "done": {"message": f"WhatsApp is on again for {name}. They can reply STOP any time."}}
+
+
 @router.delete("/agyaries/{agyary_id}/our-mobeds/{contact_id}")
 async def remove_our_mobed(agyary_id: int, contact_id: int, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_user)) -> dict:

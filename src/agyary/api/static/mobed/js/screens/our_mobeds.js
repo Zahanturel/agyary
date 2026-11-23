@@ -32,7 +32,7 @@
  * Only that fire temple's confirmed panthakys (and the admin) see any of it.
  */
 
-import { ourMobeds, addOurMobed, editOurMobed, removeOurMobed, memberRequests } from "../api.js";
+import { ourMobeds, addOurMobed, editOurMobed, removeOurMobed, startOurMobed, memberRequests } from "../api.js";
 import { currentAgyary } from "../state.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
@@ -81,6 +81,8 @@ function personHtml(m) {
       <div class="bh-main"><div>${esc(m.name)}</div>
         ${lines.map(l => `<div class="addr">${l}</div>`).join("")}
         ${state ? `<div class="meta"><b>${esc(state)}</b></div>` : ""}
+        ${m.stopped ? `<button type="button" class="secondary small" data-start="${esc(m.key)}"
+          style="margin-top:8px">Turn WhatsApp back on</button>` : ""}
         ${reachHtml(m)}
       </div>
       ${pen}${cross}
@@ -148,6 +150,9 @@ function draw(agyary, got) {
   mainEl.querySelectorAll("[data-edit]").forEach(btn => {
     btn.onclick = () => openForm(agyary, got, got.mobeds.find(m => m.kind === "contact" && String(m.id) === btn.dataset.edit));
   });
+  mainEl.querySelectorAll("[data-start]").forEach(btn => {
+    btn.onclick = () => confirmStart(agyary, got.mobeds.find(m => m.key === btn.dataset.start));
+  });
   mainEl.querySelectorAll("[data-remove]").forEach(btn => {
     btn.onclick = () => confirmRemove(agyary, got.mobeds.find(m => m.kind === "contact" && String(m.id) === btn.dataset.remove));
   });
@@ -174,6 +179,35 @@ async function member(agyary, userId, what, btn) {
   }
   draw(agyary, res);
   showInfo(res.done.message);
+}
+
+/** Turn WhatsApp back on for someone who replied STOP (owner, 24 Nov 2026): the panthaky's call, since they
+ *  asked. The person can reply STOP again any time. */
+function confirmStart(agyary, m) {
+  if (!m) return;
+  const sheet = openSheet({
+    title: `Turn WhatsApp back on for ${m.name}?`,
+    html: `<p class="meta" style="margin-top:0">They replied STOP before. Turn it back on only if they have asked
+        you to. They can reply STOP again any time.</p>
+      <div class="stack" style="margin-top:12px">
+        <button type="button" data-yes>Yes, turn it on</button>
+        <button type="button" class="ghost" data-no>Cancel</button>
+      </div>`,
+  });
+  sheet.body.querySelector("[data-no]").onclick = sheet.close;
+  sheet.body.querySelector("[data-yes]").onclick = async (ev) => {
+    ev.currentTarget.disabled = true;
+    let res;
+    try {
+      res = await startOurMobed(agyary.id, m.key);
+    } catch (e) {
+      sheet.close();
+      return showError(e.message);
+    }
+    sheet.close();
+    draw(agyary, res);
+    showInfo(res.done.message);
+  };
 }
 
 function confirmTakeOff(agyary, got, m) {
