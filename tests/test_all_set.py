@@ -571,7 +571,9 @@ async def test_the_panthaky_who_prays_gets_the_details_not_the_panthakys_message
     assert meta.templates("prayers_all_set_panthaky") == []
     (details,) = meta.templates("prayer_details_mobed_v3")
     assert _e164(details) == PANTHAKY
-    assert _body(details)[6:] == ["Er. Hormuz Dadachanji (+91 9800000001)"] * 2
+    # Going: the panthaky; the contact is never the person it goes to, so with nobody else
+    # going it is the fire temple's own name.
+    assert _body(details)[6:] == ["Er. Hormuz Dadachanji (+91 9800000001)", "Goti Adarian"]
 
 
 async def test_the_family_only_with_their_agreement_and_a_stop_is_honoured(client, db, seeded, meta, pushes, live):
@@ -700,6 +702,10 @@ def test_template_6_never_names_the_mobed_it_goes_to_as_their_own_contact():
     assert fw.contact_people([], going, to=second.phone, fire_temple="Goti Adarian") == [first]
     assert fw.contact_people([], [first], to=first.phone, fire_temple="Goti Adarian") == [fw.Person("Goti Adarian")]
     assert fw.contact_people([head], going, to=first.phone, fire_temple="Goti Adarian") == [head]
+    # A panthaky who prays is not their own contact either: the first other mobed going, else the
+    # fire temple's own name.
+    assert fw.contact_people([head], [head, first], to=head.phone, fire_temple="Goti Adarian") == [first]
+    assert fw.contact_people([head], [head], to=head.phone, fire_temple="Goti Adarian") == [fw.Person("Goti Adarian")]
     record = SimpleNamespace(id=1, departed_title="behdin", departed_name="Rustom", departed_parent_name="Jamshed",
                              geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None,
                              family_contact_name="Test Family", family_contact_phone="+919800000009")

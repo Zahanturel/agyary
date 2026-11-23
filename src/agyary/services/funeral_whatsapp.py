@@ -593,16 +593,19 @@ def contact_people(panthakys: list[Person], going: list[Person], *, to: str | No
     in the app, the first mobed going.
 
     Template 6 goes to each mobed going (``to``, the number it goes to), and
-    never names them as their own contact: the first mobed going is given the
-    next one instead, and with nobody else going, the fire temple's own name
-    (``fire_temple``) with no number."""
-    if panthakys:
-        return list(panthakys)
-    if to is None:
-        return list(going[:1])
-    others = [p for p in going if p.phone != to]
+    never names them as their own contact - a panthaky who prays included: the
+    other panthakys, else the first other mobed going, and with nobody else,
+    the fire temple's own name (``fire_temple``) with no number."""
+    def not_them(people: list[Person]) -> list[Person]:
+        return [p for p in people if to is None or p.phone != to]
+
+    if panthakys and not_them(panthakys):
+        return not_them(panthakys)
+    others = not_them(going)
     if others:
         return others[:1]
+    if to is None:
+        return []
     return [Person(fire_temple)] if fire_temple else []
 
 
