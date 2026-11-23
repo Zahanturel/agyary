@@ -961,3 +961,45 @@ async def test_the_dasmu_and_chhamsi_migration_relabels_only_those_days_and_come
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_state_names_migration_changes_only_the_exact_token_and_comes_off_cleanly():
+    """e9f0a1b2c3d8 (D11, the owner's word review of 23 Nov 2026): a fire temple's address
+    that is, or ends in ", ", one of the list's old state names (Gujerat, Rajashtan, A.P,
+    A.P., MP, UP) reads Gujarat, Rajasthan, Andhra Pradesh, Madhya Pradesh or Uttar Pradesh;
+    the same letters anywhere else, the name and the city are untouched; the downgrade puts
+    the old names back, exact tokens only ("A.P." comes back as "A.P", as in the seed list)."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "d8e9f0a1b2c7"))
+        rows = [
+            ("Udwada Town, Gujerat", "Udwada Town, Gujarat"),
+            ("Gujerat", "Gujarat"),
+            ("Tilak Road, A.P", "Tilak Road, Andhra Pradesh"),
+            ("M G Road, A.P.", "M G Road, Andhra Pradesh"),
+            ("397, Centre Street, MP", "397, Centre Street, Madhya Pradesh"),
+            ("M G Rd, Civil Lines, UP", "M G Rd, Civil Lines, Uttar Pradesh"),
+            ("Shri Ambaji Road, Rajashtan", "Shri Ambaji Road, Rajasthan"),
+            # Not the exact token: left as they are.
+            ("UP Market Road, Maharashtra", "UP Market Road, Maharashtra"),
+            ("Gujerat Lane, Tardeo", "Gujerat Lane, Tardeo"),
+            ("Near MP", "Near MP"),
+            ("Tarota Bazar,Gujerat", "Tarota Bazar,Gujerat"),
+            (None, None),
+        ]
+        for i, (address, _) in enumerate(rows):
+            await _scratch_execute("INSERT INTO agyaries (name, city, address) VALUES (:n, 'Gujerat', :a)",
+                                   {"n": f"Gujerat Adarian {i} (test)", "a": address})
+        read = "SELECT name, city, address FROM agyaries ORDER BY id"
+        _ok(_alembic("upgrade", "head"))
+
+        assert await _scratch_execute(read) == [
+            (f"Gujerat Adarian {i} (test)", "Gujerat", new) for i, (_, new) in enumerate(rows)]
+
+        _ok(_alembic("downgrade", "d8e9f0a1b2c7"))
+        back = [old if old != "M G Road, A.P." else "M G Road, A.P" for old, _ in rows]
+        assert await _scratch_execute(read) == [
+            (f"Gujerat Adarian {i} (test)", "Gujerat", old) for i, old in enumerate(back)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
