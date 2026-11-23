@@ -122,7 +122,7 @@ export async function renderCalendarScreen(params) {
   const redirect = applyCalendarRoute(state.calendar, params);
   if (redirect) return navigate(redirect, { replace: true });
   state.calendarView = "events";
-  mainEl.innerHTML = `${switchHtml("events")}<div id="calReminders"></div><div id="cal"></div>`;
+  mainEl.innerHTML = `<div id="calReminders"></div><div id="cal"></div>${switchHtml("events")}`;
   wireSwitch(mainEl);
   showReminderNotice();
   await draw();

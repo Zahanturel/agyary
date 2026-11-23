@@ -120,7 +120,7 @@ export async function renderMachiCalendarScreen(params) {
   const redirect = applyCalendarRoute(state.calendar, params, "board");
   if (redirect) return navigate(redirect, { replace: true });
   state.calendarView = "machi";
-  mainEl.innerHTML = `${switchHtml("machi")}<div id="cal"></div>`;
+  mainEl.innerHTML = `<div id="cal"></div>${switchHtml("machi")}`;
   wireSwitch(mainEl);
   await draw();
 }

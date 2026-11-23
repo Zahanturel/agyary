@@ -59,7 +59,7 @@ Migrations added by R3.1, in order (each with a working downgrade, proved by
 | `f4a5b6c7d8e2` | `e3f4a5b6c7d1` | `funeral_requests.no_answer_alert_at` |
 | `a5b6c7d8e9f4` | `f4a5b6c7d8e2` | `funeral_requests.nobody_could` (head) |
 
-App version: **v89** locally (24 Nov 2026, owner: Mobeds is a tab for a panthaky with a pen and a cross like Behdins; Machi and Calendar are one tab with an Events/Machi switch; Prayer requests is a card in Settings with radio choices; text size Regular, Large, Extra large; v88 is live) (`CACHE_NAME = "mobed-shell-v89"` in `mobed-sw.js`; Menu -> App version).
+App version: **v90** locally (24 Nov 2026, owner: Mobeds is a tab for a panthaky with a pen and a cross like Behdins; Machi and Calendar are one tab with an Events/Machi switch; Prayer requests is a card in Settings with radio choices; text size Regular, Large, Extra large; v89 is live; v90 moves the Events/Machi switch to the bottom) (`CACHE_NAME = "mobed-shell-v90"` in `mobed-sw.js`; Menu -> App version).
 The owner's checklist for trying it is [phase2-verify-checklist.md](phase2-verify-checklist.md).
 
 ---

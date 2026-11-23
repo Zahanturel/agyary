@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The switch at the top of the Calendar tab: Events or Machi (owner, 24 Nov
+ * The switch at the bottom of the Calendar tab: Events or Machi (owner, 24 Nov
  * 2026). Machi and Calendar used to be two bottom tabs; they are one now, with
  * this switch, which leaves room in the bar for Behdins, Requests and Mobeds.
  * Both views share one day (state.calendar), so the same day stays on screen
