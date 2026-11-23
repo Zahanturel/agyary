@@ -31,12 +31,11 @@ import {
 } from "../api.js";
 import { openBehdinSheet, familyLineHtml } from "./manager_behdins.js";
 import { agyariRowHtml, confirmSend } from "./manager_record.js";
-import { canPickContacts, pickContacts, fillFromContact } from "../behdin_add.js";
 import { state } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, flashInfo,
 } from "../ui.js";
-import { esc, gregLabel, gregShort, todayIst, phoneField, readPhone, MAH_NAMES_JS } from "../util.js";
+import { esc, gregLabel, gregShort, todayIst, MAH_NAMES_JS } from "../util.js";
 import { navigate, back, navGuard, returnTo } from "../router.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
 import { managerHash, managerPlaces } from "../acting.js";
@@ -121,8 +120,9 @@ function problemsOf(d, n) {
   const out = [];
   const bad = (target, message) => out.push({ target, message });
   if (n === 1) {
-    if (!d.contactName.trim()) bad("#frContact", "Please enter the family contact's name.");
-    if (!d.contactPhone) bad("#frPhoneBox .phone-field", "Please enter the family contact's number.");
+    if (!d.contactName.trim() || !d.contactPhone) {
+      bad("#frFamilyBox", "Please choose the family from your book, or add a new behdin.");
+    }
   } else if (n === 2) {
     if (d.deathBy === "parsi") {
       if (!d.deathRoj) bad("#frDeathRoj", "Please choose the Roj of the death.");
@@ -147,7 +147,7 @@ function problemsOf(d, n) {
 /** The step a field the server names belongs to, and what to mark there. */
 function whereIs(field, d) {
   const at = {
-    family_contact_name: [1, "#frContact"], family_contact_phone: [1, "#frPhoneBox .phone-field"],
+    family_contact_name: [1, "#frFamilyBox"], family_contact_phone: [1, "#frFamilyBox"],
     departed_title: [2, "#frTitle"], departed_name: [2, "#frName"], departed_parent_name: [2, "#frParent"],
     calendar: [2, "#frCalendar"], death: [2, d.deathBy === "parsi" ? "#frDeathRoj" : "#frDeathDate"],
     obsequies: [3, "#frObsequies"], geh_saarnu_date: [3, "#frGsDate"], geh_saarnu_geh: [3, "#frGsGeh"],
@@ -180,20 +180,19 @@ function stepOneHtml(d, editing) {
       ${places.length > 1 ? `<label for="frPlace">Place</label>
         <select id="frPlace" ${editing || d.recordId ? "disabled" : ""}>${places.map(p =>
           `<option value="${p.id}" ${d.placeId === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>` : ""}
-      <p class="meta" style="margin:0 0 8px">Choose them from your book of behdins, import them from your contacts, or
-        type their name and number. The family's number is shown to a fire temple only once it accepts.</p>
-      <input type="text" id="frFamilySearch" placeholder="Search your book by name or number" autocomplete="off">
-      <div id="frFamilyResults" style="margin-top:8px"></div>
-      <div class="row tight" style="margin-top:8px;flex-wrap:wrap">
-        ${canPickContacts() ? `<button type="button" class="secondary small" id="frImport">Import from contacts</button>` : ""}
-        <button type="button" class="secondary small" id="frFamilyAdd">Add a new behdin</button>
+      <div id="frFamilyBox">
+        <div id="frChosen"></div>
+        <div id="frPick">
+          <p class="meta" style="margin:0 0 8px">Choose the family contact from your behdins. The family's number is
+            shown to a fire temple only once it accepts.</p>
+          <input type="text" id="frFamilySearch" placeholder="Search your behdins by name or number" autocomplete="off">
+          <div id="frFamilyResults" style="margin-top:8px"></div>
+          <div class="row tight" style="margin-top:8px">
+            <button type="button" class="secondary small" id="frFamilyAdd">Add a new behdin</button>
+          </div>
+        </div>
       </div>
       <p class="meta" id="frFamilyNote" role="status" style="margin:6px 0 0"></p>
-
-      <label for="frContact" style="margin-top:16px">Family contact: name</label>
-      <input type="text" id="frContact" autocomplete="off" maxlength="100" value="${esc(d.contactName)}">
-      <label for="frPhone">Family contact: number</label>
-      <div id="frPhoneBox">${phoneField("frPhone", d.contactPhone || "")}</div>
     </div>`;
 }
 
@@ -337,10 +336,6 @@ async function renderFlow(rec) {
     const next = $("#frNext");
     if (!next) return;
     next.onclick = async () => {
-      if (step === 1) {
-        d.contactName = $("#frContact").value;
-        d.contactPhone = readPhone("frPhone") || "";
-      }
       const problems = problemsOf(d, step);
       if (problems.length) return flagProblems(root, problems);
       clearProblems(root);
@@ -386,32 +381,44 @@ async function renderFlow(rec) {
 // --- Step 1: the family ----------------------------------------------------------------
 
 function wireFamily($, d, keep) {
-  const nameEl = $("#frContact");
-  const phoneEl = $("#frPhone");
-  const ccEl = $("#frPhone_cc");
   const note = $("#frFamilyNote");
-  const sync = () => { d.contactName = nameEl.value; d.contactPhone = readPhone("frPhone") || ""; keep(); };
-  [nameEl, phoneEl, ccEl].forEach(el => el.addEventListener("input", sync));
+  const chosen = $("#frChosen");
+  const pick = $("#frPick");
   if ($("#frPlace")) $("#frPlace").onchange = (e) => { d.placeId = Number(e.target.value); keep(); paintBook(); };
 
+  /** The family contact once chosen (a behdin from the book); "Choose someone else" goes back to the list. */
+  function paintChosen() {
+    const has = !!(d.contactName && d.contactPhone);
+    pick.classList.toggle("hidden", has);
+    if (!has) { chosen.innerHTML = ""; return; }
+    chosen.innerHTML = `<p class="meta" style="margin:0 0 8px">The family contact:</p>
+      <div class="search-result" style="cursor:default"><strong>${esc(d.contactName)}</strong>
+        <div class="addr">${esc(d.contactPhone)}</div></div>
+      <button type="button" class="ghost small" id="frChange" style="margin-top:8px">Choose someone else</button>`;
+    $("#frChange").onclick = () => {
+      d.contactName = ""; d.contactPhone = "";
+      note.textContent = "";
+      keep();
+      paintChosen();
+      paintBook();
+    };
+  }
+
   const use = (b) => {
-    nameEl.value = b.name;
     d.contactName = b.name;
     d.contactPhone = b.phone;
-    // The phone field splits the country code from the number itself.
-    const box = $("#frPhoneBox");
-    box.innerHTML = phoneField("frPhone", b.phone);
-    box.querySelectorAll("input").forEach(el => el.addEventListener("input", sync));
-    note.textContent = `${b.name}, from your book.`;
+    note.textContent = "";
     clearProblems($("#frCard"));
     keep();
+    paintChosen();
   };
 
-  // The book: the first people when nothing is typed, so the box is never blank.
+  // The book: the first people when nothing is typed, so the list is never blank.
   const input = $("#frFamilySearch");
   const results = $("#frFamilyResults");
   let timer, token = 0;
   async function paintBook() {
+    if (!input.isConnected) return;
     const q = input.value.trim();
     const mine = ++token;
     let found;
@@ -424,8 +431,8 @@ function wireFamily($, d, keep) {
     if (mine !== token || !results.isConnected) return;
     const shown = q ? found.behdins : found.behdins.slice(0, BOOK_FIRST);
     if (!shown.length) {
-      results.innerHTML = `<p class="meta" style="margin:0">${q ? `Nobody in your book for “${esc(q)}”. Add them as a new behdin.`
-        : "Your book of behdins is empty. Add the family as a new behdin, or type their name and number below."}</p>`;
+      results.innerHTML = `<p class="meta" style="margin:0">${q ? `Nobody in your behdins for “${esc(q)}”. Add them as a new behdin.`
+        : "You have no behdins yet. Tap Add a new behdin."}</p>`;
       return;
     }
     results.innerHTML = shown.map((b, i) => `<div class="search-result" data-i="${i}">${familyLineHtml(b)}</div>`).join("")
@@ -433,26 +440,19 @@ function wireFamily($, d, keep) {
     results.querySelectorAll("[data-i]").forEach(row => { row.onclick = () => use(shown[+row.dataset.i]); });
   }
   input.oninput = () => { clearTimeout(timer); timer = setTimeout(paintBook, 250); };
-  paintBook();
 
-  const imp = $("#frImport");
-  if (imp) {
-    imp.onclick = async () => {
-      const [contact] = await pickContacts({ multiple: false });
-      if (!contact || !nameEl.isConnected) return;
-      fillFromContact(contact, { nameId: "frContact", phoneId: "frPhone" });
-      sync();
-      note.textContent = contact.name ? `${contact.name}, from your contacts. Please check the name and number.` : "";
-    };
-  }
+  // Add a new behdin: the sheet with Import from contacts, name and number (manager_behdins.js).
   $("#frFamilyAdd").onclick = () => {
     const typed = input.value.trim();
     openBehdinSheet({
       placeId: d.placeId,
-      prefill: { name: typed && !/\d/.test(typed) ? typed : nameEl.value.trim(), phone: readPhone("frPhone") || "" },
+      prefill: { name: typed && !/\d/.test(typed) ? typed : "", phone: "" },
       onSaved: (b) => { use(b); showInfo(`${b.name} is in your book of behdins.`); },
     });
   };
+
+  paintChosen();
+  if (!(d.contactName && d.contactPhone)) paintBook();
 }
 
 // --- Step 2: the departed --------------------------------------------------------------
