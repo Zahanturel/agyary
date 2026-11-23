@@ -409,12 +409,26 @@ async def suggested_agyaries(
 ) -> dict:
     """The fire temples to suggest for this record: the family's preferred one
     first (or, if none was chosen, their usual one from the place's book of
-    behdins), then within 500 km of the place, nearest first, each saying
-    whether a request would reach anyone there."""
+    behdins), then every other fire temple that has someone in the app, nearest
+    first where it has a pin and by town where not (D12), each saying how a
+    request would reach them."""
     record = await _own_record(db, acting, record_id)
     place = await db.get(FuneralPlace, record.funeral_place_id)
     first = record.preferred_agyary_id or await funeral_book.usual_agyari_of(
         db, record.funeral_place_id, record.family_contact_phone)
+    return await funeral_requests.suggested(db, get_settings(), place, first)
+
+
+@router.get("/manager/agyaries/suggested")
+async def suggested_agyaries_for_family(
+    place_id: int | None = Query(default=None), phone: str = Query(default="", max_length=40),
+    db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager),
+) -> dict:
+    """The same list as for a record, before the record is saved (D12: the
+    fire temple is chosen on the last of four steps): the family's usual fire
+    temple from the place's book (by their ``phone``) first, then the rest."""
+    place = _one_place(acting, place_id)
+    first = await funeral_book.usual_agyari_of(db, place.id, phone) if phone else None
     return await funeral_requests.suggested(db, get_settings(), place, first)
 
 

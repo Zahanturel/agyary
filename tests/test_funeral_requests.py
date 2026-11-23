@@ -124,6 +124,26 @@ async def test_the_familys_usual_fire_temple_is_first_if_someone_there_is_in_the
     assert nowhere.id not in [r["id"] for r in rows] and not any(r["preferred"] for r in rows)
 
 
+async def test_the_list_is_there_before_the_record_is_saved_with_the_books_usual_fire_temple_first(client, db, seeded):
+    """D12: the fire temple is chosen on the last of four steps, before a record exists."""
+    near, navsari, empty, delhi, nowhere = await _temples(db)
+    headers, _ = await manager(client, db)
+    await client.post("/api/mobed/manager/behdins", json={"name": "Test Family", "phone": FAMILY,
+                                                        "usual_agyary_id": navsari.id}, headers=headers)
+    got = (await client.get("/api/mobed/manager/agyaries/suggested", headers=headers)).json()
+    assert got["place_has_position"] is True and got["whatsapp_on"] in (True, False)
+    assert [r["name"] for r in got["agyaries"]][:2] == ["Near Agyari (test)", "Navsari Agyari (test)"]
+    assert not any(r["preferred"] for r in got["agyaries"])
+    got = (await client.get(f"/api/mobed/manager/agyaries/suggested?phone={FAMILY.replace('+', '%2B')}",
+                            headers=headers)).json()
+    assert got["agyaries"][0]["id"] == navsari.id and got["agyaries"][0]["preferred"] is True
+    assert [r["id"] for r in got["agyaries"]].count(navsari.id) == 1
+    other_place = await place(db, "Prayer hall (test)", kind="prayer_hall")
+    other, _ = await manager(client, db, phone="+919911100072", name="Other Manager", at=other_place)
+    mine = (await client.get("/api/mobed/manager/place", headers=headers)).json()["places"][0]["id"]
+    assert (await client.get(f"/api/mobed/manager/agyaries/suggested?place_id={mine}", headers=other)).status_code == 404
+
+
 async def test_search_all_finds_any_fire_temple_by_name_or_town(client, db, seeded):
     await _temples(db)
     headers, _ = await manager(client, db)
