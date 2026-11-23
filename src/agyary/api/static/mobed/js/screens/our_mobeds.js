@@ -46,10 +46,11 @@ const sentence = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 function reachHtml(m) {
   if (m.is_me || !m.phone) return "";
   const digits = String(m.phone).replace(/\D/g, "");
-  return `<div class="row" style="margin-top:8px">
-      <a class="button secondary" href="tel:${esc(m.phone)}" aria-label="Call ${esc(m.name)}">Call</a>
+  // The row's overflow-wrap is for long names; a button's own word never breaks ("WhatsAp/p" at 375 px).
+  return `<div class="row" style="margin-top:8px;overflow-wrap:normal">
+      <a class="button secondary" href="tel:${esc(m.phone)}" aria-label="Call ${esc(m.name)}" style="white-space:nowrap">Call</a>
       <a class="button secondary" href="https://wa.me/${esc(digits)}" target="_blank" rel="noopener"
-        aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
+        aria-label="WhatsApp ${esc(m.name)}" style="white-space:nowrap">WhatsApp</a>
     </div>`;
 }
 
