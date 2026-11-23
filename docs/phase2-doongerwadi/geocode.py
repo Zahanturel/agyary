@@ -9,7 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 CACHE = HERE / "geocache.json"
 
-# The list's state names were corrected on 23 Nov 2026 (Gujarat, Rajasthan, Andhra Pradesh,
+# The list's state names were corrected on 23 Nov 2026 (Gujarat, Rajasthan, Telangana,
 # Madhya Pradesh, Uttar Pradesh); the old spellings are kept so an older copy still reads.
 # Hyderabad and Secunderabad have been in Telangana since 2014, which is what the map knows.
 STATE_FIX = {"Gujerat": "Gujarat", "A.P": "Telangana", "Andhra Pradesh": "Telangana", "MP": "Madhya Pradesh",

@@ -1,8 +1,9 @@
 """agyaries: the fire temple list's state names, spelled out and corrected
 
 DECISIONS D11, the owner's word review (23 Nov 2026): the fire temple list says
-Gujarat (not "Gujerat"), Rajasthan (not "Rajashtan"), Andhra Pradesh (not "A.P"
-or "A.P."), Madhya Pradesh (not "MP") and Uttar Pradesh (not "UP").
+Gujarat (not "Gujerat"), Rajasthan (not "Rajashtan"), Telangana (not "A.P" or
+"A.P.": the list's three are in Hyderabad and Secunderabad, in Telangana since
+2014), Madhya Pradesh (not "MP") and Uttar Pradesh (not "UP").
 scripts/data/fire_temples.json, the seed list, is corrected with this.
 
 A fire temple has no state of its own: the seed (scripts/seed_fire_temples.py)
@@ -32,9 +33,9 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 # (old token, new token), frozen here as they were when this ran.
-UP = (("Gujerat", "Gujarat"), ("Rajashtan", "Rajasthan"), ("A.P.", "Andhra Pradesh"), ("A.P", "Andhra Pradesh"),
+UP = (("Gujerat", "Gujarat"), ("Rajashtan", "Rajasthan"), ("A.P.", "Telangana"), ("A.P", "Telangana"),
       ("MP", "Madhya Pradesh"), ("UP", "Uttar Pradesh"))
-DOWN = (("Gujarat", "Gujerat"), ("Rajasthan", "Rajashtan"), ("Andhra Pradesh", "A.P"),
+DOWN = (("Gujarat", "Gujerat"), ("Rajasthan", "Rajashtan"), ("Telangana", "A.P"),
         ("Madhya Pradesh", "MP"), ("Uttar Pradesh", "UP"))
 
 # The whole address, or its last part after ", ". None of the tokens holds a LIKE

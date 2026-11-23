@@ -966,7 +966,7 @@ async def test_the_dasmu_and_chhamsi_migration_relabels_only_those_days_and_come
 async def test_the_state_names_migration_changes_only_the_exact_token_and_comes_off_cleanly():
     """e9f0a1b2c3d8 (D11, the owner's word review of 23 Nov 2026): a fire temple's address
     that is, or ends in ", ", one of the list's old state names (Gujerat, Rajashtan, A.P,
-    A.P., MP, UP) reads Gujarat, Rajasthan, Andhra Pradesh, Madhya Pradesh or Uttar Pradesh;
+    A.P., MP, UP) reads Gujarat, Rajasthan, Telangana, Madhya Pradesh or Uttar Pradesh;
     the same letters anywhere else, the name and the city are untouched; the downgrade puts
     the old names back, exact tokens only ("A.P." comes back as "A.P", as in the seed list)."""
     await _recreate()
@@ -975,8 +975,8 @@ async def test_the_state_names_migration_changes_only_the_exact_token_and_comes_
         rows = [
             ("Udwada Town, Gujerat", "Udwada Town, Gujarat"),
             ("Gujerat", "Gujarat"),
-            ("Tilak Road, A.P", "Tilak Road, Andhra Pradesh"),
-            ("M G Road, A.P.", "M G Road, Andhra Pradesh"),
+            ("Tilak Road, A.P", "Tilak Road, Telangana"),
+            ("M G Road, A.P.", "M G Road, Telangana"),
             ("397, Centre Street, MP", "397, Centre Street, Madhya Pradesh"),
             ("M G Rd, Civil Lines, UP", "M G Rd, Civil Lines, Uttar Pradesh"),
             ("Shri Ambaji Road, Rajashtan", "Shri Ambaji Road, Rajasthan"),
