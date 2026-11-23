@@ -47,7 +47,6 @@ import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
 import { renderMobeds } from "./screens/our_mobeds.js";
-import { renderRequestSettings } from "./screens/request_settings.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
 import { paintActBanner } from "./acting.js";
 
@@ -140,8 +139,9 @@ route("#/requests/:id/callout", (p) => navigate(`#/requests/${encodeURIComponent
 // address (a bookmark, an old link) leads to the same page.
 route("#/mobeds", renderMobeds, { tab: "mobeds" });
 route("#/our-mobeds", () => navigate("#/mobeds", { replace: true }));
-// How a request reaches the panthaky's fire temple (R3.1), from Settings.
-route("#/prayer-requests", renderRequestSettings, { parent: "#/menu" });
+// How a request reaches the panthaky's fire temple (R3.1) is a card in Settings now (owner, 24 Nov 2026);
+// the old address leads there.
+route("#/prayer-requests", () => navigate("#/menu", { replace: true }));
 
 // The calendar is home; anything unrecognised lands there.
 setNotFound(() => navigate("#/calendar", { replace: true }));
@@ -214,8 +214,8 @@ menuBtn.onclick = () => navigate("#/menu");
 // A tab opens at the day and view the mobed is on - the Machi and Calendar
 // tabs read the same one - rather than resetting to today.
 onTab((tab) => navigate({
-  machi: boardHash(state.calendar),
-  calendar: calendarHash(state.calendar),
+  // One Calendar tab for Events and Machi: it opens the one that was open last.
+  calendar: state.calendarView === "machi" ? boardHash(state.calendar) : calendarHash(state.calendar),
   behdins: "#/behdins",
   requests: "#/requests",
   mobeds: "#/mobeds",

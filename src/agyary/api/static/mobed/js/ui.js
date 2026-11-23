@@ -28,8 +28,10 @@ export function showTabs(active) {
   if (!tabsEl) return;
   tabsEl.classList.toggle("hidden", !active);
   document.body.classList.toggle("has-tabs", !!active);
+  // Machi is a view inside the Calendar tab (cal_switch.js), so its screens light that tab.
+  const lit = active === "machi" ? "calendar" : active;
   tabsEl.querySelectorAll("[data-tab]").forEach(b => {
-    const on = b.dataset.tab === active;
+    const on = b.dataset.tab === lit;
     b.classList.toggle("active", on);
     b.setAttribute("aria-current", on ? "page" : "false");
   });
@@ -50,16 +52,20 @@ let defaultFabAction = () => {};
 export function setDefaultFabAction(fn) { defaultFabAction = fn; }
 
 const TEXT_KEY = "mobed.textsize";
-/** "large" (the default) or "xl". Kept on this device only, like a draft. */
+/** "regular", "large" (the default) or "xl". Kept on this device only, like a draft. */
 export function getTextSize() {
-  try { return localStorage.getItem(TEXT_KEY) === "xl" ? "xl" : "large"; } catch (e) { return "large"; }
+  try {
+    const v = localStorage.getItem(TEXT_KEY);
+    return v === "xl" || v === "regular" ? v : "large";
+  } catch (e) { return "large"; }
 }
 export function setTextSize(v) {
   try { localStorage.setItem(TEXT_KEY, v); } catch (e) { /* only this visit then */ }
   applyTextSize();
 }
 export function applyTextSize() {
-  if (getTextSize() === "xl") document.documentElement.dataset.text = "xl";
+  const size = getTextSize();
+  if (size !== "large") document.documentElement.dataset.text = size;
   else delete document.documentElement.dataset.text;
 }
 applyTextSize();

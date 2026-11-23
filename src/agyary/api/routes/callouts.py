@@ -101,6 +101,44 @@ async def add_our_mobed(agyary_id: int, payload: ContactIn, db: AsyncSession = D
     return {**await _list(db, user, agyary), "added": contact.id}
 
 
+@router.put("/agyaries/{agyary_id}/our-mobeds/{contact_id}")
+async def edit_our_mobed(agyary_id: int, contact_id: int, payload: ContactIn, db: AsyncSession = Depends(get_db),
+                         user: User = Depends(get_current_user)) -> dict:
+    """The pen on a mobed added by hand (owner, 24 Nov 2026). The same number:
+    only the name changes. A new number is a different person's: it needs the
+    tick again, the old entry goes off the list (a place it held is freed, as
+    Remove frees it) and the new one is added, all or nothing."""
+    agyary = await _managed_agyary(db, user, agyary_id)
+    rate_limit.enforce_key(f"our_mobeds_add:{user.id}", max_requests=60, window_seconds=3600)
+    from agyary.models import AgyaryMobedContact   # here: only this route reads a row itself
+    current = await db.get(AgyaryMobedContact, contact_id)
+    if current is None or current.agyary_id != agyary.id or not current.is_active:
+        raise HTTPException(status_code=404, detail="That mobed could not be found on the list.")
+    try:
+        if payload.phone == current.phone:
+            await prayer_callout.rename_contact(db, agyary.id, contact_id, payload.name, user)
+            await db.commit()
+            await db.refresh(user)
+            await db.refresh(agyary)
+            return {**await _list(db, user, agyary), "done": {"message": "Saved.", "places_freed": 0}}
+        if not payload.agreed:
+            raise HTTPException(status_code=400, detail=prayer_callout.NO_TICK, headers={FIELD_HEADER: "agreed"})
+        old = await prayer_callout.remove_contact(db, agyary.id, contact_id, user)
+        old_name = old.name
+        await prayer_callout.add_contact(db, get_settings(), user, agyary, name=payload.name,
+                                         phone=payload.phone, agreed=True)
+    except prayer_callout.CalloutError as exc:
+        await db.rollback()
+        raise _error(exc) from exc
+    await db.commit()
+    freed = await standbys.free_places_of(db, get_settings(), by_user=user, agyary_id=agyary.id,
+                                          contact_id=contact_id)
+    await db.refresh(user)
+    await db.refresh(agyary)
+    words = " ".join(w for w in (f"Saved. {old_name}'s old number is off the list.", standbys.freed_words(freed)) if w)
+    return {**await _list(db, user, agyary), "done": {"message": words, "places_freed": len(freed)}}
+
+
 @router.delete("/agyaries/{agyary_id}/our-mobeds/{contact_id}")
 async def remove_our_mobed(agyary_id: int, contact_id: int, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_user)) -> dict:

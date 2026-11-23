@@ -67,13 +67,13 @@ the test ones afterwards.
 
 ### A. Settings
 
-1. **Settings -> Prayer requests.** [ ] Both ways are there: **Everyone at once** (chosen) and
+1. **Settings -> the Prayer requests card** (a card in Settings since 24 Nov 2026; a choice saves the moment you tap it, no Save button). [ ] Both ways are there: **Everyone at once** (chosen) and
    **Come to me first**. [ ] Choosing Come to me first shows the safety net: Never, 15 minutes,
    30 minutes, 1 hour. Save it, open it again: [ ] it kept your choice. Set it back to
    **Everyone at once** for part B.
-2. **Settings -> Mobeds.** [ ] Goti Adarian's mobeds in Mobed Diary with their numbers, each with
-   Call and WhatsApp (your own phone). [ ] **Added by me**: add a test mobed (name, number, the
-   tick that they agreed; Import from contacts is in the form). [ ] Remove takes them off.
+2. **The Mobeds tab** (the panthaky's fourth tab; no button in Settings). [ ] Goti Adarian's mobeds in Mobed Diary with their numbers, each with
+   Call and WhatsApp (your own phone). [ ] **Add** a test mobed (name, number, the
+   tick that they agreed; Import from contacts is in the form). [ ] The pen changes the name (a new number asks for the tick again); the cross takes them off.
 
 ### B. Everyone at once
 

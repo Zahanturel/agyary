@@ -286,6 +286,7 @@ export function renderManagerSettings() {
     <div class="card">
       <h2>Text size</h2>
       <p class="meta">Makes the words in the app bigger on this phone.</p>
+      <label class="choice"><input type="radio" name="msText" value="regular" ${getTextSize() === "regular" ? "checked" : ""}><span>Regular</span></label>
       <label class="choice"><input type="radio" name="msText" value="large" ${getTextSize() === "large" ? "checked" : ""}><span>Large</span></label>
       <label class="choice"><input type="radio" name="msText" value="xl" ${getTextSize() === "xl" ? "checked" : ""}><span>Extra large</span></label>
     </div>

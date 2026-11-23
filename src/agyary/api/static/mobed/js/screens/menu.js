@@ -27,6 +27,7 @@ import { shellVersion } from "../update.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { paintPushCard } from "../push_card.js";
+import { paintPrayerRequests } from "./request_settings.js";
 import * as push from "../push.js";
 
 const PARSI_SYSTEMS = [
@@ -101,17 +102,16 @@ export async function renderMenu() {
         ` : ""}
       </div>
       ${agyary ? `<div style="margin-top:10px"><button class="secondary small" id="mEditLocation">Edit location</button></div>
-        ${agyary.role === "panthaky" ? `<div style="margin-top:10px"><button class="secondary small" id="mMobeds">Mobeds</button>
-          <p class="meta" style="margin:4px 0 0">The mobeds you work with: call them, message them, or ask them on WhatsApp whether they can pray.</p></div>
-          <div style="margin-top:10px"><button class="secondary small" id="mPrayerRequests">Prayer requests</button>
-          <p class="meta" style="margin:4px 0 0">How a request from a Doongerwadi or prayer hall reaches you.</p></div>` : ""}
         <div id="mClaimBox">${claimHtml(agyary)}</div>` : ""}
     </div>
+
+    ${agyary && agyary.role === "panthaky" ? `<div class="card" id="mPrayer"><h2>Prayer requests</h2><p class="meta">Checking...</p></div>` : ""}
 
     <div class="card">
       <h2>Text size</h2>
       <p class="meta">Makes the words in the app bigger on this phone.</p>
       <div id="mTextSize">
+        <label class="choice"><input type="radio" name="mText" value="regular" ${getTextSize() === "regular" ? "checked" : ""}><span>Regular</span></label>
         <label class="choice"><input type="radio" name="mText" value="large" ${getTextSize() === "large" ? "checked" : ""}><span>Large</span></label>
         <label class="choice"><input type="radio" name="mText" value="xl" ${getTextSize() === "xl" ? "checked" : ""}><span>Extra large</span></label>
       </div>
@@ -303,10 +303,8 @@ export async function renderMenu() {
 
   const editLocation = document.getElementById("mEditLocation");
   if (editLocation) editLocation.onclick = () => navigate("#/fire-temple/location");
-  const mobedsBtn = document.getElementById("mMobeds");
-  if (mobedsBtn) mobedsBtn.onclick = () => navigate("#/mobeds");
-  const prayerRequestsBtn = document.getElementById("mPrayerRequests");
-  if (prayerRequestsBtn) prayerRequestsBtn.onclick = () => navigate("#/prayer-requests");
+  const prayerBox = document.getElementById("mPrayer");
+  if (prayerBox) paintPrayerRequests(prayerBox, agyary, alive);
   document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
   const adminBar = document.getElementById("mAdminBar");
   if (adminBar) adminBar.onclick = () => navigate("#/admin");

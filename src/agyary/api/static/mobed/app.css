@@ -448,6 +448,13 @@ a.tel:active { text-decoration: underline; }
 body.has-tabs main { padding-bottom: calc(var(--space-4) + 88px + var(--safe-bottom)); }
 body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
 /* Settings > Text size > Extra large. */
+/* The Events | Machi switch at the top of the Calendar tab (cal_switch.js). */
+.seg { display: flex; gap: 0; margin: 0 0 var(--space-3); border: 2px solid var(--primary); border-radius: 999px; overflow: hidden; }
+.seg button { flex: 1; min-height: 48px; border: 0; border-radius: 0; background: #fff; color: var(--primary);
+  font-weight: 700; font-size: var(--text-base); cursor: pointer; }
+.seg button.on { background: var(--primary); color: #fff; }
+/* Regular: an ordinary phone's size, for those who find Large too big (owner, 24 Nov 2026). */
+html[data-text="regular"] { --text-xs:14px; --text-sm:16px; --text-base:17px; --text-md:19px; --text-lg:22px; --text-grid:14px; }
 html[data-text="xl"] { --text-xs:21px; --text-sm:22px; --text-base:24px; --text-md:27px; --text-lg:31px; --text-grid:18px; }
 /* The Add button floats over the page; leave room under the last row for it. */
 body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bottom)); }
@@ -575,6 +582,14 @@ body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bot
   min-height: 0; cursor: pointer; border-radius: 6px; flex: 0 0 auto; }
 .row-x:hover, .row-x:focus-visible { color: var(--danger-600); background: var(--danger-tint); }
 .row-pending { background: var(--danger-tint); border-radius: 8px; }
+/* On a Mobeds row the cross is big enough to tap, at the top beside the name. */
+.mb-row .row-x { font-size: 32px; padding: 4px 12px; align-self: flex-start; }
+.mb-row .addr { white-space: nowrap; overflow-wrap: normal; }
+.mb-row .row-edit { align-self: flex-start; padding: 8px 10px; }
+/* The pen (edit) beside a row's cross, as on the Mobeds page. */
+.row-edit { background: none; border: 0; color: var(--muted); line-height: 1; padding: 6px 10px; min-height: 0;
+  cursor: pointer; border-radius: 6px; flex: 0 0 auto; display: inline-flex; align-items: center; }
+.row-edit:hover, .row-edit:focus-visible { color: var(--primary); background: var(--primary-tint); }
 /* On a date row the cross says what it does. */
 .obs .row-x { font-size: 0; min-height: 48px; padding: 0 14px; border: 2px solid var(--danger-600); color: var(--danger-600);
   border-radius: var(--radius-sm); }

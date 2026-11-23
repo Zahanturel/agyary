@@ -346,6 +346,25 @@ async def add_contact(
     return existing
 
 
+async def rename_contact(db: AsyncSession, agyary_id: int, contact_id: int, name: str, user: User) -> AgyaryMobedContact:
+    """Change the name of a mobed added by hand (the pen on the Mobeds page; owner,
+    24 Nov 2026). The number stays: a new number is a different person's, so it
+    goes through remove_contact and add_contact with a fresh tick (the route)."""
+    contact = await db.get(AgyaryMobedContact, contact_id)
+    if contact is None or contact.agyary_id != agyary_id or not contact.is_active:
+        raise CalloutError("That mobed could not be found on the list.", status=404)
+    try:
+        name = template_text.check(name, "name", max_len=NAME_MAX)
+    except ValueError as exc:
+        raise CalloutError(str(exc), status=400, field="name") from exc
+    if not name:
+        raise CalloutError("Please enter the mobed's name.", status=400, field="name")
+    contact.name = name
+    await db.flush()
+    logger.info("Mobed contact %s renamed on fire temple %s's list by user %s", contact.id, agyary_id, user.id)
+    return contact
+
+
 async def remove_contact(db: AsyncSession, agyary_id: int, contact_id: int, user: User) -> AgyaryMobedContact:
     """Take a mobed added by hand off the list. What they were sent before
     counts for nothing from now on (left_out): their buttons change nothing,

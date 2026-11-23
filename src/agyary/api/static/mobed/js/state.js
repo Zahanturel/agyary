@@ -20,6 +20,10 @@ export const state = {
   // what keeps the same day on screen when the mobed switches between them.
   calendar: { mode: "month", focus: null, parsiMonth: null, selectedDay: null },
 
+  // Which view of the Calendar tab was open last, "events" or "machi" (cal_switch.js):
+  // the tab reopens it.
+  calendarView: "events",
+
   // The bottom tab the mobed was last on. Screens that belong to no tab of
   // their own (a slip, an edit, a review) light up this one, and Back lands
   // on it - see homeHash().

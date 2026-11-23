@@ -13,6 +13,7 @@ import {
 } from "../api.js";
 import { state, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, calendarHash } from "../calendar.js";
+import { switchHtml, wireSwitch } from "../cal_switch.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
 import { esc, istYmd, istTime, todayIst } from "../util.js";
 import { navigate } from "../router.js";
@@ -120,7 +121,9 @@ export async function renderCalendarScreen(params) {
   state.calendar.focus = state.calendar.focus || todayIst();
   const redirect = applyCalendarRoute(state.calendar, params);
   if (redirect) return navigate(redirect, { replace: true });
-  mainEl.innerHTML = `<div id="calReminders"></div><div id="cal"></div>`;
+  state.calendarView = "events";
+  mainEl.innerHTML = `${switchHtml("events")}<div id="calReminders"></div><div id="cal"></div>`;
+  wireSwitch(mainEl);
   showReminderNotice();
   await draw();
 }

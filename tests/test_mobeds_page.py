@@ -196,3 +196,48 @@ async def test_no_other_screen_gives_out_the_app_mobeds_numbers(client, db, seed
             if number != who:
                 assert number not in r.text, (who, path, number)
     assert (await db.execute(select(Notification.id))).first() is None
+
+
+async def test_the_pen_renames_a_mobed_and_a_new_number_needs_the_tick(client, db, seeded):
+    """The pen on a mobed added by hand (owner, 24 Nov 2026): the same number only renames;
+    a new number is a different person's, so it needs the tick, takes the old entry off the
+    list and adds the new one; another fire temple's panthaky cannot touch it."""
+    aid = seeded["agyary_id"]
+    ids = await _people(client, db, aid)
+    panthaky = await _as(client, PANTHAKY)
+    path = f"{_page(aid)}/{ids['listed']}"
+    NEW = "+919822200331"
+
+    r = await client.put(path, json={"name": "Er. Renamed", "phone": LISTED, "agreed": False}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert [(m["name"], m["phone"]) for m in r.json()["mobeds"] if m["kind"] == "contact"] == [("Er. Renamed", LISTED)]
+
+    r = await client.put(path, json={"name": "", "phone": LISTED, "agreed": False}, headers=panthaky)
+    assert r.status_code == 400 and r.headers.get("x-field") == "name"
+
+    # A new number without the tick changes nothing.
+    r = await client.put(path, json={"name": "Er. Renamed", "phone": NEW, "agreed": False}, headers=panthaky)
+    assert r.status_code == 400 and r.headers.get("x-field") == "agreed"
+    row = await db.get(AgyaryMobedContact, ids["listed"])
+    await db.refresh(row)
+    assert row.is_active and row.phone == LISTED
+
+    # A number already on the list is refused, and the old entry stays.
+    r = await client.put(path, json={"name": "Er. Renamed", "phone": MOBED, "agreed": True}, headers=panthaky)
+    assert r.status_code == 409 and r.headers.get("x-field") == "phone"
+    await db.refresh(row)
+    assert row.is_active
+
+    r = await client.put(path, json={"name": "Er. Renamed", "phone": NEW, "agreed": True}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert [(m["name"], m["phone"]) for m in r.json()["mobeds"] if m["kind"] == "contact"] == [("Er. Renamed", NEW)]
+    await db.refresh(row)
+    assert not row.is_active   # kept, turned off (D8)
+
+    # Another fire temple's panthaky, and a plain mobed, get the same 404 as for a list that is not there.
+    other = await _as(client, OTHER_PANTHAKY)
+    r = await client.put(path, json={"name": "X", "phone": NEW, "agreed": True}, headers=other)
+    assert r.status_code == 404
+    r = await client.put(path, json={"name": "X", "phone": NEW, "agreed": True}, headers=await _as(client, MOBED))
+    assert r.status_code == 404
+    assert (await db.execute(select(Notification.id))).first() is None

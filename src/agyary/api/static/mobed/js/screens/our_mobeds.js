@@ -3,17 +3,20 @@
 /**
  * Mobeds (DECISIONS D10, changed 21 Nov 2026; R3.1 step 3; "Our mobeds"
  * before): the mobeds a confirmed panthaky works with, to call, message, or ask
- * on WhatsApp whether they can pray. Reached from Settings, and from a
- * request's board while nobody is on the list, at #/mobeds (the old
- * #/our-mobeds leads here too).
+ * on WhatsApp whether they can pray. The panthaky's fifth tab (owner, 24 Nov
+ * 2026), and reached from a request's board while nobody is on the list, at
+ * #/mobeds (the old #/our-mobeds leads here too).
  *
- *  - In Mobed Diary: the fire temple's mobeds in the app, on it by themselves,
- *    each with their number and Call and WhatsApp (not on the panthaky's own row).
- *  - Added by me: mobeds added by hand, with their number, who added them,
- *    Call, WhatsApp and Remove.
- *  - Adding one: name and number (with Import from contacts, as on the Add
- *    behdin form, where the phone allows it) and the required tick that they
- *    agreed to get WhatsApp messages from Mobed Diary about prayers.
+ * One list, drawn like Behdins (owner, 24 Nov 2026): a round letter, the name and
+ * number, Call and WhatsApp (not on the panthaky's own row), and on the right a
+ * pen (edit) and a cross (take off the list):
+ *  - mobeds added by hand: pen and cross. Adding is the Add button at the top,
+ *    with Import from contacts where the phone allows it (as on the Add behdin
+ *    form) and the required tick that they agreed to get WhatsApp messages from
+ *    Mobed Diary about prayers. The pen changes the name; a new number is a
+ *    different person's, so it needs the tick again.
+ *  - the fire temple's mobeds in the app: a cross only (their name and number are
+ *    their own), shown when the panthaky may take them off.
  *  - Who replied STOP, or is switched off or waiting, says so: they are never
  *    asked by Mobed Diary, but Call and WhatsApp stay, since those are the
  *    panthaky's own phone and WhatsApp (a plain chat, nothing typed for them).
@@ -24,13 +27,12 @@
  *  - Joined, waiting for you: mobeds who chose this fire temple in Mobed Diary and
  *    get none of its prayer requests until confirmed, by name only (no number until
  *    then), with Confirm and Not one of ours.
- *  - Take off the list (asked first) on a mobed in Mobed Diary, and Off the list,
- *    by name only, with Put back. They stay at the fire temple in Mobed Diary.
+ *  - Off the list, by name only, with Put back. They stay at the fire temple in Mobed Diary.
  *
  * Only that fire temple's confirmed panthakys (and the admin) see any of it.
  */
 
-import { ourMobeds, addOurMobed, removeOurMobed, memberRequests } from "../api.js";
+import { ourMobeds, addOurMobed, editOurMobed, removeOurMobed, memberRequests } from "../api.js";
 import { currentAgyary } from "../state.js";
 import { chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet } from "../ui.js";
 import { esc, phoneField, readPhone } from "../util.js";
@@ -40,6 +42,10 @@ import { canPickContacts, pickContacts, fillFromContact } from "../behdin_add.js
 
 /** The server's words as a sentence: "cannot be ..." -> "Cannot be ...". */
 const sentence = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
+
+const PEN = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="22" height="22" fill="none"
+  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>`;
 
 /** Call and WhatsApp from the panthaky's own phone, as on a request
  *  (requests.js): the WhatsApp one opens a plain chat. Not on their own row. */
@@ -57,32 +63,36 @@ function reachHtml(m) {
 function personHtml(m) {
   const lines = [];
   if (m.is_me) lines.push("You");
-  else {
-    if (m.phone) lines.push(esc(m.phone));
-    if (m.kind === "app") lines.push("Uses Mobed Diary");
-    else if (m.added_by) lines.push(`Added by ${esc(m.added_by)}`);
-  }
+  else if (m.phone) lines.push(esc(m.phone));
   // For a mobed added by hand the server's words are whole ("cannot be asked on WhatsApp now"):
   // they never say whether the number has a Mobed Diary account, or its state.
   const state = m.stopped ? "Replied STOP: not asked on WhatsApp"
     : !m.can_message && !m.is_me ? (m.kind === "contact" ? sentence(m.why_not) : `Not asked: ${m.why_not}`) : "";
-  return `<div class="search-result" data-key="${esc(m.key)}" style="overflow-wrap:anywhere;cursor:default">
-      <strong>${esc(m.name)}</strong>
-      ${lines.map(l => `<div class="addr">${l}</div>`).join("")}
-      ${state ? `<div class="meta"><b>${esc(state)}</b></div>` : ""}
-      ${reachHtml(m)}
-      ${m.kind === "contact" ? `<button type="button" class="ghost small" data-remove="${m.id}"
-        style="margin-top:8px">Remove</button>` : ""}
-      ${m.kind === "app" && m.may_take_off ? `<button type="button" class="ghost small" data-takeoff="${m.id}"
-        style="margin-top:8px">Take off the list</button>` : ""}
+  const pen = m.kind === "contact" ? `<button type="button" class="row-edit" data-edit="${m.id}"
+      aria-label="Edit ${esc(m.name)}" title="Edit">${PEN}</button>` : "";
+  const cross = m.kind === "contact"
+    ? `<button type="button" class="row-x" data-remove="${m.id}" aria-label="Take ${esc(m.name)} off the list"
+      title="Take off the list">&times;</button>`
+    : m.kind === "app" && m.may_take_off
+      ? `<button type="button" class="row-x" data-takeoff="${m.id}" aria-label="Take ${esc(m.name)} off the list"
+        title="Take off the list">&times;</button>` : "";
+  return `<div class="search-result bh-row mb-row" data-key="${esc(m.key)}" style="overflow-wrap:anywhere;cursor:default">
+      <div class="bh-av" aria-hidden="true">${esc((m.name || "?").trim().charAt(0).toUpperCase())}</div>
+      <div class="bh-main"><div>${esc(m.name)}</div>
+        ${lines.map(l => `<div class="addr">${l}</div>`).join("")}
+        ${state ? `<div class="meta"><b>${esc(state)}</b></div>` : ""}
+        ${reachHtml(m)}
+      </div>
+      ${pen}${cross}
     </div>`;
 }
 
 /** Someone not on the list for prayer requests (D10, 22 Nov 2026): a name, no number. */
 function joinedHtml(p, buttons) {
-  return `<div class="search-result" style="overflow-wrap:anywhere;cursor:default">
-      <strong>${esc(p.name)}</strong>
-      <div class="row" style="margin-top:8px">${buttons}</div>
+  return `<div class="search-result bh-row" style="overflow-wrap:anywhere;cursor:default">
+      <div class="bh-av" aria-hidden="true">${esc((p.name || "?").trim().charAt(0).toUpperCase())}</div>
+      <div class="bh-main"><div>${esc(p.name)}</div>
+        <div class="row" style="margin-top:8px">${buttons}</div></div>
     </div>`;
 }
 
@@ -107,15 +117,11 @@ export async function renderMobeds() {
 }
 
 function draw(agyary, got) {
-  const app = got.mobeds.filter(m => m.kind === "app");
-  const added = got.mobeds.filter(m => m.kind === "contact");
   const joined = got.joined || { waiting: [], off: [] };
   const temple = esc(got.agyari.name);
+  // The fire temple's mobeds in the app first, then those added by hand.
+  const all = [...got.mobeds.filter(m => m.kind === "app"), ...got.mobeds.filter(m => m.kind === "contact")];
   mainEl.innerHTML = `
-    <h2 style="margin:0 0 4px">Mobeds</h2>
-    <p class="meta" style="margin:0 0 12px">The mobeds of ${temple} you work with: call them, message
-      them, or ask them on WhatsApp whether they can pray. Call and WhatsApp use your own phone. Only the panthaky
-      sees this page.</p>
     ${joined.waiting.length ? `<div class="card">
       <h2>Joined, waiting for you</h2>
       <p class="meta" style="margin:0 0 8px">Confirm the ones who are your mobeds. Only then do they get prayer
@@ -124,29 +130,29 @@ function draw(agyary, got) {
           data-id="${p.id}">Confirm</button>
         <button type="button" class="ghost small" data-member="off" data-id="${p.id}">Not one of ours</button>`)).join("")}
     </div>` : ""}
-    ${got.whatsapp.on ? "" : `<div class="card"><p class="meta" style="margin:0">${esc(got.whatsapp.why_not)}
-      You can build the list now.</p></div>`}
     <div class="card">
-      <h2>In Mobed Diary</h2>
-      ${app.length ? app.map(personHtml).join("") : `<p class="meta" style="margin:0">Nobody else here uses Mobed Diary yet.</p>`}
-    </div>
-    <div class="card">
-      <h2>Added by me</h2>
-      ${added.length ? added.map(personHtml).join("") : `<p class="meta" style="margin:0">Nobody yet.</p>`}
-      <div class="action-bar"><button type="button" id="omAdd">Add a mobed</button></div>
+      <div class="row tight" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Mobeds</h2>
+        <button class="icon-add" id="omAdd" title="Add a mobed" aria-label="Add a mobed">+</button>
+      </div>
+      <div style="margin-top:8px">
+        ${all.length ? all.map(personHtml).join("") : `<p class="meta">No mobeds yet. Tap Add.</p>`}
+      </div>
     </div>
     ${joined.off.length ? `<div class="card">
       <h2>Off the list</h2>
-      <p class="meta" style="margin:0 0 8px">They get no prayer requests from ${temple}, and stay in Mobed Diary.</p>
       ${joined.off.map(p => joinedHtml(p, `<button type="button" class="secondary small" data-member="on"
           data-id="${p.id}">Put back</button>`)).join("")}
     </div>` : ""}`;
-  document.getElementById("omAdd").onclick = () => openAdd(agyary, got);
+  document.getElementById("omAdd").onclick = () => openForm(agyary, got, null);
+  mainEl.querySelectorAll("[data-edit]").forEach(btn => {
+    btn.onclick = () => openForm(agyary, got, got.mobeds.find(m => m.kind === "contact" && String(m.id) === btn.dataset.edit));
+  });
   mainEl.querySelectorAll("[data-remove]").forEach(btn => {
     btn.onclick = () => confirmRemove(agyary, got.mobeds.find(m => m.kind === "contact" && String(m.id) === btn.dataset.remove));
   });
   mainEl.querySelectorAll("[data-takeoff]").forEach(btn => {
-    btn.onclick = () => confirmTakeOff(agyary, got, app.find(m => String(m.id) === btn.dataset.takeoff));
+    btn.onclick = () => confirmTakeOff(agyary, got, got.mobeds.find(m => m.kind === "app" && String(m.id) === btn.dataset.takeoff));
   });
   // Confirm, Not one of ours and Put back go at once: each can be undone on this page.
   mainEl.querySelectorAll("[data-member]").forEach(btn => {
@@ -197,31 +203,45 @@ function confirmTakeOff(agyary, got, m) {
   };
 }
 
-function openAdd(agyary, got) {
+/** Add a mobed (`existing` null) or change one added by hand (the pen). Same sheet: Import from
+ *  contacts, name, number, and the tick that they agreed, which an edit asks for only when the
+ *  number is a new one (a new number is a different person's). */
+function openForm(agyary, got, existing) {
+  const editing = !!existing;
   const sheet = openSheet({
-    title: "Add a mobed",
+    title: editing ? "Edit mobed" : "Add a mobed",
     html: `
       ${canPickContacts() ? `<button type="button" class="secondary" id="omImport" style="margin-bottom:12px">
         Import from contacts</button>` : ""}
       <label for="omName">Name</label>
-      <input type="text" id="omName" maxlength="60" autocomplete="off" placeholder="e.g. Er. Jehangir Mistry">
+      <input type="text" id="omName" maxlength="60" autocomplete="off" placeholder="e.g. Er. Jehangir Mistry"
+        value="${editing ? esc(existing.name) : ""}">
       <label for="omPhone">WhatsApp number</label>
-      ${phoneField("omPhone", "")}
-      <div class="check-row" id="omTickRow"><input type="checkbox" id="omTick">
+      ${phoneField("omPhone", editing ? existing.phone : "")}
+      <div class="check-row ${editing ? "hidden" : ""}" id="omTickRow"><input type="checkbox" id="omTick">
         <label for="omTick">${esc(got.consent_words)}</label></div>
       <p class="meta" data-msg role="alert" style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">
-        <button type="button" data-yes>Add</button>
+        <button type="button" data-yes>${editing ? "Save" : "Add"}</button>
         <button type="button" class="ghost" data-no>Cancel</button>
       </div>`,
   });
   const body = sheet.body;
   body.querySelector("[data-no]").onclick = sheet.close;
+  const tickRow = body.querySelector("#omTickRow");
+  // Editing: the tick shows once the number is not the one on the list.
+  const numberChanged = () => editing && readPhone("omPhone") !== existing.phone;
+  if (editing) {
+    body.addEventListener("input", () => { tickRow.classList.toggle("hidden", !numberChanged()); });
+  }
   const imp = body.querySelector("#omImport");
   if (imp) {
     imp.onclick = async () => {
       const [contact] = await pickContacts({ multiple: false });
-      if (contact) fillFromContact(contact, { nameId: "omName", phoneId: "omPhone" });
+      if (contact) {
+        fillFromContact(contact, { nameId: "omName", phoneId: "omPhone" });
+        if (editing) tickRow.classList.toggle("hidden", !numberChanged());
+      }
     };
   }
   body.querySelector("[data-yes]").onclick = async (ev) => {
@@ -230,16 +250,19 @@ function openAdd(agyary, got) {
     body.querySelector("[data-msg]").textContent = "";
     const name = body.querySelector("#omName").value.trim();
     const phone = readPhone("omPhone");
+    const needsTick = !editing || numberChanged();
     const agreed = body.querySelector("#omTick").checked;
     const problems = [];
     if (!name) problems.push({ target: "#omName", message: "Please enter the mobed's name." });
     if (!phone) problems.push({ target: ".phone-field", message: "Please enter a valid WhatsApp number." });
-    if (!agreed) problems.push({ target: "#omTickRow", message: "Please tick this first: they must have agreed." });
+    if (needsTick && !agreed) problems.push({ target: "#omTickRow", message: "Please tick this first: they must have agreed." });
     if (problems.length) return flagProblems(body, problems);
     btn.disabled = true;
     let res;
     try {
-      res = await addOurMobed(agyary.id, name, phone, true);
+      res = editing
+        ? await editOurMobed(agyary.id, existing.id, name, phone, needsTick && agreed)
+        : await addOurMobed(agyary.id, name, phone, true);
     } catch (e) {
       btn.disabled = false;
       const target = { name: "#omName", phone: ".phone-field", agreed: "#omTickRow" }[e.field];
@@ -250,7 +273,7 @@ function openAdd(agyary, got) {
     }
     sheet.close();
     draw(agyary, res);
-    showInfo(`${name} is on your list.`);
+    showInfo(editing ? (res.done ? res.done.message : "Saved.") : `${name} is on your list.`);
   };
 }
 

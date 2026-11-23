@@ -17,6 +17,7 @@
 import { machiBoard, bookableGehs } from "../api.js";
 import { state, GEHS, GEH_NAME_BY_NUM, MACHI_PURPOSE_DISPLAY } from "../state.js";
 import { renderCalendar, applyCalendarRoute, boardHash } from "../calendar.js";
+import { switchHtml, wireSwitch } from "../cal_switch.js";
 import { chrome, mainEl, showFab, showError, refreshHeader } from "../ui.js";
 import { esc, todayIst } from "../util.js";
 import { navigate } from "../router.js";
@@ -118,7 +119,9 @@ export async function renderMachiCalendarScreen(params) {
   state.calendar.focus = state.calendar.focus || todayIst();
   const redirect = applyCalendarRoute(state.calendar, params, "board");
   if (redirect) return navigate(redirect, { replace: true });
-  mainEl.innerHTML = `<div id="cal"></div>`;
+  state.calendarView = "machi";
+  mainEl.innerHTML = `${switchHtml("machi")}<div id="cal"></div>`;
+  wireSwitch(mainEl);
   await draw();
 }
 
