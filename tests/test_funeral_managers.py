@@ -38,6 +38,8 @@ MANAGER_MAY = {
     ("POST", "/api/mobed/me/push/subscribe"),
     ("POST", "/api/mobed/me/push/unsubscribe"),
     ("POST", "/api/mobed/me/push/test"),
+    # The departed's names kept for this account's own number (D12).
+    ("GET", "/api/mobed/me/person-names"),
     # Recording a death (Step 4).
     ("POST", "/api/mobed/manager/death-day"),
     ("GET", "/api/mobed/manager/records"),
@@ -46,6 +48,7 @@ MANAGER_MAY = {
     ("PUT", "/api/mobed/manager/records/{record_id}"),
     ("GET", "/api/mobed/manager/records/{record_id}/agyaries"),
     ("GET", "/api/mobed/manager/agyaries/search"),
+    ("GET", "/api/mobed/manager/agyaries/suggested"),
     ("POST", "/api/mobed/manager/records/{record_id}/requests"),
     ("POST", "/api/mobed/manager/requests/{request_id}/withdraw"),
     # The place's book of behdins (19 Nov 2026).

@@ -53,6 +53,7 @@ from agyary.services import (
     mobed_auth,
     mobed_dashboard,
     panthaky,
+    person_names,
     reminders,
     template_text,
     wa_login,
@@ -710,6 +711,15 @@ async def my_push_test(db: AsyncSession = Depends(get_db), user: User = Depends(
     )
     await db.commit()
     return {"sent": sent, "devices": await web_push.devices(db, user.id)}
+
+
+@router.get("/me/person-names")
+async def my_person_names(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_account)) -> dict:
+    """The departed's names kept for this account's own number, newest first
+    (D12, 24 Nov 2026). Any kind of account that is on, mobed or manager; only
+    by the account's own number. Nothing takes a phone: no one else's pool can
+    be asked for, and no other screen reads it."""
+    return {"names": [person_names.as_dict(r) for r in await person_names.mine(db, user)]}
 
 
 @router.get("/me/preferences")
