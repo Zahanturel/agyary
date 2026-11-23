@@ -406,3 +406,26 @@ STOP is one sheet (the consent words and the warning, one confirm), not two prom
 
 Not now: a number that sends "hi", "hello" or "start" being answered with what it can do. That is a flow for the
 behdin app (R4: choose an agyari, book a machi, see events); it is designed with it.
+
+## D12. Simplifying the Doongerwadi side (owner, 24 Nov 2026)
+
+Decided while walking the Doongerwadi screens on the phone ("too complicated"):
+
+- **Recording a death is four short steps, family first** (one group of questions per screen, Back, a review
+  before Send, like New machi): 1 the family (name and number: from the place's book, Import from contacts, or
+  typed); 2 the departed (title, name, father's or husband's name, date of death); 3 the prayers (days,
+  Geh-saarnu, Uthamna, mobeds wanted); 4 which fire temple, then Send. The separate "family's fire temple"
+  field and the separate "Ask a fire temple" screen go: step 4 is that choice.
+- **Names that are not known are simply left empty** (the departed's name, the father's or husband's name); only
+  the family's contact and the date are needed. Not a "Not known" tick.
+- **Defaults:** four days; the date of death is today (editable); no time of death. Geh-saarnu and Uthamna start
+  empty until the owner gives the usual rule.
+- **No fire temple in mind: the Doongerwadi's manager chooses**, by their own knowledge and the fire temples'
+  workload. The app never picks (not the one with most behdins: behdins are private to each mobed, D2), and
+  never asks several at once. **The list is already there when the step opens, with no typing**: only the fire
+  temples that have someone in Mobed Diary, the family's usual one first, nearest first where a pin exists and
+  by town where not (today's Suggested list was empty because almost no fire temple has a pin yet, and the
+  search shows nothing until a letter is typed). A search box stays above it.
+- **Dates are written day/month/year, 24/11/2026, everywhere** in the app: screens, slips, notices, messages,
+  PDFs (the weekday may go before it where there is room). Date boxes follow the phone's own setting.
+- **Departed names for the family:** open, see the next amendment.
