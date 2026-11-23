@@ -57,7 +57,7 @@ from agyary.models.enums import (
     REQUEST_WAITING,
     REQUEST_WITHDRAWN,
 )
-from agyary.services import memorials, template_text
+from agyary.services import memorials, person_names, template_text
 from agyary.services.phone import _validate_phone
 
 logger = logging.getLogger(__name__)
@@ -326,6 +326,7 @@ async def create(db: AsyncSession, user: User, place: FuneralPlace, values: dict
     record = FuneralRecord(funeral_place_id=place.id, created_by_user_id=user.id, **values)
     db.add(record)
     await db.flush()
+    await person_names.sync_from_record(db, record)
     logger.info("Funeral record %s made at funeral place %s by user %s", record.id, place.id, user.id)
     return record
 
@@ -367,6 +368,7 @@ async def update(db: AsyncSession, record: FuneralRecord, user: User, values: di
         setattr(record, key, value)
     record.updated_at = datetime.now(timezone.utc)
     await db.flush()
+    await person_names.sync_from_record(db, record)
     logger.info("Funeral record %s changed by user %s", record.id, user.id)
     return True
 
