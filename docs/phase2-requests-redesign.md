@@ -170,7 +170,8 @@ entered for that person (services/phone.py), never from free text.
 
 Owner's word review (23 Nov 2026, D11): 5, 6 and 8 say "For anything else, please contact
 **[contact]**": the panthaky with their number, or with no confirmed panthaky in the app, the
-first mobed going with their number. 5 ends "May the ruvan of the late [departed] ...".
+first mobed going with their number (in 6 sent to that first mobed, the next mobed going, else the
+fire temple's own name with no number). 5 ends "May the ruvan of the late [departed] ...".
 
 **5. To the family: `prayers_all_set_family`**
 > The prayers for **[departed]** will be offered by **[mobeds with numbers]** of **[agyari]**.

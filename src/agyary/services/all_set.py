@@ -487,7 +487,8 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
             to = ("contact", row.contact_id or 0)
         sends.append(fw.all_set_details_send(
             record, place, going=people, panthakys=heads, phone=g["phone"], recipient_type=to[0],
-            recipient_id=to[1], agyary_id=agyary.id, back_out=prayer_callout.back_out_payload(row),
+            recipient_id=to[1], agyary_id=agyary.id, fire_temple=agyary.name,
+            back_out=prayer_callout.back_out_payload(row),
             refs={"request": request_id, "to": "going", "answer": row.id}, why_not=why))
     going_ids = {g["row"].user_id for g in going if g["row"].user_id}
     if not again:

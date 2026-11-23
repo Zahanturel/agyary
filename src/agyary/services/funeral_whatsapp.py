@@ -22,8 +22,10 @@ At All set (R3.1 step 5, services/all_set.py):
   5  prayers_all_set_family    to the family: who will pray, the times, who to
                                contact (the panthaky, else the first mobed going)
   6  prayer_details_mobed_v3   to each mobed going: the details, the family's
-                               contact, everyone going, who to contact; with the
-                               button "I can't go any more" ("pca:<token>:x")
+                               contact, everyone going, who to contact (never
+                               themselves: the next mobed going, else the fire
+                               temple's name); with the button "I can't go any
+                               more" ("pca:<token>:x")
   7  prayers_all_set_panthaky  to the panthaky not going: who is going, the family
   8  funeral_accepted_manager_v2  to the funeral place's managers: who will pray,
                                who to contact, with their number
@@ -583,12 +585,25 @@ def people_blank(people: list[Person]) -> tuple[str, str]:
     return (sent, kept) if sent else (NOT_FIXED, NOT_FIXED)
 
 
-def contact_people(panthakys: list[Person], going: list[Person]) -> list[Person]:
+def contact_people(panthakys: list[Person], going: list[Person], *, to: str | None = None,
+                   fire_temple: str | None = None) -> list[Person]:
     """Who "For anything else, please contact {contact}" names in templates 5, 6
     and 8 (owner's word review, 23 Nov 2026): the request's panthaky (or
     panthakys) with their number; at a fire temple with no confirmed panthaky
-    in the app, the first mobed going."""
-    return list(panthakys) if panthakys else list(going[:1])
+    in the app, the first mobed going.
+
+    Template 6 goes to each mobed going (``to``, the number it goes to), and
+    never names them as their own contact: the first mobed going is given the
+    next one instead, and with nobody else going, the fire temple's own name
+    (``fire_temple``) with no number."""
+    if panthakys:
+        return list(panthakys)
+    if to is None:
+        return list(going[:1])
+    others = [p for p in going if p.phone != to]
+    if others:
+        return others[:1]
+    return [Person(fire_temple)] if fire_temple else []
 
 
 def names_blank(people: list[Person]) -> str:
@@ -636,7 +651,8 @@ def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Pe
 
 def all_set_details_send(
     record: FuneralRecord, place: FuneralPlace, *, going: list[Person], panthakys: list[Person], phone: str,
-    recipient_type: str, recipient_id: int, agyary_id: int, back_out: str, refs: dict, why_not: str | None = None,
+    recipient_type: str, recipient_id: int, agyary_id: int, fire_temple: str, back_out: str, refs: dict,
+    why_not: str | None = None,
 ) -> Send:
     """Template 6 (prayer_details_mobed_v3): "You will pray for {{1 departed}} at
     {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}. The family's contact is
@@ -645,9 +661,14 @@ def all_set_details_send(
     your service." One quick-reply button, "I can't go any more", whose
     payload is ``back_out`` (prayer_callout.back_out_payload: Step 5b reads
     it). {{8}} is the panthaky with their number, else the first mobed going
-    (``contact_people``)."""
+    who is not the one it goes to, else ``fire_temple``, the fire temple's own
+    name with no number (``contact_people``)."""
     mobeds, mobeds_kept = people_blank(going)
-    contact, contact_kept = people_blank(contact_people(panthakys, going))
+    contacts = contact_people(panthakys, going, to=phone, fire_temple=fire_temple)
+    contact, contact_kept = people_blank(contacts)
+    # A contact who is neither going nor a panthaky is the fire temple's name.
+    temple = [("the fire temple's name", p.name, template_text.TEMPLE_MAX)
+              for p in contacts if p not in going and p not in panthakys]
     return Send(
         kind=TYPE_ALL_SET_DETAILS, phone=phone, recipient_type=recipient_type, recipient_id=recipient_id,
         agyary_id=agyary_id,
@@ -656,7 +677,7 @@ def all_set_details_send(
         hidden=(6,), recorded={7: mobeds_kept, 8: contact_kept}, quick_replies=(back_out,), refs=refs,
         why_not=why_not,
         names=_record_checks(record, place, None, True) + _people_checks(going, "the name of a mobed going")
-        + _people_checks(panthakys, "the panthaky's name"),
+        + _people_checks(panthakys, "the panthaky's name") + temple,
     )
 
 

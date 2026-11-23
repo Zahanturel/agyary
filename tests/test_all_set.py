@@ -680,11 +680,64 @@ def test_for_anything_else_the_panthaky_else_the_first_mobed_going():
     assert family.params[5] == "Er. First (+91 9800000002)" and family.params[6] == "Behdin Rustom Jamshed"
     assert family.recorded[6] == "Er. First ([number])"
     details = fw.all_set_details_send(record, place, going=going, panthakys=[], phone="+919800000003",
-                                      recipient_type="user", recipient_id=3, agyary_id=2, back_out="pca:x:x", refs={})
+                                      recipient_type="user", recipient_id=3, agyary_id=2, fire_temple="Goti Adarian",
+                                      back_out="pca:x:x", refs={})
     assert details.params[7] == "Er. First (+91 9800000002)"
     to_place = fw.all_set_manager_send(record, agyary, going=going, panthakys=[], phone="+919800000004",
                                        recipient_id=4, refs={})
     assert to_place.params[3] == "Er. First (+91 9800000002)" and to_place.recorded[4] == "Er. First ([number])"
+
+
+def test_template_6_never_names_the_mobed_it_goes_to_as_their_own_contact():
+    """With no confirmed panthaky, template 6 sent to the first mobed going names the next
+    mobed going instead; with nobody else going, the fire temple's own name, with no number
+    (and that name passes the same checks as any other). The panthaky stays the contact
+    where there is one."""
+    head = fw.Person("Er. Head", "+919800000001")
+    first, second = fw.Person("Er. First", "+919800000002"), fw.Person("Er. Second", "+919800000003")
+    going = [first, second]
+    assert fw.contact_people([], going, to=first.phone, fire_temple="Goti Adarian") == [second]
+    assert fw.contact_people([], going, to=second.phone, fire_temple="Goti Adarian") == [first]
+    assert fw.contact_people([], [first], to=first.phone, fire_temple="Goti Adarian") == [fw.Person("Goti Adarian")]
+    assert fw.contact_people([head], going, to=first.phone, fire_temple="Goti Adarian") == [head]
+    record = SimpleNamespace(id=1, departed_title="behdin", departed_name="Rustom", departed_parent_name="Jamshed",
+                             geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None,
+                             family_contact_name="Test Family", family_contact_phone="+919800000009")
+    place = SimpleNamespace(name="Doongerwadi (test)")
+
+    def details(going, to):
+        return fw.all_set_details_send(record, place, going=going, panthakys=[], phone=to, recipient_type="user",
+                                       recipient_id=3, agyary_id=2, fire_temple="Goti Adarian", back_out="pca:x:x",
+                                       refs={})
+
+    to_first = details(going, first.phone)
+    assert to_first.params[7] == "Er. Second (+91 9800000003)" and to_first.recorded[8] == "Er. Second ([number])"
+    assert "Er. First" not in to_first.params[7] and "Goti Adarian" not in [n for _, n, _ in to_first.names]
+    alone = details([first], first.phone)
+    assert alone.params[7] == "Goti Adarian" and alone.recorded[8] == "Goti Adarian"
+    assert ("the fire temple's name", "Goti Adarian", fw.template_text.TEMPLE_MAX) in alone.names
+
+
+async def test_the_only_mobed_going_at_a_fire_temple_with_no_panthaky_is_told_to_contact_the_fire_temple(
+        client, db, seeded, meta, pushes, live):
+    from sqlalchemy import update
+
+    from agyary.models import AgyaryUser
+
+    aid = seeded["agyary_id"]
+    hormuz = (await db.execute(select(User).where(User.phone == PANTHAKY))).scalar_one()
+    await db.execute(update(AgyaryUser).where(AgyaryUser.user_id == hormuz.id).values(role="mobed"))
+    await db.commit()
+    tomorrow = (funeral_records.today_ist() + timedelta(days=1)).isoformat()
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=1, geh_saarnu_date=tomorrow)
+    meta.sent.clear()
+    r = await client.post(f"{REQUESTS}/{rid}/answer", json={"answer": "yes"}, headers=await _as(client, MOBED))
+    assert r.status_code == 200 and r.json()["request"]["status"] == "all_set", r.text
+    details = _to(meta, "prayer_details_mobed_v3")
+    assert set(details) == {MOBED}
+    assert _body(details[MOBED])[7] == "Goti Adarian"
+    (family,) = meta.templates("prayers_all_set_family")
+    assert _body(family)[5] == "Er. Pervez Kias (+91 9800000002)"     # the family is still given the mobed
 
 
 # --- Confirm with who's going -------------------------------------------------------------

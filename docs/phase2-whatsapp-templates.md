@@ -100,7 +100,10 @@ Setting: `WHATSAPP_ALL_SET_DETAILS_TEMPLATE` (default `prayer_details_mobed_v3`)
 > your service.
 
 Blanks, in this order: 1 departed, 2 place, 3 Geh-saarnu, 4 Uthamna, 5 the family's name, 6 the
-family's number, 7 the mobeds going with their numbers, 8 the contact (as in template 5).
+family's number, 7 the mobeds going with their numbers, 8 the contact (as in template 5, except
+that it never names the mobed it goes to: with no confirmed panthaky in the app, the first mobed
+going is given the next mobed going, and if nobody else is going, the fire temple's own name with
+no number).
 
 Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: a mobed going can back out from
 here; their place opens and the next on the waiting list is asked).
@@ -162,7 +165,9 @@ answer or tap; after that nothing is sent:
 Templates 5, 6 and 8 named "the panthaky", which at an agyari with no confirmed panthaky in the
 app read "not fixed yet". The owner chose "For anything else, please contact [contact]": the
 panthaky's name and number, or with no confirmed panthaky in the app, the first mobed going (name
-and number). The drafts above and the code (services/funeral_whatsapp.py, `contact_people`) say so.
+and number). In template 6 sent to that first mobed, they are not named as their own contact: the
+next mobed going, or with nobody else going, the fire temple's own name (no number). The drafts
+above and the code (services/funeral_whatsapp.py, `contact_people`) say so.
 
 ### When to switch on
 
