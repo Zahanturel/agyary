@@ -259,6 +259,8 @@ show the family that three mobeds keep them, and what each wrote. (c) can come l
 **Recommended: A in R4.1, B in R4.2.** A mobed's number cannot also be a family account. A mobed
 books for their own family in their own diary.
 
+**Note (24 Nov 2026, D12): names follow the person.** Since a Doongerwadi manager recording a death, the departed's names are kept in a person-level pool keyed by phone number (`person_names`), readable only by the account that signs in with that number. The behdin app builds on it: the family owns that pool and chooses to share it (with a mobed, or with a booking), and until a family account exists a mobed gets only copies in their own book at All set. Question for Round 4: when a family signs in, should they see the pool, edit it, and tick which mobeds may be given copies?
+
 ### 5.12 Erasure, and D8
 
 - **Delete my account** (D6) removes the family's own things at once: the account, names,

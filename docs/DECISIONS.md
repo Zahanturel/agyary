@@ -428,4 +428,22 @@ Decided while walking the Doongerwadi screens on the phone ("too complicated"):
   search shows nothing until a letter is typed). A search box stays above it.
 - **Dates are written day/month/year, 24/11/2026, everywhere** in the app: screens, slips, notices, messages,
   PDFs (the weekday may go before it where there is room). Date boxes follow the phone's own setting.
-- **Departed names for the family:** open, see the next amendment.
+- **Departed names for the family:** decided the same day, see the amendment below.
+
+**Departed names for the family: decided 24 Nov 2026.** When a Doongerwadi manager records a death, the
+departed's name and the father's or husband's name are saved as names of the departed for that family, newest
+on top, so later bookings and slips offer them first. The owner chose a pool for the PERSON, keyed by phone
+number: one number is one person with many roles (behdin, mobed, Doongerwadi manager, trustee), and their
+names follow the person. The privacy rule, built exactly:
+
+- Only the account that signs in with that number can read the pool. No other mobed, no manager (not the one
+  who recorded the death) and no admin screen can read it, and nothing asks for it by phone number. Not even a
+  count of it is shown to the admin before an erasure.
+- A mobed gets names for a family only as **copies in their own book of behdins**, and only at All set for a
+  request they are assigned to (they already see the departed's name for the prayers, so nothing new is shown).
+  The pair goes on top of the family's saved names there; one already saved with the same names is not added
+  twice, and All set running again changes nothing. A mobed who only types that number as a behdin sees none of it.
+- One entry per death record: editing the record's names or number changes that entry, and emptying both names
+  removes it. Nothing is written when both names are empty.
+- It goes when that family is erased (docs/DATA-REQUESTS.md) or when that person deletes their account, and never
+  because of its age (D8).
