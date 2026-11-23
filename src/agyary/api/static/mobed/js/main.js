@@ -212,6 +212,21 @@ async function guardFor(matched, params) {
 
 // --- Chrome -----------------------------------------------------------------
 menuBtn.onclick = () => navigate("#/menu");
+// The name and fire temple in the header go home (owner, 24 Nov 2026: "I got stuck and could not get back to the
+// calendar"): the Calendar tab as it was last left, Events or Machi, on the same day; a Doongerwadi manager's
+// own home. Nothing happens on the sign-in screens, before there is anyone signed in.
+{
+  const title = document.getElementById("headerTitle");
+  const home = () => {
+    if (!state.user || !state.accessToken) return;
+    if (state.user.account_kind === "funeral_manager") return navigate("#/manager");
+    navigate(state.calendarView === "machi" ? boardHash(state.calendar) : calendarHash(state.calendar));
+  };
+  title.setAttribute("role", "link");
+  title.setAttribute("tabindex", "0");
+  title.onclick = home;
+  title.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); home(); } };
+}
 // A tab opens at the day and view the mobed is on - the Machi and Calendar
 // tabs read the same one - rather than resetting to today.
 onTab((tab) => navigate({
