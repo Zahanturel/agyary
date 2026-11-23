@@ -448,14 +448,16 @@ a.tel:active { text-decoration: underline; }
 body.has-tabs main { padding-bottom: calc(var(--space-4) + 88px + var(--safe-bottom)); }
 body.has-tabs .fab { bottom: calc(92px + var(--safe-bottom)); }
 /* Settings > Text size > Extra large. */
-/* The Events | Machi switch at the bottom of the Calendar tab (cal_switch.js), where the thumb is: it floats
-   over the page on the left, level with the Add button on the right, above the tab bar. */
-.seg { position: fixed; left: var(--space-4); bottom: calc(92px + var(--safe-bottom)); z-index: 15; display: flex;
-  width: calc(100% - 2 * var(--space-4) - 168px); max-width: 300px; height: 64px; background: #fff;
-  border: 2px solid var(--primary); border-radius: 999px; overflow: hidden; box-shadow: var(--shadow-sm); }
+/* The Events | Machi switch (cal_switch.js): a slim bar across the page just above the tab bar, so the
+   calendar stays in view; the Add button floats above it. */
+.seg { position: fixed; left: 0; right: 0; bottom: var(--tabs-h, 77px); z-index: 15; display: flex;
+  height: 44px; background: #fff; border-top: 1px solid var(--border); box-shadow: 0 -2px 6px rgba(0,0,0,.06); }
 .seg button { flex: 1; min-height: 0; height: 100%; padding: 0 var(--space-2); border: 0; border-radius: 0; background: #fff;
-  color: var(--primary); font-weight: 700; font-size: var(--text-base); cursor: pointer; }
+  color: var(--primary); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
 .seg button.on { background: var(--primary); color: #fff; }
+body:has(.seg) .fab { bottom: calc(var(--tabs-h, 77px) + 44px + 12px); }
+body:has(.seg).has-tabs main { padding-bottom: calc(var(--space-4) + var(--tabs-h, 77px) + 44px); }
+body:has(.seg).has-fab main { padding-bottom: calc(var(--space-4) + 168px + 44px); }
 /* Regular: an ordinary phone's size, for those who find Large too big (owner, 24 Nov 2026). */
 html[data-text="regular"] { --text-xs:14px; --text-sm:16px; --text-base:17px; --text-md:19px; --text-lg:22px; --text-grid:14px; }
 html[data-text="xl"] { --text-xs:21px; --text-sm:22px; --text-base:24px; --text-md:27px; --text-lg:31px; --text-grid:18px; }
@@ -474,7 +476,8 @@ body.has-fab main { padding-bottom: calc(var(--space-4) + 168px + var(--safe-bot
   body.has-tabs main { max-width: 960px; padding-bottom: var(--space-6); }
   body.has-tabs .fab { bottom: var(--space-6); }
   body.has-fab main { padding-bottom: calc(var(--space-6) + 88px); }
-  .seg { left: calc(150px + var(--space-4)); bottom: var(--space-6); }
+  .seg { left: 150px; bottom: 0; }
+  body:has(.seg) .fab { bottom: calc(44px + var(--space-6)); }
 }
 @media print { .tabs { display: none !important; } }
 

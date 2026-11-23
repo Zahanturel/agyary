@@ -36,6 +36,13 @@ export function showTabs(active) {
     b.setAttribute("aria-current", on ? "page" : "false");
   });
 }
+// The tab bar's own height (it grows with the text size and the phone's bottom edge) is kept in
+// --tabs-h, so the Events | Machi bar can sit exactly on top of it (cal_switch.js).
+if (tabsEl && typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(() => {
+    if (tabsEl.offsetHeight) document.documentElement.style.setProperty("--tabs-h", tabsEl.offsetHeight + "px");
+  }).observe(tabsEl);
+}
 export function onTab(handler) {
   if (tabsEl) tabsEl.querySelectorAll("[data-tab]").forEach(b => { b.onclick = () => handler(b.dataset.tab); });
 }
