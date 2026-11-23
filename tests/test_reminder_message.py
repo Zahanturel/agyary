@@ -28,7 +28,7 @@ def test_the_manual_message_says_when_and_what_without_asking_for_anything():
     assert rm.manual_text(_parts()) == (
         "Sahebji Rustom Mistry, a reminder from Er. Jehangir Mistry of Goti Adarian:\n\n"
         "Afringan and Baaj for Dinshaw\n"
-        f"Tomorrow, Thu 14 Mar ({ROJ_MAH})\n\n"
+        f"Tomorrow, Thu 14/03/2030 ({ROJ_MAH})\n\n"
         "May the ruvan of the late Dinshaw attain Garothman Behesht."
     )
 
@@ -43,20 +43,20 @@ def test_the_automatic_message_adds_how_to_stop():
     assert rm.template_text(_parts()) == (
         "Reminder from Goti Adarian.\n\n"
         "This is a notice of prayers scheduled at the fire temple.\n\n"
-        f"When: Tomorrow, Thu 14 Mar ({ROJ_MAH})\n"
+        f"When: Tomorrow, Thu 14/03/2030 ({ROJ_MAH})\n"
         "Prayers: Afringan and Baaj for Dinshaw.\n\n"
         "To stop these reminders, reply STOP."
     )
 
 
 def test_today_and_tomorrow_are_said_only_when_true():
-    assert f"\nToday, Thu 14 Mar ({ROJ_MAH})" in rm.manual_text(_parts(today=DAY))
+    assert f"\nToday, Thu 14/03/2030 ({ROJ_MAH})" in rm.manual_text(_parts(today=DAY))
     # Further off it is just the date; no "tomorrow" that would be wrong.
-    assert f"\nThu 14 Mar ({ROJ_MAH})\n" in rm.manual_text(_parts(today=DAY - timedelta(days=4)))
+    assert f"\nThu 14/03/2030 ({ROJ_MAH})\n" in rm.manual_text(_parts(today=DAY - timedelta(days=4)))
 
 
 def test_the_time_appears_only_when_there_is_one():
-    assert f"Tomorrow, Thu 14 Mar ({ROJ_MAH}), at 9:00 am\n" in rm.manual_text(
+    assert f"Tomorrow, Thu 14/03/2030 ({ROJ_MAH}), at 9:00 am\n" in rm.manual_text(
         _parts(services=["Afringan"], at=(9, 0)))
     assert ", at 5:30 pm" in rm.manual_text(_parts(at=(17, 30)))
     assert ", at 12:00 pm" in rm.manual_text(_parts(at=(12, 0)))
@@ -127,15 +127,15 @@ def test_the_next_template_greets_the_family_and_carries_no_blessing():
 def test_the_next_template_reads_in_the_owners_words():
     parts = _parts(at=(9, 0))
     assert parts.params_for(rm.TEMPLATE_V2_NAME) == [
-        "Rustom Mistry", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14 Mar ({ROJ_MAH}) at 9:00 am"]
+        "Rustom Mistry", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14/03/2030 ({ROJ_MAH}) at 9:00 am"]
     assert rm.template_text(parts, rm.TEMPLATE_V2_NAME) == (
         "Sahebji Rustom Mistry,\n\n"
         "A reminder from Goti Adarian:\n"
-        f"Afringan and Baaj for Dinshaw on Thu 14 Mar ({ROJ_MAH}) at 9:00 am.\n\n"
+        f"Afringan and Baaj for Dinshaw on Thu 14/03/2030 ({ROJ_MAH}) at 9:00 am.\n\n"
         "The prayers are already arranged; you need not reply."
     )
     # No time: the day blank ends with the Parsi date (Meta refuses an empty blank).
-    assert _parts().params_for(rm.TEMPLATE_V2_NAME)[4] == f"Thu 14 Mar ({ROJ_MAH})"
+    assert _parts().params_for(rm.TEMPLATE_V2_NAME)[4] == f"Thu 14/03/2030 ({ROJ_MAH})"
     # Every other template name keeps the live template's four blanks.
     assert _parts().params_for("memorial_reminder") == _parts().as_params()
 

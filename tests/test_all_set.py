@@ -501,7 +501,7 @@ def _times() -> tuple[str, str]:
     today = funeral_records.today_ist()
 
     def day(d):
-        return f"{d:%a} {d.day} {d:%b}"
+        return f"{d:%a} {d:%d/%m/%Y}"
 
     return f"{day(today)}, Havan geh", f"{day(today + timedelta(days=2))}, 4:00 pm"
 
@@ -862,7 +862,7 @@ async def test_still_short_tells_the_panthaky_once_four_hours_before_the_geh_saa
     (note,) = await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)
     assert note.title == "Still 1 mobed short for Behdin Rustom Jamshed" and note.link == f"#/requests/{rid}"
     assert note.body == (f"1 of 2 going for the request from Doongerwadi (test), and the Geh-saarnu is "
-                         f"{tomorrow:%a} {tomorrow.day} {tomorrow:%b}, Rapithwan geh. "
+                         f"{tomorrow:%a} {tomorrow:%d/%m/%Y}, Rapithwan geh. "
                          "Ask everyone, call a mobed, or Confirm with who's going.")
     (push,) = pushes
     assert push["to"] == [(await _user(db, PANTHAKY)).id] and push["title"] == "Still 1 mobed short"
@@ -1038,7 +1038,7 @@ async def test_a_panthaky_not_praying_tells_the_family_the_agyari_was_asked_and_
     today = funeral_records.today_ist()
 
     def day(d) -> str:
-        return f"{d:%a} {d.day} {d:%b}"
+        return f"{d:%a} {d:%d/%m/%Y}"
 
     when = (f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, "
             "4:00 pm. Please call or message me here for anything you need. "

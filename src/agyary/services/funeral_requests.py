@@ -30,6 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
+from agyary.messaging.formatting import weekday_date
 from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, FuneralRequestRecipient, User
 from agyary.models.enums import (
     GEH_NAMES,
@@ -189,7 +190,7 @@ def nobody_there(agyary: Agyary) -> str:
 
 
 def _day(d: date) -> str:
-    return f"{d:%a} {d.day} {d:%b}"
+    return weekday_date(d)
 
 
 def _clock(t: time) -> str:

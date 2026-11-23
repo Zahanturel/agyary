@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import date, time
 
 from agyary.calendar import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
+from agyary.messaging.formatting import weekday_date
 
 # The text submitted to Meta for approval, with its four numbered blanks:
 #   {{1}} the fire temple   {{2}} when, e.g. "Tomorrow, Thu 15 Oct"
@@ -140,7 +141,7 @@ def build_parts(
     button early never sends a "tomorrow" that is wrong.
     """
     d = obs.gregorian_date
-    date_text = f"{d:%a} {d.day} {d:%b}"
+    date_text = weekday_date(d)
     when = {0: f"Today, {date_text}", 1: f"Tomorrow, {date_text}"}.get((d - today).days, date_text)
     what = _list_and(service_names) or obs.label
     clock = _clock(obs.time_of_day) if obs.time_of_day else ""

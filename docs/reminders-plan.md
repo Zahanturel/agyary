@@ -84,13 +84,13 @@ charge for.
 
     This is a notice of prayers scheduled at the fire temple.
 
-    When: Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad)
+    When: Tomorrow, Thu 15/10/2026 (Roj Bahman, Mah Khordad)
     Prayers: Afringan and Baaj for Ardeshir Mehta at 9:00 am.
 
     To stop these reminders, reply STOP.
 
   The text submitted to Meta is `reminder_message.TEMPLATE_BODY`, with four
-  numbered blanks: the temple, "Tomorrow, Thu 15 Oct", the Parsi date, and
+  numbered blanks: the temple, "Tomorrow, Thu 15/10/2026", the Parsi date, and
   "Afringan and Baaj for Ardeshir Mehta at 9:00 am." (A template may not begin
   or end with a blank, nor put a newline inside one; both are tested.) The
   manual wa.me message has no STOP line, since a reply to a message a mobed
@@ -102,7 +102,7 @@ charge for.
       Sahebji <behdin's name>, a reminder from <mobed> of <fire temple>:
 
       Afringan and Baaj for Ardeshir Mehta
-      Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad), at 9:00 am
+      Tomorrow, Thu 15/10/2026 (Roj Bahman, Mah Khordad), at 9:00 am
 
       May the ruvan of the late Ardeshir Mehta attain Garothman Behesht.
 

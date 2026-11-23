@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agyary.core.config import Settings
-from agyary.messaging.formatting import PURPOSE_SHORT, geh_label
+from agyary.messaging.formatting import PURPOSE_SHORT, geh_label, weekday_date
 from agyary.messaging.geh_times import IST
 from agyary.models import (
     AgyaryUser, AppNotification, Customer, Machi, Memorial, MemorialObservance, Notification, Service, User,
@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 KIND = "daily_report"
 WA_LIST_MAX = 700          # characters of list in a WhatsApp message (the body limit is 1024)
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 @dataclass(frozen=True)
@@ -50,7 +49,7 @@ class Item:
 
 
 def day_label(d: date) -> str:
-    return f"{WEEKDAYS[d.weekday()]} {d.day} {MONTHS[d.month - 1]}"
+    return weekday_date(d)
 
 
 def _clock(dt: datetime) -> str:

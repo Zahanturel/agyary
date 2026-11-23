@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar.engine import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 from agyary.core.config import Settings
+from agyary.messaging.formatting import numeric_date, weekday_date
 from agyary.models import Customer, Notification, User
 from agyary.services import account, guardrails, reminder_sender, reminders, template_text, wa_send
 
@@ -39,24 +40,22 @@ TYPE = "memorial_share"
 NOTE_MAX = 300
 GLOBAL_CAP_REACHED = ("Today's limit for sending schedules from the Mobed Diary number has been reached. "
                       "You can still send it from your own WhatsApp.")
-MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
-          "September", "October", "November", "December")
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
 def long_date(iso: str) -> str:
     d = date.fromisoformat(iso)
-    return f"{WEEKDAYS[d.weekday()]}, {d.day} {MONTHS[d.month - 1]} {d.year}"
+    return f"{WEEKDAYS[d.weekday()]} {numeric_date(d)}"
 
 
 def short_date(iso: str) -> str:
     d = date.fromisoformat(iso)
-    return f"{d.day} {MONTHS[d.month - 1][:3]} {d.year}"
+    return numeric_date(d)
 
 
 def table_date(iso: str) -> str:
     d = date.fromisoformat(iso)
-    return f"{WEEKDAYS[d.weekday()][:3]}, {d.day} {MONTHS[d.month - 1][:3]} {d.year}"
+    return weekday_date(d)
 
 
 def parsi_day(roj: int | None, mah: int | None, gatha_index: int | None = None) -> str:

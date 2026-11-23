@@ -119,7 +119,7 @@ async def test_whatsapp_goes_through_the_template_in_live_mode(client, db, seede
     body = json.loads(call.content)
     assert body["to"] == NEW_MOBED_PHONE and body["template"]["name"] == "daily_report"
     texts = [p["text"] for p in body["template"]["components"][0]["parameters"]]
-    assert texts[0] == "Sun 1 Aug" and texts[1] == "1 thing on your day" and "Delete Behdin" in texts[2]
+    assert texts[0] == "Sun 01/08/2027" and texts[1] == "1 thing on your day" and "Delete Behdin" in texts[2]
     assert "\n" not in "".join(texts)                       # a template variable cannot hold a line break
     (row,) = (await db.execute(select(Notification))).scalars().all()
     assert row.status == "sent" and row.wa_message_id == "wamid.REPORT" and row.notification_type == "daily_report"

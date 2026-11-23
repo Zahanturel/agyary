@@ -168,7 +168,7 @@ async def test_one_accepted_the_old_way_reads_as_before_and_its_book_is_the_acce
     assert req["status"] == "accepted" and req["accepted_by_me"] is True
     assert req["family_contact"] == {"name": "Test Family", "phone": FAMILY}
     today = funeral_records.today_ist()
-    day = lambda d: f"{d:%a} {d.day} {d:%b}"   # noqa: E731
+    day = lambda d: f"{d:%a} {d:%d/%m/%Y}"   # noqa: E731
     assert req["family_message"] == (
         f"Sahebji Test Family, I am Er. Hormuz Dadachanji of {req['agyari']['name']}. Doongerwadi (test) has asked me "
         "to perform the prayers for Behdin Rustom Jamshed. "

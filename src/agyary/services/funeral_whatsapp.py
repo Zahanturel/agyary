@@ -79,6 +79,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings, get_settings
+from agyary.messaging.formatting import weekday_date
 from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, Notification
 from agyary.models.enums import GEH_NAMES
 from agyary.services import funeral_records, guardrails, reminder_sender, reminders, template_text, wa_send
@@ -197,7 +198,7 @@ def withdrawn_text(name: str | None) -> str:
 # --- The words in the blanks ------------------------------------------------------
 
 def _day(d) -> str:
-    return f"{d:%a} {d.day} {d:%b}"
+    return weekday_date(d)
 
 
 def _clock(t) -> str:

@@ -41,10 +41,23 @@ def parsi_label(roj: int, mah: int) -> str:
     return f"Roj {ROJ_NAMES[roj - 1]}, Mah {MAH_NAMES[mah - 1]}"
 
 
+def numeric_date(d: date) -> str:
+    """Day/month/year in numbers: "24/11/2026" (owner, 24 Nov 2026, D12)."""
+    return f"{d.day:02d}/{d.month:02d}/{d.year}"
+
+
+def weekday_date(d: date) -> str:
+    """"Tue 24/11/2026": the weekday in front of the numbers."""
+    return f"{WEEKDAYS_SHORT[d.weekday()]} {numeric_date(d)}"
+
+
+WEEKDAYS_SHORT = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
 def gregorian_label(d: date) -> str:
     """With the weekday - it is what a mobed checks a date against, and it
     is on the printed slip, so it has to be readable there."""
-    return d.strftime("%a %d %b %Y")
+    return weekday_date(d)
 
 
 def date_label(roj: int, mah: int, gregorian: date) -> str:
