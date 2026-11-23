@@ -33,7 +33,7 @@ import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, flashInfo,
   flashError,
 } from "../ui.js";
-import { esc, firstName, gregLabel, istHm, istYmd, todayIst } from "../util.js";
+import { esc, recordMobedText, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard, returnTo } from "../router.js";
 import { managerHash } from "../acting.js";
 import { refreshAfterAction } from "../notifications.js";
@@ -97,11 +97,8 @@ async function fetchRecord(id, retry) {
 function reachHtml(rec, name, phone, idPrefix) {
   const me = state.user ? state.user.name : "";
   const place = rec.funeral_place ? rec.funeral_place.name : "";
-  // "Sahebji <first name>" (owner, 22 Nov 2026): the Parsi way one addresses a mobed. The words
-  // are the owner's (word review, 23 Nov 2026).
-  const first = firstName(name);
-  const who = [me, place].filter(Boolean).join(" of ");
-  const text = `${first ? `Sahebji ${first}` : "Sahebji"}, ${who ? `this is ${who}, ` : ""}about the prayers for ${rec.prayed_name}.`;
+  // util.js recordMobedText: "Sahebji <first name>," alone, then short lines (D11; layout 24 Nov 2026).
+  const text = recordMobedText(name, me, place, rec.prayed_name);
   const digits = phone.replace(/\D/g, "");
   return `
     <p style="margin:6px 0 0"><a class="tel" href="tel:${esc(phone)}">${esc(phone)}</a></p>

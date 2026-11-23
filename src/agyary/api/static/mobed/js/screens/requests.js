@@ -47,7 +47,7 @@ import { state, saveSession } from "../state.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, toTop,
 } from "../ui.js";
-import { esc, firstName, gregLabel, istHm, istYmd, todayIst } from "../util.js";
+import { askMobedText, esc, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { refreshRequestCount } from "../requests_count.js";
@@ -247,7 +247,7 @@ function familyCardHtml(q) {
       <h2>The family of ${esc(q.prayed_name)}</h2>
       ${fact("Family contact", `${esc(c.name)}<br><a class="tel" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`)}
       <label for="rqMsg" style="margin-top:10px">Message to the family</label>
-      <textarea id="rqMsg" rows="7" maxlength="1000">${esc(q.family_message)}</textarea>
+      <textarea id="rqMsg" rows="14" maxlength="1000">${esc(q.family_message)}</textarea>
       <p class="meta" style="margin:6px 0 0">Change it as you like. It opens in your own WhatsApp, ready to send.</p>
       <div class="action-bar">
         <a class="button" id="rqWa" href="${esc(waLink(c.phone, q.family_message))}" target="_blank"
@@ -598,7 +598,7 @@ function allSetFamilyHtml(a, prayed) {
       <h2>The family of ${esc(prayed)}</h2>
       ${fact("Family contact", `${esc(c.name)}<br><a class="tel" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`)}
       <label for="rqAsMsg" style="margin-top:10px">Message to the family</label>
-      <textarea id="rqAsMsg" rows="7" maxlength="1000">${esc(msg)}</textarea>
+      <textarea id="rqAsMsg" rows="14" maxlength="1000">${esc(msg)}</textarea>
       <p class="meta" style="margin:6px 0 0">Change it as you like. It opens in your own WhatsApp, ready to send.</p>
       <div class="row" style="margin-top:10px">
         <a class="button" id="rqAsWa" href="${esc(waLink(c.phone, msg))}" target="_blank" rel="noopener">WhatsApp
@@ -833,18 +833,6 @@ function mobedStateText(m) {
   return "Not asked yet";
 }
 
-/** What the panthaky's own WhatsApp opens with, to one of their mobeds: no family details.
- *  "Sahebji <first name>, ..." (D11, owner's word review of 23 Nov 2026). */
-function askText(b, m) {
-  const first = firstName(m && m.name);
-  return [
-    `${first ? `Sahebji ${first}` : "Sahebji"}, a prayer request has come to ${b.agyari.name} for ${b.prayed_name} at ${b.place.name}.`,
-    b.geh_saarnu ? `Geh-saarnu: ${b.geh_saarnu.text}.` : "",
-    b.uthamna ? `Uthamna: ${b.uthamna.text}.` : "",
-    "Can you pray?",
-  ].filter(Boolean).join(" ");
-}
-
 function mobedRowHtml(b, m) {
   const notes = [];
   if (m.phone) notes.push(esc(m.phone));
@@ -857,7 +845,7 @@ function mobedRowHtml(b, m) {
   const reach = m.phone ? `<div class="row" style="margin-top:8px">
       <a class="button secondary" href="tel:${esc(m.phone)}" data-call="${esc(m.key)}"
         aria-label="Call ${esc(m.name)}">Call</a>
-      <a class="button secondary" href="${esc(waLink(m.phone, askText(b, m)))}" target="_blank" rel="noopener"
+      <a class="button secondary" href="${esc(waLink(m.phone, askMobedText(b, m)))}" target="_blank" rel="noopener"
         data-chat="${esc(m.key)}" aria-label="WhatsApp ${esc(m.name)}">WhatsApp</a>
     </div>` : "";
   // Not for someone whose account is waiting or switched off (D9): said why instead.

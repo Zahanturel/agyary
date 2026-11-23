@@ -361,8 +361,43 @@ console.log(JSON.stringify({json.dumps(names)}.map(firstName)));
     from agyary.services import funeral_whatsapp
     assert [funeral_whatsapp.first_name(n) for n in names] == out
     record = (JS / "screens" / "manager_record.js").read_text(encoding="utf-8")
-    assert "const first = firstName(name);" in record and "Sahebji ${first}" in record
+    assert "recordMobedText(name, me, place, rec.prayed_name)" in record
     board = (JS / "screens" / "requests.js").read_text(encoding="utf-8")
-    assert "const first = firstName(m && m.name);" in board and "Sahebji ${first}" in board
+    assert "askMobedText(b, m)" in board
+    util = (JS / "util.js").read_text(encoding="utf-8")
+    assert "const first = firstName(m && m.name);" in util and util.count("Sahebji ${first}") == 2
     for path in JS.rglob("*.js"):
         assert "namaste" not in path.read_text(encoding="utf-8").lower(), path
+
+
+def _assert_layout(text: str) -> None:
+    """The shape of every WhatsApp message (owner, 24 Nov 2026): the greeting alone on line 1,
+    an empty line after it, never two empty lines in a row, no trailing spaces, no blank edges."""
+    lines = text.split("\n")
+    assert lines[0].startswith("Sahebji") and lines[0].endswith(",") and lines[1] == ""
+    assert "\n\n\n" not in text and text == text.strip()
+    assert all(line == line.rstrip() for line in lines)
+
+
+def test_the_message_to_a_mobed_is_laid_out_in_short_lines():
+    board = {"agyari": {"name": "Goti Adarian"}, "prayed_name": "Behdin Rustom", "place": {"name": "Doongerwadi (test)"},
+             "geh_saarnu": {"text": "Tue 24/11/2026, Havan geh"}, "uthamna": {"text": "Thu 26/11/2026, 4:00 pm"}}
+    out = _node(STORAGE + f"""
+const {{ askMobedText, recordMobedText }} = await import({json.dumps(_module(JS / "util.js"))});
+const b = {json.dumps(board)};
+console.log(JSON.stringify([askMobedText(b, {{ name: "Er. Delzeen Mistry" }}),
+  askMobedText({{ ...b, geh_saarnu: null, uthamna: null }}, {{ name: "" }}),
+  recordMobedText("Er. Delzeen Mistry", "Er. Test", "Doongerwadi (test)", "Behdin Rustom"),
+  recordMobedText("Delzeen", "", "", "Behdin Rustom")]));
+""")
+    assert out[0] == (
+        "Sahebji Delzeen,\n\n"
+        "A prayer request has come to Goti Adarian.\n\n"
+        "*Prayers for:* Behdin Rustom\n*Place:* Doongerwadi (test)\n"
+        "*Geh-saarnu:* Tue 24/11/2026, Havan geh\n*Uthamna:* Thu 26/11/2026, 4:00 pm\n\n"
+        "Can you pray?")
+    assert out[1].startswith("Sahebji,\n\n") and "Geh-saarnu" not in out[1] and "Uthamna" not in out[1]
+    assert out[2] == "Sahebji Delzeen,\n\nThis is Er. Test of Doongerwadi (test).\n\nAbout the prayers for Behdin Rustom."
+    assert out[3] == "Sahebji Delzeen,\n\nAbout the prayers for Behdin Rustom."
+    for text in out:
+        _assert_layout(text)

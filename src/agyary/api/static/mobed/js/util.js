@@ -25,6 +25,47 @@ export function firstName(full) {
   return words[i] || words.join(" ");
 }
 
+/** A message laid out for WhatsApp (owner, 24 Nov 2026): each paragraph is a string or an array of
+ *  lines, paragraphs are separated by ONE empty line, and an empty paragraph or line is left out. */
+export function layoutMessage(...paragraphs) {
+  return paragraphs
+    .map(p => (Array.isArray(p) ? p : [p]).map(l => String(l == null ? "" : l).trim()).filter(Boolean).join("\n"))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** One fact with its label in WhatsApp bold: "*Label:* value"; nothing when there is no value. */
+export function boldLine(label, value) {
+  const v = String(value == null ? "" : value).trim();
+  return v ? `*${label}:* ${v}` : "";
+}
+
+/** What the panthaky's own WhatsApp opens with, to one of their mobeds: no family details.
+ *  "Sahebji <first name>," alone on the first line (D11), then each fact on its own line. `b` is
+ *  the board (agyari, prayed_name, place, geh_saarnu, uthamna), `m` the mobed asked. */
+export function askMobedText(b, m) {
+  const first = firstName(m && m.name);
+  return layoutMessage(
+    `${first ? `Sahebji ${first}` : "Sahebji"},`,
+    `A prayer request has come to ${b.agyari.name}.`,
+    [boldLine("Prayers for", b.prayed_name), boldLine("Place", b.place.name),
+     boldLine("Geh-saarnu", b.geh_saarnu && b.geh_saarnu.text), boldLine("Uthamna", b.uthamna && b.uthamna.text)],
+    "Can you pray?",
+  );
+}
+
+/** The manager's WhatsApp to a mobed or the panthaky about a record (D11): `me` is the manager's
+ *  name, `place` the Doongerwadi's. */
+export function recordMobedText(name, me, place, prayedName) {
+  const first = firstName(name);
+  const who = [me, place].filter(Boolean).join(" of ");
+  return layoutMessage(
+    `${first ? `Sahebji ${first}` : "Sahebji"},`,
+    who ? `This is ${who}.` : "",
+    `About the prayers for ${prayedName}.`,
+  );
+}
+
 // Every date the app reasons about is an IST calendar day: the fire temple
 // is in India, the Parsi day is anchored to sunrise there, and a mobed
 // travelling shouldn't see their day shift.
