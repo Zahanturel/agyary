@@ -111,8 +111,8 @@ async def test_tomorrows_reminder_is_planned_with_the_template_blanks_filled(cli
 
 
 async def test_on_template_v2_the_reminder_is_planned_with_its_own_six_blanks(client, db, seeded):
-    # The owner's words (D11, 23 Nov 2026): "Sahebji {{1}}, a reminder from {{2}}: {{3}} for {{4}}
-    # on {{5}}. May the ruvan of the late {{6}} attain Garothman Behesht."
+    # The owner's words (D11, 23 Nov 2026), in short lines: "Sahebji {{1}}, / A reminder from
+    # {{2}}: / {{3}} for {{4}} on {{5}}. / May the ruvan of the late {{6}} attain Garothman Behesht."
     *_, now = await _scenario(client, db, seeded)
     v2 = _settings(whatsapp_reminder_template=reminder_message.TEMPLATE_V2_NAME)
     assert await reminder_sender.plan_tomorrow(db, now, v2) == 1
@@ -124,7 +124,7 @@ async def test_on_template_v2_the_reminder_is_planned_with_its_own_six_blanks(cl
     assert params[:4] == ["Delzeen Test", "Goti Adarian", "Afringan and Baaj", "Ardeshir Mehta"]
     assert "(Roj " in params[4] and params[5] == "Ardeshir Mehta" and len(params) == 6
     assert reminder_message.render(reminder_message.TEMPLATE_V2_BODY, params).startswith(
-        "Sahebji Delzeen Test, a reminder from Goti Adarian: Afringan and Baaj for Ardeshir Mehta on ")
+        "Sahebji Delzeen Test,\n\nA reminder from Goti Adarian:\nAfringan and Baaj for Ardeshir Mehta on ")
 
 
 async def test_planning_twice_plans_once(client, db, seeded):

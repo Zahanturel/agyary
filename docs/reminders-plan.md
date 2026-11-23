@@ -108,9 +108,17 @@ charge for.
 
   ("Sahebji, a reminder ..." when the behdin's name is blank.) The template
   above is live and keeps its words. The next one, `memorial_reminder_v2`
-  (not submitted yet; docs/OWNER-TODO.md), is "Sahebji {{1}}, a reminder from
-  {{2}}: {{3}} for {{4}} on {{5}}. May the ruvan of the late {{6}} attain
-  Garothman Behesht." with its own six blanks (the behdin's name, the fire
+  (not submitted yet; docs/OWNER-TODO.md), is laid out in short lines (owner,
+  23 Nov 2026):
+
+      Sahebji {{1}},
+
+      A reminder from {{2}}:
+      {{3}} for {{4}} on {{5}}.
+
+      May the ruvan of the late {{6}} attain Garothman Behesht.
+
+  with its own six blanks (the behdin's name, the fire
   temple, the prayers, the departed, the day with its Roj and Mah and the
   time, the departed again); each reminder is planned with the blanks of the
   template it goes on.

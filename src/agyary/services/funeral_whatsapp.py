@@ -658,10 +658,10 @@ def all_set_details_send(
     why_not: str | None = None,
 ) -> Send:
     """Template 6 (prayer_details_mobed_v3): "You will pray for {{1 departed}} at
-    {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}. The family's contact is
-    {{5 family name}}, {{6 family number}}. Mobeds going: {{7 mobeds with
-    numbers}}. For anything else, please contact {{8 contact}}. Thank you for
-    your service." One quick-reply button, "I can't go any more", whose
+    {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}. Family: {{5 family name}},
+    {{6 family number}}. Mobeds going: {{7 mobeds with numbers}}. For anything
+    else, please contact {{8 contact}}. Thank you for your service." (in short
+    lines, docs/phase2-whatsapp-templates.md). One quick-reply button, "I can't go any more", whose
     payload is ``back_out`` (prayer_callout.back_out_payload: Step 5b reads
     it). {{8}} is the panthaky with their number, else the first mobed going
     who is not the one it goes to, else ``fire_temple``, the fire temple's own
@@ -688,9 +688,9 @@ def all_set_panthaky_send(record: FuneralRecord, place: FuneralPlace, *, going: 
                           recipient_id: int, agyary_id: int, refs: dict) -> Send:
     """Template 7 (prayers_all_set_panthaky): "The prayers for {{1 departed}} at
     {{2 place}} are confirmed. Mobeds going: {{3 mobeds with numbers}}.
-    Geh-saarnu: {{4}}. Uthamna: {{5}}. The family's contact is {{6 family
+    Geh-saarnu: {{4}}. Uthamna: {{5}}. The family's contact: {{6 family
     name}}, {{7 family number}}. You can see the full details in Mobed Diary."
-    No button. (Reworded 23 Nov 2026: Meta's form refused the first wording,
+    (in short lines, docs/phase2-whatsapp-templates.md). No button. (Reworded 23 Nov 2026: Meta's form refused the first wording,
     which ended on a blank and had too many blanks for its length.)"""
     mobeds, mobeds_kept = people_blank(going)
     return Send(

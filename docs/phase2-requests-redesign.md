@@ -173,36 +173,67 @@ Owner's word review (23 Nov 2026, D11): 5, 6 and 8 say "For anything else, pleas
 first mobed going with their number (in 6 sent to that first mobed, the next mobed going, else the
 fire temple's own name with no number). 5 ends "May the ruvan of the late [departed] ...".
 
+Laid out in short lines with an empty line between parts (owner, 23 Nov 2026), labels bold in
+WhatsApp; a `\` at the end of a line is a line break with no empty line. Details and the exact
+form text: docs/phase2-whatsapp-templates.md.
+
 **5. To the family: `prayers_all_set_family`**
 > The prayers for **[departed]** will be offered by **[mobeds with numbers]** of **[agyari]**.
-> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, please contact
-> **[contact]**. May the ruvan of the late **[departed]** attain Garothman Behesht.
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> For anything else, please contact **[contact]**.
+>
+> May the ruvan of the late **[departed]** attain Garothman Behesht.
 
 **6. To each mobed going: `prayer_details_mobed_v3`**
-> You will pray for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
-> **[day and time]**. The family's contact is **[family name]**, **[family number]**. Mobeds
-> going: **[mobeds with numbers]**. For anything else, please contact **[contact]**. Thank you
-> for your service.
+> You will pray for **[departed]** at **[place]**.
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> Family: **[family name]**, **[family number]**\
+> Mobeds going: **[mobeds with numbers]**
+>
+> For anything else, please contact **[contact]**.
+>
+> Thank you for your service.
 
 Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: backing out, see above).
 
 **7. To the panthaky: `prayers_all_set_panthaky`**
-> The prayers for **[departed]** at **[place]** are confirmed. Mobeds going: **[mobeds with
-> numbers]**. Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact
-> is **[family name]**, **[family number]**. You can see the full details in Mobed Diary.
+> The prayers for **[departed]** at **[place]** are confirmed.
+>
+> Mobeds going: **[mobeds with numbers]**
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> The family's contact: **[family name]**, **[family number]**
+>
+> You can see the full details in Mobed Diary.
 
 **8. To the Doongerwadi: `funeral_accepted_manager_v2`**
-> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. For
-> anything else, please contact **[contact]**. Thank you.
+> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**.
+>
+> For anything else, please contact **[contact]**.
+>
+> Thank you.
 
 (7 and 8 reworded 23 Nov 2026 before submitting: Meta's form refuses a template that ends on a
 blank, and refused 7 for too many blanks for its length. Same blanks, same order.)
 
 **4 v2 (owner, 21 Nov 2026: yes, it replaces template 4): `prayer_request_mobeds_v2`**
-> A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:
-> **[day and geh]**. Uthamna: **[day and time]**. Please reply to tell **[panthaky's name]**
-> whether you can take it. If you can, you will get the details once enough mobeds are going,
-> and your name and number will be shared with the family.
+> A prayer request has come to **[agyari]** for **[departed]** at **[place]**.
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> Please reply to tell **[panthaky's name]** whether you can take it.
+>
+> If you can, you will get the details once enough mobeds are going, and your name and number
+> will be shared with the family.
 
 Why 4 v2: under R3.1 a mobed who says Yes waits for the others before getting the details, and
 their number goes to the family; the message should say both before they answer.

@@ -124,8 +124,10 @@ def test_the_next_template_reads_in_the_owners_words():
         "Rustom Mistry", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14 Mar ({ROJ_MAH}) at 9:00 am",
         "Dinshaw"]
     assert rm.template_text(parts, rm.TEMPLATE_V2_NAME) == (
-        "Sahebji Rustom Mistry, a reminder from Goti Adarian: Afringan and Baaj for Dinshaw on "
-        f"Thu 14 Mar ({ROJ_MAH}) at 9:00 am. May the ruvan of the late Dinshaw attain Garothman Behesht."
+        "Sahebji Rustom Mistry,\n\n"
+        "A reminder from Goti Adarian:\n"
+        f"Afringan and Baaj for Dinshaw on Thu 14 Mar ({ROJ_MAH}) at 9:00 am.\n\n"
+        "May the ruvan of the late Dinshaw attain Garothman Behesht."
     )
     # No time: the day blank ends with the Parsi date (Meta refuses an empty blank).
     assert _parts().params_for(rm.TEMPLATE_V2_NAME)[4] == f"Thu 14 Mar ({ROJ_MAH})"

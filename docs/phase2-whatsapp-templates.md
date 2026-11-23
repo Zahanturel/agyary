@@ -15,6 +15,13 @@ else, please contact [contact]" (the panthaky, else the first mobed going), and 
 "May the ruvan of the late [departed] attain Garothman Behesht." None of 4 v2 and 5 to 8 had been
 submitted, so they are submitted in these words.
 
+**Laid out for reading at a glance (owner, 23 Nov 2026):** each template is in short lines with an
+empty line between its parts, and the labels (Geh-saarnu, Uthamna, Family, Mobeds going, The
+family's contact) are bold in WhatsApp (typed `*Geh-saarnu:*` in Meta's form). The words, the
+blanks and their order are unchanged, except that 6 says "Family:" and 7 "The family's contact:"
+where they said "The family's contact is". The texts below show the line breaks; a `\` at the end
+of a line is a line break with no empty line.
+
 Category for all: **Utility** (about a service the person is part of; no offer, no invitation, no
 "thank you for using" lines). Language: English (Gujarati later, as for the reminders). Meta's
 rules respected: no blank at the very start or end, no two blanks side by side, short.
@@ -45,10 +52,15 @@ The wording is exactly as in `docs/phase2-requests-redesign.md`, "Template draft
 Setting: `WHATSAPP_PRAYER_REQUEST_TEMPLATE` (default `prayer_request_mobeds_v2`). It replaces
 template 4 (owner, 21 Nov 2026).
 
-> A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:
-> **[day and geh]**. Uthamna: **[day and time]**. Please reply to tell **[panthaky's name]**
-> whether you can take it. If you can, you will get the details once enough mobeds are going,
-> and your name and number will be shared with the family.
+> A prayer request has come to **[agyari]** for **[departed]** at **[place]**.
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> Please reply to tell **[panthaky's name]** whether you can take it.
+>
+> If you can, you will get the details once enough mobeds are going, and your name and number
+> will be shared with the family.
 
 Blanks, in this order: 1 agyari, 2 departed, 3 place, 4 Geh-saarnu (day and geh), 5 Uthamna (day
 and time), 6 the panthaky's name (the one who asks, else the agyari's first confirmed panthaky,
@@ -76,8 +88,13 @@ blanks fit either.
 Setting: `WHATSAPP_ALL_SET_FAMILY_TEMPLATE` (default `prayers_all_set_family`).
 
 > The prayers for **[departed]** will be offered by **[mobeds with numbers]** of **[agyari]**.
-> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, please contact
-> **[contact]**. May the ruvan of the late **[departed]** attain Garothman Behesht.
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> For anything else, please contact **[contact]**.
+>
+> May the ruvan of the late **[departed]** attain Garothman Behesht.
 
 Blanks, in this order: 1 departed, 2 the mobeds going with their numbers, 3 agyari, 4 Geh-saarnu,
 5 Uthamna, 6 the contact (the panthaky with their number; at an agyari with no confirmed panthaky
@@ -94,10 +111,17 @@ someone going backed out and the place was filled.
 
 Setting: `WHATSAPP_ALL_SET_DETAILS_TEMPLATE` (default `prayer_details_mobed_v3`).
 
-> You will pray for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
-> **[day and time]**. The family's contact is **[family name]**, **[family number]**. Mobeds
-> going: **[mobeds with numbers]**. For anything else, please contact **[contact]**. Thank you for
-> your service.
+> You will pray for **[departed]** at **[place]**.
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> Family: **[family name]**, **[family number]**\
+> Mobeds going: **[mobeds with numbers]**
+>
+> For anything else, please contact **[contact]**.
+>
+> Thank you for your service.
 
 Blanks, in this order: 1 departed, 2 place, 3 Geh-saarnu, 4 Uthamna, 5 the family's name, 6 the
 family's number, 7 the mobeds going with their numbers, 8 the contact (as in template 5, except
@@ -118,9 +142,16 @@ to it gets it.
 
 Setting: `WHATSAPP_ALL_SET_PANTHAKY_TEMPLATE` (default `prayers_all_set_panthaky`).
 
-> The prayers for **[departed]** at **[place]** are confirmed. Mobeds going: **[mobeds with
-> numbers]**. Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact
-> is **[family name]**, **[family number]**. You can see the full details in Mobed Diary.
+> The prayers for **[departed]** at **[place]** are confirmed.
+>
+> Mobeds going: **[mobeds with numbers]**
+>
+> Geh-saarnu: **[day and geh]**\
+> Uthamna: **[day and time]**
+>
+> The family's contact: **[family name]**, **[family number]**
+>
+> You can see the full details in Mobed Diary.
 
 Blanks, in this order: 1 departed, 2 place, 3 the mobeds going with their numbers, 4 Geh-saarnu,
 5 Uthamna, 6 the family's name, 7 the family's number. No button.
@@ -139,8 +170,11 @@ new names in the app). "Are confirmed" is true also when the panthaky confirmed 
 
 Setting: `WHATSAPP_ALL_SET_MANAGER_TEMPLATE` (default `funeral_accepted_manager_v2`).
 
-> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. For
-> anything else, please contact **[contact]**. Thank you.
+> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**.
+>
+> For anything else, please contact **[contact]**.
+>
+> Thank you.
 
 Blanks, in this order: 1 departed, 2 the mobeds' names (no numbers), 3 agyari, 4 the contact (as
 in template 5). No button. "Thank you." added 23 Nov 2026 before submitting: Meta's form refuses

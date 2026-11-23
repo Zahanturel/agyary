@@ -56,10 +56,14 @@ TEMPLATE_BODY = (
 # two blanks, and none at the very start or end. The current template keeps
 # working until this one is APPROVED; then WHATSAPP_REMINDER_TEMPLATE is set to
 # this name - a setting, not a deploy (each reminder is planned with the blanks
-# of the template it goes on).
+# of the template it goes on). Laid out in short lines with a blank line
+# between the greeting, the prayers and the closing line, so it can be read at
+# a glance (the owner, 23 Nov 2026).
 TEMPLATE_V2_NAME = "memorial_reminder_v2"
 TEMPLATE_V2_BODY = (
-    "Sahebji {{1}}, a reminder from {{2}}: {{3}} for {{4}} on {{5}}. "
+    "Sahebji {{1}},\n\n"
+    "A reminder from {{2}}:\n"
+    "{{3}} for {{4}} on {{5}}.\n\n"
     "May the ruvan of the late {{6}} attain Garothman Behesht."
 )
 TEMPLATE_V2_FOOTER = "To stop these reminders, reply STOP"
