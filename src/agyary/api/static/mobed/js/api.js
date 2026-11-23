@@ -267,6 +267,7 @@ export const backOutRequest = (id) => post(`/requests/${id}/back-out`, {});
 export const ourMobeds = (aid) => get(`/agyaries/${aid}/our-mobeds`);
 export const addOurMobed = (aid, name, phone, agreed) => post(`/agyaries/${aid}/our-mobeds`, { name, phone, agreed });
 export const editOurMobed = (aid, id, name, phone, agreed) => put(`/agyaries/${aid}/our-mobeds/${id}`, { name, phone, agreed });
+export const startOurMobed = (aid, key) => post(`/agyaries/${aid}/our-mobeds/${encodeURIComponent(key)}/start`, {});
 export const removeOurMobed =(aid, id) => del(`/agyaries/${aid}/our-mobeds/${id}`);
 /** Joining needs the panthaky's confirmation (D10, 22 Nov 2026): "confirm" one who joined,
  *  "off" (Not one of ours / Take off the list) or "on" (Put back). The Mobeds page comes back. */
