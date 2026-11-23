@@ -99,15 +99,21 @@ def test_the_family_never_sees_our_vocabulary():
     for text in (rm.manual_text(_parts()), rm.template_text(_parts()),
                  rm.template_text(_parts(), rm.TEMPLATE_V2_NAME)):
         lowered = text.lower()
-        for word in ("observance", "booking", "booked", "arrange", "memorial", "day 3"):
+        for word in ("observance", "booking", "booked", "memorial", "day 3"):
             assert word not in lowered
+        # Never asks the family to arrange anything (reminders-plan); template v2 may
+        # say the prayers "are already arranged" (owner, 23 Nov 2026), which tells.
+        for ask in ("please arrange", "to arrange", "arrange for"):
+            assert ask not in lowered
 
 
-def test_the_next_template_greets_the_family_and_ends_with_the_closing_line():
-    # The owner's words (D11, 23 Nov 2026). Its blanks are its own: 1..6 in order, none
-    # at the very start or end, and fixed words between every two (Meta's rules).
+def test_the_next_template_greets_the_family_and_carries_no_blessing():
+    # The owner's words (D11, 23 Nov 2026). Its blanks are its own: 1..5 in order, none
+    # at the very start or end, and fixed words between every two (Meta's rules). No
+    # closing blessing: Meta's form classed it as Marketing (owner: drop it here only).
     blanks = re.findall(r"\{\{(\d+)\}\}", rm.TEMPLATE_V2_BODY)
-    assert blanks == ["1", "2", "3", "4", "5", "6"]
+    assert blanks == ["1", "2", "3", "4", "5"]
+    assert "ruvan" not in rm.TEMPLATE_V2_BODY and "Garothman" not in rm.TEMPLATE_V2_BODY
     assert not rm.TEMPLATE_V2_BODY.startswith("{{") and not rm.TEMPLATE_V2_BODY.endswith("}}")
     assert not re.search(r"\}\}\s*\{\{", rm.TEMPLATE_V2_BODY)
     # Nothing that invites: Meta classed that as Marketing.
@@ -121,13 +127,12 @@ def test_the_next_template_greets_the_family_and_ends_with_the_closing_line():
 def test_the_next_template_reads_in_the_owners_words():
     parts = _parts(at=(9, 0))
     assert parts.params_for(rm.TEMPLATE_V2_NAME) == [
-        "Rustom Mistry", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14 Mar ({ROJ_MAH}) at 9:00 am",
-        "Dinshaw"]
+        "Rustom Mistry", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14 Mar ({ROJ_MAH}) at 9:00 am"]
     assert rm.template_text(parts, rm.TEMPLATE_V2_NAME) == (
         "Sahebji Rustom Mistry,\n\n"
         "A reminder from Goti Adarian:\n"
         f"Afringan and Baaj for Dinshaw on Thu 14 Mar ({ROJ_MAH}) at 9:00 am.\n\n"
-        "May the ruvan of the late Dinshaw attain Garothman Behesht."
+        "The prayers are already arranged; you need not reply."
     )
     # No time: the day blank ends with the Parsi date (Meta refuses an empty blank).
     assert _parts().params_for(rm.TEMPLATE_V2_NAME)[4] == f"Thu 14 Mar ({ROJ_MAH})"
@@ -139,4 +144,6 @@ def test_the_text_shown_follows_the_template_in_use():
     parts = _parts()
     assert rm.template_text(parts).endswith("reply STOP.")
     assert rm.template_text(parts, rm.TEMPLATE_V2_NAME).endswith(
-        "May the ruvan of the late Dinshaw attain Garothman Behesht.")
+        "The prayers are already arranged; you need not reply.")
+    # The mobed's own message keeps the closing blessing.
+    assert rm.manual_text(parts).endswith("May the ruvan of the late Dinshaw attain Garothman Behesht.")

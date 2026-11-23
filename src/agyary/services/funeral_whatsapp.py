@@ -635,17 +635,21 @@ def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Pe
                         refs: dict) -> Send:
     """Template 5 (prayers_all_set_family): "The prayers for {{1 departed}} will
     be offered by {{2 mobeds with numbers}} of {{3 agyari}}. Geh-saarnu: {{4}}.
-    Uthamna: {{5}}. For anything else, please contact {{6 contact}}. May the
-    ruvan of the late {{7 departed}} attain Garothman Behesht." No button.
-    {{6}} is the panthaky with their number, else the first mobed going
-    (``contact_people``); {{7}} is {{1}} again (each blank is numbered once)."""
+    Uthamna: {{5}}. Please contact {{6 contact}} for anything else." (in short
+    lines, docs/phase2-whatsapp-templates.md). No button. {{6}} is the panthaky
+    with their number, else the first mobed going (``contact_people``).
+
+    No closing blessing: Meta classes well-wishes as Marketing, and its form
+    warned that a Utility template with "May the ruvan of the late ... attain
+    Garothman Behesht." would be rejected (owner, 23 Nov 2026: drop it here only;
+    the family's wa.me message, the app and the PDF keep it)."""
     mobeds, mobeds_kept = people_blank(going)
     contact, contact_kept = people_blank(contact_people(panthakys, going))
     return Send(
         kind=TYPE_ALL_SET_FAMILY, phone=record.family_contact_phone, recipient_type="family", recipient_id=record.id,
         agyary_id=agyary.id,
         params=[clean(departed(record)), mobeds, clean(agyary.name), geh_saarnu_text(record), uthamna_text(record),
-                contact, clean(departed(record))],
+                contact],
         recorded={2: mobeds_kept, 6: contact_kept}, refs=refs,
         names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
         + _people_checks(panthakys, "the panthaky's name"),

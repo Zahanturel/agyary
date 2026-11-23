@@ -171,7 +171,9 @@ entered for that person (services/phone.py), never from free text.
 Owner's word review (23 Nov 2026, D11): 5, 6 and 8 say "For anything else, please contact
 **[contact]**": the panthaky with their number, or with no confirmed panthaky in the app, the
 first mobed going with their number (in 6 sent to that first mobed, the next mobed going, else the
-fire temple's own name with no number). 5 ends "May the ruvan of the late [departed] ...".
+fire temple's own name with no number). 5 was to end "May the ruvan of the late [departed] ...";
+dropped the same day because Meta's form classed it as Marketing (DECISIONS D11), so 5 ends
+"Please contact [contact] for anything else."
 
 Laid out in short lines with an empty line between parts (owner, 23 Nov 2026), labels bold in
 WhatsApp; a `\` at the end of a line is a line break with no empty line. Details and the exact
@@ -183,9 +185,7 @@ form text: docs/phase2-whatsapp-templates.md.
 > Geh-saarnu: **[day and geh]**\
 > Uthamna: **[day and time]**
 >
-> For anything else, please contact **[contact]**.
->
-> May the ruvan of the late **[departed]** attain Garothman Behesht.
+> Please contact **[contact]** for anything else.
 
 **6. To each mobed going: `prayer_details_mobed_v3`**
 > You will pray for **[departed]** at **[place]**.

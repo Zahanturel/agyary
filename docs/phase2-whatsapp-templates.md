@@ -10,10 +10,12 @@ everyone is told at once. The templates that go are **4 v2** (asking the mobeds)
 (Confirmed). Templates **1, 2 and 3** are **not sent for requests since R3.1; kept for history**
 (they went when someone tapped Accept, which is gone).
 
-**Owner's word review (23 Nov 2026, DECISIONS D11):** templates 5, 6 and 8 say "For anything
-else, please contact [contact]" (the panthaky, else the first mobed going), and template 5 closes
-"May the ruvan of the late [departed] attain Garothman Behesht." None of 4 v2 and 5 to 8 had been
-submitted, so they are submitted in these words.
+**Owner's word review (23 Nov 2026, DECISIONS D11):** templates 6 and 8 say "For anything
+else, please contact [contact]" and 5 "Please contact [contact] for anything else" (the panthaky,
+else the first mobed going). Template 5 was to close "May the ruvan of the late [departed] attain
+Garothman Behesht.", but Meta's form classed that as Marketing, so the owner dropped it from the
+WhatsApp template the same day. None of 4 v2 and 5 to 8 had been submitted, so they are submitted
+in these words.
 
 **Laid out for reading at a glance (owner, 23 Nov 2026):** each template is in short lines with an
 empty line between its parts, and the labels (Geh-saarnu, Uthamna, Family, Mobeds going, The
@@ -97,14 +99,15 @@ Setting: `WHATSAPP_ALL_SET_FAMILY_TEMPLATE` (default `prayers_all_set_family`).
 > Geh-saarnu: **[day and geh]**\
 > Uthamna: **[day and time]**
 >
-> For anything else, please contact **[contact]**.
->
-> May the ruvan of the late **[departed]** attain Garothman Behesht.
+> Please contact **[contact]** for anything else.
 
 Blanks, in this order: 1 departed, 2 the mobeds going with their numbers, 3 agyari, 4 Geh-saarnu,
 5 Uthamna, 6 the contact (the panthaky with their number; at an agyari with no confirmed panthaky
-in the app, the first mobed going with their number), 7 departed again (the same words as 1: each
-blank is numbered once). No button.
+in the app, the first mobed going with their number). No button.
+
+No closing blessing (owner, 23 Nov 2026, DECISIONS D11): Meta's form classed the template with "May
+the ruvan of the late [departed] attain Garothman Behesht." as Marketing, so it was dropped here
+(and its seventh blank, the departed again); the family's wa.me message keeps it.
 
 Who gets it: the family's contact, only if the Doongerwadi's tick recorded the family's agreement
 to hear from Mobed Diary; a STOP from the family is honoured.

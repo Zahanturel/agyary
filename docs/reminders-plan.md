@@ -116,11 +116,13 @@ charge for.
       A reminder from {{2}}:
       {{3}} for {{4}} on {{5}}.
 
-      May the ruvan of the late {{6}} attain Garothman Behesht.
+      The prayers are already arranged; you need not reply.
 
-  with a 6-hour validity like the live one (owner, 23 Nov 2026), and its own six blanks (the behdin's name, the fire
+  (its first wording closed with the blessing; Meta's form classed that as
+  Marketing, so the owner dropped it here, 23 Nov 2026, DECISIONS D11), with a
+  6-hour validity like the live one, and its own five blanks (the behdin's name, the fire
   temple, the prayers, the departed, the day with its Roj and Mah and the
-  time, the departed again); each reminder is planned with the blanks of the
+  time); each reminder is planned with the blanks of the
   template it goes on.
 
   **Why it is so plain.** Meta's own check, run when a template is submitted,

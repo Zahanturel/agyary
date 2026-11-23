@@ -373,6 +373,16 @@ The lead reviewed every text in the app (2,135) and brought 38 for the owner; th
   suggestion "Andhra Pradesh": Telangana since 2014).
 - **Kept:** the role name "Caretaker" (panthaky, mobed and caretaker are the three roles; nothing in
   the app grants caretaker yet).
+- **Changed 23 Nov 2026 (owner, on Meta's warning): no blessing in the two WhatsApp templates.**
+  When the reminder template v2 was submitted, Meta's form said it reads as Marketing and "will be
+  rejected" as Utility; Meta counts greetings and well-wishes as Marketing, and the four templates
+  without the blessing were accepted. The family's template (5) and the reminder template v2
+  therefore drop "May the ruvan of the late ... attain Garothman Behesht." and close with plain
+  words: 5 ends "Please contact {contact} for anything else."; the reminder v2 ends "The prayers are
+  already arranged; you need not reply." One blank fewer in each. The blessing stays everywhere else
+  (the mobed's own reminder message, the family's wa.me message, the memorial share, the app). Both
+  templates are laid out in short lines (owner, same day), and the reminder v2 has a 6-hour validity
+  like the live reminder.
 - **Owner, to do separately:** the Play description, the privacy policy and the app's other legal
   words must match the business model (agyaries pay, funeral places and families are free, payments
   later) "to avoid lawsuits", with the lawyer.

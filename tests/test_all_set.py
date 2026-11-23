@@ -521,7 +521,7 @@ async def test_live_each_one_gets_their_template_with_the_blanks_in_order(client
     (family,) = meta.templates("prayers_all_set_family")
     assert _e164(family) == FAMILY
     # "For anything else, please contact {{6}}. May the ruvan of the late {{7}} ..." (D11, 23 Nov 2026).
-    assert _body(family) == ["Behdin Rustom Jamshed", mobeds, "Goti Adarian", gs, ut, head, "Behdin Rustom Jamshed"]
+    assert _body(family) == ["Behdin Rustom Jamshed", mobeds, "Goti Adarian", gs, ut, head]
     assert _buttons(family) == []
 
     details = _to(meta, "prayer_details_mobed_v3")
@@ -679,7 +679,8 @@ def test_for_anything_else_the_panthaky_else_the_first_mobed_going():
                              family_contact_name="Test Family", family_contact_phone="+919800000009")
     agyary, place = SimpleNamespace(id=2, name="Goti Adarian"), SimpleNamespace(name="Doongerwadi (test)")
     family = fw.all_set_family_send(record, agyary, going=going, panthakys=[], refs={})
-    assert family.params[5] == "Er. First (+91 9800000002)" and family.params[6] == "Behdin Rustom Jamshed"
+    # Six blanks, the contact last: no closing blessing (Meta classes it as Marketing).
+    assert family.params[5] == "Er. First (+91 9800000002)" and len(family.params) == 6
     assert family.recorded[6] == "Er. First ([number])"
     details = fw.all_set_details_send(record, place, going=going, panthakys=[], phone="+919800000003",
                                       recipient_type="user", recipient_id=3, agyary_id=2, fire_temple="Goti Adarian",

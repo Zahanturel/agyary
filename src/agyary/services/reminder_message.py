@@ -5,9 +5,10 @@ their own WhatsApp, and automatically through the WhatsApp Business API. Meta
 only allows the second as an approved *template* - fixed text with numbered
 blanks - so the message is built from parts that fill the manual message and
 either template. Since the owner's word review (D11, 23 Nov 2026) the manual
-message and template v2 greet the family and close with "May the ruvan of the
-late <departed> attain Garothman Behesht."; the live template keeps its words
-until v2 is approved.
+message and template v2 greet the family ("Sahebji"); the manual message closes
+with "May the ruvan of the late <departed> attain Garothman Behesht.", template
+v2 does not (Meta classes well-wishes as Marketing). The live template keeps
+its words until v2 is approved.
 
 The mobed has already booked these prayers, so a reminder never asks for
 anything. It says which fire temple, when, what and for whom, and that the
@@ -50,10 +51,12 @@ TEMPLATE_BODY = (
 #   {{1}} the family's name   {{2}} the fire temple   {{3}} the prayers
 #   {{4}} the departed        {{5}} the day, its Roj and Mah and the time,
 #   e.g. "Thu 15 Oct (Roj Hormazd, Mah Fravardin) at 9:00 am"
-#   {{6}} the departed again (Meta numbers every blank once)
 # One blank for the day, the Parsi date and the time, because the time is
 # not always set and Meta refuses an empty blank. Fixed words between every
-# two blanks, and none at the very start or end. The current template keeps
+# two blanks, and none at the very start or end. No closing blessing: Meta's
+# form warned that "May the ruvan of the late ... attain Garothman Behesht."
+# makes it Marketing (well-wishes), so the owner dropped it from this template
+# only, 23 Nov 2026; the manual message below keeps it. The current template keeps
 # working until this one is APPROVED; then WHATSAPP_REMINDER_TEMPLATE is set to
 # this name - a setting, not a deploy (each reminder is planned with the blanks
 # of the template it goes on). Laid out in short lines with a blank line
@@ -64,7 +67,7 @@ TEMPLATE_V2_BODY = (
     "Sahebji {{1}},\n\n"
     "A reminder from {{2}}:\n"
     "{{3}} for {{4}} on {{5}}.\n\n"
-    "May the ruvan of the late {{6}} attain Garothman Behesht."
+    "The prayers are already arranged; you need not reply."
 )
 TEMPLATE_V2_FOOTER = "To stop these reminders, reply STOP"
 TEMPLATE_V2_BUTTON = "Stop reminders"
@@ -94,9 +97,9 @@ class Parts:
         return [self.agyary, self.when, self.parsi, self.what]
 
     def v2_params(self) -> list[str]:
-        """The six blanks of memorial_reminder_v2, in order."""
+        """The five blanks of memorial_reminder_v2, in order."""
         on = f"{self.day} ({self.parsi})" + (f" at {self.at}" if self.at else "")
-        return [self.family, self.agyary, self.prayer, self.departed, on, self.departed]
+        return [self.family, self.agyary, self.prayer, self.departed, on]
 
     def params_for(self, template_name: str) -> list[str]:
         """The blanks of the template a reminder goes out on."""
