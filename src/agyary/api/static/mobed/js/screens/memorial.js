@@ -200,7 +200,7 @@ export async function renderMemorial({ id, oid }) {
       <p class="meta" style="margin:4px 0 0">
         ${behdin ? `For <a href="#/behdins/${m.customer_id}">${esc(behdin.name)}</a> · ` : ""}${m.long_ago
           ? `passed away more than a year ago (${esc(parsiText({ ...m.death, gatha_index: m.death.mah === 13 ? m.death.roj : null }))})`
-          : `died ${esc(gregLabel(m.death_date))}`}</p>
+          : `passed away ${esc(gregLabel(m.death_date))}`}</p>
       <p class="meta" style="margin:4px 0 0">${esc(choicesText(m))} · ${esc(m.calendar[0].toUpperCase() + m.calendar.slice(1))} calendar</p>
       <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="memStatus"></b></p>
       <div class="progress"><div id="memProgress"></div></div>

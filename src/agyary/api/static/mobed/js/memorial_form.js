@@ -614,7 +614,7 @@ export function schedulePreviewHtml(body, preview, services, { heading = "", rev
         ${heading}
         <p class="meta" style="margin:4px 0 0">${esc(body.departed_name)} · ${preview.long_ago
           ? "passed away more than a year ago"
-          : "died " + esc(gregLabel(preview.death_date || body.death_date))}
+          : "passed away " + esc(gregLabel(preview.death_date || body.death_date))}
           (${esc(parsiText(preview.death.mah === 13 ? { gatha_index: preview.death.roj } : preview.death))})</p>
         <p style="margin:12px 0 0;font-size:var(--text-sm)"><b id="schedCount">${kept.length} observance${kept.length === 1 ? "" : "s"}</b>.
           Tap a date to change its prayers, or Remove to take it out.</p>

@@ -296,7 +296,7 @@ def plan(
         if choice.opening != OPENING_NONE or choice.day_counts:
             raise MemorialError(
                 "The opening days and the named days (Dasmu, Masiso, Varsi...) have passed for someone who "
-                "died more than a year ago. Choose what repeats instead.")
+                "passed away more than a year ago. Choose what repeats instead.")
         # Everything runs from today: the monthly and yearly days still to come.
         choice = replace(choice, start_from=choice.start_from or today or today_ist())
 
