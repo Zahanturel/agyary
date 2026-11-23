@@ -20,6 +20,7 @@ from agyary.models.memorial import Memorial, MemorialObservance, MemorialObserva
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
 from agyary.models.prayer_callout import AgyaryMobedContact, PrayerCallout, PrayerCalloutAnswer
+from agyary.models.person_name import PersonName
 from agyary.models.preferences import UserPreferences
 from agyary.models.push_subscription import PushSubscription
 from agyary.models.recurrence import RecurrenceRule
@@ -55,6 +56,7 @@ __all__ = [
     "MemorialObservanceService",
     "Notification",
     "Payment",
+    "PersonName",
     "PrayerCallout",
     "PrayerCalloutAnswer",
     "PushSubscription",

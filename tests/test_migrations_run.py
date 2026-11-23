@@ -1003,3 +1003,27 @@ async def test_the_state_names_migration_changes_only_the_exact_token_and_comes_
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_person_names_migration_holds_its_rules_and_comes_off_cleanly():
+    """a1b2c3d4e5f9 (D12, 24 Nov 2026): the pool of a person's departed names holds an E.164
+    number and a known title, keeps its row when the record that made it goes, and the
+    downgrade takes the table off."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        add = ("INSERT INTO person_names (phone, departed_title, departed_name, source_record_id)"
+               " VALUES (:p, :t, 'Name (test)', :r)")
+        await _scratch_execute(add, {"p": "+919000000009", "t": "ervad", "r": None})
+        await _refused(add, {"p": "98200", "t": "ervad", "r": None}, "a number not in E.164")
+        await _refused(add, {"p": "+919000000009", "t": "mr", "r": None}, "an unknown title")
+        assert await _scratch_execute("SELECT source, departed_name FROM person_names") == [("death_record", "Name (test)")]
+        names = await _scratch_execute("SELECT conname FROM pg_constraint WHERE conrelid = 'person_names'::regclass")
+        assert {"ck_person_names_phone_e164", "ck_person_names_departed_title",
+                "fk_person_names_source_record_id_funeral_records"} <= {n for (n,) in names}
+        _ok(_alembic("downgrade", "e9f0a1b2c3d8"))
+        tables = {t for (t,) in await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
+        assert "person_names" not in tables
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
