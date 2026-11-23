@@ -51,7 +51,7 @@ import { refreshAfterAction } from "../notifications.js";
 const TITLES = [["behdin", "Behdin"], ["ervad", "Ervad"], ["osta", "Osta"], ["osti", "Osti"], ["khud", "Khud"]];
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
 // The Geh-saarnu is prayed in daylight only.
-const DAY_GEHS = [[1, "Havan"], [2, "Rapithwin"], [3, "Uziran"]];
+const DAY_GEHS = [[1, "Havan"], [2, "Rapithwan"], [3, "Uzirin"]];
 const REACH = {
   panthaky: { text: "Panthaky in the app", cls: "role" },
   mobeds: { text: "Mobeds only", cls: "" },

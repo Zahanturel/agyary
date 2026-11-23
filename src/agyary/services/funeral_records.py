@@ -72,7 +72,7 @@ assert set(OBSEQUIES_LABELS) == set(OBSEQUIES)
 PRAYED_NAME_MAX = template_text.DEPARTED_MAX
 CONTACT_NAME_MAX = 100
 # The Geh-saarnu is prayed in daylight only (after sunrise, up to an hour before
-# sunset): Havan, Rapithwin or Uziran.
+# sunset): Havan, Rapithwan or Uzirin.
 DAY_GEHS = (1, 2, 3)
 # A record is for a death of the last year, and its prayers follow within days.
 OLDEST_DEATH_DAYS = 366
@@ -216,7 +216,7 @@ async def checked(db: AsyncSession, data: dict, *, today: date | None = None) ->
     if gs_date is not None and gs_geh is None:
         raise RecordError("geh_saarnu_geh", "Please choose the geh of the Geh-saarnu.")
     if gs_geh is not None and gs_geh not in DAY_GEHS:
-        raise RecordError("geh_saarnu_geh", "The Geh-saarnu is in daylight: choose Havan, Rapithwin or Uziran.")
+        raise RecordError("geh_saarnu_geh", "The Geh-saarnu is in daylight: choose Havan, Rapithwan or Uzirin.")
     gs_date = _prayer_day(gs_date, death.date, "geh_saarnu_date", "Geh-saarnu")
 
     u_date, u_time = data.get("uthamna_date"), data.get("uthamna_time")

@@ -161,7 +161,7 @@ button:disabled { opacity: .5; cursor: default; }
   color: var(--accent-text); border-radius: 4px; padding: 1px 3px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .pg-event.machi { background: var(--primary-tint); color: var(--primary); }
-/* Machi Board: a long "Rapithwin - Patet" wraps onto a second line rather than
+/* Machi Board: a long "Rapithwan - Patet" wraps onto a second line rather than
    clipping the purpose. Only that board turns this on. */
 .pg-events.wrap .pg-event { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; padding: 1px 2px; }
 .pg-more { font-size: var(--text-grid); color: var(--muted); line-height: 1.1; }

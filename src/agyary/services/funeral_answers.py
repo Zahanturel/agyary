@@ -99,8 +99,8 @@ KIND_ANSWERED = "funeral_request_answered"
 # The events put on each calendar (put_in_book), by these names in the fire
 # temple's service list (added to it if it has none of that name).
 GEH_SAARNU, UTHAMNA = "Geh-saarnu", "Uthamna"
-# The Uthamna is in the afternoon (Uziran geh). With no time given, it goes on
-# the calendar at the start of Uziran and the mobed is told to check it.
+# The Uthamna is in the afternoon (Uzirin geh). With no time given, it goes on
+# the calendar at the start of Uzirin and the mobed is told to check it.
 UTHAMNA_GEH = 3
 KIND_LABELS = {"doongerwadi": "Doongerwadi", "prayer_hall": "Prayer hall", "aramgah": "Aramgah"}
 

@@ -31,7 +31,7 @@ access is on, in the app and on their phones ("Still 1 mobed short for <prayed
 name>"; the lock screen without the departed or the family), or, with none,
 to the funeral place's managers (and the admin who sent it acting for the
 place). The 4 hours count from the start of the Geh-saarnu's geh in IST (the
-lead's choice): Havan 6:30 am, Rapithwin 12:30 pm, Uziran 3:30 pm, or 6:30 am
+lead's choice): Havan 6:30 am, Rapithwan 12:30 pm, Uzirin 3:30 pm, or 6:30 am
 with no geh; with no Geh-saarnu day, from the Uthamna's day and time (6:30 am
 with no time); with neither, never. Claimed by a conditional update of
 short_alert_at before anyone is told, so it is told once, two loops included.

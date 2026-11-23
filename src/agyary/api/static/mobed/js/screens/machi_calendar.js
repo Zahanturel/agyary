@@ -55,7 +55,7 @@ async function loadItems({ from, to }) {
     const res = await bookableGehs(aid, from);
     dayGehs = res.bookable || res;
   }
-  // Geh order, so a month cell lists Havan before Rapithwin whatever order
+  // Geh order, so a month cell lists Havan before Rapithwan whatever order
   // the rows arrived in.
   return machiItems(machis).sort((a, b) => a.geh - b.geh);
 }

@@ -148,11 +148,13 @@ MESSAGE_DIRECTIONS = ("inbound", "outbound")
 
 BEHDIN_LANGUAGES = ("en", "gu")
 
-# Geh numbering follows doc 1: index -> display name (v2 spelling, "Uziran").
+# Geh numbering follows doc 1: index -> display name. The spellings are the
+# owner's (word review, 23 Nov 2026): Rapithwan and Uzirin. Only the number is
+# ever stored, so a spelling is a change here (and in the app's JS lists) alone.
 GEH_NAMES = {
     1: "Havan",
-    2: "Rapithwin",
-    3: "Uziran",
+    2: "Rapithwan",
+    3: "Uzirin",
     4: "Aiwisruthrem",
     5: "Ushahin",
 }

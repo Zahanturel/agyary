@@ -21,8 +21,8 @@ IST = ZoneInfo("Asia/Kolkata")
 # Approximate local start time of each geh.
 GEH_START_TIMES: dict[int, time] = {
     1: time(7, 0),  # Havan: sunrise -> noon
-    2: time(13, 0),  # Rapithwin: noon -> ~3 pm
-    3: time(15, 30),  # Uziran: ~3 pm -> sunset
+    2: time(13, 0),  # Rapithwan: noon -> ~3 pm
+    3: time(15, 30),  # Uzirin: ~3 pm -> sunset
     4: time(19, 0),  # Aiwisruthrem: sunset -> midnight
     5: time(4, 0),  # Ushahin: midnight -> sunrise (next Gregorian day)
 }

@@ -215,7 +215,7 @@ their number goes to the family; the message should say both before they answer.
 ## The lead's choices while building (the owner can change any of them)
 
 - **"4 hours before the Geh-saarnu"** is counted from the start of its geh, in IST: Havan
-  6:30 am, Rapithwin 12:30 pm, Uziran 3:30 pm (the Geh-saarnu is prayed only in these day gehs).
+  6:30 am, Rapithwan 12:30 pm, Uzirin 3:30 pm (the Geh-saarnu is prayed only in these day gehs).
   With no geh given, 6:30 am of that day; with no Geh-saarnu day, the Uthamna's day and time
   (or 6:30 am); with neither, no "still short" alert.
 - **The Mobeds page shows numbers only of approved mobeds** (not of someone still waiting for

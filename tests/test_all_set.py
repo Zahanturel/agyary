@@ -767,8 +767,8 @@ def test_when_still_short_is_due_for_each_geh_and_without_one():
         return datetime.combine(d, time(h, m), tzinfo=pt.IST)
 
     assert pt.short_alert_at(day, 1, None, None) == at(2, 30)        # Havan 6:30 am
-    assert pt.short_alert_at(day, 2, None, None) == at(8, 30)        # Rapithwin 12:30 pm
-    assert pt.short_alert_at(day, 3, day, time(16, 0)) == at(11, 30)  # Uziran 3:30 pm; the Uthamna does not count
+    assert pt.short_alert_at(day, 2, None, None) == at(8, 30)        # Rapithwan 12:30 pm
+    assert pt.short_alert_at(day, 3, day, time(16, 0)) == at(11, 30)  # Uzirin 3:30 pm; the Uthamna does not count
     assert pt.short_alert_at(day, None, None, None) == at(2, 30)     # no geh: 6:30 am
     assert pt.short_alert_at(None, None, day, time(16, 0)) == at(12, 0)   # no Geh-saarnu: the Uthamna's time
     assert pt.short_alert_at(None, None, day, None) == at(2, 30)     # nor its time: 6:30 am
@@ -802,7 +802,7 @@ async def test_still_short_tells_the_panthaky_once_four_hours_before_the_geh_saa
     (note,) = await _notes_of(db, PANTHAKY, prayer_timers.KIND_STILL_SHORT)
     assert note.title == "Still 1 mobed short for Behdin Rustom Jamshed" and note.link == f"#/requests/{rid}"
     assert note.body == (f"1 of 2 going for the request from Doongerwadi (test), and the Geh-saarnu is "
-                         f"{tomorrow:%a} {tomorrow.day} {tomorrow:%b}, Rapithwin geh. "
+                         f"{tomorrow:%a} {tomorrow.day} {tomorrow:%b}, Rapithwan geh. "
                          "Ask everyone, call a mobed, or Confirm with who's going.")
     (push,) = pushes
     assert push["to"] == [(await _user(db, PANTHAKY)).id] and push["title"] == "Still 1 mobed short"

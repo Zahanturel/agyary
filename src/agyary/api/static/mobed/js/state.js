@@ -50,7 +50,7 @@ export function homeHash() {
   return { machi: "#/board", behdins: "#/behdins" }[state.lastTab] || "#/calendar";
 }
 
-export const GEHS = [[1, "Havan"], [2, "Rapithwin"], [3, "Uziran"], [4, "Aiwisruthrem"], [5, "Ushahin"]];
+export const GEHS = [[1, "Havan"], [2, "Rapithwan"], [3, "Uzirin"], [4, "Aiwisruthrem"], [5, "Ushahin"]];
 export const GEH_NAME_BY_NUM = Object.fromEntries(GEHS);
 
 export const MACHI_PURPOSE_DISPLAY = {
