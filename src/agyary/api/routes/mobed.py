@@ -1718,7 +1718,7 @@ class ManualAddBookingIn(BaseModel):
     is_offsite: bool = False
     remember_names: bool = True
     # As for a machi: monthly is the same Roj every Mah, yearly the same Roj and
-    # Mah every Parsi year (a Salgrah, an anniversary). Only a NEW event repeats.
+    # Mah every Parsi year (a Salgreh, an anniversary). Only a NEW event repeats.
     recurring: Literal["monthly", "yearly"] | None = None
     recurring_count: RepeatCount = None
 

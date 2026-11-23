@@ -1,5 +1,5 @@
 """An event (a booking) can repeat, like a machi: monthly on the same Roj, or
-yearly on the same Roj and Mah (a Salgrah, an anniversary). The pattern and the
+yearly on the same Roj and Mah (a Salgreh, an anniversary). The pattern and the
 deleting of a series are shared with machis; what is checked here is what is
 particular to events - a time of day instead of a geh, no exclusive slot, and the
 calendar topping a repeat up as it is scrolled forward."""
@@ -27,7 +27,7 @@ async def _headers(client, seeded) -> dict:
 
 def _payload(when="2027-11-05T11:00:00+05:30", phone="+919922200301", **extra) -> dict:
     return {
-        "behdin_phone": phone, "behdin_name": "Salgrah Family", "service_id": 2,
+        "behdin_phone": phone, "behdin_name": "Salgreh Family", "service_id": 2,
         "ceremony_datetime": when, "purpose": "khushali_nu", "names": NAMES,
         "location": None, "is_offsite": False, **extra,
     }

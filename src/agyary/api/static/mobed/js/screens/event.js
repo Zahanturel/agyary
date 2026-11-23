@@ -320,7 +320,7 @@ async function render(draft) {
         <div id="evRecur">
           <label class="choice${!draft.recurring ? " on" : ""}"><input type="radio" name="evRecur" value="" ${!draft.recurring ? "checked" : ""}><span>No, just this once</span></label>
           <label class="choice${draft.recurring === "monthly" ? " on" : ""}"><input type="radio" name="evRecur" value="monthly" ${draft.recurring === "monthly" ? "checked" : ""}><span>Every month, on the same Roj</span></label>
-          <label class="choice${draft.recurring === "yearly" ? " on" : ""}"><input type="radio" name="evRecur" value="yearly" ${draft.recurring === "yearly" ? "checked" : ""}><span>Every year, on the same Roj and Mah (a Salgrah or an anniversary)</span></label>
+          <label class="choice${draft.recurring === "yearly" ? " on" : ""}"><input type="radio" name="evRecur" value="yearly" ${draft.recurring === "yearly" ? "checked" : ""}><span>Every year, on the same Roj and Mah (a Salgreh or an anniversary)</span></label>
         </div>
         ${repeatCountHtml(draft, "evCount")}`}`) : ""}
 
