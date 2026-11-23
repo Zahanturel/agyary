@@ -15,7 +15,7 @@ remove rows."""
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.models import FuneralRecord, PersonName, User
