@@ -119,7 +119,7 @@ async def test_on_template_v2_the_reminder_is_planned_with_its_own_six_blanks(cl
     await db.commit()
 
     [n] = await _rows(db)
-    assert n.template_name == "memorial_reminder_v2"
+    assert n.template_name == "memorial_reminder_v3"
     params = [n.template_params[k] for k in sorted(n.template_params, key=int)]
     assert params[:4] == ["Delzeen Test", "Goti Adarian", "Afringan and Baaj", "Ardeshir Mehta"]
     assert "(Roj " in params[4] and len(params) == 5

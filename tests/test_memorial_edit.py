@@ -170,7 +170,7 @@ async def test_moving_a_date_forgets_the_reminder_for_its_old_day(client, db, se
     assert r.status_code == 200
     db.add(Notification(
         agyary_id=aid, recipient_phone="+919944400701", recipient_type="customer", recipient_id=cid,
-        notification_type="memorial_reminder", template_name="memorial_reminder_v2",
+        notification_type="memorial_reminder", template_name="memorial_reminder_v3",
         memorial_observance_id=masiso["id"], scheduled_at=datetime.now(timezone.utc), status="sent",
     ))
     await db.commit()

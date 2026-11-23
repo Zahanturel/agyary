@@ -201,7 +201,7 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Delete my account (in the app) and `/delete-account` | **Live** | none. What was sent stays counted, with who and what wiped; a one-way digest of the number stays for 30 days, so deleting cannot reset a number's limits |
 | Erase a family from every mobed's book | **Admin screen** | `ADMIN_PHONES`. Procedure in [DATA-REQUESTS.md](DATA-REQUESTS.md) |
 | Deleting old records | **Never** | Owner's decision D8: no record is deleted because of its age |
-| Reminder template v2, in the owner's words of 23 Nov 2026, with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
+| Reminder template v2, in the owner's words of 23 Nov 2026, with a Stop button | **In Meta's review since 23 Nov 2026** | `memorial_reminder_v3`; switch with `WHATSAPP_REMINDER_TEMPLATE` once Active (the code needs this commit live first) |
 | Android app (Trusted Web Activity) | **Built, shared directly** (14 Oct 2026) | signed APK given to mobeds in a WhatsApp group, and (15 Nov) "Download the app" on the sign-in page of an Android phone, served from `/download/android`; `/.well-known/assetlinks.json` lists the upload key, so it opens full-screen; not on Google Play (DECISIONS.md D6) |
 | iPhone / iPad | **Home Screen app** (15 Nov 2026) | Apple allows no app from outside the App Store, so the sign-in page shows the Add to Home Screen steps; `mobed-icon-180.png` is its icon |
 | Web Push to mobeds | **Not started** | |
@@ -348,7 +348,7 @@ free (Oracle always-free, Cloudflare free).
 
 ## 10. What is left (prioritised)
 
-**A. Meta.** Submit `memorial_reminder_v2` (the owner's words of 23 Nov 2026, Stop button; text in OWNER-TODO.md) as Utility; switch to it
+**A. Meta.** `memorial_reminder_v3` (submitted 23 Nov 2026 under this name because Meta locked _v2; the owner's words of 23 Nov 2026, Stop button; text in OWNER-TODO.md) as Utility; switch to it
 by setting once approved.
 
 **B. Android.** The signed APK is shared with mobeds directly (the project and upload key live

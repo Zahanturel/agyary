@@ -138,7 +138,7 @@ def _text_problem(agyary_name: str, departed: str, services: list[str], *, famil
     """Why this reminder's free text cannot go out, or None. The same rules as
     where the text is typed (template_text), for anything saved before them.
     ``family``, the behdin's name, only for the template that greets them by
-    it (memorial_reminder_v2)."""
+    it (memorial_reminder_v3)."""
     checks = [(agyary_name, template_text.TEMPLE_MAX), (departed, template_text.DEPARTED_MAX)]
     checks += [(name, template_text.SERVICE_MAX) for name in services]
     for text_, max_len in checks:

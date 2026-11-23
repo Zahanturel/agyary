@@ -62,7 +62,7 @@ TEMPLATE_BODY = (
 # of the template it goes on). Laid out in short lines with a blank line
 # between the greeting, the prayers and the closing line, so it can be read at
 # a glance (the owner, 23 Nov 2026).
-TEMPLATE_V2_NAME = "memorial_reminder_v2"
+TEMPLATE_V2_NAME = "memorial_reminder_v3"  # the second layout; Meta locked the name _v2 (owner, 23 Nov 2026)
 TEMPLATE_V2_BODY = (
     "Sahebji {{1}},\n\n"
     "A reminder from {{2}}:\n"
@@ -97,7 +97,7 @@ class Parts:
         return [self.agyary, self.when, self.parsi, self.what]
 
     def v2_params(self) -> list[str]:
-        """The five blanks of memorial_reminder_v2, in order."""
+        """The five blanks of memorial_reminder_v3, in order."""
         on = f"{self.day} ({self.parsi})" + (f" at {self.at}" if self.at else "")
         return [self.family, self.agyary, self.prayer, self.departed, on]
 

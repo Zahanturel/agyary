@@ -107,8 +107,8 @@ charge for.
       May the ruvan of the late Ardeshir Mehta attain Garothman Behesht.
 
   ("Sahebji, a reminder ..." when the behdin's name is blank.) The template
-  above is live and keeps its words. The next one, `memorial_reminder_v2`
-  (not submitted yet; docs/OWNER-TODO.md), is laid out in short lines (owner,
+  above is live and keeps its words. The next one, `memorial_reminder_v3`
+  (submitted 23 Nov 2026; the name _v2 is locked by Meta; docs/OWNER-TODO.md), is laid out in short lines (owner,
   23 Nov 2026):
 
       Sahebji {{1}},
