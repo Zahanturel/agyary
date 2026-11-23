@@ -29,6 +29,7 @@ from agyary.models import (
     Booking,
     BookingMobed,
     Customer,
+    CustomerSavedName,
     FuneralRequest,
     FuneralRequestBook,
     Memorial,
@@ -189,6 +190,51 @@ async def test_the_family_goes_into_the_panthakys_and_each_going_app_mobeds_own_
     # Nothing put in the book of the mobed not going.
     assert await _count(db, Booking, Booking.customer_id == not_going_own) == 0
     assert (await db.get(Customer, not_going_own)).name == "Not Going's Name"
+
+
+async def test_all_set_copies_the_departed_pair_on_top_into_the_assigned_books_only_and_once(
+    client, db, seeded, meta, pushes, live,
+):
+    """D12, 24 Nov 2026: the departed and the father or husband go on top of the family's saved
+    names in the own book of each person it is all set for, and nobody else's."""
+    aid = seeded["agyary_id"]
+    goti = await db.get(Agyary, aid)
+    await member(db, goti, OTHER_MOBED, name="Er. Not Going")
+    await db.commit()
+    mine = await client.post(f"/api/mobed/agyaries/{aid}/behdins", json={"name": "Their Own Name", "phone": FAMILY},
+                             headers=await _as(client, MOBED))
+    kias_own = mine.json()["id"]
+    other = await client.post(f"/api/mobed/agyaries/{aid}/behdins", json={"name": "Not Going's", "phone": FAMILY},
+                              headers=await _as(client, OTHER_MOBED))
+    not_going_own = other.json()["id"]
+    db.add_all([CustomerSavedName(customer_id=kias_own, section="pair", title="ervad", name="Old Father",
+                                  status="departed", pair_group=1, display_order=0),
+                CustomerSavedName(customer_id=kias_own, section="pair", title="osti", name="Old Mother",
+                                  status="departed", pair_group=1, display_order=1)])
+    await db.commit()
+
+    rid = await _two_yes(client, db, aid)
+    books = await _books(db, rid)
+
+    async def pairs(customer_id):
+        rows = (await db.execute(select(CustomerSavedName).where(
+            CustomerSavedName.customer_id == customer_id, CustomerSavedName.section == "pair")
+            .order_by(CustomerSavedName.display_order).execution_options(populate_existing=True))).scalars().all()
+        return [(r.title, r.name, r.status, r.pair_group) for r in rows]
+
+    new = [("behdin", "Rustom", "departed", 2), ("behdin", "Jamshed", "departed", 2)]
+    assert await pairs(books[PANTHAKY].customer_id) == [("behdin", "Rustom", "departed", 1),
+                                                       ("behdin", "Jamshed", "departed", 1)]
+    assert await pairs(books[MOBED].customer_id) == new + [("ervad", "Old Father", "departed", 1),
+                                                          ("osti", "Old Mother", "departed", 1)]
+    assert await pairs(not_going_own) == []
+
+    # All set again (someone backed out and it was confirmed again): no second copy.
+    request = await _request(db, rid)
+    await all_set._set_up_books(db, config.get_settings(), request.id, request.all_set_at)
+    await db.commit()
+    assert len(await pairs(books[PANTHAKY].customer_id)) == 2
+    assert len(await pairs(books[MOBED].customer_id)) == 4
 
 
 async def test_the_panthaky_who_took_it_gets_the_book_and_counts_once_when_they_pray_too(

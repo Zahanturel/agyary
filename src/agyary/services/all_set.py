@@ -72,6 +72,7 @@ from agyary.services import (
     funeral_requests,
     mobed_access,
     panthaky,
+    person_names,
     prayer_callout,
     reminders,
     web_push,
@@ -223,6 +224,10 @@ async def set_up_book(
     try:
         async with db.begin_nested():
             done = await funeral_answers.put_in_book(db, user, agyary, record, place, today=today)
+            # The departed pair on top of the family's saved names in THIS person's own
+            # book, and no one else's (D12, 24 Nov 2026): they already see the name for
+            # the prayers, so nothing new is shown.
+            await person_names.copy_into_book(db, done.customer.id, record)
             book = FuneralRequestBook(funeral_request_id=request_id, user_id=user_id, customer_id=done.customer.id,
                                       is_panthaky=is_panthaky)
             db.add(book)
