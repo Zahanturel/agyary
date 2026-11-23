@@ -1752,6 +1752,9 @@ async def card(db: AsyncSession, request: FuneralRequest, user: User, *, mine: b
         if state in (GOING, BACKED_OUT):
             # Who "Tell <panthaky or fire temple> you can't go?" names.
             out["my_answer"]["tell"] = await standbys.who_hears(db, request)
+        if state == BACKED_OUT:
+            # Said by the mobed themselves, or marked by the panthaky (walk-through, 23 Nov 2026).
+            out["my_answer"]["backed_out_by_me"] = row.backed_out_by_user_id in (None, user.id)
     return out
 
 

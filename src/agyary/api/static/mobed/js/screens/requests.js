@@ -414,6 +414,10 @@ function myWords(q) {
       : GOING_WORDS;
   }
   if (mine === "backed_out") {
+    // Said by the mobed in the app or on WhatsApp, or marked by the panthaky after a call.
+    if (my.backed_out_by_me === false) {
+      return `${my.tell || "The panthaky"} noted that you can't go any more. Nothing more is needed from you.`;
+    }
     return `You said you can't go any more, and ${my.tell || "the panthaky"} has been told. Nothing more is needed `
       + "from you.";
   }

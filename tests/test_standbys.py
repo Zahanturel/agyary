@@ -185,6 +185,7 @@ async def test_an_app_mobed_going_backs_out_and_the_place_reopens(client, db, se
     got = r.json()["request"]
     assert got["status"] == "waiting" and got["reopened"] is True
     assert got["my_answer"]["state"] == "backed_out" and got["my_answer"]["may_back_out"] is False
+    assert got["my_answer"]["backed_out_by_me"] is True
     assert got["places"] == {"going": 1, "wanted": 2}
     # Nothing more for them: not the family's contact any more, though it stays in their book (D8).
     assert got["all_set"] is None
@@ -305,6 +306,9 @@ async def test_the_panthaky_or_the_admin_marks_cant_go_on_the_board(client, db, 
     assert r.status_code == 200, r.text
     assert r.json()["going"] == 0
     assert len(await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)) == 1
+    # The mobed's own card says it was marked for them, not that they said it (walk-through, 23 Nov).
+    card = (await client.get(f"{REQUESTS}/{rid}", headers=mobed)).json()["request"]
+    assert card["my_answer"]["state"] == "backed_out" and card["my_answer"]["backed_out_by_me"] is False
 
 
 # --- Refused --------------------------------------------------------------------------
