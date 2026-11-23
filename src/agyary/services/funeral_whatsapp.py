@@ -686,10 +686,12 @@ def all_set_details_send(
 
 def all_set_panthaky_send(record: FuneralRecord, place: FuneralPlace, *, going: list[Person], phone: str,
                           recipient_id: int, agyary_id: int, refs: dict) -> Send:
-    """Template 7 (prayers_all_set_panthaky): "All mobeds are found for {{1
-    departed}} at {{2 place}}: {{3 mobeds with numbers}}. Geh-saarnu: {{4}}.
-    Uthamna: {{5}}. The family's contact is {{6 family name}}, {{7 family
-    number}}." No button."""
+    """Template 7 (prayers_all_set_panthaky): "The prayers for {{1 departed}} at
+    {{2 place}} are confirmed. Mobeds going: {{3 mobeds with numbers}}.
+    Geh-saarnu: {{4}}. Uthamna: {{5}}. The family's contact is {{6 family
+    name}}, {{7 family number}}. You can see the full details in Mobed Diary."
+    No button. (Reworded 23 Nov 2026: Meta's form refused the first wording,
+    which ended on a blank and had too many blanks for its length.)"""
     mobeds, mobeds_kept = people_blank(going)
     return Send(
         kind=TYPE_ALL_SET_PANTHAKY, phone=phone, recipient_type="user", recipient_id=recipient_id,
@@ -705,7 +707,7 @@ def all_set_manager_send(record: FuneralRecord, agyary: Agyary, *, going: list[P
                          phone: str, recipient_id: int, refs: dict) -> Send:
     """Template 8 (funeral_accepted_manager_v2): "The prayers for {{1 departed}}
     will be offered by {{2 mobeds' names}} of {{3 agyari}}. For anything else,
-    please contact {{4 contact}}." No button. {{4}} is the panthaky with their
+    please contact {{4 contact}}. Thank you." No button. {{4}} is the panthaky with their
     number, else the first mobed going (``contact_people``)."""
     contact, contact_kept = people_blank(contact_people(panthakys, going))
     return Send(

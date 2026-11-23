@@ -187,13 +187,16 @@ fire temple's own name with no number). 5 ends "May the ruvan of the late [depar
 Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: backing out, see above).
 
 **7. To the panthaky: `prayers_all_set_panthaky`**
-> All mobeds are found for **[departed]** at **[place]**: **[mobeds with numbers]**.
-> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact is
-> **[family name]**, **[family number]**.
+> The prayers for **[departed]** at **[place]** are confirmed. Mobeds going: **[mobeds with
+> numbers]**. Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact
+> is **[family name]**, **[family number]**. You can see the full details in Mobed Diary.
 
 **8. To the Doongerwadi: `funeral_accepted_manager_v2`**
 > The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. For
-> anything else, please contact **[contact]**.
+> anything else, please contact **[contact]**. Thank you.
+
+(7 and 8 reworded 23 Nov 2026 before submitting: Meta's form refuses a template that ends on a
+blank, and refused 7 for too many blanks for its length. Same blanks, same order.)
 
 **4 v2 (owner, 21 Nov 2026: yes, it replaces template 4): `prayer_request_mobeds_v2`**
 > A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:
@@ -238,7 +241,8 @@ their number goes to the family; the message should say both before they answer.
   named in the messages.
 - **"Still short" is told only before the prayers begin** (never for a request whose Geh-saarnu
   has begun or passed, such as an old test record left waiting).
-- **Template 7** says "All mobeds are found" also when the panthaky confirmed with fewer.
+- **Template 7** now says "are confirmed", which is true also when the panthaky confirmed with
+  fewer (the first wording, "All mobeds are found", was not).
 - **Standbys (step 5b):** one standby is asked per open place, in the order they said yes; one
   who gave no answer in 30 minutes is not asked again for a later place (a late answer to that
   re-ask still counts); the panthaky's own standby ("I'll pray" when full) is never re-asked; a

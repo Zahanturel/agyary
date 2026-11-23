@@ -118,28 +118,33 @@ to it gets it.
 
 Setting: `WHATSAPP_ALL_SET_PANTHAKY_TEMPLATE` (default `prayers_all_set_panthaky`).
 
-> All mobeds are found for **[departed]** at **[place]**: **[mobeds with numbers]**.
-> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact is
-> **[family name]**, **[family number]**.
+> The prayers for **[departed]** at **[place]** are confirmed. Mobeds going: **[mobeds with
+> numbers]**. Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. The family's contact
+> is **[family name]**, **[family number]**. You can see the full details in Mobed Diary.
 
 Blanks, in this order: 1 departed, 2 place, 3 the mobeds going with their numbers, 4 Geh-saarnu,
 5 Uthamna, 6 the family's name, 7 the family's number. No button.
+
+Reworded 23 Nov 2026, before submitting: Meta's form refused the first wording ("All mobeds are
+found for ... The family's contact is [family name], [family number].") because it ended on a
+blank and had too many blanks for its length. The blanks and their order are unchanged.
 
 Who gets it: the request's panthaky (the one whose book the family went into) when they are not
 praying themselves (if they pray, they get template 6 instead).
 
 When: the first time it is **Confirmed** only (not again when it is confirmed again; they see the
-new names in the app). It says "All mobeds are found" also when the panthaky confirmed with fewer.
+new names in the app). "Are confirmed" is true also when the panthaky confirmed with fewer.
 
 ### 8. To the Doongerwadi: `funeral_accepted_manager_v2`
 
 Setting: `WHATSAPP_ALL_SET_MANAGER_TEMPLATE` (default `funeral_accepted_manager_v2`).
 
 > The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. For
-> anything else, please contact **[contact]**.
+> anything else, please contact **[contact]**. Thank you.
 
 Blanks, in this order: 1 departed, 2 the mobeds' names (no numbers), 3 agyari, 4 the contact (as
-in template 5). No button.
+in template 5). No button. "Thank you." added 23 Nov 2026 before submitting: Meta's form refuses
+a template that ends on a blank.
 
 Who gets it: the Doongerwadi's (or prayer hall's) managers whose access is on.
 
