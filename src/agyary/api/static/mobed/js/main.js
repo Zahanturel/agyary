@@ -136,9 +136,9 @@ route("#/requests/:id", renderRequest, { parent: "#/requests", tab: "requests" }
 // The old "Who is going" screen (Step 5c): the request's own page, with its board (R3.1),
 // is where its notification links and bookmarks land now.
 route("#/requests/:id/callout", (p) => navigate(`#/requests/${encodeURIComponent(p.id)}`, { replace: true }));
-// The panthaky's Mobeds page (R3.1), from Settings. It was "Our mobeds": the old
+// The panthaky's Mobeds page (R3.1), the fifth tab (owner, 24 Nov 2026; Settings still has a button). It was "Our mobeds": the old
 // address (a bookmark, an old link) leads to the same page.
-route("#/mobeds", renderMobeds, { parent: "#/menu" });
+route("#/mobeds", renderMobeds, { tab: "mobeds" });
 route("#/our-mobeds", () => navigate("#/mobeds", { replace: true }));
 // How a request reaches the panthaky's fire temple (R3.1), from Settings.
 route("#/prayer-requests", renderRequestSettings, { parent: "#/menu" });
@@ -218,6 +218,7 @@ onTab((tab) => navigate({
   calendar: calendarHash(state.calendar),
   behdins: "#/behdins",
   requests: "#/requests",
+  mobeds: "#/mobeds",
 }[tab]));
 
 // What the add button does unless a screen overrides it (see ui.showFab).

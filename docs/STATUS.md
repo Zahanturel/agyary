@@ -59,7 +59,7 @@ Migrations added by R3.1, in order (each with a working downgrade, proved by
 | `f4a5b6c7d8e2` | `e3f4a5b6c7d1` | `funeral_requests.no_answer_alert_at` |
 | `a5b6c7d8e9f4` | `f4a5b6c7d8e2` | `funeral_requests.nobody_could` (head) |
 
-App version: **v87** (`CACHE_NAME = "mobed-shell-v87"` in `mobed-sw.js`; Menu -> App version).
+App version: **v88** locally (Mobeds is a fifth tab for a panthaky, owner 24 Nov 2026; not pushed; live is v87) (`CACHE_NAME = "mobed-shell-v88"` in `mobed-sw.js`; Menu -> App version).
 The owner's checklist for trying it is [phase2-verify-checklist.md](phase2-verify-checklist.md).
 
 ---

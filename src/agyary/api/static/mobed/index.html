@@ -42,7 +42,7 @@
 
 <!-- The four places a mobed lives: their machi board, their calendar, their
      behdins, and the requests for prayers from a Doongerwadi (with the red
-     count of those waiting). Shown on every screen except Settings, sign-in
+     count of those waiting), and for a panthaky a fifth, Mobeds. Shown on every screen except Settings, sign-in
      and onboarding; the tab they came from stays lit on a form or a slip. -->
 <nav id="tabs" class="tabs hidden" aria-label="Main">
   <button data-tab="machi" aria-label="Machi">
@@ -69,6 +69,14 @@
       <path d="M3.5 13.5l2.4-7.2A2 2 0 0 1 7.8 5h8.4a2 2 0 0 1 1.9 1.3l2.4 7.2V18a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-4.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
       <path d="M3.5 13.5h4.8l1.2 2.5h5l1.2-2.5h4.8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
     </svg><span>Requests</span><span id="reqBadge" class="tab-badge hidden" aria-hidden="true"></span>
+  </button>
+  <!-- The fifth tab, only for a panthaky (shown by requests_count.js): the mobeds they work with. -->
+  <button data-tab="mobeds" aria-label="Mobeds" class="hidden">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="7.5" r="3.5" stroke="currentColor" stroke-width="2"/>
+      <path d="M5 20.5c0-4 3-6.5 7-6.5s7 2.5 7 6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M8.5 5.2h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><span>Mobeds</span>
   </button>
 </nav>
 
