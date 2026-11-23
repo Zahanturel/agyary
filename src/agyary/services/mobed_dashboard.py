@@ -879,9 +879,9 @@ async def _create_recurring_bookings(
 def check_board_range(start: date, end: date) -> None:
     """Checked before anything is written for the range (SEC-09)."""
     if end < start:
-        raise ValueError("end must not be before start")
+        raise ValueError("The end date cannot be before the start date.")
     if (end - start).days + 1 > MAX_BOARD_RANGE_DAYS:
-        raise ValueError(f"Range too large (max {MAX_BOARD_RANGE_DAYS} days)")
+        raise ValueError(f"Please choose a shorter time, up to {MAX_BOARD_RANGE_DAYS} days.")
 
 
 async def ensure_recurrences_generated(

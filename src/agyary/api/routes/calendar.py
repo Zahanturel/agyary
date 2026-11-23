@@ -76,7 +76,7 @@ def range_(
     if end < start:
         raise HTTPException(status_code=400, detail="The end date is before the start date.")
     if (end - start).days + 1 > _MAX_RANGE_DAYS:
-        raise HTTPException(status_code=400, detail=f"Range too large (max {_MAX_RANGE_DAYS} days)")
+        raise HTTPException(status_code=400, detail=f"Please choose a shorter time, up to {_MAX_RANGE_DAYS} days.")
     days = []
     current = start
     while current <= end:

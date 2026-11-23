@@ -65,7 +65,7 @@ async def search_google(q: str = Query(default=""), user: User = Depends(get_use
     """Up to five places Google finds by name. Not there at all without a key."""
     settings = get_settings()
     if not place_search.google_configured(settings):
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="This search is not available.")
     query = _query(q)
     rate_limit.enforce_key(f"google_search:{user.id}", max_requests=GOOGLE_PER_MINUTE, window_seconds=60)
     rate_limit.enforce_key(f"google_search_day:{user.id}", max_requests=GOOGLE_PER_DAY, window_seconds=86400)

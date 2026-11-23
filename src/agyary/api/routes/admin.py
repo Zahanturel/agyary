@@ -57,7 +57,7 @@ def require_admin(user: User = Depends(get_current_account)) -> User:
     # Any kind of account that is on: the number is what makes an admin, and a
     # manager's or a mobed's account that is not an admin gets the same 404.
     if not guardrails.is_admin(get_settings(), user.phone):
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="This page could not be found.")
     return user
 
 

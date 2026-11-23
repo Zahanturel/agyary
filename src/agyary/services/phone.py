@@ -55,7 +55,7 @@ def normalize_phone(value: str) -> str:
 def _validate_phone(value: str) -> str:
     value = normalize_phone(value)
     if not _E164_RE.match(value):
-        raise ValueError("Phone number must be in international format, e.g. +919876543210")
+        raise ValueError("Please enter the number with the country code, e.g. +91 98765 43210.")
     return value
 
 

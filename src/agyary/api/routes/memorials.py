@@ -481,7 +481,7 @@ async def memorial_feed(
     if to < from_:
         raise HTTPException(status_code=400, detail="The end date is before the start date.")
     if (to - from_).days + 1 > MAX_FEED_RANGE_DAYS:
-        raise HTTPException(status_code=400, detail=f"Range too wide (max {MAX_FEED_RANGE_DAYS} days)")
+        raise HTTPException(status_code=400, detail=f"Please choose a shorter time, up to {MAX_FEED_RANGE_DAYS} days.")
     return await memorials.calendar_feed(db, user.id, agyary_id, from_, to)
 
 

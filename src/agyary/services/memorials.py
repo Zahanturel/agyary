@@ -1053,7 +1053,7 @@ async def calendar_feed(
     memorial's last one. The notice is its own kind so the calendar can pin
     and colour it apart from ordinary events."""
     if end < start:
-        raise MemorialError("end must not be before start")
+        raise MemorialError("The end date cannot be before the start date.")
 
     rows = (
         await db.execute(
@@ -1170,7 +1170,7 @@ async def reminders_due(
     fire temple's.
     """
     if horizon_days < 0:
-        raise MemorialError("horizon must not be negative")
+        raise MemorialError("The number of days ahead cannot be less than zero.")
     end = today + timedelta(days=horizon_days)
     rows = (
         await db.execute(

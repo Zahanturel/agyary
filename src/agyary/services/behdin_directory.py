@@ -147,7 +147,7 @@ async def create_or_link(
     """
     name, phone = name.strip(), phone.strip()
     if not name:
-        raise BehdinError("Name is required")
+        raise BehdinError("Please enter the name.")
 
     customer, created = await resolve_own(db, user_id, phone, name)
 
@@ -177,13 +177,13 @@ async def update(
     if name is not None:
         cleaned = name.strip()
         if not cleaned:
-            raise BehdinError("Name cannot be blank")
+            raise BehdinError("Please enter the name.")
         customer.name = cleaned
 
     if phone is not None:
         cleaned = phone.strip()
         if not cleaned:
-            raise BehdinError("Phone cannot be blank")
+            raise BehdinError("Please enter the number.")
         if cleaned != customer.phone:
             clash = await booking_service.get_customer_by_phone(db, customer.owner_user_id, cleaned)
             if clash is not None:
@@ -288,24 +288,22 @@ def validate_section_names(section: str, names: list[dict]) -> list[dict]:
     if section == "farmayeshne":
         for n in names:
             if n.get("pair_group") is not None:
-                raise BehdinError("Farmayeshne names are singles and cannot belong to a pair")
+                raise BehdinError("A Farmayeshne name stands on its own: it cannot be part of a pair.")
             if n.get("status") != "living":
-                raise BehdinError("Farmayeshne names are the living family - status must be 'living'")
+                raise BehdinError("Farmayeshne names are for the living: please mark each one living.")
         return names
 
     groups: dict[int, list[dict]] = {}
     for n in names:
         group = n.get("pair_group")
         if group is None:
-            raise BehdinError("Every pair name must carry a pair_group")
+            raise BehdinError("Every pair name needs a partner.")
         groups.setdefault(group, []).append(n)
-    for group, members in groups.items():
+    for members in groups.values():
         if len(members) != 2:
-            raise BehdinError(
-                f"A pair is exactly two names - pair {group} has {len(members)}"
-            )
+            raise BehdinError("A pair is exactly two names: please fill both, or remove the pair.")
         if members[0].get("status") != members[1].get("status"):
-            raise BehdinError(f"Both names in pair {group} must share the same status")
+            raise BehdinError("Both names in a pair must be living, or both departed.")
     return names
 
 

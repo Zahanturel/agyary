@@ -158,7 +158,7 @@ async def test_a_managers_account_reaches_none_of_the_mobed_app(client, db, seed
         r = await client.request(method, url, json={}, headers=headers)
         if path.startswith("/api/mobed/admin/"):
             # The admin pages answer anyone who is not an admin with the same 404.
-            assert r.status_code == 404 and r.json()["detail"] == "Not found", (method, path, r.text)
+            assert r.status_code == 404 and r.json()["detail"] == "This page could not be found.", (method, path, r.text)
         else:
             assert r.status_code == 403, (method, path, r.status_code, r.text)
             assert r.json()["detail"] == mobed_routes.NOT_FOR_MANAGERS, (method, path)

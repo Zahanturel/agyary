@@ -190,13 +190,13 @@ def decode_token(token: str, expected_type: str) -> dict:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError as exc:
-        raise TokenError("Invalid or expired token") from exc
+        raise TokenError("Please sign in again.") from exc
     if payload.get("type") != expected_type:
-        raise TokenError("Wrong token type")
+        raise TokenError("Please sign in again.")
     try:
         payload["sub"] = int(payload["sub"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise TokenError("Invalid token") from exc
+        raise TokenError("Please sign in again.") from exc
     return payload
 
 
@@ -250,7 +250,7 @@ async def _adopt_legacy(db: AsyncSession, claims: dict) -> UserSession:
         raise TokenError("This sign-in has ended. Please sign in again.")
     user = await db.get(User, claims["sub"])
     if user is None:
-        raise TokenError("User not found")
+        raise TokenError("This account could not be found. Please sign in again.")
     # A legacy token carries no issue time; it was minted for exactly the refresh
     # window, so its expiry says when.
     issued = datetime.fromtimestamp(claims["exp"], UTC) - timedelta(days=settings.jwt_refresh_token_days)

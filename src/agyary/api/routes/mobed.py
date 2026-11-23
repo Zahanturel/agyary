@@ -73,7 +73,7 @@ async def _current(authorization: str, db: AsyncSession) -> tuple[User, int]:
     request, so ending it (sign out, sign out other devices, an admin's sign out
     everywhere) takes effect at once, not when the access token runs out."""
     if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
+        raise HTTPException(status_code=401, detail="Please sign in again.")
     token = authorization.removeprefix("Bearer ")
     try:
         claims = mobed_auth.decode_token(token, "access")
@@ -175,7 +175,7 @@ async def _require_membership(db: AsyncSession, agyary_id: int, user: User) -> A
     if agyary is None or not agyary.is_active:
         raise HTTPException(status_code=404, detail="That fire temple could not be found.")
     if not await mobed_dashboard.is_active_member(db, agyary_id, user.id):
-        raise HTTPException(status_code=403, detail="Not a member of this agyary")
+        raise HTTPException(status_code=403, detail="You are not at this fire temple in Mobed Diary.")
     return agyary
 
 
@@ -413,12 +413,12 @@ async def refresh(
     (the user's explicit requirement) actually true for someone who opens
     the app at least once within the window."""
     if refresh_token is None:
-        raise HTTPException(status_code=401, detail="Missing refresh token")
+        raise HTTPException(status_code=401, detail="Please sign in again.")
     try:
         claims = mobed_auth.decode_token(refresh_token, "refresh")
         user = await db.get(User, claims["sub"])
         if user is None or not user.is_active:
-            raise mobed_auth.TokenError("User not found")
+            raise mobed_auth.TokenError("This account could not be found. Please sign in again.")
         # Each refresh token is good once: the session moves on a generation,
         # and an older one coming back ends the session (AU-2).
         session = await mobed_auth.rotate(db, claims)
@@ -743,24 +743,21 @@ async def put_preferences(
     unknown = [s for s in systems if s not in OFFERED_DISPLAY_SYSTEMS]
     if unknown:
         raise HTTPException(
-            status_code=400,
-            detail=f"Unknown calendar system(s): {', '.join(unknown)}. "
-            f"Choose from: {', '.join(OFFERED_DISPLAY_SYSTEMS)}",
+            status_code=400, detail="Please choose the calendars to show from the list, and try again.",
         )
     if not systems:
         raise HTTPException(status_code=400, detail="Please keep at least one calendar showing.")
     if payload.default_secondary_system not in OFFERED_CALENDARS:
         raise HTTPException(
-            status_code=400,
-            detail=f"Secondary system must be one of: {', '.join(OFFERED_CALENDARS)}",
+            status_code=400, detail="Please choose the second calendar from the list, and try again.",
         )
     if payload.default_secondary_system not in systems:
         raise HTTPException(
-            status_code=400, detail="The secondary system has to be one of the visible ones"
+            status_code=400, detail="Please choose a second calendar from those you show."
         )
     if payload.display_language not in DISPLAY_LANGUAGES:
         raise HTTPException(
-            status_code=400, detail=f"Language must be one of: {', '.join(DISPLAY_LANGUAGES)}"
+            status_code=400, detail="Please choose a language from the list, and try again."
         )
 
     prefs = await db.get(UserPreferences, user.id)
@@ -1172,14 +1169,14 @@ async def my_day(
     first time.
     """
     if (from_ is None) != (to is None):
-        raise HTTPException(status_code=400, detail="Pass both from and to, or neither")
+        raise HTTPException(status_code=400, detail="Please choose both a start and an end date.")
     if from_ is not None and to is not None:
         if to < from_:
             raise HTTPException(status_code=400, detail="The end date is before the start date.")
         if (to - from_).days + 1 > mobed_dashboard.MAX_MY_DAY_RANGE_DAYS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Range too wide (max {mobed_dashboard.MAX_MY_DAY_RANGE_DAYS} days)",
+                detail=f"Please choose a shorter time, up to {mobed_dashboard.MAX_MY_DAY_RANGE_DAYS} days.",
             )
     if to is not None and await mobed_dashboard.ensure_booking_recurrences_generated(db, user.id, through=to):
         # A repeating event is written ahead only a few periods at a time; a
@@ -1512,7 +1509,7 @@ async def delete_behdin(
     mobed_dashboard.delete_behdin_scoped). ``erased`` says whether the record
     itself went too, or only their place in this mobed's list."""
     if scope not in mobed_dashboard.DELETE_SCOPES:
-        raise HTTPException(status_code=400, detail="scope must be list, memorials or all.")
+        raise HTTPException(status_code=400, detail="Please choose how much to delete, and try again.")
     customer = await _require_behdin(db, agyary_id, customer_id, user)
     agyary = await _require_membership(db, agyary_id, user)
     done = await mobed_dashboard.delete_behdin_scoped(db, agyary, customer, user.id, scope)
@@ -1575,12 +1572,12 @@ async def replace_saved_name_section(
     """
     await _require_behdin(db, agyary_id, customer_id, user)
     if section not in NAME_SECTIONS:
-        raise HTTPException(status_code=404, detail=f"Unknown section: {section}")
+        raise HTTPException(status_code=404, detail="That list of names could not be found. Please open the behdin again.")
     for n in payload.names:
         if n.title not in NAME_TITLES:
-            raise HTTPException(status_code=400, detail=f"Unknown title: {n.title}")
+            raise HTTPException(status_code=400, detail="Please choose a title from the list for every name.")
         if n.status not in NAME_STATUSES:
-            raise HTTPException(status_code=400, detail=f"Unknown status: {n.status}")
+            raise HTTPException(status_code=400, detail="Please choose living or departed for every name.")
     try:
         rows = await behdin_directory.replace_section(
             db, customer_id, section, [n.model_dump() for n in payload.names]

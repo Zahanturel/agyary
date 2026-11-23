@@ -111,6 +111,6 @@ async def test_a_mobed_who_is_not_an_admin_gets_a_404_for_every_funeral_place_pa
     ]
     for method, path, body in calls:
         r = await client.request(method, path, json=body, headers=mobed)
-        assert r.status_code == 404 and r.json()["detail"] == "Not found", (method, path)
+        assert r.status_code == 404 and r.json()["detail"] == "This page could not be found.", (method, path)
         assert (await client.request(method, path, json=body)).status_code == 401, (method, path)
     assert (await db.execute(select(FuneralPlace.is_active))).scalars().all() == [True]

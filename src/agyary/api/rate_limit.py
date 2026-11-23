@@ -50,6 +50,9 @@ def enforce_key(key: str, *, max_requests: int, window_seconds: int) -> None:
     cutoff = now - window_seconds
     hits = [t for t in _hits[key] if t > cutoff]
     if len(hits) >= max_requests:
-        raise HTTPException(status_code=429, detail="Too many attempts, please wait and try again")
+        # Plain words (owner's word review, 23 Nov 2026); a window longer than a minute
+        # is not promised as one.
+        wait = "a minute" if window_seconds <= 60 else "a while"
+        raise HTTPException(status_code=429, detail=f"Too many tries. Please wait {wait} and try again.")
     hits.append(now)
     _hits[key] = hits
