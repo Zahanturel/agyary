@@ -438,7 +438,7 @@ async def notify_closing_tomorrow(db: AsyncSession, now: datetime | None = None)
             db, memorial.created_by_user_id, KIND_MEMORIAL_CLOSING,
             f"Last prayer for {memorial.departed_name} is tomorrow",
             f"After tomorrow there are no more prayers for {memorial.departed_name} "
-            f"({behdin_name}). The memorial will close.",
+            f"({behdin_name}).",
             link=link, agyary_id=memorial.agyary_id, now=now,
         )
         made += 1

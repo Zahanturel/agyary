@@ -25,7 +25,7 @@ function flagPhone(id) {
   flagProblems(field.closest(".card"), [{ target: field, message: "Please enter a valid phone number." }]);
 }
 
-const rupees = (n) => "Rs " + Number(n).toFixed(2);
+const rupees = (n) => "₹" + Number(n).toFixed(2);
 
 function fact(label, value) {
   return `<div class="fact"><div class="fl">${esc(label)}</div><div class="fv">${value}</div></div>`;

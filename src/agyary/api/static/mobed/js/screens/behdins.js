@@ -219,8 +219,8 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
 
       <div class="step-sec hidden" data-bstep="2">
         <h2 class="step-q">${QUESTIONS[1]}</h2>
-        <p class="meta">Reused whenever this behdin books - here or over
-          WhatsApp. Leave it for later if you don't have them to hand.</p>
+        <p class="meta">Used whenever you book for this behdin. Leave it for later if you don't have them
+          to hand.</p>
         <div id="savedRegion"></div>
       </div>
 
@@ -516,7 +516,7 @@ export async function renderBehdinDetail({ id }) {
 
     <div class="card">
       <h2>Names for prayers</h2>
-      <p class="meta">Reused whenever this behdin books - here or over WhatsApp.</p>
+      <p class="meta">Used whenever you book for this behdin.</p>
       <div id="savedRegion"></div>
       <div style="margin-top:14px"><button class="small" id="bdSaveNames">Save names</button></div>
     </div>

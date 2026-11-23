@@ -888,7 +888,7 @@ def closed_words(request: FuneralRequest, place_name: str) -> str:
     if request.status == REQUEST_DECLINED:
         return "This request was declined, so nothing more is needed for it."
     if request.status == REQUEST_ALL_SET:
-        return "Enough mobeds are going for this request: it is all set."
+        return "Enough mobeds are going for this request: it is confirmed."
     return "This request is no longer waiting, so nothing more can be done with it here."
 
 
@@ -996,7 +996,7 @@ def _same_person(a: PrayerCalloutAnswer, b: PrayerCalloutAnswer) -> bool:
 # What a mobed going, or on standby, is told in the app (owner, 21 Nov 2026).
 GOING_WORDS = "You are going. You will get the details once enough mobeds are going."
 # An app mobed whose "I can pray" filled the last place: the details are on their card now.
-ALL_SET_GOING_WORDS = "You are going, and all the places are filled: it is all set."
+ALL_SET_GOING_WORDS = "You are going, and all the places are filled: it is confirmed."
 HOW_WORDS = {HOW_WHATSAPP: "said yes on WhatsApp", HOW_APP: "said yes in the app", HOW_PHONE: "said yes on the phone"}
 
 
@@ -1088,7 +1088,7 @@ async def fill(
                   HOW_APP: ", and were told so in the app."}.get(how, ".")
     await _tell_panthakys(
         db, settings, request, row, KIND_YES, f"{row.name} also said yes",
-        f"{_said(row, how, departed)}. Enough mobeds are going, so they are on standby{told_words}",
+        f"{_said(row, how, departed)}. Enough mobeds are going, so they are on the waiting list{told_words}",
         push=None, now=now, skip_user_id=skip)
     if how != HOW_SELF:
         await _tell_mobed(db, settings, request, row, "Enough mobeds are going", fw.ENOUGH_TEXT, now=now)
@@ -1418,16 +1418,16 @@ def _already(name: str, row: PrayerCalloutAnswer, *, me: bool = False) -> str:
     if row.picked_at is not None:
         return "You are already going." if me else f"{name} is already going."
     if row.answer == CALLOUT_YES:
-        return "You are on standby already." if me else f"{name} already said yes and is on standby."
+        return "You are on the waiting list already." if me else f"{name} already said yes and is on the waiting list."
     return "You have already answered for yourself." if me else f"{name} has already said they cannot pray this time."
 
 
 def _done_words(row: PrayerCalloutAnswer, request: FuneralRequest, going: int, want: int, *, me: bool) -> str:
     who = "You are" if me else f"{row.name} is"
     if row.picked_at is None:
-        return f"Enough mobeds are going already, so {'you are' if me else row.name + ' is'} on standby."
+        return f"Enough mobeds are going already, so {'you are' if me else row.name + ' is'} on the waiting list."
     if request.status == REQUEST_ALL_SET:
-        return f"{who} going. All the places are filled: it is all set."
+        return f"{who} going. All the places are filled: it is confirmed."
     return f"{who} going: {going} of {want}."
 
 
@@ -1463,7 +1463,7 @@ async def pray_myself(
 
 SHORT_NOBODY = ("Nobody is going yet, so there is nobody to confirm with. "
                 "Ask everyone, call a mobed, or tap I'll pray.")
-SHORT_FAILED = "It could not be made all set just now. Please try again."
+SHORT_FAILED = "It could not be confirmed just now. Please try again."
 
 
 async def confirm_short(
@@ -1493,8 +1493,8 @@ async def confirm_short(
         raise CalloutError(SHORT_FAILED)
     logger.warning("Request %s: user %s confirmed with %d of %d going", request.id, user_id, going, want)
     return {"outcome": "all set" + (", short" if short else ""),
-            "message": f"All set with {going} of {want} going." if short
-            else "All the places are filled: it is all set."}
+            "message": f"Confirmed with {going} of {want} going." if short
+            else "All the places are filled: it is confirmed."}
 
 
 CALL_RESULTS = ("going", "not_going", "no_answer")
@@ -1649,7 +1649,7 @@ def _mine_already(row: PrayerCalloutAnswer) -> str:
     if row.picked_at is not None:
         return "You have already said yes: you are going."
     if row.answer == CALLOUT_YES:
-        return "You have already said yes: you are on standby."
+        return "You have already said yes: you are on the waiting list."
     return "You have already said you cannot pray this time."
 
 

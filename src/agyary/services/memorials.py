@@ -1041,8 +1041,7 @@ async def edit_memorial(
 # The calendar
 # ---------------------------------------------------------------------------
 CLOSING_TEXT = (
-    "Last observance for {departed}. After today there are no more upcoming "
-    "bookings for this memorial, and it will be closed."
+    "Last prayer for {departed}. After today there are no more prayers for this memorial."
 )
 
 

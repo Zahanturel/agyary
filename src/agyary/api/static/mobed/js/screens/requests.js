@@ -90,7 +90,7 @@ function stateText(q) {
   }
   if (q.status === "declined") return q.declined_by_me ? "Declined by you" : q.declined_by ? `Declined by ${q.declined_by}` : "Declined";
   if (q.status === "withdrawn") return `Withdrawn by ${q.funeral_place.name}`;
-  if (q.status === "all_set") return "All set";
+  if (q.status === "all_set") return "Confirmed";
   return "Waiting for an answer";
 }
 
@@ -138,7 +138,7 @@ function allSetStands(q) {
   const n = a ? a.going.length : (q.places || { going: 0 }).going;
   const mine = q.my_answer ? q.my_answer.state : "";
   const me = mine === "going" || (a && a.going.some(g => g.is_me));
-  return `All set: ${n} going${me ? ", including you" : mine === "standby" ? ", you are on standby"
+  return `Confirmed: ${n} going${me ? ", including you" : mine === "standby" ? ", you are on the waiting list"
     : mine === "backed_out" ? ", you said you can't go" : ""}`;
 }
 
@@ -400,7 +400,7 @@ function myHeadline(q) {
   if (my.may_answer_again) return "A place has opened: can you still pray?";
   if (mine === "standby" && my.reask === "said_no") return "You said not this time";
   return {
-    going: "You are going", standby: "Standby", said_no: "You said not this time", backed_out: "You said you can't go",
+    going: "You are going", standby: "Waiting list", said_no: "You said not this time", backed_out: "You said you can't go",
   }[mine] || "Asked: can you pray?";
 }
 
@@ -425,7 +425,7 @@ function myWords(q) {
   if (mine === "standby") return STANDBY_WORDS;
   if (mine === "said_no") return "You said not this time. Nothing more is needed from you.";
   return q.status === "all_set"
-    ? "Enough mobeds are going already. If you can pray too, you are kept on standby in case a place opens."
+    ? "Enough mobeds are going already. If you can pray too, you are kept on the waiting list in case a place opens."
     : "If you can pray, you will get the details once enough mobeds are going, and your name and number will be "
       + "shared with the family.";
 }
@@ -482,7 +482,7 @@ function confirmBackOut(q, alive) {
   const sheet = openSheet({
     title: `Tell ${tell} you can't go?`,
     html: `
-      <p style="margin-top:0">Your place opens again, and the next mobed on standby is asked to take it.</p>
+      <p style="margin-top:0">Your place opens again, and the next mobed on the waiting list is asked to take it.</p>
       ${q.all_set ? `<p class="meta" style="margin:0 0 8px">The family stays in your Behdins.</p>` : ""}
       <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
       <div class="stack">
@@ -664,7 +664,7 @@ function drawAllSet(q, alive) {
   mainEl.innerHTML = `
     <div class="card">
       <h2>${esc(q.prayed_name)}</h2>
-      <p style="margin:0"><b>${esc(opened ? openedText({ going: n, wanted }) : `All set: ${n} going`)}</b></p>
+      <p style="margin:0"><b>${esc(opened ? openedText({ going: n, wanted }) : `Confirmed: ${n} going`)}</b></p>
       <p style="margin:4px 0 0">${esc(line)}${me ? (opened ? " You are still going." : " You are going.") : ""}</p>
       <div style="margin-top:10px">${factsHtml(q)}</div>
       ${backOutHtml(q)}
@@ -776,7 +776,7 @@ const REASK = { waiting: "Waiting", asked_again: "Asked again", said_no: "Said n
 function standbysHtml(b) {
   if (!b.standbys.length) return "";
   const me = myKey();
-  return `<p style="margin:14px 0 4px"><b>Standby, in order</b></p>
+  return `<p style="margin:14px 0 4px"><b>Waiting list, in order</b></p>
     <ol style="margin:0;padding-left:28px">${b.standbys.map(s => `<li>${esc(s.name)}${s.key === me ? " (you)" : ""}
       ${HOW[s.how] ? `<span class="meta">· ${esc(HOW[s.how])}</span>` : ""}
       ${REASK[s.reask] ? `<span class="meta">· <b>${esc(REASK[s.reask])}</b></span>` : ""}</li>`).join("")}</ol>`;
@@ -794,7 +794,7 @@ function boardCardHtml(view) {
   // the family's contact (#rqAllSetMore), so the places are not listed twice.
   const contacts = allSet && b.all_set;
   return `<div class="card">
-      <h2>${allSet ? esc(`All set: ${b.going} going`) : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
+      <h2>${allSet ? esc(`Confirmed: ${b.going} going`) : `Who will pray: ${b.going} of ${b.wanted}`}</h2>
       <p ${allSet ? "" : `class="meta" `}style="margin:0">${esc(boardStateText(b, !!view.q))}</p>
       <p class="meta" id="rqLive" role="status" style="margin:4px 0 0">${esc(view.liveError)}</p>
       ${contacts ? "" : `${slotsHtml(b, { open: !["declined", "withdrawn", "all_set"].includes(b.status), marks: true })}
@@ -819,7 +819,7 @@ function boardCardHtml(view) {
 function mobedStateText(m) {
   if (m.state === "going") return "Going";
   if (m.state === "backed_out") return "Can't go";
-  if (m.state === "standby") return "Standby";
+  if (m.state === "standby") return "Waiting list";
   if (m.state === "said_no") return `Said no${SAID_HOW[m.how] ? ` ${SAID_HOW[m.how]}` : ""}`;
   if (m.state === "asked_whatsapp") {
     const wa = m.whatsapp;
@@ -1078,7 +1078,7 @@ function askAbout(view, call) {
   if (!m) return;
   if (MAY_MARK.has(m.state) && m.may_place === false) return showInfo(`${m.name} ${m.no_place}.`);
   if (MAY_MARK.has(m.state)) return askGoing(view, m);
-  showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on standby already.`);
+  showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on the waiting list already.`);
 }
 
 /** Back in the app: the board read again (answers may have come meanwhile), then the
@@ -1201,7 +1201,7 @@ function confirmShort(view) {
     if (!here(view)) return;
     const { done = {}, ...nb } = res;
     showBoard(view, nb, seq);
-    showInfo(done.message || "All set.");
+    showInfo(done.message || "Confirmed.");
   };
 }
 
@@ -1216,7 +1216,7 @@ function confirmCantGo(view, p) {
   const sheet = openSheet({
     title: me ? "You can't go?" : `${p.name} can't go?`,
     html: `
-      <p style="margin-top:0">${me ? "Your" : "Their"} place opens again, and the first mobed on standby is asked to
+      <p style="margin-top:0">${me ? "Your" : "Their"} place opens again, and the first mobed on the waiting list is asked to
         take it.${me ? "" : " Nothing more is sent to them."}</p>
       <p class="meta" data-msg role="alert" style="margin:0 0 8px"></p>
       <div class="stack">

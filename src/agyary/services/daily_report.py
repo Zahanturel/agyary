@@ -67,7 +67,7 @@ async def tomorrows_items(db: AsyncSession, user_id: int, day: date) -> list[Ite
         b = e.booking
         if b.status in SLOT_RELEASING_STATUSES:
             continue
-        where = " (offsite)" if b.is_offsite else ""
+        where = " (outside the fire temple)" if b.is_offsite else ""
         items.append(Item(b.ceremony_datetime, "booking",
                           f"{_clock(b.ceremony_datetime)} {e.service_name}{where} - {e.behdin_name or 'a behdin'}"))
 

@@ -84,5 +84,5 @@ def names_block(names: list[dict]) -> str:
 def rupees(amount: Decimal | float | int | str) -> str:
     value = Decimal(str(amount))
     if value == value.to_integral_value():
-        return f"Rs. {value:.0f}"
-    return f"Rs. {value:.2f}"
+        return f"₹{value:.0f}"
+    return f"₹{value:.2f}"

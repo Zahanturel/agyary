@@ -441,7 +441,7 @@ async def test_a_call_can_bring_back_someone_who_said_they_cant_go(client, db, s
     r = await call(LISTED, "going")
     assert r.status_code == 409 and r.json()["detail"] == "Er. Listed is already going."
     r = await call(SECOND, "going")
-    assert r.status_code == 409 and r.json()["detail"] == "Er. Second already said yes and is on standby."
+    assert r.status_code == 409 and r.json()["detail"] == "Er. Second already said yes and is on the waiting list."
     # "Not this time" for the one who can't go: noted quietly, nothing changes.
     r = await call(MOBED, "not_going")
     assert r.status_code == 200 and r.json()["done"]["message"] == f"Noted: {MOBED_NAME} cannot pray this time."
@@ -452,7 +452,7 @@ async def test_a_call_can_bring_back_someone_who_said_they_cant_go(client, db, s
     sent = len(meta.sent)
     r = await call(MOBED, "going")
     assert r.status_code == 200, r.text
-    assert r.json()["done"]["message"] == f"{MOBED_NAME} is going. All the places are filled: it is all set."
+    assert r.json()["done"]["message"] == f"{MOBED_NAME} is going. All the places are filled: it is confirmed."
     board = r.json()
     assert board["status"] == "all_set" and board["backed_out"] == []
     assert [p["name"] for p in board["places"]] == ["Er. Listed", MOBED_NAME]
@@ -487,7 +487,7 @@ async def test_backing_out_before_all_set_tells_the_panthaky_to_find_someone(cli
     assert r.status_code == 200, r.text
     assert r.json()["request"]["status"] == "waiting" and r.json()["request"]["reopened"] is False
     (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
-    assert "nobody is on standby" in note.body and "please find someone" in note.body
+    assert "nobody is on the waiting list" in note.body and "please find someone" in note.body
 
 
 async def test_with_no_panthaky_the_funeral_place_is_told(client, db, seeded, meta, pushes, live):
@@ -508,7 +508,7 @@ async def test_with_no_panthaky_the_funeral_place_is_told(client, db, seeded, me
     assert r.status_code == 200, r.text
     assert r.json()["done"]["message"] == "Noted: you can't go. Doongerwadi (test) has been told."
     (note,) = await _notes(db, MANAGER, standbys.KIND_PLACE_OPENED)
-    assert "nobody at Goti Adarian is on standby" in note.body and note.link.startswith("#/manager/record/")
+    assert "nobody at Goti Adarian is on the waiting list" in note.body and note.link.startswith("#/manager/record/")
     _no_family(note.title + note.body)
 
 
@@ -647,7 +647,7 @@ async def test_a_no_or_thirty_minutes_asks_the_next_once_and_none_left_tells_the
     assert sorted(done) == [0, 1]
     notes = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
     assert len(notes) == 3
-    assert notes[-1].title == "Er. Third did not answer and nobody else is on standby: please find someone"
+    assert notes[-1].title == "Er. Third did not answer and nobody else is on the waiting list: please find someone"
     assert "Ask everyone, call a mobed, or pray yourself" in notes[-1].body and notes[-1].link == f"#/requests/{rid}"
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
     assert [(s["name"], s["reask"]) for s in board["standbys"]] == [("Er. Second", "said_no"),
@@ -760,12 +760,12 @@ async def test_all_set_again_tells_the_new_names_once_without_repeating_the_rest
     assert kias.id in books
 
     # In the app: All set again, with the new names, to the panthaky, those going and the place.
-    title = "All set again: Er. Listed and Er. App Standby are going for Behdin Rustom Jamshed"
+    title = "Confirmed again: Er. Listed and Er. App Standby are going for Behdin Rustom Jamshed"
     assert (await _notes(db, PANTHAKY, all_set.KIND_ALL_SET))[-1].title == title
     assert (await _notes(db, OTHER_MOBED, all_set.KIND_ALL_SET))[-1].title == title
     assert (await _notes(db, MANAGER, all_set.KIND_ALL_SET))[-1].title == title
     assert len(await _notes(db, MOBED, all_set.KIND_ALL_SET)) == 1        # the first one only
-    assert [p for p in pushes if p["title"] == "All set again"]
+    assert [p for p in pushes if p["title"] == "Confirmed again"]
 
     # The board and the cards read the new names; the one who can't go reads so.
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()

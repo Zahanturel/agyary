@@ -151,7 +151,7 @@ async def test_waiting_then_finding_then_all_set_for_the_manager_and_the_acting_
     rec = await _record(client, record_id, mgr)
     q = rec["requests"][0]
     assert q["stage"] == "all_set" and q["going"] == 2 and q["may_withdraw"] is False
-    assert q["headline"] == f"All set at Goti Adarian: {GOING} and {HEAD} are going"
+    assert q["headline"] == f"Confirmed at Goti Adarian: {GOING} and {HEAD} are going"
     assert q["going_names"] == [GOING, HEAD]
     assert q["panthakys"] == [{"name": HEAD, "phone": PANTHAKY}]
     # Never a mobed's number, nor which mobed has the family in their book.
@@ -191,7 +191,7 @@ async def test_confirmed_short_reopened_and_with_no_panthaky_just_the_names(clie
     await _board(client, rid, "confirm-short")
     q = await _latest(client, record_id, mgr)
     assert q["stage"] == "all_set" and q["confirmed_short"] is True and (q["going"], q["wanted"]) == (1, 2)
-    assert q["headline"] == f"All set at Goti Adarian: {GOING} is going (confirmed with 1 of 2)"
+    assert q["headline"] == f"Confirmed at Goti Adarian: {GOING} is going (confirmed with 1 of 2)"
     assert q["panthakys"] == [{"name": HEAD, "phone": PANTHAKY}] and q["going_names"] == [GOING]
 
     # The mobed going can no longer go: a place has opened. The place saw the names and the
@@ -220,7 +220,7 @@ async def test_confirmed_short_reopened_and_with_no_panthaky_just_the_names(clie
     assert (await _latest(client, record2, mgr))["headline"] == "Waiting at Mobeds Only Agyari (test)"
     await _yes(client, rid2, ONLY)
     q = await _latest(client, record2, mgr)
-    assert q["headline"] == "All set at Mobeds Only Agyari (test): Er. Only One is going"
+    assert q["headline"] == "Confirmed at Mobeds Only Agyari (test): Er. Only One is going"
     assert q["going_names"] == ["Er. Only One"] and q["panthakys"] == []
     assert ONLY not in json.dumps(q) and ONLY[3:] not in json.dumps(q)
 

@@ -168,7 +168,7 @@ def death_day(
     if when > today:
         raise RecordError("death", "The death cannot be after today.")
     if when < today - timedelta(days=OLDEST_DEATH_DAYS):
-        raise RecordError("death", "A funeral record is for a death within the last year.")
+        raise RecordError("death", "A death can be recorded here only within a year of it.")
     p_roj, p_mah, p_year = parsi_slot_fields(gregorian_to_parsi(when, system))
     return DeathDay(
         date=when, given_by=DEATH_BY_DATE if death_date is not None else DEATH_BY_ROJ_MAH,
@@ -416,7 +416,7 @@ def headline(stage: str, where: str, *, going: int = 0, wanted: int = 0, names: 
         return f"A place has opened at {where}: {going} of {wanted} going"
     if stage == STAGE_ALL_SET:
         names = names or []
-        words = f"All set at {where}: {_join(names)} {'is' if len(names) == 1 else 'are'} going"
+        words = f"Confirmed at {where}: {_join(names)} {'is' if len(names) == 1 else 'are'} going"
         return words + (f" (confirmed with {going} of {wanted})" if confirmed_short else "")
     if stage == STAGE_DECLINED:
         return f"Declined by {where}" + (f": {reason}" if reason else "")

@@ -139,7 +139,7 @@ async def test_a_removed_standby_is_never_asked_again(client, db, seeded, meta, 
     assert row.reasked_at is None and row.reask_token is None
     # The panthaky is told nobody is on standby, so they find someone.
     (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
-    assert "nobody is on standby" in note.title
+    assert "nobody is on the waiting list" in note.title
 
 
 async def test_a_removed_mobed_holding_a_place_is_not_named_or_sent_the_details(client, db, seeded, meta, pushes,
@@ -225,7 +225,7 @@ async def test_a_standby_whose_number_has_an_account_waiting_is_not_asked_again(
     # Not asked again at all (D9: nothing to an account that is not on), so nobody is on standby.
     assert (await _answers(db))[SECOND].reasked_at is None
     (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
-    assert "nobody is on standby" in note.title
+    assert "nobody is on the waiting list" in note.title
 
 
 # --- 6. Adding a mobed by hand never tells the panthaky about an account -----------------
@@ -498,7 +498,7 @@ async def test_the_place_is_told_counts_not_names_before_all_set(client, db, see
     assert (await _request(db, rid2)).status == "all_set"
     assert (await client.post(f"{REQUESTS}/{rid2}/back-out", headers=two)).status_code == 200
     notes = await _notes(db, MANAGER, standbys.KIND_PLACE_OPENED)
-    assert notes[-1].title == "Er. Only Two can't go: nobody is on standby at Mobeds Only Agyari (test)"
+    assert notes[-1].title == "Er. Only Two can't go: nobody is on the waiting list at Mobeds Only Agyari (test)"
 
 
 # --- 2. "This prayer request was withdrawn" goes only to a yes that came on WhatsApp -----

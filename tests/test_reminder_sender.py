@@ -455,7 +455,7 @@ async def test_the_mobed_is_told_the_evening_before_a_memorials_last_prayer(clie
     await db.commit()
     [note] = await _owner_notes(client, headers)
     assert note["kind"] == "memorial_closing" and note["title"] == "Last prayer for Ardeshir Mehta is tomorrow"
-    assert "Delzeen Test" in note["body"] and "will close" in note["body"]
+    assert "Delzeen Test" in note["body"] and note["body"].endswith("(Delzeen Test).") and "close" not in note["body"]
     assert note["link"].startswith("#/memorial/")
 
 

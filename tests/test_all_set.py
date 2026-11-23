@@ -438,13 +438,13 @@ async def test_the_panthakys_the_mobeds_going_and_the_managers_are_told_without_
     r = await client.post(_b(rid, "call-result"), json={"key": f"u{kias.id}", "result": "going"}, headers=panthaky)
     assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
 
-    title = "All set: Er. Hormuz Dadachanji and Er. Pervez Kias are going for Behdin Rustom Jamshed"
+    title = "Confirmed: Er. Hormuz Dadachanji and Er. Pervez Kias are going for Behdin Rustom Jamshed"
     said = "Er. Hormuz Dadachanji and Er. Pervez Kias are going for Behdin Rustom Jamshed."
     (mine,) = await _notes_of(db, PANTHAKY)
     assert mine.title == title and mine.link == f"#/requests/{rid}"
     assert mine.body == f"{said} The family's contact and everyone going are on the request from Doongerwadi (test)."
     (other,) = await _notes_of(db, SECOND_PANTHAKY)
-    assert other.body == f"{said} The request from Doongerwadi (test) is all set. Nothing more is needed from you."
+    assert other.body == f"{said} The request from Doongerwadi (test) is confirmed. Nothing more is needed from you."
     (going,) = await _notes_of(db, MOBED)
     assert going.body == (f"{said} You are going. The family's contact, the panthaky and everyone going are on "
                           "your request card.")
@@ -456,7 +456,7 @@ async def test_the_panthakys_the_mobeds_going_and_the_managers_are_told_without_
 
     # On their phones: who and where, never the departed or the family. The panthaky who marked
     # the last place sees it on screen, so their phone is not woken.
-    told = [p for p in pushes if p["title"] == "All set"]
+    told = [p for p in pushes if p["title"] == "Confirmed"]
     hormuz, second = await _user(db, PANTHAKY), await _user(db, SECOND_PANTHAKY)
     to_mobeds, to_place = told
     assert to_mobeds["to"] == sorted([second.id, kias.id]) and to_mobeds["url"] == f"/mobed#/requests/{rid}"
@@ -470,9 +470,9 @@ async def test_the_panthakys_the_mobeds_going_and_the_managers_are_told_without_
 
 def test_a_long_title_still_fits():
     names = [f"Er. A Very Long Mobed Name Number {i}" for i in range(5)]
-    title = all_set.fit_title(f"All set: {all_set.going_words(names)} for Behdin Rustom Jamshed",
-                              "All set: 5 mobeds are going for Behdin Rustom Jamshed", "All set: enough mobeds are going")
-    assert title == "All set: 5 mobeds are going for Behdin Rustom Jamshed"
+    title = all_set.fit_title(f"Confirmed: {all_set.going_words(names)} for Behdin Rustom Jamshed",
+                              "Confirmed: 5 mobeds are going for Behdin Rustom Jamshed", "Confirmed: enough mobeds are going")
+    assert title == "Confirmed: 5 mobeds are going for Behdin Rustom Jamshed"
     assert len(all_set.fit_title("x" * 200, "y" * 130)) == all_set.TITLE_MAX
 
 
@@ -706,7 +706,7 @@ async def test_confirm_with_whos_going_makes_it_all_set_short_the_same_way(clien
     meta.sent.clear()
     r = await client.post(url, json={}, headers=panthaky)
     assert r.status_code == 200, r.text
-    assert r.json()["done"] == {"outcome": "all set, short", "message": "All set with 1 of 3 going."}
+    assert r.json()["done"] == {"outcome": "all set, short", "message": "Confirmed with 1 of 3 going."}
     board = r.json()
     assert board["status"] == "all_set" and board["confirmed_short"] is True and board["may_confirm_short"] is False
     assert board["all_set"]["confirmed_short"] is True and board["all_set"]["family_contact"]["phone"] == FAMILY
@@ -720,7 +720,7 @@ async def test_confirm_with_whos_going_makes_it_all_set_short_the_same_way(clien
         "prayers_all_set_family", "prayer_details_mobed_v3", "funeral_accepted_manager_v2"}
     # Once all set, it is refused in plain words.
     r = await client.post(url, json={}, headers=panthaky)
-    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is all set."
+    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is confirmed."
 
 
 async def test_confirm_with_whos_going_is_for_the_panthakys_it_reached_and_the_admin_only(client, db, seeded, pushes,
@@ -744,7 +744,7 @@ async def test_confirm_with_whos_going_is_for_the_panthakys_it_reached_and_the_a
     assert (await _request(db, rid)).status == "waiting"
     # The admin may; the admin is not the panthaky, so the family goes to the panthaky it reached.
     r = await client.post(url, json={}, headers=await _as(client, ADMIN))
-    assert r.status_code == 200 and r.json()["done"]["message"] == "All set with 1 of 2 going.", r.text
+    assert r.status_code == 200 and r.json()["done"]["message"] == "Confirmed with 1 of 2 going.", r.text
     assert r.json()["all_set"] is None
     assert set(await _books(db, rid)) == {PANTHAKY, MOBED}
     # A withdrawn request is refused too.

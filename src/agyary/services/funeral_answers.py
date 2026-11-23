@@ -366,7 +366,7 @@ async def _lock(db: AsyncSession, request: FuneralRequest) -> FuneralRecord:
 
 async def _not_waiting(db: AsyncSession, user: User, request: FuneralRequest, place: FuneralPlace) -> AnswerError:
     if request.status == REQUEST_ALL_SET:
-        return AnswerError("Enough mobeds are going for this request: it is all set.")
+        return AnswerError("Enough mobeds are going for this request: it is confirmed.")
     if request.status in funeral_records.ACCEPTED:
         if request.accepted_by_user_id == user.id:
             return AnswerError("You have already accepted this request.")

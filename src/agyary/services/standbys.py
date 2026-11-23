@@ -363,16 +363,17 @@ async def _tell_step(
     push_title = all_set.fit_title(lead, "A place has opened")
     if asked.waiting_on:
         names = all_set.join_names([r.name for r in asked.waiting_on])
-        title = all_set.fit_title(f"{lead}; we have asked {names}", f"{lead}; we have asked a standby",
-                                  "We have asked a standby")
+        title = all_set.fit_title(f"{lead}; we have asked {names}",
+                                  f"{lead}; we have asked a mobed on the waiting list",
+                                  "We have asked a mobed on the waiting list")
         body = (f"For the prayers for {departed}: {lead}; we have asked {names}. If there is no yes in 30 "
-                "minutes, the next on standby is asked.")
+                "minutes, the next on the waiting list is asked.")
         out.panthakys = await pc._tell_panthakys(
             db, settings, request, row, KIND_PLACE_OPENED, title, body, push=f"We have asked {names}.",
             push_title=push_title, now=now, skip_user_id=skip_user_id, link=link)
     elif asked.open > 0:
-        nobody = ("nobody on standby could be asked" if asked.unreachable
-                  else "nobody is on standby" if first else "nobody else is on standby")
+        nobody = ("nobody on the waiting list could be asked" if asked.unreachable
+                  else "nobody is on the waiting list" if first else "nobody else is on the waiting list")
         title = all_set.fit_title(f"{lead} and {nobody}: please find someone", f"{lead}: please find someone",
                                   "Please find someone")
         body = (f"For the prayers for {departed}: {lead} and {nobody}: please find someone. Ask everyone, call a "
@@ -382,7 +383,7 @@ async def _tell_step(
             "please find someone.", push_title=push_title, now=now, skip_user_id=skip_user_id, link=link)
         if not out.has_panthaky:
             if _named_to_the_place(request, row, first):
-                title = all_set.fit_title(f"{lead}: nobody is on standby at {agyary.name}",
+                title = all_set.fit_title(f"{lead}: nobody is on the waiting list at {agyary.name}",
                                           f"A mobed can't go at {agyary.name}", "A mobed can't go")
                 said, place_push = lead, push_title
             else:
@@ -393,9 +394,9 @@ async def _tell_step(
                 said, place_push = f"{unnamed[0].lower()}{unnamed[1:]} ({count})", unnamed
             await funeral_answers._tell_managers(
                 db, settings, record, request, kind=KIND_PLACE_OPENED, title=title,
-                body=(f"For the prayers for {departed}: {said}, and nobody at {agyary.name} is on standby: please "
-                      "find someone. You can withdraw the request and send it to another fire temple."),
-                push=(place_push, f"The request to {agyary.name}: nobody is on standby."), now=now)
+                body=(f"For the prayers for {departed}: {said}, and nobody at {agyary.name} is on the waiting list: "
+                      "please find someone. You can withdraw the request and send it to another fire temple."),
+                push=(place_push, f"The request to {agyary.name}: nobody is on the waiting list."), now=now)
             out.managers = True
     elif first:
         # Filled again at the same moment by other means: said so, and nobody is asked.
@@ -481,8 +482,8 @@ def _asked_words(opened: Opened) -> str:
     if asked.waiting_on:
         return f"We have asked {all_set.join_names([r.name for r in asked.waiting_on])}."
     if asked.open > 0:
-        return ("Nobody on standby could be asked: please find someone." if asked.unreachable
-                else "Nobody is on standby: please find someone.")
+        return ("Nobody on the waiting list could be asked: please find someone." if asked.unreachable
+                else "Nobody is on the waiting list: please find someone.")
     return ""
 
 
@@ -511,7 +512,7 @@ async def back_out_in_app(
     elif opened.managers:
         told = f"{place.name} has been told."
     elif opened.asked.waiting_on:
-        told = "A mobed on standby has been asked to take your place."
+        told = "A mobed on the waiting list has been asked to take your place."
     else:
         told = ""
     logger.info("Request %s: user %s can't go any more, in the app", request.id, user_id)
@@ -705,7 +706,7 @@ async def answer_reask(
             return "yes again, " + await pc.fill(db, settings, request, row, how, by_user, now, client)
         if moved:
             await _move_on(db, settings, request, row, lead=f"{row.name} said no",
-                           unnamed="A mobed on standby said no", now=now, client=client)
+                           unnamed="A mobed on the waiting list said no", now=now, client=client)
         return "no again"
     except Exception:   # noqa: BLE001 - the answer is kept; what did not follow is on the board
         logger.exception("After standby %s answered again on request %s", row.id, request.id)
@@ -758,7 +759,7 @@ async def timed_out(db: AsyncSession, now: datetime, settings: Settings, client:
             request = await db.get(FuneralRequest, request_id, populate_existing=True)
             logger.warning("Request %s: standby %s did not answer in 30 minutes", request_id, row_id)
             await _move_on(db, settings, request, row, lead=f"{row.name} did not answer",
-                           unnamed="A mobed on standby did not answer", now=now, client=client)
+                           unnamed="A mobed on the waiting list did not answer", now=now, client=client)
         except Exception:   # noqa: BLE001 - it is claimed (once); the next one still goes
             logger.exception("Moving on past standby %s of request %s failed", row_id, request_id)
             await db.rollback()

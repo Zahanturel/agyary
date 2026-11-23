@@ -581,7 +581,7 @@ async def test_removing_a_mobed_added_by_hand_frees_their_place(client, db, seed
     departed = await _departed(db, rid)
     assert r.json()["done"]["message"] == (
         f"Er. Listed is off the list. Their place for {departed} is open again. "
-        "Nobody is on standby: please find someone.")
+        "Nobody is on the waiting list: please find someone.")
     assert (await _answers(db))[LISTED].backed_out_at is not None
     assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "waiting"
     # Removing one who holds no place says only that.

@@ -376,7 +376,7 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
     agyary = await db.get(Agyary, request.agyary_id)
     going = [g["name"] for g in await going_people(db, request_id, settings)]
     prayed = fw.departed(record)
-    head = "All set again" if again else "All set"
+    head = "Confirmed again" if again else "Confirmed"
     title = fit_title(f"{head}: {going_words(going)} for {prayed}",
                       f"{head}: {mobeds(len(going))} {'is' if len(going) == 1 else 'are'} going for {prayed}",
                       f"{head}: enough mobeds are going")
@@ -390,7 +390,7 @@ async def _tell(db: AsyncSession, settings: Settings, request_id: int, now: date
     for u in await funeral_requests.asked(db, request):
         if u.id in confirmed:
             told[u.id] = (f"{said} The family's contact and everyone going are on the request from {place.name}."
-                          if u.id in books else f"{said} The request from {place.name} is all set. {NOTHING_MORE}")
+                          if u.id in books else f"{said} The request from {place.name} is confirmed. {NOTHING_MORE}")
     going_ids = {g["row"].user_id for g in await going_people(db, request_id, settings) if g["row"].user_id}
     for uid in books:
         # The app mobeds going; never someone who said they can't go any more (step 5b).

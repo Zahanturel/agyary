@@ -191,7 +191,7 @@ export async function renderAdminMobeds() {
       return showError(e.message);
     }
     // Turned off, a place they held on a request is freed, and the server says so (D10, 22 Nov 2026).
-    showInfo(access === "off" ? `${m.name} is turned off.${res && res.freed ? ` ${res.freed}` : ""}`
+    showInfo(access === "off" ? `${m.name}'s access is turned off.${res && res.freed ? ` ${res.freed}` : ""}`
       : m.access === "pending" ? `${m.name} is approved. They are told when they next open the app.`
       : `${m.name} is turned on again.`);
     if (!alive()) return;

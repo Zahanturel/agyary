@@ -295,7 +295,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     assert going.body == "Er. Pervez Kias said yes on WhatsApp for the prayers for Behdin Rustom Jamshed: 1 of 1 going."
     assert going.link == f"#/requests/{rid}"
     # (The All set notices that follow are tests/test_all_set.py's.)
-    (push,) = [p for p in pushes if p["title"] != "All set"]
+    (push,) = [p for p in pushes if p["title"] != "Confirmed"]
     assert push["title"] == "Er. Pervez Kias is going (1 of 1)"
     assert "Rustom" not in push["body"] and "Family" not in push["body"]
     (mine,) = await _notes(db, MOBED, prayer_callout.KIND_MY_YES)
@@ -313,8 +313,8 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     listed = (await _answers(db))[LISTED]
     assert listed.answer == "yes" and listed.picked_at is None and listed.enough_sent_at is not None
     (also,) = await _notes(db, PANTHAKY, prayer_callout.KIND_YES)
-    assert also.title == "Er. Listed also said yes" and "standby" in also.body
-    assert len([p for p in pushes if p["title"] != "All set"]) == 1     # no phone notification for it
+    assert also.title == "Er. Listed also said yes" and "on the waiting list" in also.body
+    assert len([p for p in pushes if p["title"] != "Confirmed"]) == 1     # no phone notification for it
 
     board = (await client.get(f"/api/mobed/requests/{rid}/board", headers=panthaky)).json()
     assert board["going"] == 1 and board["wanted"] == 1 and board["open"] is False

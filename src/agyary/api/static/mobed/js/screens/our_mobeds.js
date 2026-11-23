@@ -174,7 +174,7 @@ function confirmTakeOff(agyary, got, m) {
   const sheet = openSheet({
     title: `Take ${m.name} off the list?`,
     html: `<p class="meta" style="margin-top:0">They will not get prayer requests from ${esc(got.agyari.name)}. If they
-        hold a place, it opens again and the next on standby is asked. You can put them back later.</p>
+        hold a place, it opens again and the next on the waiting list is asked. You can put them back later.</p>
       <div class="stack" style="margin-top:12px">
         <button type="button" class="danger" data-yes>Take off</button>
         <button type="button" class="ghost" data-no>Keep them</button>
@@ -258,7 +258,7 @@ function confirmRemove(agyary, m) {
   const sheet = openSheet({
     title: `Take ${m.name} off the list?`,
     html: `<p class="meta" style="margin-top:0">They will not be asked on WhatsApp any more. If they hold a place, it
-        opens again and the next on standby is asked. You can add them again later.</p>
+        opens again and the next on the waiting list is asked. You can add them again later.</p>
       <div class="stack" style="margin-top:12px">
         <button type="button" class="danger" data-yes>Remove</button>
         <button type="button" class="ghost" data-no>Keep them</button>

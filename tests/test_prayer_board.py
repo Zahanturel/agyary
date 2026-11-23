@@ -192,7 +192,7 @@ async def test_an_all_set_request_is_taken_for_good_on_the_managers_side(client,
     assert got["may_send"] is False and got["may_edit"] is False
     assert got["requests"][0]["status"] == "all_set"
     r = await client.post(f"/api/mobed/requests/{rid}/decline", json={}, headers=await _as(client, PANTHAKY))
-    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is all set."
+    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is confirmed."
     assert (await _request(db, rid)).status == "all_set"
     assert len(list((await db.execute(select(FuneralRequest))).scalars())) == 1
 
@@ -490,7 +490,7 @@ async def test_a_call_can_turn_an_earlier_no_into_going_but_never_touches_a_yes(
     meta.sent.clear()
     r = await client.post(url, json={"key": keys["Er. Second"], "result": "going"}, headers=panthaky)
     assert r.status_code == 200, r.text
-    assert r.json()["done"]["message"] == "Er. Second is going. All the places are filled: it is all set."
+    assert r.json()["done"]["message"] == "Er. Second is going. All the places are filled: it is confirmed."
     assert [(p["name"], p["how"]) for p in r.json()["places"]] == [("Er. Listed", "whatsapp"), ("Er. Second", "phone")]
     second = (await _answers(db))[SECOND]
     assert second.id == no_id and second.answer == "yes" and second.how == "phone" and second.picked_at
@@ -559,10 +559,10 @@ async def test_once_all_set_the_board_reads_so_and_takes_no_more(client, db, see
     rid, _ = await _first(client, db, seeded["agyary_id"], mobeds_wanted=1)
     panthaky = await _as(client, PANTHAKY)
     r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
-    assert r.json()["done"]["message"] == "You are going. All the places are filled: it is all set."
+    assert r.json()["done"]["message"] == "You are going. All the places are filled: it is confirmed."
     board = r.json()
     assert board["status"] == "all_set" and board["open"] is False and board["all_set_at"]
-    all_set_words = "Enough mobeds are going for this request: it is all set."
+    all_set_words = "Enough mobeds are going for this request: it is confirmed."
     assert board["ask_everyone"] == {"can": False, "why_not": all_set_words}
     # The family's contact is there now, for the panthaky whose book it went into, under all_set only
     # (Step 5; tests/test_all_set.py).

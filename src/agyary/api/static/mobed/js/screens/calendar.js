@@ -31,7 +31,7 @@ function serviceItems(rows) {
     label: b.service_name,
     short: b.service_name,
     sublabel: b.behdin_name || "-",
-    tags: b.is_offsite ? '<span class="tag">Offsite</span>' : "",
+    tags: b.is_offsite ? '<span class="tag">Outside the fire temple</span>' : "",
     paid: !!b.paid,
     agyaryId: b.agyary_id,
   }));
@@ -72,8 +72,8 @@ function memorialItems(rows) {
         day: r.date,
         time: null,
         geh: null,
-        label: "Memorial closes today",
-        short: "Closes today",
+        label: "Last prayer of this memorial today",
+        short: "Last prayer today",
         sublabel: r.text,
       };
     }
