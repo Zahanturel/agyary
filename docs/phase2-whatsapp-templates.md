@@ -22,6 +22,11 @@ blanks and their order are unchanged, except that 6 says "Family:" and 7 "The fa
 where they said "The family's contact is". The texts below show the line breaks; a `\` at the end
 of a line is a line break with no empty line.
 
+**Validity period:** none set on 4 v2 and 5 to 8, so Meta's default for Utility applies (30 days
+in Meta's time-to-live documentation; the form's own line "the standard 10 minutes" is the
+default for sign-in codes, not for these). The memorial reminder v2 has 6 hours, like the live
+reminder (owner, 23 Nov 2026).
+
 Category for all: **Utility** (about a service the person is part of; no offer, no invitation, no
 "thank you for using" lines). Language: English (Gujarati later, as for the reminders). Meta's
 rules respected: no blank at the very start or end, no two blanks side by side, short.
