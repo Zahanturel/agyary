@@ -95,6 +95,8 @@ _STEPS = [
     # A Doongerwadi manager's link to their place (D10). The place stays, and so
     # do places an admin added (their created_by is cleared by the foreign key).
     "DELETE FROM funeral_place_managers WHERE user_id = :u",
+    # The departed's names kept for this number: the person's own pool goes with the person (D12).
+    "DELETE FROM person_names WHERE phone = (SELECT phone FROM users WHERE id = :u)",
     "DELETE FROM wa_login_attempts WHERE claimed_phone = (SELECT phone FROM users WHERE id = :u)",
     "DELETE FROM users WHERE id = :u",
 ]

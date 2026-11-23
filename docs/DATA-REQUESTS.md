@@ -26,7 +26,12 @@ and the record of messages sent to them.
 
 **And from the Doongerwadi side:** their name and number as the family contact on a Doongerwadi's
 record (the record of the death stays), their entry in a Doongerwadi's book of behdins, and their
-name in the record of the WhatsApp messages about that record's requests. If a panthaky added the
+name in the record of the WhatsApp messages about that record's requests. The departed's names kept
+for their number (D12, 24 Nov 2026: written when a Doongerwadi records a death, readable only by the
+person who signs in with that number) go too, and so do they when that person deletes their own account.
+The copies of those names that a mobed holds in their own book go with that mobed's record, as above.
+They are not counted in **See what we hold**: the admin screens cannot read that pool, not even to count
+it. If a panthaky added the
 number to a fire temple's list of mobeds, it comes off the list, and its name and number go from
 that list, from the answers to requests, and from the record of messages sent to it.
 
