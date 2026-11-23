@@ -5,10 +5,15 @@ Each needs a Meta-approved template; sending stays switched off (`FUNERAL_WHATSA
 they are approved.
 
 **Since R3.1 (built 21-22 Nov 2026, live with the owner's push):** the request is confirmed only
-when enough mobeds are going ("All set"), and then everyone is told at once. The templates that
-go are **4 v2** (asking the mobeds) and **5 to 8** (All set). Templates **1, 2 and 3** are **not
-sent for requests since R3.1; kept for history** (they went when someone tapped Accept, which is
-gone).
+when enough mobeds are going ("Confirmed" in the app; called "all set" in the code), and then
+everyone is told at once. The templates that go are **4 v2** (asking the mobeds) and **5 to 8**
+(Confirmed). Templates **1, 2 and 3** are **not sent for requests since R3.1; kept for history**
+(they went when someone tapped Accept, which is gone).
+
+**Owner's word review (23 Nov 2026, DECISIONS D11):** templates 5, 6 and 8 say "For anything
+else, please contact [contact]" (the panthaky, else the first mobed going), and template 5 closes
+"May the ruvan of the late [departed] attain Garothman Behesht." None of 4 v2 and 5 to 8 had been
+submitted, so they are submitted in these words.
 
 Category for all: **Utility** (about a service the person is part of; no offer, no invitation, no
 "thank you for using" lines). Language: English (Gujarati later, as for the reminders). Meta's
@@ -58,8 +63,8 @@ panthakys, not whoever sent the request; never a number that replied STOP. Each 
 request.
 
 When: at Send, if the agyari's way is **Everyone at once**; when the panthaky taps **Ask everyone**
-on the board; when the **safety net** fires in **Come to me first**; and to a mobed on **standby**
-when a place opens again (with buttons of their own for that question).
+on the board; when the **safety net** fires in **Come to me first**; and to a mobed on the
+**waiting list** when a place opens again (with buttons of their own for that question).
 
 Why v2: a mobed who says Yes now waits for the others before getting the details, and their
 number goes to the family; the message says both before they answer. Until v2 is approved the
@@ -71,17 +76,19 @@ blanks fit either.
 Setting: `WHATSAPP_ALL_SET_FAMILY_TEMPLATE` (default `prayers_all_set_family`).
 
 > The prayers for **[departed]** will be offered by **[mobeds with numbers]** of **[agyari]**.
-> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, the panthaky is
-> **[panthaky, number]**. May the ruvan of the departed attain Garothman Behesht.
+> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, please contact
+> **[contact]**. May the ruvan of the late **[departed]** attain Garothman Behesht.
 
 Blanks, in this order: 1 departed, 2 the mobeds going with their numbers, 3 agyari, 4 Geh-saarnu,
-5 Uthamna, 6 the panthaky with their number. No button.
+5 Uthamna, 6 the contact (the panthaky with their number; at an agyari with no confirmed panthaky
+in the app, the first mobed going with their number), 7 departed again (the same words as 1: each
+blank is numbered once). No button.
 
 Who gets it: the family's contact, only if the Doongerwadi's tick recorded the family's agreement
 to hear from Mobed Diary; a STOP from the family is honoured.
 
-When: at **All set**; and again, with the new names, when it is all set again after someone going
-backed out and the place was filled.
+When: when it is **Confirmed**; and again, with the new names, when it is confirmed again after
+someone going backed out and the place was filled.
 
 ### 6. To each mobed going: `prayer_details_mobed_v3`
 
@@ -89,20 +96,20 @@ Setting: `WHATSAPP_ALL_SET_DETAILS_TEMPLATE` (default `prayer_details_mobed_v3`)
 
 > You will pray for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
 > **[day and time]**. The family's contact is **[family name]**, **[family number]**. Mobeds
-> going: **[mobeds with numbers]**. The panthaky is **[panthaky, number]**. Thank you for your
-> service.
+> going: **[mobeds with numbers]**. For anything else, please contact **[contact]**. Thank you for
+> your service.
 
 Blanks, in this order: 1 departed, 2 place, 3 Geh-saarnu, 4 Uthamna, 5 the family's name, 6 the
-family's number, 7 the mobeds going with their numbers, 8 the panthaky with their number.
+family's number, 7 the mobeds going with their numbers, 8 the contact (as in template 5).
 
 Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: a mobed going can back out from
-here; their place opens and the next standby is asked).
+here; their place opens and the next on the waiting list is asked).
 
 Who gets it: each mobed going who has a number (an app mobed, the panthaky if they pray, or a
 mobed added by hand), only if their Mobed Diary access is on.
 
-When: at **All set**, once to each person: when it is all set again, only the one new to it gets
-it.
+When: when it is **Confirmed**, once to each person: when it is confirmed again, only the one new
+to it gets it.
 
 ### 7. To the panthaky: `prayers_all_set_panthaky`
 
@@ -118,42 +125,44 @@ Blanks, in this order: 1 departed, 2 place, 3 the mobeds going with their number
 Who gets it: the request's panthaky (the one whose book the family went into) when they are not
 praying themselves (if they pray, they get template 6 instead).
 
-When: at the first **All set** only (not again when it is all set again; they see the new names
-in the app). It says "All mobeds are found" also when the panthaky confirmed with fewer.
+When: the first time it is **Confirmed** only (not again when it is confirmed again; they see the
+new names in the app). It says "All mobeds are found" also when the panthaky confirmed with fewer.
 
 ### 8. To the Doongerwadi: `funeral_accepted_manager_v2`
 
 Setting: `WHATSAPP_ALL_SET_MANAGER_TEMPLATE` (default `funeral_accepted_manager_v2`).
 
-> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. The
-> panthaky is **[panthaky, number]**, by phone or WhatsApp.
+> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. For
+> anything else, please contact **[contact]**.
 
-Blanks, in this order: 1 departed, 2 the mobeds' names (no numbers), 3 agyari, 4 the panthaky with
-their number. No button.
+Blanks, in this order: 1 departed, 2 the mobeds' names (no numbers), 3 agyari, 4 the contact (as
+in template 5). No button.
 
 Who gets it: the Doongerwadi's (or prayer hall's) managers whose access is on.
 
-When: at the first **All set** only (they see the new names in the app afterwards).
+When: the first time it is **Confirmed** only (they see the new names in the app afterwards).
 
 ### Short replies (no template needed)
 
 These are plain text, so WhatsApp lets them go only inside the 24 hours after the mobed's own
 answer or tap; after that nothing is sent:
 
-- to a Yes once enough are going (a standby): "Thank you. Enough mobeds are going this time. If a
-  place opens, we may ask you again."
-- to someone who said Yes, when the request is withdrawn or declined: "This prayer request was
-  withdrawn."
+- to a Yes once enough are going (they are on the waiting list): "Thank you. Enough mobeds are
+  going this time. If a place opens, we may ask you again."
+- to someone who said Yes, when the request is withdrawn or declined (owner's words, 23 Nov
+  2026): "Sahebji [first name], this prayer request has been closed, so you are not needed for
+  now, but we will keep you updated. Thank you." ([first name] skips a title typed before the
+  name, as the app's "Sahebji" does; with no name: "Sahebji, this prayer request has been
+  closed, ...")
 - to a tap on **I can't go any more**: "Thank you for letting us know. The panthaky has been
   told." (at an agyari with no panthaky in the app: "Thank you for letting us know.")
 
-### Open for the owner: an agyari with no panthaky
+### Settled by the owner: an agyari with no panthaky (23 Nov 2026)
 
-Templates 5, 6 and 8 name "the panthaky". At an agyari with no confirmed panthaky in the app that
-blank reads **"not fixed yet"**, which sounds odd ("For anything else, the panthaky is not fixed
-yet."). **Settle this before submitting 5, 6 and 8**: reword those sentences (for example "For
-anything else, please contact [contact]", filled with the panthaky or else the agyari's name), or
-leave it. The drafts and the code then change together.
+Templates 5, 6 and 8 named "the panthaky", which at an agyari with no confirmed panthaky in the
+app read "not fixed yet". The owner chose "For anything else, please contact [contact]": the
+panthaky's name and number, or with no confirmed panthaky in the app, the first mobed going (name
+and number). The drafts above and the code (services/funeral_whatsapp.py, `contact_people`) say so.
 
 ### When to switch on
 
@@ -210,7 +219,8 @@ Setting (kept, no longer read): `WHATSAPP_PRAYERS_FAMILY_TEMPLATE`.
 (Owner, 18 Nov 2026: not "rest in peace", which is not a Zoroastrian idea. After the fourth dawn
 the prayers support the soul's journey towards Garothman, the highest heaven (Karanjia, QA about
 death and Dokhmenashini; Dastur Antia's guide to prayers for the departed); "attain Garothman
-Behesht" is the community's own condolence wording.) Template 5 keeps this ending.
+Behesht" is the community's own condolence wording.) Template 5 keeps this wish, as "May the
+ruvan of the late [departed] ..." (owner, 23 Nov 2026).
 
 ### 4. To the agyari's mobeds, asking who can pray: `prayer_request_mobeds` (replaced by 4 v2)
 
@@ -223,7 +233,7 @@ you can pray", read as Marketing and would be rejected as Utility.)
 
 Quick-reply buttons: **Yes, I can pray** / **Not this time**. Until R3.1 the first mobeds to say
 "Yes" (up to the number wanted) got message 2 at once (owner, 19 Nov 2026). Since R3.1 nobody gets
-the details at a Yes: they go to everyone at All set (template 6).
+the details at a Yes: they go to everyone when it is confirmed (template 6).
 
 ## Submitted to Meta (18 Nov 2026)
 

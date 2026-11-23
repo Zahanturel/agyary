@@ -109,12 +109,15 @@ evening before, unless that mobed's account switch is off.
 ## D6. Warmth, and leaving cleanly (14 Oct 2026)
 
 - A family's first STOP gets one short, kind reply naming their mobed: "You will not receive any
-  more reminders from <mobed>. May you and your family be in peace." Never a second one. It is a
-  paid text reply (about the utility rate since 1 Oct 2026), so it has its own daily cap and
-  respects the pause switch.
+  more reminders from <mobed>. Ushta te." (**Changed 23 Nov 2026**, D11: it ended "May you and
+  your family be in peace.") Never a second one. It is a paid text reply (about the utility rate
+  since 1 Oct 2026), so it has its own daily cap and respects the pause switch.
 - The reminder template gains one warm closing line and a "Stop reminders" button
   (`memorial_reminder_v2`), with no invitation wording, so it stays Utility. The current template
-  keeps sending until the new one is approved; switching is a setting.
+  keeps sending until the new one is approved; switching is a setting. (**Changed 23 Nov 2026**,
+  D11: v2, not yet submitted, is in the owner's words, "Sahebji <family>, a reminder from <fire
+  temple>: ... May the ruvan of the late <departed> attain Garothman Behesht.", with blanks of its
+  own; docs/OWNER-TODO.md has the text to submit.)
 - A mobed can mark a reminder "I told them myself"; nothing is then sent automatically for it.
 - A mobed can delete their account, and everything that is theirs goes with it, as Google Play
   requires.

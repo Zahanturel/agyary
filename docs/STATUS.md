@@ -33,13 +33,13 @@ What it contains:
 - The **Who will pray** board on a request: Ask everyone, I'll pray, Call / WhatsApp and "Is X
   going?", We can't take this; the first action takes the request. App mobeds answer in the app
   as well as on WhatsApp. The old Accept and the old call-out screen are gone (step 7).
-- **All set** when the places fill or on Confirm with who's going: the family into the
+- **Confirmed** (all set in the code) when the places fill or on Confirm with who's going: the family into the
   panthaky's and each praying app mobed's own book, calendars, the memorial one tap away, notices
   and phone notifications; "Still short" 4 hours before the Geh-saarnu.
-- **Standbys and backing out**: I can't go any more (app card, WhatsApp button, or the board's
-  Can't go), standbys asked again in order (30 minutes each), all set again; a phone call can
+- **The waiting list (standbys in the code) and backing out**: I can't go any more (app card, WhatsApp button, or the board's
+  Can't go), the waiting list asked again in order (30 minutes each), confirmed again; a phone call can
   bring back someone who said they can't go.
-- The **Doongerwadi's side** in plain words, Send to another agyari, "No answer yet" after an hour
+- The **Doongerwadi's side** in plain words, Send to another fire temple, "No answer yet" after an hour
   (only for requests sent in the last 24 hours), "Nobody at <agyari> can take it".
 - WhatsApp: templates **4 v2 and 5-8** are written into the code behind `FUNERAL_WHATSAPP_MODE`
   (off); 1-3 are no longer sent. The owner submits 4 v2 and 5-8 (step 8,
@@ -196,12 +196,12 @@ counted. Admin screen shows usage, an estimated cost, recent failures, and the s
 | Security headers (CSP, HSTS, permissions policy), webhook size cap | **Live** | none |
 | Automatic WhatsApp reminders | **Live** (13 Oct 2026, owner decision D4) | `REMINDERS_SEND_MODE=live`, `REMINDERS_ALLOWLIST=*`. Each family still needs its mobed to record consent; each account has its own switch (`users.automatic_reminders`) |
 | Sign-in by WhatsApp code | **Live** (owner decision D3, 12 Oct 2026) | `OTP_MODE=live`, template `login_code` approved. The bot check is enforced once `TURNSTILE_*` are set |
-| STOP: one kind reply ("You will not receive any more reminders from ...") | **Live** | once per number; its own daily cap (`REMINDERS_STOP_ACK_DAILY_CAP`); respects the pause |
+| STOP: one kind reply ("You will not receive any more reminders from ... Ushta te.") | **Live** | once per number; its own daily cap (`REMINDERS_STOP_ACK_DAILY_CAP`); respects the pause |
 | "I told them myself" mark on a reminder | **Live** | the planner then sends nothing for it |
 | Delete my account (in the app) and `/delete-account` | **Live** | none. What was sent stays counted, with who and what wiped; a one-way digest of the number stays for 30 days, so deleting cannot reset a number's limits |
 | Erase a family from every mobed's book | **Admin screen** | `ADMIN_PHONES`. Procedure in [DATA-REQUESTS.md](DATA-REQUESTS.md) |
 | Deleting old records | **Never** | Owner's decision D8: no record is deleted because of its age |
-| Warmer reminder template with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
+| Reminder template v2, in the owner's words of 23 Nov 2026, with a Stop button | **Ready, waiting for Meta** | submit `memorial_reminder_v2`; switch with `WHATSAPP_REMINDER_TEMPLATE` |
 | Android app (Trusted Web Activity) | **Built, shared directly** (14 Oct 2026) | signed APK given to mobeds in a WhatsApp group, and (15 Nov) "Download the app" on the sign-in page of an Android phone, served from `/download/android`; `/.well-known/assetlinks.json` lists the upload key, so it opens full-screen; not on Google Play (DECISIONS.md D6) |
 | iPhone / iPad | **Home Screen app** (15 Nov 2026) | Apple allows no app from outside the App Store, so the sign-in page shows the Add to Home Screen steps; `mobed-icon-180.png` is its icon |
 | Web Push to mobeds | **Not started** | |
@@ -348,7 +348,7 @@ free (Oracle always-free, Cloudflare free).
 
 ## 10. What is left (prioritised)
 
-**A. Meta.** Submit `memorial_reminder_v2` (warm closing line, Stop button) as Utility; switch to it
+**A. Meta.** Submit `memorial_reminder_v2` (the owner's words of 23 Nov 2026, Stop button; text in OWNER-TODO.md) as Utility; switch to it
 by setting once approved.
 
 **B. Android.** The signed APK is shared with mobeds directly (the project and upload key live

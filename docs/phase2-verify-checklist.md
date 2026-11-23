@@ -18,18 +18,18 @@ rules stay live.
   after a call, a sheet asks **"Is <name> going?"**. **We can't take this** at the bottom. There is
   **no Accept any more**: the panthaky's first action takes the request.
 - **App mobeds answer in the app too** (I can pray / Not this time), as well as on WhatsApp.
-- **All set** when the places fill (or with **Confirm with who's going** if short): the family goes
+- **Confirmed** when the places fill (or with **Confirm with who's going** if short): the family goes
   into the panthaky's own book and each praying app mobed's own book (reminders off), the days go
   on their calendars, **Make the memorial** is one tap away, and everyone is connected: the
   family's contact, the mobeds going and the panthaky, each with Call and WhatsApp.
-- **Standbys and backing out:** a Yes after the places are full is kept as a standby, in order.
+- **The waiting list and backing out:** a Yes after the places are full is kept on the waiting list, in order.
   Someone going can say **I can't go any more** (or the panthaky marks **Can't go**); the place
-  reopens and the first standby is asked again (30 minutes each). A phone call can also bring
+  reopens and the first on the waiting list is asked again (30 minutes each). A phone call can also bring
   back someone who said they can't go (the panthaky marks them Going).
 - **The Doongerwadi's side** reads where each request stands in plain words: Waiting at, Sent to
-  the panthaky of, Finding mobeds: 1 of 2 going, A place has opened, All set (with the names and
+  the panthaky of, Finding mobeds: 1 of 2 going, A place has opened, Confirmed (with the names and
   the panthaky's number), Declined, Nobody at <agyari> can take it, Withdrawn. **Send to another
-  agyari** while it waits. **No answer yet** if nobody at the agyari has done anything an hour
+  fire temple** while it waits. **No answer yet** if nobody at the agyari has done anything an hour
   after sending (only for requests sent in the last 24 hours).
 - **Our mobeds** becomes **Mobeds**, for panthakys: the agyari's approved mobeds with their
   numbers, and those you add by hand.
@@ -54,11 +54,11 @@ the app only**:
   "WhatsApp messages from Mobed Diary start once Meta approves them."
 - Mobeds you **added by hand** on the Mobeds page cannot be asked by Mobed Diary: **call** them
   (or WhatsApp them from your own phone) and mark them **Going** on the board.
-- At All set **the family is not messaged** by Mobed Diary, nor the mobeds or the Doongerwadi:
+- When it is confirmed **the family is not messaged** by Mobed Diary, nor the mobeds or the Doongerwadi:
   everyone sees it in the app, and you reach the family from the family's contact (Call, or your
   own WhatsApp with the message ready to edit).
 - **I can't go any more** is on the mobed's request card only (the WhatsApp button comes with
-  template 6). A standby is asked again in the app only.
+  template 6). Someone on the waiting list is asked again in the app only.
 
 Before you start, on each phone: reload the app until **Menu -> App version** says **v87**, then
 **Settings -> Notifications on this phone**. Use a clearly test name (e.g. "Behdin Test Run") and
@@ -92,19 +92,19 @@ the test ones afterwards.
 6. **A call:** on the board tap **Call** for a mobed (a test one), come back to the app: [ ] a
    sheet asks **Is <name> going?** with Going / Not this time / No answer. Try **No answer**, then
    the **Going?** button and **Not this time**: [ ] each is noted in plain words.
-7. **I'll pray:** [ ] the last place fills and it is **All set: 2 going**: [ ] the family's
+7. **I'll pray:** [ ] the last place fills and it is **Confirmed: 2 going**: [ ] the family's
    contact with Call and **WhatsApp** (your WhatsApp opens with the message ready to edit,
    "...has asked me to perform the prayers..." since you pray yourself), who is praying and the
    panthaky, each with Call and WhatsApp. [ ] **Make the memorial** opens filled in; save it, and
    it becomes **Open the memorial**, with **Open in Behdins**. [ ] Behdins has the family
    (reminders off); the Calendar has the Geh-saarnu and the Uthamna.
-   [ ] **Second phone:** All set on their card with the family's contact and Make the memorial;
-   the family is in their own Behdins too. [ ] Everyone gets an **All set** notice; the lock
+   [ ] **Second phone:** Confirmed on their card with the family's contact and Make the memorial;
+   the family is in their own Behdins too. [ ] Everyone gets a **Confirmed** notice; the lock
    screen names only who is going and the place, never the departed or the family.
-8. **As the Doongerwadi:** [ ] **All set at Goti Adarian: <names> are going**, with the panthaky's
+8. **As the Doongerwadi:** [ ] **Confirmed at Goti Adarian: <names> are going**, with the panthaky's
    name and number, Call and WhatsApp.
 
-### C. Backing out, standbys, and a call that brings someone back
+### C. Backing out, the waiting list, and a call that brings someone back
 
 9. **Second phone:** on the card, **I can't go any more** -> the sheet "Tell <panthaky> you can't
    go?" -> yes. [ ] It says you have been noted. [ ] The panthaky is told. [ ] The board reads
@@ -112,15 +112,16 @@ the test ones afterwards.
    the actions back. [ ] The Doongerwadi's record reads **A place has opened** and still shows who
    is going and the panthaky.
 10. **The panthaky calls them back:** **Call** (or **Going?**) for the one who can't go -> **Going**.
-    [ ] All set again; their card has the family's contact again. (Or mark a place **Can't go** on
+    [ ] Confirmed again; their card has the family's contact again. (Or mark a place **Can't go** on
     the board, for someone who phoned you.)
-11. **Standbys** need a third mobed in the app: their I can pray after All set reads **Standby**.
-    When someone going can't go, the first standby is asked again in the app ("A place has opened:
-    can you still pray?"); no answer in 30 minutes asks the next; with nobody left, you are told to
+11. **The waiting list** needs a third mobed in the app: their I can pray once it is confirmed
+    reads **Waiting list**. When someone going can't go, the first on the waiting list is asked
+    again in the app ("A place has opened: can you still pray?"); no answer in 30 minutes asks the
+    next; with nobody left, you are told to
     find someone.
 12. **Confirm with who's going:** a new test record (2 wanted); tap **I'll pray** only. [ ] The
     board has **Confirm with who's going** -> the sheet "Confirm with 1 of 2 going?" -> yes.
-    [ ] All set with 1 of 2; the Doongerwadi reads "(confirmed with 1 of 2)".
+    [ ] Confirmed with 1 of 2; the Doongerwadi reads "(confirmed with 1 of 2)".
 
 ### D. Come to me first
 
@@ -136,7 +137,7 @@ the test ones afterwards.
     leave it alone for an hour. [ ] The Doongerwadi gets **No answer yet from Goti Adarian** (in
     the app and on the phone) and the record says so. (Only for requests sent in the last 24 hours;
     older ones are never told.)
-16. **Send to another agyari** (on the record, while it waits): [ ] the sheet "Withdraw the request
+16. **Send to another fire temple** (on the record, while it waits): [ ] the sheet "Withdraw the request
     from Goti Adarian and send it to another?" -> it is withdrawn, and choosing a fire temple opens.
 17. **Decline:** as the panthaky, **We can't take this** at the bottom of the board, with a reason.
     [ ] The Doongerwadi reads **Declined by Goti Adarian: <reason>** and can send it elsewhere.

@@ -6,6 +6,10 @@ the questions that followed. The decisions are recorded in `docs/DECISIONS.md` (
 the 19 Nov rules stay live (the call-out at Send, the first Yeses get the details, the panthaky
 accepts separately).
 
+Words (owner's word review, 23 Nov 2026, D11): the screens say **Confirmed** for what this
+design calls "All set", **Waiting list** for "standby", and "fire temple" for "agyari"; the code
+keeps its names (`all_set`, `standbys`). The template drafts below are in the owner's words.
+
 ## Why
 
 Today two things run side by side and do not meet. The panthaky taps Accept in the app (the
@@ -164,16 +168,20 @@ Blanks that hold several people are filled by the server, e.g. "Ervad A (+91 98x
 Ervad B (+91 98xxxxxx02)"; their numbers come only from sign-in numbers or numbers a panthaky
 entered for that person (services/phone.py), never from free text.
 
+Owner's word review (23 Nov 2026, D11): 5, 6 and 8 say "For anything else, please contact
+**[contact]**": the panthaky with their number, or with no confirmed panthaky in the app, the
+first mobed going with their number. 5 ends "May the ruvan of the late [departed] ...".
+
 **5. To the family: `prayers_all_set_family`**
 > The prayers for **[departed]** will be offered by **[mobeds with numbers]** of **[agyari]**.
-> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, the panthaky is
-> **[panthaky, number]**. May the ruvan of the departed attain Garothman Behesht.
+> Geh-saarnu: **[day and geh]**. Uthamna: **[day and time]**. For anything else, please contact
+> **[contact]**. May the ruvan of the late **[departed]** attain Garothman Behesht.
 
 **6. To each mobed going: `prayer_details_mobed_v3`**
 > You will pray for **[departed]** at **[place]**. Geh-saarnu: **[day and geh]**. Uthamna:
 > **[day and time]**. The family's contact is **[family name]**, **[family number]**. Mobeds
-> going: **[mobeds with numbers]**. The panthaky is **[panthaky, number]**. Thank you for your
-> service.
+> going: **[mobeds with numbers]**. For anything else, please contact **[contact]**. Thank you
+> for your service.
 
 Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: backing out, see above).
 
@@ -183,8 +191,8 @@ Quick-reply button: **I can't go any more** (owner, 21 Nov 2026: backing out, se
 > **[family name]**, **[family number]**.
 
 **8. To the Doongerwadi: `funeral_accepted_manager_v2`**
-> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. The
-> panthaky is **[panthaky, number]**, by phone or WhatsApp.
+> The prayers for **[departed]** will be offered by **[mobeds' names]** of **[agyari]**. For
+> anything else, please contact **[contact]**.
 
 **4 v2 (owner, 21 Nov 2026: yes, it replaces template 4): `prayer_request_mobeds_v2`**
 > A prayer request has come to **[agyari]** for **[departed]** at **[place]**. Geh-saarnu:

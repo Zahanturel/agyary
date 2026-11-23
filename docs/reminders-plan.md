@@ -93,8 +93,27 @@ charge for.
   numbered blanks: the temple, "Tomorrow, Thu 15 Oct", the Parsi date, and
   "Afringan and Baaj for Ardeshir Mehta at 9:00 am." (A template may not begin
   or end with a blank, nor put a newline inside one; both are tested.) The
-  manual wa.me message is the same without the STOP line, since a reply to a
-  message a mobed sends from their own WhatsApp goes to the mobed, not to us.
+  manual wa.me message has no STOP line, since a reply to a message a mobed
+  sends from their own WhatsApp goes to the mobed, not to us.
+
+  **Changed 23 Nov 2026 (owner's word review, D11).** The manual message
+  ("Remind on WhatsApp") now reads:
+
+      Sahebji <behdin's name>, a reminder from <mobed> of <fire temple>:
+
+      Afringan and Baaj for Ardeshir Mehta
+      Tomorrow, Thu 15 Oct (Roj Bahman, Mah Khordad), at 9:00 am
+
+      May the ruvan of the late Ardeshir Mehta attain Garothman Behesht.
+
+  ("Sahebji, a reminder ..." when the behdin's name is blank.) The template
+  above is live and keeps its words. The next one, `memorial_reminder_v2`
+  (not submitted yet; docs/OWNER-TODO.md), is "Sahebji {{1}}, a reminder from
+  {{2}}: {{3}} for {{4}} on {{5}}. May the ruvan of the late {{6}} attain
+  Garothman Behesht." with its own six blanks (the behdin's name, the fire
+  temple, the prayers, the departed, the day with its Roj and Mah and the
+  time, the departed again); each reminder is planned with the blanks of the
+  template it goes on.
 
   **Why it is so plain.** Meta's own check, run when a template is submitted,
   classed both "We would be glad to have you there." and "Please join us." as
@@ -222,7 +241,8 @@ history, same rule as the sign-in number.
   reminder is sent at most once per observance. The existing `notifications`
   table (survived the bot teardown) is the outbox.
 - **Wording** (`services/reminder_message.py`): one source for the manual
-  message and the template, so a mobed sees exactly what would go out.
+  message and the templates (since 23 Nov 2026 the manual message greets the
+  family and differs from the live template).
 - **Consent and STOP** (`services/reminders.py`), HTTP in
   `api/routes/reminders.py`.
 - **Planning and sending** (`services/reminder_sender.py`): `plan_tomorrow`
