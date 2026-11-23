@@ -368,6 +368,9 @@ The lead reviewed every text in the app (2,135) and brought 38 for the owner; th
 - **Examples:** "e.g. Rustom", "e.g. Er. Jehangir Mistry", "e.g. Zubin Mistry"; the sign-up example
   "e.g. Er. Pervez Kias" stays (owner: keep). The greeting skips only Parsi titles (no Shri / Smt, and
   "Dastur" is a surname; "Dasturji" is the title).
+- **State names in the fire temple list:** Gujarat, Rajasthan, Madhya Pradesh, Uttar Pradesh, and
+  **Telangana** for the three in Hyderabad and Secunderabad (the lead's correction of his own
+  suggestion "Andhra Pradesh": Telangana since 2014).
 - **Kept:** the role name "Caretaker" (panthaky, mobed and caretaker are the three roles; nothing in
   the app grants caretaker yet).
 - **Owner, to do separately:** the Play description, the privacy policy and the app's other legal
