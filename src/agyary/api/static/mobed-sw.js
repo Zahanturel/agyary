@@ -71,6 +71,7 @@ const SHELL_FILES = [
   "/mobed-app/js/screens/waiting.js",
   "/mobed-app/js/screens/manager.js",
   "/mobed-app/js/screens/manager_record.js",
+  "/mobed-app/js/screens/manager_record_flow.js",
   "/mobed-app/js/screens/manager_behdins.js",
   "/mobed-app/js/screens/requests.js",
   "/mobed-app/js/screens/our_mobeds.js",

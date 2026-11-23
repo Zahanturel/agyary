@@ -228,6 +228,9 @@ export const managerRecord = (id) => get(asManager(`/manager/records/${id}`));
 export const managerCreateRecord = (body) => post(asManager("/manager/records"), body);
 export const managerUpdateRecord = (id, body) => put(asManager(`/manager/records/${id}`), body);
 export const managerSuggested = (id) => get(asManager(`/manager/records/${id}/agyaries`));
+// The same list before the record is saved (D12: the fire temple is the last of four steps).
+export const managerSuggestedFor = (placeId, phone) =>
+  get(asManager(`/manager/agyaries/suggested?phone=${encodeURIComponent(phone || "")}${placeId ? `&place_id=${placeId}` : ""}`));
 export const managerSearchAgyaries = (q, placeId) =>
   get(asManager(`/manager/agyaries/search?q=${encodeURIComponent(q || "")}${placeId ? `&place_id=${placeId}` : ""}`));
 // The one tick says both: the family agreed to share their name and number, and to

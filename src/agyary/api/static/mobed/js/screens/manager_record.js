@@ -1,29 +1,24 @@
 "use strict";
 
 /**
- * A Doongerwadi manager records a death and asks a fire temple for the prayers
- * (DECISIONS D10, D5; Phase 2 Step 4).
+ * A Doongerwadi manager's record of a death, and sending it to a fire temple
+ * (DECISIONS D10, D5, D12; Phase 2 Step 4).
  *
- *  - The record form: the name as it is prayed, the death by its date or by
- *    its Roj and Mah (the other is worked out by the server and shown, to
- *    confirm), four days or one, Geh-saarnu, Uthamna, mobeds wanted,
- *    one family contact (chosen from the place's book of behdins, or added to
- *    it on the spot: manager_behdins.js), and the family's preferred fire
- *    temple - their usual one from the book, unless the manager chooses.
  *  - The record: everything on it, its requests, and Send / Withdraw / Edit.
  *    Where a request stands, in the server's words (R3.1 step 6): Waiting at
  *    X (or Sent to the panthaky of X), Finding mobeds at X: 1 of 2 going, A
  *    place has opened at X, All set at X with the mobeds' names and the
  *    panthaky's Call and WhatsApp (the manager's own phone, a short message
  *    ready), Declined by X, Nobody at X can take it, Withdrawn. While it
- *    waits, "Send to another agyari" withdraws it (a sheet first) and opens
- *    Ask a fire temple. A request accepted the old way (Step 5) still shows
- *    who accepted, and - only if they ticked "Share my name and number" -
- *    their number with Call and WhatsApp.
- *  - Choosing the fire temple: Suggested (nearest first) or Search all, then
- *    the sheet saying what happens by that fire temple's way (its mobeds asked
- *    at once, or its panthaky choosing who to ask), the tick that the family
- *    agreed, and Send.
+ *    waits, "Send to another fire temple" withdraws it (a sheet first) and opens
+ *    the list of fire temples for it again. A request accepted the old way
+ *    (Step 5) still shows who accepted, and - only if they ticked "Share my
+ *    name and number" - their number with Call and WhatsApp.
+ *  - Sending: a fire temple's row (agyariRowHtml), then the sheet saying what
+ *    happens by that fire temple's way (its mobeds asked at once, or its
+ *    panthaky choosing who to ask), the tick that the family agreed, and Send
+ *    (confirmSend). The four steps that record a death and choose the fire
+ *    temple are in manager_record_flow.js.
  *
  * Nothing about the cause of death, age, address, certificate, ID numbers or
  * how the body goes is asked.
@@ -32,30 +27,21 @@
  * address goes through managerHash, and what the admin recorded says so.
  */
 
-import {
-  calendarOptions, managerDeathDay, managerRecord, managerCreateRecord, managerUpdateRecord,
-  managerSuggested, managerSearchAgyaries, managerSend, managerWithdraw, managerBook,
-} from "../api.js";
-import { openBehdinSheet, familyLineHtml } from "./manager_behdins.js";
+import { managerRecord, managerSend, managerWithdraw } from "../api.js";
 import { state } from "../state.js";
 import {
-  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, openSheet, flashInfo,
+  chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, openSheet, flashInfo,
   flashError,
 } from "../ui.js";
-import { esc, firstName, gregLabel, istHm, istYmd, todayIst, phoneField, readPhone, setPhoneField, MAH_NAMES_JS } from "../util.js";
+import { esc, firstName, gregLabel, istHm, istYmd, todayIst } from "../util.js";
 import { navigate, navGuard, returnTo } from "../router.js";
-import { flagProblems, clearProblems } from "../fielderrors.js";
-import { managerHash, managerPlaces } from "../acting.js";
+import { managerHash } from "../acting.js";
 import { refreshAfterAction } from "../notifications.js";
 
-const TITLES = [["behdin", "Behdin"], ["ervad", "Ervad"], ["osta", "Osta"], ["osti", "Osti"], ["khud", "Khud"]];
-const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
-// The Geh-saarnu is prayed in daylight only.
-const DAY_GEHS = [[1, "Havan"], [2, "Rapithwan"], [3, "Uzirin"]];
 const REACH = {
   panthaky: { text: "Panthaky in the app", cls: "role" },
   mobeds: { text: "Mobeds only", cls: "" },
-  nobody: { text: "Not in the app yet", cls: "grey" },
+  nobody: { text: "Not in Mobed Diary yet", cls: "grey" },
 };
 
 // --- Shared words ---------------------------------------------------------------
@@ -96,441 +82,6 @@ function uthamnaText(u) {
   return `${gregLabel(u.date)}, ${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
 }
 
-async function loadCalendarOptions() {
-  if (state.calendarOptions && state.calendarOptions.roj && state.calendarOptions.roj.length) return;
-  try {
-    state.calendarOptions = await calendarOptions();
-  } catch (e) {
-    state.calendarOptions = null;
-    throw e;
-  }
-}
-
-// --- The form ---------------------------------------------------------------------
-
-function blankDraft() {
-  return {
-    title: "behdin", name: "", parent: "", calendar: "shenshai", deathBy: "date", death: "",
-    deathRoj: "", deathMah: "", obsequies: "", gsDate: "", gsGeh: "", utDate: "", utTime: "",
-    mobeds: "", preferred: null, contactName: "", contactPhone: "",
-    placeId: (managerPlaces()[0] || {}).id || null,
-  };
-}
-
-function draftFrom(rec) {
-  return {
-    title: rec.departed_title, name: rec.departed_name, parent: rec.departed_parent_name || "",
-    calendar: rec.death.calendar, deathBy: rec.death.given_by === "roj_mah" ? "parsi" : "date",
-    death: rec.death.date, deathRoj: String(rec.death.roj), deathMah: String(rec.death.mah),
-    obsequies: rec.obsequies,
-    gsDate: rec.geh_saarnu ? rec.geh_saarnu.date : "", gsGeh: rec.geh_saarnu ? String(rec.geh_saarnu.geh) : "",
-    utDate: rec.uthamna ? rec.uthamna.date : "", utTime: rec.uthamna && rec.uthamna.time ? rec.uthamna.time : "",
-    mobeds: rec.mobeds_wanted ? String(rec.mobeds_wanted) : "",
-    preferred: rec.preferred_agyari, contactName: rec.family_contact.name, contactPhone: rec.family_contact.phone,
-    placeId: rec.funeral_place ? rec.funeral_place.id : null,
-  };
-}
-
-function rojOptions(d) {
-  const gatha = d.deathMah === "13";
-  const names = ((state.calendarOptions && state.calendarOptions.roj) || []).map(o => o.title);
-  return `<option value="">Choose</option>` + names.map((n, i) =>
-    `<option value="${i + 1}" ${!gatha && d.deathRoj === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")
-    + `<optgroup label="Gatha days">` + GATHAS.map((n, i) =>
-      `<option value="g${i + 1}" ${gatha && d.deathRoj === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")
-    + `</optgroup>`;
-}
-
-function radio(name, id, value, checked, text) {
-  return `<div class="check-row"><input type="radio" name="${name}" id="${id}" value="${value}" ${checked ? "checked" : ""}>
-    <label for="${id}">${text}</label></div>`;
-}
-
-function formHtml(d, { editing }) {
-  const places = managerPlaces();
-  const today = todayIst();
-  return `
-    <div class="card" id="frCard">
-      <h2>${editing ? "Change the record" : "Record a death"}</h2>
-      <p class="meta">Only what the prayers need. The family's number is shown to a fire temple only once it
-        accepts.</p>
-      ${places.length > 1 ? `<label for="frPlace">Place</label>
-        <select id="frPlace" ${editing ? "disabled" : ""}>${places.map(p =>
-          `<option value="${p.id}" ${d.placeId === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>` : ""}
-
-      <label for="frTitle">Title</label>
-      <select id="frTitle">${TITLES.map(([v, t]) => `<option value="${v}" ${d.title === v ? "selected" : ""}>${t}</option>`).join("")}</select>
-      <label for="frName">Name of the departed</label>
-      <input type="text" id="frName" autocomplete="off" maxlength="80" value="${esc(d.name)}">
-      <label for="frParent">Father's or husband's name</label>
-      <input type="text" id="frParent" autocomplete="off" maxlength="80" value="${esc(d.parent)}">
-      <p class="meta" id="frPrayed" style="margin:6px 0 0"></p>
-
-      <label for="frCalendar">Calendar the family keeps</label>
-      <select id="frCalendar">${[["shenshai", "Shenshai"], ["kadmi", "Kadmi"]].map(([k, v]) =>
-        `<option value="${k}" ${d.calendar === k ? "selected" : ""}>${v}</option>`).join("")}</select>
-
-      <label>Death</label>
-      <div class="choice-group" id="frDeathBy">
-        ${radio("frDeathBy", "frByDate", "date", d.deathBy !== "parsi", "By the date")}
-        ${radio("frDeathBy", "frByParsi", "parsi", d.deathBy === "parsi",
-          "By Roj and Mah (for a death before sunrise, give the Parsi day it belonged to)")}
-      </div>
-      <div id="frDateBox" style="${d.deathBy === "parsi" ? "display:none" : ""}">
-        <label for="frDeathDate">Date of death</label>
-        <input type="date" id="frDeathDate" max="${today}" value="${esc(d.death)}">
-      </div>
-      <div id="frParsiBox" style="${d.deathBy === "parsi" ? "" : "display:none"}">
-        <label for="frDeathRoj">Roj</label>
-        <select id="frDeathRoj">${rojOptions(d)}</select>
-        <div id="frMahBox" style="${d.deathMah === "13" ? "display:none" : ""}">
-          <label for="frDeathMah">Mah</label>
-          <select id="frDeathMah"><option value="">Choose</option>${MAH_NAMES_JS.map((n, i) =>
-            `<option value="${i + 1}" ${d.deathMah === String(i + 1) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
-        </div>
-      </div>
-      <p class="meta" id="frDeathDay" role="status" style="margin:6px 0 0"></p>
-
-      <label>Days of prayers</label>
-      <div class="choice-group" id="frObsequies">
-        ${radio("frOb", "frObFour", "four_days", d.obsequies === "four_days", "Four days")}
-        ${radio("frOb", "frObOne", "one_day", d.obsequies === "one_day", "One day")}
-      </div>
-
-      <label for="frGsDate">Geh-saarnu: day</label>
-      <input type="date" id="frGsDate" value="${esc(d.gsDate)}">
-      <label for="frGsGeh">Geh-saarnu: geh</label>
-      <select id="frGsGeh"><option value="">Choose</option>${DAY_GEHS.map(([n, t]) =>
-        `<option value="${n}" ${d.gsGeh === String(n) ? "selected" : ""}>${t}</option>`).join("")}</select>
-
-      <label for="frUtDate">Uthamna: day</label>
-      <input type="date" id="frUtDate" value="${esc(d.utDate)}">
-      <label for="frUtTime">Uthamna: time</label>
-      <input type="time" id="frUtTime" value="${esc(d.utTime)}">
-
-      <label for="frMobeds">Mobeds wanted (optional)</label>
-      <input type="number" id="frMobeds" inputmode="numeric" min="1" max="20" value="${esc(d.mobeds)}">
-
-      <label for="frFamilySearch">Family</label>
-      <p class="meta" style="margin:0 0 6px">Choose them from your book of behdins, or add them to it.</p>
-      <div id="frFamilyBox"></div>
-      <p class="meta" id="frFamilyNote" role="status" style="margin:6px 0 0"></p>
-
-      <label for="frContact">Family contact: name</label>
-      <input type="text" id="frContact" autocomplete="off" maxlength="100" value="${esc(d.contactName)}">
-      <label for="frPhone">Family contact: number</label>
-      <div id="frPhoneBox">${phoneField("frPhone")}</div>
-
-      <label for="frPrefSearch">The family's fire temple (optional)</label>
-      <div id="frPreferredBox"></div>
-
-      <div class="action-bar">
-        <button type="button" id="frSave">${editing ? "Save changes" : "Save"}</button>
-      </div>
-    </div>`;
-}
-
-/** Field the server names (X-Field) -> what to mark on the form. */
-function fieldTarget(field, d) {
-  return {
-    departed_title: "#frTitle", departed_name: "#frName", departed_parent_name: "#frParent",
-    calendar: "#frCalendar", death: d.deathBy === "parsi" ? "#frDeathRoj" : "#frDeathDate",
-    obsequies: "#frObsequies", geh_saarnu_date: "#frGsDate", geh_saarnu_geh: "#frGsGeh",
-    uthamna_date: "#frUtDate", mobeds_wanted: "#frMobeds", preferred_agyary_id: "#frPreferredBox",
-    family_contact_name: "#frContact", family_contact_phone: "#frPhoneBox .phone-field",
-  }[field] || null;
-}
-
-/** The form's body for the API, and what is wrong with it (marked on the form). */
-function build(d) {
-  const problems = [];
-  const bad = (target, message) => problems.push({ target, message });
-  if (!d.name.trim()) bad("#frName", "Please enter the name of the departed.");
-  const byParsi = d.deathBy === "parsi";
-  if (byParsi) {
-    if (!d.deathRoj) bad("#frDeathRoj", "Please choose the Roj of the death.");
-    else if (d.deathMah !== "13" && !d.deathMah) bad("#frDeathMah", "Please choose the Mah of the death.");
-  } else if (!d.death) bad("#frDeathDate", "Please enter the date of death.");
-  else if (d.death > todayIst()) bad("#frDeathDate", "The death cannot be after today.");
-  if (!d.obsequies) bad("#frObsequies", "Please choose four days or one day.");
-  if (d.gsDate && !d.gsGeh) bad("#frGsGeh", "Please choose the geh of the Geh-saarnu.");
-  if (d.gsGeh && !d.gsDate) bad("#frGsDate", "Please give the day of the Geh-saarnu.");
-  if (d.utTime && !d.utDate) bad("#frUtDate", "Please give the day of the Uthamna.");
-  const deathDay = byParsi ? null : d.death;
-  if (deathDay && d.gsDate && d.gsDate < deathDay) bad("#frGsDate", "The Geh-saarnu cannot be before the death.");
-  if (deathDay && d.utDate && d.utDate < deathDay) bad("#frUtDate", "The Uthamna cannot be before the death.");
-  const mobeds = d.mobeds === "" ? null : Number(d.mobeds);
-  if (mobeds !== null && !(Number.isInteger(mobeds) && mobeds >= 1 && mobeds <= 20)) {
-    bad("#frMobeds", "The number of mobeds is from 1 to 20.");
-  }
-  if (!d.contactName.trim()) bad("#frContact", "Please enter the family contact's name.");
-  const phone = readPhone("frPhone");
-  if (!phone) bad("#frPhoneBox .phone-field", "Please enter the family contact's number.");
-  return {
-    problems,
-    body: {
-      funeral_place_id: d.placeId,
-      departed_title: d.title, departed_name: d.name.trim(), departed_parent_name: d.parent.trim() || null,
-      calendar: d.calendar,
-      death_date: byParsi ? null : d.death || null,
-      death_roj: byParsi && d.deathRoj ? Number(d.deathRoj) : null,
-      death_mah: byParsi && d.deathMah ? Number(d.deathMah) : null,
-      obsequies: d.obsequies,
-      geh_saarnu_date: d.gsDate || null, geh_saarnu_geh: d.gsGeh ? Number(d.gsGeh) : null,
-      uthamna_date: d.utDate || null, uthamna_time: d.utTime || null,
-      mobeds_wanted: mobeds,
-      preferred_agyary_id: d.preferred ? d.preferred.id : null,
-      family_contact_name: d.contactName.trim(), family_contact_phone: phone || "",
-    },
-  };
-}
-
-/** The family's preferred fire temple: chosen (with Change), or a search. */
-function paintPreferred(box, d) {
-  if (d.preferred) {
-    box.innerHTML = `<div class="search-result" style="cursor:default;min-height:0">
-        <div><strong>${esc(d.preferred.name)}</strong></div><div class="addr">${esc(d.preferred.city || "")}</div></div>
-      <button type="button" class="ghost small" id="frPrefClear">Not this one</button>`;
-    box.querySelector("#frPrefClear").onclick = () => { d.preferred = null; paintPreferred(box, d); };
-    return;
-  }
-  box.innerHTML = `<input type="text" id="frPrefSearch" placeholder="Search by name or town" autocomplete="off">
-    <div id="frPrefResults" style="margin-top:8px"></div>`;
-  const input = box.querySelector("#frPrefSearch");
-  const results = box.querySelector("#frPrefResults");
-  let timer, token = 0;
-  input.oninput = () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const q = input.value.trim();
-      const mine = ++token;
-      if (!q) { results.innerHTML = ""; return; }
-      let found;
-      try {
-        found = (await managerSearchAgyaries(q, d.placeId)).agyaries;
-      } catch (e) {
-        if (mine === token) results.innerHTML = `<p class="meta" role="alert">${esc(e.message)}</p>`;
-        return;
-      }
-      if (mine !== token || !box.isConnected) return;
-      if (!found.length) { results.innerHTML = `<p class="meta">No fire temple found for “${esc(q)}”.</p>`; return; }
-      results.innerHTML = found.map((a, i) => `<div class="search-result" data-i="${i}">
-          <div><strong>${esc(a.name)}</strong></div><div class="addr">${esc(a.city || "")}</div></div>`).join("");
-      results.querySelectorAll("[data-i]").forEach(row => {
-        row.onclick = () => {
-          const a = found[+row.dataset.i];
-          d.preferred = { id: a.id, name: a.name, city: a.city };
-          paintPreferred(box, d);
-        };
-      });
-    }, 250);
-  };
-}
-
-/** The family from the place's book: a search, and "Add a new family" (which
- *  saves them to the book). Choosing one fills the family contact and, if no
- *  fire temple is chosen yet, their usual one, which is then suggested first. */
-function paintFamily(box, d, root, repaintPreferred) {
-  box.innerHTML = `<input type="text" id="frFamilySearch" placeholder="Search your book by name or number"
-      autocomplete="off">
-    <div id="frFamilyResults" style="margin-top:8px"></div>
-    <div class="row tight" style="margin-top:8px"><button type="button" class="secondary small" id="frFamilyAdd">Add a new
-      behdin</button></div>`;
-  const input = box.querySelector("#frFamilySearch");
-  const results = box.querySelector("#frFamilyResults");
-  const note = root.querySelector("#frFamilyNote");
-  const use = (b) => {
-    d.contactName = b.name;
-    d.contactPhone = b.phone;
-    root.querySelector("#frContact").value = b.name;
-    setPhoneField("frPhone", b.phone);
-    input.value = "";
-    results.innerHTML = "";
-    const words = [`${b.name}, from your book.`];
-    if (b.usual_agyari && !d.preferred) {
-      d.preferred = { ...b.usual_agyari };
-      repaintPreferred();
-      words.push(`Their usual fire temple, ${b.usual_agyari.name}, is suggested first.`);
-    } else if (b.usual_agyari && d.preferred.id !== b.usual_agyari.id) {
-      words.push(`Their usual fire temple is ${b.usual_agyari.name}; you have chosen ${d.preferred.name}.`);
-    }
-    note.textContent = words.join(" ");
-  };
-  let timer, token = 0;
-  input.oninput = () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const q = input.value.trim();
-      const mine = ++token;
-      if (!q) { results.innerHTML = ""; return; }
-      let found;
-      try {
-        found = (await managerBook(q)).behdins;
-      } catch (e) {
-        if (mine === token) results.innerHTML = `<p class="meta" role="alert">${esc(e.message)}</p>`;
-        return;
-      }
-      if (mine !== token || !box.isConnected) return;
-      if (!found.length) {
-        results.innerHTML = `<p class="meta">Nobody in your book for “${esc(q)}”. Add them as a new behdin.</p>`;
-        return;
-      }
-      results.innerHTML = found.map((b, i) => `<div class="search-result" data-i="${i}">${familyLineHtml(b)}</div>`).join("");
-      results.querySelectorAll("[data-i]").forEach(row => { row.onclick = () => use(found[+row.dataset.i]); });
-    }, 250);
-  };
-  box.querySelector("#frFamilyAdd").onclick = () => {
-    const typed = input.value.trim();
-    openBehdinSheet({
-      placeId: d.placeId,
-      prefill: { name: typed && !/\d/.test(typed) ? typed : d.contactName, phone: readPhone("frPhone") || "" },
-      onSaved: (b) => { use(b); showInfo(`${b.name} is in your book of behdins.`); },
-    });
-  };
-}
-
-async function renderForm(rec) {
-  chrome(true);
-  refreshHeader();
-  showFab(false);
-  loading();
-  const alive = navGuard();
-  try {
-    await loadCalendarOptions();
-  } catch (e) {
-    if (!alive()) return;
-    return screenFailed(e.message, () => renderForm(rec));
-  }
-  if (!alive()) return;
-  const editing = !!rec;
-  const d = rec ? draftFrom(rec) : blankDraft();
-  mainEl.innerHTML = formHtml(d, { editing });
-  toTop();
-  const root = document.getElementById("frCard");
-  const $ = (sel) => root.querySelector(sel);
-  if (d.contactPhone) setPhoneField("frPhone", d.contactPhone);
-
-  const prayed = () => {
-    const title = (TITLES.find(([v]) => v === d.title) || ["", ""])[1];
-    const whole = [title, d.name.trim(), d.parent.trim()].filter(Boolean).join(" ");
-    $("#frPrayed").textContent = d.name.trim() ? `Prayed as: ${whole}` : "";
-  };
-  prayed();
-
-  // The Roj and Mah of the death (or its date), from the server, to confirm (D5).
-  let dayToken = 0;
-  const showDay = async () => {
-    const out = $("#frDeathDay");
-    const mine = ++dayToken;
-    const parsi = d.deathBy === "parsi";
-    if (parsi ? !(d.deathRoj && (d.deathMah || d.deathMah === "13")) : !d.death) { out.textContent = ""; return; }
-    out.textContent = "Working it out...";
-    try {
-      const day = await managerDeathDay({
-        calendar: d.calendar, death_date: parsi ? null : d.death,
-        death_roj: parsi ? Number(d.deathRoj) : null, death_mah: parsi ? Number(d.deathMah) : null,
-      });
-      if (mine !== dayToken || !out.isConnected) return;
-      out.innerHTML = parsi
-        ? `That is <b>${esc(gregLabel(day.date))}</b> (${esc(day.label)}). Please check it is right.`
-        : `That is <b>${esc(day.label)}</b>. Please check it is right; for a death before sunrise, give the Roj and
-           Mah instead.`;
-    } catch (e) {
-      if (mine !== dayToken || !out.isConnected) return;
-      out.textContent = e.message;
-    }
-  };
-  showDay();
-
-  const bind = (sel, key, after) => {
-    const el = $(sel);
-    el.addEventListener(el.tagName === "SELECT" || el.type === "date" || el.type === "time" ? "change" : "input",
-      () => { d[key] = el.value; if (after) after(); });
-  };
-  if ($("#frPlace")) $("#frPlace").onchange = (e) => { d.placeId = Number(e.target.value); };
-  bind("#frTitle", "title", prayed);
-  bind("#frName", "name", prayed);
-  bind("#frParent", "parent", prayed);
-  bind("#frCalendar", "calendar", showDay);
-  bind("#frDeathDate", "death", showDay);
-  bind("#frDeathMah", "deathMah", showDay);
-  bind("#frGsDate", "gsDate");
-  bind("#frGsGeh", "gsGeh");
-  bind("#frUtDate", "utDate");
-  bind("#frUtTime", "utTime");
-  bind("#frMobeds", "mobeds");
-  bind("#frContact", "contactName");
-  $("#frDeathRoj").onchange = (e) => {
-    const v = e.target.value;
-    if (v.startsWith("g")) {            // a Gatha day has no Mah of its own
-      d.deathMah = "13"; d.deathRoj = v.slice(1);
-      $("#frMahBox").style.display = "none";
-    } else {
-      if (d.deathMah === "13") { d.deathMah = ""; $("#frDeathMah").value = ""; }
-      d.deathRoj = v;
-      $("#frMahBox").style.display = "";
-    }
-    showDay();
-  };
-  root.querySelectorAll("[name=frDeathBy]").forEach(r => {
-    r.onchange = () => {
-      d.deathBy = r.value;
-      $("#frDateBox").style.display = d.deathBy === "parsi" ? "none" : "";
-      $("#frParsiBox").style.display = d.deathBy === "parsi" ? "" : "none";
-      showDay();
-    };
-  });
-  root.querySelectorAll("[name=frOb]").forEach(r => { r.onchange = () => { d.obsequies = r.value; }; });
-  paintPreferred($("#frPreferredBox"), d);
-  paintFamily($("#frFamilyBox"), d, root, () => paintPreferred($("#frPreferredBox"), d));
-
-  let saving = false;
-  $("#frSave").onclick = async (ev) => {
-    if (saving) return;
-    const btn = ev.currentTarget;
-    const { problems, body } = build(d);
-    if (problems.length) return flagProblems(root, problems);
-    clearProblems(root);
-    saving = true;
-    btn.disabled = true;
-    let res;
-    try {
-      res = editing ? await managerUpdateRecord(rec.id, body) : await managerCreateRecord(body);
-    } catch (e) {
-      saving = false;
-      btn.disabled = false;
-      const target = e.field ? fieldTarget(e.field, d) : null;
-      if (target && root.querySelector(target)) return flagProblems(root, [{ target, message: e.message }]);
-      return showError(e.message);
-    }
-    if (!alive()) return;
-    const saved = res.record;
-    if (editing) {
-      flashInfo(res.told
-        ? `Saved. The ${res.told === 1 ? "person" : `${res.told} people`} asked at the fire temple ${res.told === 1
-          ? "was" : "were"} sent the new details.`
-        : "Saved.");
-      returnTo(managerHash(`/record/${saved.id}`));
-    } else if (saved.may_send) {
-      flashInfo("Saved. Now choose the fire temple to ask for the prayers.");
-      navigate(managerHash(`/record/${saved.id}`), { replace: true });
-      navigate(managerHash(`/record/${saved.id}/send`));
-    } else {
-      flashInfo("Saved.");
-      navigate(managerHash(`/record/${saved.id}`), { replace: true });
-    }
-  };
-}
-
-export function renderRecordNew() {
-  const places = managerPlaces();
-  if (places.length && !places.some(p => p.is_active)) {
-    flashInfo("Your place is turned off in Mobed Diary at the moment, so a death cannot be recorded there.");
-    return navigate(managerHash(), { replace: true });
-  }
-  return renderForm(null);
-}
-
 async function fetchRecord(id, retry) {
   try {
     return (await managerRecord(id)).record;
@@ -538,19 +89,6 @@ async function fetchRecord(id, retry) {
     screenFailed(e.message, retry);
     return null;
   }
-}
-
-export async function renderRecordEdit({ id }) {
-  chrome(true);
-  loading();
-  const alive = navGuard();
-  const rec = await fetchRecord(id, () => renderRecordEdit({ id }));
-  if (!rec || !alive()) return;
-  if (!rec.may_edit) {
-    flashInfo("A fire temple has accepted this request, so the record can no longer be changed here.");
-    return navigate(managerHash(`/record/${id}`), { replace: true });
-  }
-  return renderForm(rec);
 }
 
 // --- The record ---------------------------------------------------------------------
@@ -720,7 +258,7 @@ function confirmElsewhere(rec, q, alive) {
     sheet.close();
     refreshAfterAction();
     if (!alive()) return;
-    flashInfo(`Withdrawn from ${where}. Now choose another fire temple to ask.`);
+    flashInfo(`Withdrawn from ${where}. Now choose another fire temple.`);
     navigate(managerHash(`/record/${rec.id}/send`));
   };
 }
@@ -755,125 +293,19 @@ function confirmWithdraw(rec, q) {
 
 // --- Choosing the fire temple ---------------------------------------------------------
 
-function agyariRowHtml(a, i) {
+/** One fire temple as a row (the list at step 4 of recording a death, manager_record_flow.js). */
+export function agyariRowHtml(a, i) {
   const reach = REACH[a.reach] || REACH.nobody;
+  const how = a.way === "panthaky_first" ? "Its panthaky chooses who to ask"
+    : a.way === "everyone" ? "Its mobeds are asked at once" : "";
   const km = a.km == null ? "" : `${a.location_source === "town" ? "about " : ""}${a.km < 10 ? a.km : Math.round(a.km)} km`;
   return `<div class="search-result${a.may_send ? "" : " unavailable"}" data-i="${i}" ${a.may_send ? "" : 'aria-disabled="true"'}>
       <div><strong>${esc(a.name)}</strong></div>
       <div class="addr">${esc([a.city, km].filter(Boolean).join(" · "))}</div>
-      <div style="margin-top:4px">${a.preferred ? `<span class="tag">The family's choice</span>` : ""}<span
+      <div style="margin-top:4px">${a.preferred ? `<span class="tag">Family's usual</span> ` : ""}<span
         class="tag ${reach.cls}">${reach.text}</span></div>
+      ${how ? `<div class="addr" style="margin-top:2px">${how}</div>` : ""}
     </div>`;
-}
-
-function wireRows(container, list, rec, whatsappOn) {
-  container.querySelectorAll("[data-i]").forEach(row => {
-    const a = list[+row.dataset.i];
-    if (!a.may_send) {
-      // Shown so the manager knows it is there, but a request would reach nobody.
-      row.removeAttribute("role");
-      row.tabIndex = -1;
-      return;
-    }
-    row.onclick = () => confirmSend(rec, a, whatsappOn);
-  });
-}
-
-export async function renderRecordSend({ id }) {
-  chrome(true);
-  refreshHeader();
-  showFab(false);
-  loading();
-  const alive = navGuard();
-  const rec = await fetchRecord(id, () => renderRecordSend({ id }));
-  if (!rec || !alive()) return;
-  if (!rec.may_send) {
-    flashInfo(rec.requests.some(q => q.status === "waiting")
-      ? "This request is already waiting at a fire temple. Withdraw it first to send it to another."
-      : "This record cannot be sent now.");
-    return navigate(managerHash(`/record/${id}`), { replace: true });
-  }
-  mainEl.innerHTML = `
-    <div class="card">
-      <h2>Ask a fire temple</h2>
-      <p class="meta" style="margin:0">For ${esc(rec.prayed_name)}. Choose the fire temple; its panthaky is asked, or
-        if it has none in Mobed Diary, its mobeds.</p>
-      <div class="chip-row" style="margin-top:12px" role="tablist">
-        <button type="button" class="chip on" data-tab="near" role="tab" aria-selected="true">Suggested</button>
-        <button type="button" class="chip" data-tab="all" role="tab" aria-selected="false">Search all</button>
-      </div>
-    </div>
-    <div class="card" id="msNear"><p class="meta">Loading...</p></div>
-    <div class="card hidden" id="msAll">
-      <input type="text" id="msSearch" placeholder="Search by name or town" autocomplete="off">
-      <div id="msResults" style="margin-top:8px"></div>
-    </div>`;
-  toTop();
-  const near = document.getElementById("msNear");
-  const all = document.getElementById("msAll");
-  const tabs = mainEl.querySelectorAll("[data-tab]");
-  const show = (tab) => {
-    tabs.forEach(b => { const onTab = b.dataset.tab === tab; b.classList.toggle("on", onTab); b.setAttribute("aria-selected", String(onTab)); });
-    near.classList.toggle("hidden", tab !== "near");
-    all.classList.toggle("hidden", tab !== "all");
-    if (tab === "all") document.getElementById("msSearch").focus();
-  };
-  tabs.forEach(b => { b.onclick = () => show(b.dataset.tab); });
-
-  const placeName = rec.funeral_place ? rec.funeral_place.name : "Your place";
-  const loadNear = async () => {
-    let got;
-    try {
-      got = await managerSuggested(rec.id);
-    } catch (e) {
-      if (!alive()) return;
-      near.innerHTML = `<div class="load-failed" role="alert"><p><b></b></p>
-        <button class="small" type="button" data-retry>Try again</button></div>`;
-      near.querySelector("b").textContent = e.message;
-      near.querySelector("[data-retry]").onclick = loadNear;
-      return;
-    }
-    if (!alive()) return;
-    const list = got.agyaries;
-    const intro = got.place_has_position
-      ? `<p class="meta" style="margin-top:0">Nearest first, within ${got.near_km} km of ${esc(placeName)}, in a
-          straight line.</p>`
-      : `<p class="meta" style="margin-top:0">${esc(placeName)} is not on the map yet, so nothing can be suggested
-          by distance. Use Search all.</p>`;
-    near.innerHTML = intro + (list.length ? list.map(agyariRowHtml).join("")
-      : got.place_has_position ? `<p class="meta">No fire temple in Mobed Diary is within ${got.near_km} km.
-          Use Search all.</p>` : "")
-      + (got.place_has_position ? "" : `<div class="action-bar"><button type="button" class="secondary"
-          id="msToAll">Search all</button></div>`);
-    const toAll = document.getElementById("msToAll");
-    if (toAll) toAll.onclick = () => show("all");
-    wireRows(near, list, rec, got.whatsapp_on);
-  };
-  loadNear();
-
-  const input = document.getElementById("msSearch");
-  const results = document.getElementById("msResults");
-  let timer, token = 0;
-  input.oninput = () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const q = input.value.trim();
-      const mine = ++token;
-      if (!q) { results.innerHTML = ""; return; }
-      let got;
-      try {
-        got = await managerSearchAgyaries(q, rec.funeral_place && rec.funeral_place.id);
-      } catch (e) {
-        if (mine === token) results.innerHTML = `<p class="meta" role="alert">${esc(e.message)}</p>`;
-        return;
-      }
-      if (mine !== token || !alive()) return;
-      const found = got.agyaries;
-      results.innerHTML = found.length ? found.map(agyariRowHtml).join("")
-        : `<p class="meta">No fire temple found for “${esc(q)}”.</p>`;
-      wireRows(results, found, rec, got.whatsapp_on);
-    }, 250);
-  };
 }
 
 let sending = false;
@@ -888,7 +320,7 @@ export function sendWords(a, whatsappOn) {
 }
 
 /** The tick, then Send. The tick is asked every time, for this fire temple. */
-function confirmSend(rec, a, whatsappOn) {
+export function confirmSend(rec, a, whatsappOn, { onSent = null } = {}) {
   const sheet = openSheet({
     title: `Send to ${a.name}?`,
     html: `
@@ -927,6 +359,7 @@ function confirmSend(rec, a, whatsappOn) {
     }
     sheet.close();
     refreshAfterAction();
+    if (onSent) onSent();
     const n = res.asked;
     const wa = res.callout || {};
     if (wa.state === "panthaky_first") {

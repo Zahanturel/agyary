@@ -77,11 +77,20 @@ the test ones afterwards.
 
 ### B. Everyone at once
 
-3. **As the Doongerwadi** (Act for this place): **Record a death** (2 mobeds wanted, the
-   Geh-saarnu tomorrow), then choose **Goti Adarian** (Suggested or Search all). [ ] The sheet
-   before Send says its mobeds are asked at once, in the app only while WhatsApp sending is off,
-   and that the family's name and number are shared only once enough mobeds are going. Tick, Send.
-   [ ] The record reads **Waiting at Goti Adarian** (sent when).
+3. **As the Doongerwadi** (Act for this place): **Record a death** in the four steps (D12).
+   [ ] **1 The family:** the book's first people are listed before you type; choose one, or
+   Import from contacts, or type a name and number. [ ] **2 The departed:** title; the name and the
+   father's or husband's name may be left empty; the date of death is already today; "Give the Roj
+   and Mah instead" works for a death before sunrise. [ ] **3 The prayers:** Four days is already
+   chosen; Geh-saarnu and Uthamna start empty; 2 mobeds wanted, the Geh-saarnu tomorrow.
+   [ ] **4 The fire temple:** the list is already full with nothing typed (only fire temples with
+   someone in Mobed Diary; the family's usual one first, then the nearest, then by town); the search
+   box above filters it, and a fire temple nobody uses yet reads "Not in Mobed Diary yet" and cannot
+   be tapped. Tap **Goti Adarian**. [ ] The sheet before Send says its mobeds are asked at once, in
+   the app only while WhatsApp sending is off, and that the family's name and number are shared only
+   once enough mobeds are going. Tick, Send. [ ] The record reads **Waiting at Goti Adarian** (sent
+   when). [ ] A death recorded with **Save without sending** shows on the record with **Send to a
+   fire temple**, which opens the same list.
 4. **As the panthaky** (Requests tab): [ ] red count, phone notification. Open it: [ ] the board,
    **Who will pray: 0 of 2**, with no family name or number. [ ] The Mobeds list with each one's
    state (asked in the app, not asked yet). [ ] **Ask everyone** is greyed, saying everyone in the

@@ -39,6 +39,13 @@ What it contains:
 - **The waiting list (standbys in the code) and backing out**: I can't go any more (app card, WhatsApp button, or the board's
   Can't go), the waiting list asked again in order (30 minutes each), confirmed again; a phone call can
   bring back someone who said they can't go.
+- **Recording a death is four short steps (D12, 24 Nov 2026, built, not yet live):** the family
+  (from the book, contacts or typed), the departed (names may be left empty; the date is today),
+  the prayers (four days preselected), then the fire temple from a list that is full the moment it
+  opens (only fire temples with someone in Mobed Diary; the family's usual first, nearest first,
+  then by town; a search above it). The old long form, the "family's fire temple" field and the
+  separate "Ask a fire temple" screen are gone (`screens/manager_record_flow.js`; no migration:
+  an unknown name is kept as empty text and reads "Behdin (name not known)").
 - The **Doongerwadi's side** in plain words, Send to another fire temple, "No answer yet" after an hour
   (only for requests sent in the last 24 hours), "Nobody at <agyari> can take it".
 - WhatsApp: templates **4 v2 and 5-8** are written into the code behind `FUNERAL_WHATSAPP_MODE`
