@@ -292,11 +292,17 @@ async def test_the_agyari_rows_say_the_way_and_nothing_else(client, db, seeded, 
         found = (await client.get("/api/mobed/manager/agyaries/search?q=Agyari", headers=mgr)).json()
         assert near["whatsapp_on"] == found["whatsapp_on"]
         by_name = {a["name"]: a for a in near["agyaries"]}
-        assert {a["name"]: a["way"] for a in found["agyaries"]} == {n: a["way"] for n, a in by_name.items()
-                                                                    if n in {a["name"] for a in found["agyaries"]}}
+        found_by = {a["name"]: a for a in found["agyaries"]}
+        # The ready list holds only fire temples someone uses in the app (D12, 24 Nov 2026); a search also
+        # finds those nobody uses yet, and says so (no way, not sendable).
+        assert "Empty Agyari (test)" not in by_name
+        assert found_by["Empty Agyari (test)"]["may_send"] is False
+        for n, a in by_name.items():
+            if n in found_by:
+                assert found_by[n]["way"] == a["way"]
         for a in near["agyaries"] + found["agyaries"]:
             assert set(a) == ROW_KEYS
-        return {n: a["way"] for n, a in by_name.items()}, near
+        return {**{n: a["way"] for n, a in by_name.items()}, **{n: a["way"] for n, a in found_by.items()}}, near
 
     ways, near = await rows()
     assert ways == {"Goti Adarian": "everyone", "Mobeds Only Agyari (test)": "everyone", "Empty Agyari (test)": None}
