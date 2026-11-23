@@ -342,6 +342,35 @@ trying to make this a good Parsi app." Binding from now on:
   sign-up "e.g. Er. ...", against the title choice plus name used for behdins), to settle with the
   inventory and R4.
 
+### D11, the owner's word review (23 Nov 2026)
+
+The lead reviewed every text in the app (2,135) and brought 38 for the owner; the owner's answers
+(page "Words to fix") are binding:
+- **Messages:** "Sahebji {first name}" opens the panthaky's WhatsApp to a mobed and the manager's
+  ("Sahebji {first name}, this is {manager} of {Doongerwadi}, about the prayers for {departed}.");
+  reminders read "Sahebji {family name}, a reminder from {mobed} of {fire temple}: ..." and every
+  closing line reads **"May the ruvan of the late {departed} attain Garothman Behesht."** (reminders,
+  the reminder template v2, the memorial share, the family message); a mobed whose yes is no longer
+  needed gets "Sahebji {first name}, this prayer request has been closed, so you are not needed for
+  now, but we will keep you updated. Thank you."; templates 5, 6 and 8 say "For anything else, please
+  contact {contact}" (the panthaky, else the first mobed going).
+- **D6 changed:** the one reply to a family's STOP ends **"Ushta te."** instead of "May you and your
+  family be in peace."
+- **Words:** Y.Z. 1396 (not Y1396); Lagan (not Wedding); Vendidad; Salgreh; Rapithwan and Uzirin;
+  Dasmu and Chhamsi; "Passed away" (not Died); "Days of prayers" (not Obsequies); "Confirmed" (not
+  All set); "Waiting list" (not Standby); "Outside the fire temple" (not Offsite); ₹ everywhere;
+  "Add a behdin" on the manager's screens; plain words for every error a user can see.
+- **The general word is "fire temple"** (it covers agiaries and Atash Behrams); the place's own name
+  wherever the app knows it; "agyari" in on-screen text goes.
+- **Examples:** "e.g. Rustom", "e.g. Er. Jehangir Mistry", "e.g. Zubin Mistry"; the sign-up example
+  "e.g. Er. Pervez Kias" stays (owner: keep). The greeting skips only Parsi titles (no Shri / Smt, and
+  "Dastur" is a surname; "Dasturji" is the title).
+- **Kept:** the role name "Caretaker" (panthaky, mobed and caretaker are the three roles; nothing in
+  the app grants caretaker yet).
+- **Owner, to do separately:** the Play description, the privacy policy and the app's other legal
+  words must match the business model (agyaries pay, funeral places and families are free, payments
+  later) "to avoid lawsuits", with the lawyer.
+
 ## Not decided yet
 
 Separate WhatsApp numbers for sign-in and reminders; price and payer; Gujarati reminders; the
