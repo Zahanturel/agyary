@@ -129,6 +129,19 @@ export async function renderAdminMobeds() {
       if (!t.has_panthaky && (t.requests === "waiting" || t.requests === "off")) joins.push({ m, t });
     }
   }
+  // Waiting and off the list are told apart, as on the panthaky's Mobeds page (walk-through, 23 Nov 2026).
+  const joinsWaiting = joins.filter(({ t }) => t.requests !== "off");
+  const joinsOff = joins.filter(({ t }) => t.requests === "off");
+  const joinRow = ({ m, t }) => `<div class="list-row" style="flex-wrap:wrap;gap:8px">
+        <div class="lr-main"><b>${esc(m.name)}</b>
+          <span style="display:block">${t.requests === "off" ? `Off the list at ${esc(t.name)}`
+            : `Joined ${esc(t.name)}`}</span></div>
+        <div class="row tight">${t.requests === "off"
+          ? `<button class="secondary small" data-ract="on" data-id="${m.id}" data-aid="${t.agyary_id}">Put back</button>`
+          : `<button class="small" data-ract="confirm" data-id="${m.id}" data-aid="${t.agyary_id}">Confirm</button>
+             <button class="ghost small" data-ract="off" data-id="${m.id}" data-aid="${t.agyary_id}">Not one of ours</button>`}
+        </div>
+      </div>`;
 
   mainEl.innerHTML = `
     <div class="card">
@@ -143,20 +156,18 @@ export async function renderAdminMobeds() {
       ${waiting.length ? waiting.map(row).join("") : `<p class="meta">Nobody is waiting.</p>`}
     </div>
 
-    ${joins.length ? `<div class="card">
-      <h2>Joined, waiting for you (${joins.length})</h2>
+    ${joinsWaiting.length ? `<div class="card">
+      <h2>Joined, waiting for you (${joinsWaiting.length})</h2>
       <p class="meta" style="margin:4px 0 0">These fire temples have no panthaky in the app, so you confirm who
         gets their prayer requests.</p>
-      ${joins.map(({ m, t }) => `<div class="list-row" style="flex-wrap:wrap;gap:8px">
-        <div class="lr-main"><b>${esc(m.name)}</b>
-          <span style="display:block">${t.requests === "off" ? `Off the list at ${esc(t.name)}`
-            : `Joined ${esc(t.name)}`}</span></div>
-        <div class="row tight">${t.requests === "off"
-          ? `<button class="secondary small" data-ract="on" data-id="${m.id}" data-aid="${t.agyary_id}">Put back</button>`
-          : `<button class="small" data-ract="confirm" data-id="${m.id}" data-aid="${t.agyary_id}">Confirm</button>
-             <button class="ghost small" data-ract="off" data-id="${m.id}" data-aid="${t.agyary_id}">Not one of ours</button>`}
-        </div>
-      </div>`).join("")}
+      ${joinsWaiting.map(joinRow).join("")}
+    </div>` : ""}
+
+    ${joinsOff.length ? `<div class="card">
+      <h2>Off the list (${joinsOff.length})</h2>
+      <p class="meta" style="margin:4px 0 0">They get no prayer requests from these fire temples, and stay in
+        Mobed Diary.</p>
+      ${joinsOff.map(joinRow).join("")}
     </div>` : ""}
 
     ${claims.length ? `<div class="card">
