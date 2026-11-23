@@ -140,8 +140,8 @@ DEFAULT_SERVICE_SPECS = [
     ("Satum", 1, False),
     ("Jore nu", 1, False),
     ("Navjote", 1, True),
-    ("Wedding", 1, True),
-    ("Vandidad", 1, False),
+    ("Lagan", 1, True),
+    ("Vendidad", 1, False),
     ("Yazeshni", 2, False),
 ]
 

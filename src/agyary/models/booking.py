@@ -33,7 +33,7 @@ class Booking(Base):
     """All non-machi services. Time-based, not slot-based.
 
     ``ceremony_datetime`` mirrors ``date_time`` for normal services and holds
-    the actual physical start for overnight ones (e.g. Vandidad).
+    the actual physical start for overnight ones (e.g. Vendidad).
     """
 
     __tablename__ = "bookings"

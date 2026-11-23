@@ -888,3 +888,35 @@ async def test_the_join_confirmation_migration_confirms_every_membership_from_be
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_lagan_and_vendidad_migration_renames_only_the_standard_names_and_comes_off_cleanly():
+    """c7d8e9f0a1b6 (D11, the owner's word review of 23 Nov 2026): a fire temple's service
+    named exactly "Wedding" or "Vandidad" (the old standard list) becomes "Lagan" or
+    "Vendidad"; a service a mobed named differently is untouched, and so is one at a fire
+    temple that already has the new name; the downgrade renames them back, exact matches only."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "b6c7d8e9f0a5"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Agyari (test)', 'Mumbai'),"
+                               " ('Another agyari (test)', 'Surat')")
+        before = [(1, "Jashan"), (1, "Wedding"), (1, "Vandidad"), (1, "Wedding ceremony"), (1, "vandidad night"),
+                  (2, "Wedding"), (2, "lagan"), (2, "VANDIDAD")]
+        for agyary_id, name in before:
+            await _scratch_execute("INSERT INTO services (agyary_id, name) VALUES (:a, :n)",
+                                   {"a": agyary_id, "n": name})
+        ids = [i for (i,) in await _scratch_execute("SELECT id FROM services ORDER BY id")]
+        _ok(_alembic("upgrade", "head"))
+
+        renamed = [(1, "Jashan"), (1, "Lagan"), (1, "Vendidad"), (1, "Wedding ceremony"), (1, "vandidad night"),
+                   # The second already has a "lagan" of its own, so its "Wedding" stays; "VANDIDAD" is not exact.
+                   (2, "Wedding"), (2, "lagan"), (2, "VANDIDAD")]
+        assert await _scratch_execute("SELECT id, agyary_id, name FROM services ORDER BY id") == [
+            (i, a, n) for i, (a, n) in zip(ids, renamed)]
+
+        _ok(_alembic("downgrade", "b6c7d8e9f0a5"))
+        assert await _scratch_execute("SELECT id, agyary_id, name FROM services ORDER BY id") == [
+            (i, a, n) for i, (a, n) in zip(ids, before)]
+        _ok(_alembic("upgrade", "head"))
+    finally:
+        await _recreate(drop_only=True)
