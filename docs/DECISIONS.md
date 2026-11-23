@@ -393,3 +393,16 @@ The lead reviewed every text in the app (2,135) and brought 38 for the owner; th
 Separate WhatsApp numbers for sign-in and reminders; price and payer; Gujarati reminders; the
 privacy policy and the lawyer's answers; whether the repository goes public before the
 security fixes are done (it should not).
+
+## Amendment, 24 Nov 2026: who can lift a STOP (D2, D4, D6)
+
+Owner's decision. The behdin can still stop WhatsApp by replying STOP. **The panthaky can turn it back on**
+("the behdin can stop, but once the panthaky starts it, it starts again"): from the Mobeds page (Turn WhatsApp
+back on, for someone on the list who replied STOP) and when they confirm "they asked me to" on a behdin of
+their own book; both clear the number's own STOP (`reminder_opt_outs`) as well as the record's. Every other
+mobed's record of the number stays stopped until that mobed asks. A plain mobed's "they asked me to" still lifts
+only their own record. The person can reply STOP again at any time. Turning reminders on for someone who replied
+STOP is one sheet (the consent words and the warning, one confirm), not two prompts.
+
+Not now: a number that sends "hi", "hello" or "start" being answered with what it can do. That is a flow for the
+behdin app (R4: choose an agyari, book a machi, see events); it is designed with it.
