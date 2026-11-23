@@ -118,7 +118,7 @@ export function renderAddBehdin(container, { onCreated, onCancel, prefill } = {}
         </button>` : ""}
       <div id="abNameRow">
         <label for="abName">Name</label>
-        <input type="text" id="abName" placeholder="e.g. Behdin Zubin Mistry"
+        <input type="text" id="abName" placeholder="e.g. Zubin Mistry"
                autocomplete="off" value="${esc(pf.name || "")}">
       </div>
       <label for="abPhone">WhatsApp number</label>

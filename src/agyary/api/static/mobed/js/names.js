@@ -35,12 +35,12 @@ function titleSelect(sel) {
  *  removing one of them is what the pair-level remove is for. */
 function memberRow(n) {
   return `<div class="name-row">${titleSelect(n && n.title)}
-    <input class="nm" placeholder="e.g. Zahan" value="${esc(n ? n.name : "")}"></div>`;
+    <input class="nm" placeholder="e.g. Rustom" value="${esc(n ? n.name : "")}"></div>`;
 }
 
 function singleRow(n) {
   return `<div class="name-row">${titleSelect(n && n.title)}
-    <input class="nm" placeholder="e.g. Zahan" value="${esc(n ? n.name : "")}">
+    <input class="nm" placeholder="e.g. Rustom" value="${esc(n ? n.name : "")}">
     <button type="button" class="rm" title="Remove">&times;</button></div>`;
 }
 

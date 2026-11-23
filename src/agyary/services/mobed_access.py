@@ -132,7 +132,7 @@ async def set_access(
     if access == ACCESS_ON:
         await reminders.notify(
             db, user.id, KIND_APPROVED,
-            "You're in" if before == ACCESS_PENDING else "Your access is back on",
+            "You can now use Mobed Diary" if before == ACCESS_PENDING else "Your access is back on",
             "Your Mobed Diary account has been approved. Welcome!" if before == ACCESS_PENDING
             else "You can use Mobed Diary again. Everything you saved is as you left it.",
             link="#/manager" if user.account_kind == ACCOUNT_FUNERAL_MANAGER else "#/calendar",

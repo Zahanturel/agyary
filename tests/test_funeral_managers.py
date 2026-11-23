@@ -339,7 +339,7 @@ async def test_the_admin_sees_managers_with_their_place_and_counts_what_is_in_th
     await client.post(f"/api/mobed/funeral-places/{place.id}/join", headers=approved)
     await client.post(f"/api/mobed/admin/mobeds/{user['id']}/access", json={"access": "on"}, headers=ah)
     (note,) = (await db.execute(select(AppNotification).where(AppNotification.user_id == user["id"]))).scalars()
-    assert note.title == "You're in" and note.link == "#/manager"
+    assert note.title == "You can now use Mobed Diary" and note.link == "#/manager"
 
     data = (await client.get("/api/mobed/admin/mobeds", headers=ah)).json()
     assert data["waiting"] == 1 and data["managers_waiting"] == 1

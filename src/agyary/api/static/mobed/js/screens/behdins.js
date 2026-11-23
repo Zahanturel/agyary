@@ -212,7 +212,7 @@ function buildBehdinNew({ returnTo, prefillName, backTarget, memorialOk, draftKe
           Import from contacts
         </button>` : ""}
         <label for="bnName">Name</label>
-        <input type="text" id="bnName" placeholder="e.g. Behdin Zubin Mistry"
+        <input type="text" id="bnName" placeholder="e.g. Zubin Mistry"
                autocomplete="off" value="${esc(prefillName)}">
         <label for="bnPhone">WhatsApp number</label>${phoneField("bnPhone")}
       </div>

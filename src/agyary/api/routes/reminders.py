@@ -80,7 +80,7 @@ async def list_notifications(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_account)
 ) -> list[dict]:
     """This account's notifications that have not yet lapsed, newest first
-    (a Doongerwadi manager's too: "You're in" is one).
+    (a Doongerwadi manager's too: "You can now use Mobed Diary" is one).
     ``seen`` is whether the popup has already shown it."""
     now = datetime.now(timezone.utc)
     rows = (

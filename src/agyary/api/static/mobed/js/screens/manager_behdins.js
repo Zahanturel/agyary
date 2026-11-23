@@ -86,7 +86,7 @@ export function openBehdinSheet({ behdin = null, prefill = null, placeId = null,
       ${canPickContacts() ? `<button type="button" class="secondary" id="fbImport" style="margin-bottom:12px">
         Import from contacts</button>` : ""}
       <label for="fbName">Name</label>
-      <input type="text" id="fbName" maxlength="100" autocomplete="off" placeholder="e.g. Behdin Zubin Mistry"
+      <input type="text" id="fbName" maxlength="100" autocomplete="off" placeholder="e.g. Zubin Mistry"
         value="${esc(start.name || "")}">
       <label for="fbPhone">WhatsApp number</label>
       ${phoneField("fbPhone", start.phone || "")}

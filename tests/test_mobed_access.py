@@ -133,7 +133,7 @@ async def test_the_admin_approves_and_the_mobed_is_in_and_told(client, db, seede
     assert (await client.get("/api/mobed/my-day", headers=headers)).status_code == 200
     assert (await client.get("/api/mobed/auth/me", headers=headers)).json()["access"] == "on"
     titles = [n["title"] for n in (await client.get("/api/mobed/notifications", headers=headers)).json()]
-    assert titles == ["You're in"]
+    assert titles == ["You can now use Mobed Diary"]
     assert (await _user(db)).access_changed_at is not None
 
 

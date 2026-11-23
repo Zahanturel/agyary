@@ -348,13 +348,21 @@ def test_a_mobed_is_written_to_as_sahebji_and_their_first_name_never_namaste():
     """Owner, 22 Nov 2026: a Parsi app greets a mobed "Sahebji <first name>". The manager's ready
     message to the mobed or panthaky said "Namaste <full name>". A title typed before the name
     is skipped; a family is always addressed by their full name (not tested here)."""
+    names = ["Er. Hormuz Dadachanji", "Ervad Hormuz Dadachanji", "Dasturji Dr. Hormuz D",
+             "Hormuz Dadachanji", "Er.", "", "  Hormuz  ", "Dastur Rustom", "Shri Rustom"]
     out = _node(STORAGE + f"""
 const {{ firstName }} = await import({json.dumps(_module(JS / "util.js"))});
-console.log(JSON.stringify(["Er. Hormuz Dadachanji", "Ervad Hormuz Dadachanji", "Dasturji Dr. Hormuz D",
-  "Hormuz Dadachanji", "Er.", "", "  Hormuz  "].map(firstName)));
+console.log(JSON.stringify({json.dumps(names)}.map(firstName)));
 """)
-    assert out == ["Hormuz", "Hormuz", "Hormuz", "Hormuz", "Er.", "", "Hormuz"]
+    # Only Parsi titles are skipped (owner's word review, 23 Nov 2026): "Dastur" is a
+    # surname ("Dasturji" is the title), and there is no Shri or Smt.
+    assert out == ["Hormuz", "Hormuz", "Hormuz", "Hormuz", "Er.", "", "Hormuz", "Dastur", "Shri"]
+    # The server's own helper (the WhatsApp text to a mobed no longer needed) says the same.
+    from agyary.services import funeral_whatsapp
+    assert [funeral_whatsapp.first_name(n) for n in names] == out
     record = (JS / "screens" / "manager_record.js").read_text(encoding="utf-8")
-    assert "Sahebji ${firstName(name)}" in record
+    assert "const first = firstName(name);" in record and "Sahebji ${first}" in record
+    board = (JS / "screens" / "requests.js").read_text(encoding="utf-8")
+    assert "const first = firstName(m && m.name);" in board and "Sahebji ${first}" in board
     for path in JS.rglob("*.js"):
         assert "namaste" not in path.read_text(encoding="utf-8").lower(), path

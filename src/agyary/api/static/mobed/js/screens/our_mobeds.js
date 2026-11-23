@@ -203,7 +203,7 @@ function openAdd(agyary, got) {
       ${canPickContacts() ? `<button type="button" class="secondary" id="omImport" style="margin-bottom:12px">
         Import from contacts</button>` : ""}
       <label for="omName">Name</label>
-      <input type="text" id="omName" maxlength="60" autocomplete="off" placeholder="e.g. Er. Rustom Dastur">
+      <input type="text" id="omName" maxlength="60" autocomplete="off" placeholder="e.g. Er. Jehangir Mistry">
       <label for="omPhone">WhatsApp number</label>
       ${phoneField("omPhone", "")}
       <div class="check-row" id="omTickRow"><input type="checkbox" id="omTick">

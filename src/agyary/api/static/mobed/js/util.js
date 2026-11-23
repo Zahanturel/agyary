@@ -10,8 +10,10 @@ export function esc(s) {
 
 // Words that may come before a name as typed ("Er. Hormuz ...", "Ervad Hormuz ..."): not the
 // first name itself.
-const NAME_PREFIXES = new Set(["er", "ervad", "mobed", "mobedji", "dastur", "dasturji", "dr", "behdin",
-  "osta", "osti", "khud", "mr", "mrs", "ms", "shri", "smt"]);
+// Parsi titles only (owner's word review, 23 Nov 2026): no Shri or Smt, and "Dastur" is a
+// surname ("Dasturji" is the title). The same list is services/funeral_whatsapp.py NAME_PREFIXES.
+const NAME_PREFIXES = new Set(["er", "ervad", "mobed", "mobedji", "dasturji", "dr", "behdin",
+  "osta", "osti", "khud", "mr", "mrs", "ms"]);
 
 /** The first name, for "Sahebji <first name>" when one mobed writes to another (owner, 22 Nov
  *  2026): a title typed before it ("Er.", "Ervad", "Dasturji", ...) is skipped. Falls back to the
