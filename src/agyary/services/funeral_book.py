@@ -45,7 +45,7 @@ class BookError(ValueError):
 def _name(value: str | None) -> str:
     value = " ".join(str(value or "").split())
     if not value:
-        raise BookError("Please enter the family's name.", field="name")
+        raise BookError("Please enter the behdin's name.", field="name")
     try:
         return template_text.check(value, "name", max_len=NAME_MAX)
     except ValueError as exc:
@@ -108,7 +108,7 @@ async def add(
     count = (await db.execute(select(func.count()).select_from(FuneralBehdin).where(
         FuneralBehdin.funeral_place_id == place.id, FuneralBehdin.is_active.is_(True)))).scalar_one()
     if count >= MAX_PER_PLACE:
-        raise BookError(f"The book has {MAX_PER_PLACE} families, which is as many as it can hold.", status=409)
+        raise BookError(f"The book has {MAX_PER_PLACE} behdins, which is as many as it can hold.", status=409)
     if row is None:
         row = FuneralBehdin(funeral_place_id=place.id, phone=phone, created_by_user_id=user.id)
         db.add(row)
@@ -127,7 +127,7 @@ async def update(
         other = await _same_number(db, row.funeral_place_id, phone)
         if other is not None:
             raise BookError(f"That number is in the book already, as {other.name}." if other.is_active
-                            else "That number was taken out of the book earlier. Add it as a new family to bring "
+                            else "That number was taken out of the book earlier. Add it as a new behdin to bring "
                                  "it back.", field="phone", status=409)
         row.phone = phone
     row.name, row.usual_agyary_id = name, usual

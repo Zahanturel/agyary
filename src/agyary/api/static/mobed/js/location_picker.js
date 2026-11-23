@@ -101,7 +101,7 @@ let current = null;
  * { latitude, longitude }, or null when there is none.
  */
 export function mountLocationPicker(root, {
-  initial = null, suggest = () => "", tall = false, noun = "the fire temple", hereLabel = "I'm at the agyari now",
+  initial = null, suggest = () => "", tall = false, noun = "the fire temple", hereLabel = "I'm at the fire temple now",
 } = {}) {
   if (current) current.destroy();
   root.innerHTML = `

@@ -27,7 +27,7 @@ export function shareCardHtml() {
       <h2>Share with the family</h2>
       <p class="meta">All the dates as a PDF and a message. A short note you add here goes on both.</p>
       <label for="shNote">Short note <span class="meta">(optional)</span></label>
-      <textarea id="shNote" rows="2" maxlength="300" placeholder="e.g. Please be at the agyari by 7 am"></textarea>
+      <textarea id="shNote" rows="2" maxlength="300" placeholder="e.g. Please be at the fire temple by 7 am"></textarea>
       <div style="margin-top:12px">
         <button class="small" id="shShare" type="button" disabled>Share PDF and note on WhatsApp</button>
         <p class="meta" id="shShareNote" style="margin:6px 0 0">Preparing the PDF...</p>

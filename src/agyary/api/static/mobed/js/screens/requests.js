@@ -101,8 +101,8 @@ function fact(label, value) {
 function factsHtml(q) {
   return `
     ${fact("Place", esc(placeText(q.funeral_place)))}
-    ${fact("Died", `${esc(gregLabel(q.death.date))}<br><span class="meta">${esc(q.death.label)}</span>`)}
-    ${fact("Obsequies", esc(q.obsequies_label))}
+    ${fact("Passed away", `${esc(gregLabel(q.death.date))}<br><span class="meta">${esc(q.death.label)}</span>`)}
+    ${fact("Days of prayers", esc(q.obsequies_label))}
     ${fact("Geh-saarnu", esc(gehSaarnuText(q.geh_saarnu)))}
     ${fact("Uthamna", esc(uthamnaText(q.uthamna)))}
     ${q.mobeds_wanted ? fact("Mobeds wanted", String(q.mobeds_wanted)) : ""}

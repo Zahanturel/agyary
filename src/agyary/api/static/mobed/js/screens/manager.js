@@ -239,7 +239,7 @@ async function paintRecords(box, alive, before = null) {
   box.insertAdjacentHTML("beforeend", page.records.map(r => `
     <div class="search-result" data-rec="${r.id}">
       <div><strong>${esc(r.prayed_name)}</strong></div>
-      <div class="addr">Died ${esc(gregLabel(r.death.date))}${r.geh_saarnu
+      <div class="addr">Passed away ${esc(gregLabel(r.death.date))}${r.geh_saarnu
         ? ` · Geh-saarnu ${esc(gregLabel(r.geh_saarnu.date))}, ${esc(r.geh_saarnu.geh_name)}` : ""}</div>
       <div style="margin-top:4px;font-size:var(--text-sm)">${esc(recordState(r))}</div>
     </div>`).join("") + (page.more ? `<div data-older style="margin-top:4px">

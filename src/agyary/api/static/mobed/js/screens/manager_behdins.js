@@ -81,7 +81,7 @@ export function openBehdinSheet({ behdin = null, prefill = null, placeId = null,
   const start = behdin || prefill || {};
   const form = { agyari: behdin ? behdin.usual_agyari : null };
   const sheet = openSheet({
-    title: behdin ? "Change the family" : "Add a family",
+    title: behdin ? "Change the behdin" : "Add a behdin",
     html: `
       ${canPickContacts() ? `<button type="button" class="secondary" id="fbImport" style="margin-bottom:12px">
         Import from contacts</button>` : ""}
@@ -117,7 +117,7 @@ export function openBehdinSheet({ behdin = null, prefill = null, placeId = null,
     const name = body.querySelector("#fbName").value.trim();
     const phone = readPhone("fbPhone");
     const problems = [];
-    if (!name) problems.push({ target: "#fbName", message: "Please enter the family's name." });
+    if (!name) problems.push({ target: "#fbName", message: "Please enter the behdin's name." });
     if (!phone) problems.push({ target: ".phone-field", message: "Please enter a valid WhatsApp number." });
     if (problems.length) return flagProblems(body, problems);
     btn.disabled = true;
@@ -177,11 +177,11 @@ export async function renderManagerBehdins() {
   mainEl.innerHTML = `
     <div class="card">
       <h2>Book of behdins</h2>
-      <p class="meta" style="margin:0 0 10px">The families you deal with, and the fire temple each usually goes to.
-        Only your place sees this book. When you record a death, choose the family from here.</p>
+      <p class="meta" style="margin:0 0 10px">The behdins you deal with, and the fire temple each usually goes to.
+        Only your place sees this book. When you record a death, choose the behdin from here.</p>
       <input type="text" id="mbSearch" placeholder="Search by name or number" autocomplete="off">
       <div id="mbList" style="margin-top:8px"></div>
-      <div class="action-bar"><button type="button" id="mbAdd">Add a family</button></div>
+      <div class="action-bar"><button type="button" id="mbAdd">Add a behdin</button></div>
     </div>`;
   toTop();
   const list = document.getElementById("mbList");
@@ -189,7 +189,7 @@ export async function renderManagerBehdins() {
   const paint = (got, q) => {
     if (!got.behdins.length) {
       list.innerHTML = `<p class="meta" style="margin:0">${q ? `Nobody found for “${esc(q)}”.`
-        : "Nobody yet. Tap Add a family."}</p>`;
+        : "Nobody yet. Tap Add a behdin."}</p>`;
       return;
     }
     list.innerHTML = got.behdins.map((b, i) => `<div class="search-result" data-i="${i}">${familyLineHtml(b)}</div>`).join("")

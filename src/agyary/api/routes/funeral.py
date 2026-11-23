@@ -305,7 +305,7 @@ async def update_record(
 # ---------------------------------------------------------------------------
 # The place's book of behdins (D10, 19 Nov 2026): the families it deals with
 # ---------------------------------------------------------------------------
-NO_FAMILY = "That family could not be found in the book."
+NO_FAMILY = "That behdin could not be found in the book."
 
 
 class BehdinIn(BaseModel):

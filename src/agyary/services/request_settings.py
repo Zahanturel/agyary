@@ -34,7 +34,7 @@ from agyary.services import panthaky
 
 logger = logging.getLogger(__name__)
 
-NO_MODE = "Please choose how requests reach your agyari: Everyone at once, or Come to me first."
+NO_MODE = "Please choose how requests reach your fire temple: Everyone at once, or Come to me first."
 NO_MINUTES = "The safety net can be Never, 15 minutes, 30 minutes or 1 hour."
 
 

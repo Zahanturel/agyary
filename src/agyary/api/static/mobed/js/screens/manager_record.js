@@ -191,7 +191,7 @@ function formHtml(d, { editing }) {
       </div>
       <p class="meta" id="frDeathDay" role="status" style="margin:6px 0 0"></p>
 
-      <label>Obsequies</label>
+      <label>Days of prayers</label>
       <div class="choice-group" id="frObsequies">
         ${radio("frOb", "frObFour", "four_days", d.obsequies === "four_days", "Four days")}
         ${radio("frOb", "frObOne", "one_day", d.obsequies === "one_day", "One day")}
@@ -335,7 +335,7 @@ function paintFamily(box, d, root, repaintPreferred) {
       autocomplete="off">
     <div id="frFamilyResults" style="margin-top:8px"></div>
     <div class="row tight" style="margin-top:8px"><button type="button" class="secondary small" id="frFamilyAdd">Add a new
-      family</button></div>`;
+      behdin</button></div>`;
   const input = box.querySelector("#frFamilySearch");
   const results = box.querySelector("#frFamilyResults");
   const note = root.querySelector("#frFamilyNote");
@@ -372,7 +372,7 @@ function paintFamily(box, d, root, repaintPreferred) {
       }
       if (mine !== token || !box.isConnected) return;
       if (!found.length) {
-        results.innerHTML = `<p class="meta">Nobody in your book for “${esc(q)}”. Add them as a new family.</p>`;
+        results.innerHTML = `<p class="meta">Nobody in your book for “${esc(q)}”. Add them as a new behdin.</p>`;
         return;
       }
       results.innerHTML = found.map((b, i) => `<div class="search-result" data-i="${i}">${familyLineHtml(b)}</div>`).join("");
@@ -613,7 +613,7 @@ function standingHtml(rec, q) {
       ${names.length ? `<p style="margin:6px 0 0">Still going: <b>${esc(names.join(", "))}</b></p>` : ""}
       ${panthakysHtml(rec, q)}`;
   } else if (q.no_answer_told_at) {
-    lines.push(`Nobody at ${esc(where)} has answered in an hour. You can send it to another agyari.`);
+    lines.push(`Nobody at ${esc(where)} has answered in an hour. You can send it to another fire temple.`);
   } else if (q.stage === "waiting" || q.stage === "panthaky_first") {
     lines.push("You see here when they answer.");
   }
@@ -646,9 +646,9 @@ function drawRecord(rec, alive) {
       ${rec.funeral_place ? `<p class="meta" style="margin:0">${esc(rec.funeral_place.name)}</p>` : ""}
       ${rec.recorded_by_admin ? `<p class="meta" style="margin:4px 0 0">Recorded by the admin</p>` : ""}
       <div style="margin-top:10px">
-        ${fact("Died", `${esc(gregLabel(death.date))}<br><span class="meta">${esc(death.label)}${death.given_by === "roj_mah"
+        ${fact("Passed away", `${esc(gregLabel(death.date))}<br><span class="meta">${esc(death.label)}${death.given_by === "roj_mah"
           ? " (given by Roj and Mah)" : ""}</span>`)}
-        ${fact("Obsequies", esc(rec.obsequies_label))}
+        ${fact("Days of prayers", esc(rec.obsequies_label))}
         ${fact("Geh-saarnu", esc(gehSaarnuText(rec.geh_saarnu)))}
         ${fact("Uthamna", esc(uthamnaText(rec.uthamna)))}
         ${rec.mobeds_wanted ? fact("Mobeds wanted", String(rec.mobeds_wanted)) : ""}
@@ -664,7 +664,7 @@ function drawRecord(rec, alive) {
       ${rec.requests.length > 1 ? `<div style="margin-top:10px">${rec.requests.slice(1).map(q =>
         `<p class="meta" style="margin:2px 0">${esc(requestState(q))}</p>`).join("")}</div>` : ""}
       <div class="action-bar">
-        ${waiting && placeOn ? `<button type="button" class="secondary" id="mrElsewhere">Send to another agyari</button>` : ""}
+        ${waiting && placeOn ? `<button type="button" class="secondary" id="mrElsewhere">Send to another fire temple</button>` : ""}
         ${waiting ? `<button type="button" class="ghost" id="mrWithdraw">Withdraw</button>` : ""}
         ${rec.may_send ? `<button type="button" id="mrSend">${rec.requests.length ? "Send to another fire temple"
           : "Send to a fire temple"}</button>` : ""}
@@ -894,7 +894,7 @@ function confirmSend(rec, a, whatsappOn) {
     html: `
       <p class="meta" style="margin-top:0">${esc(rec.prayed_name)}. ${esc(sendWords(a, whatsappOn))}</p>
       <div class="check-row" id="msTickRow"><input type="checkbox" id="msTick">
-        <label for="msTick">The family agreed to share their name and number with this agyari, and to get
+        <label for="msTick">The family agreed to share their name and number with this fire temple, and to get
           WhatsApp messages about the prayers from Mobed Diary</label></div>
       <p class="meta" data-msg role="alert" style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">

@@ -56,7 +56,7 @@ export async function renderAgyariLocation() {
     const btn = ev.currentTarget;
     const pin = picker.get();
     if (!pin) {
-      return showError("Please put the pin on the fire temple first: tap the map, search, or use “I'm at the agyari now”.");
+      return showError("Please put the pin on the fire temple first: tap the map, search, or use “I'm at the fire temple now”.");
     }
     if (!picker.moved()) {
       // A town position saved as it is would claim to be the fire temple.

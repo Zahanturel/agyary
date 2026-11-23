@@ -174,7 +174,7 @@ export async function renderMemorialNew({ id }) {
   offerDraft({
     title: "Unfinished memorial",
     summary: [behdin.name, stored.name ? `For ${stored.name}` : "The person they lost is not named yet",
-      stored.longAgo ? "Passed away more than a year ago" : stored.death ? `Died ${stored.death}` : "No date given yet"],
+      stored.longAgo ? "Passed away more than a year ago" : stored.death ? `Passed away ${stored.death}` : "No date given yet"],
     onStartNew: () => { clearDraft(draftKey); draft = blankMemorialDraft(); showForm(); },
     onContinue: () => { draft = { ...blankMemorialDraft(), ...stored }; showForm(); },
   });
