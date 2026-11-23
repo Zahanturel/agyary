@@ -305,10 +305,13 @@ async def test_the_same_alert_is_not_repeated_within_hours(client, db, seeded):
 
 async def test_alerts_go_only_to_admins(client, db, seeded):
     aid, cid, headers, later, opening, now = await _scenario(client, db, seeded)
+    # Setting up may leave notices of its own (since 22 Nov 2026 a mobed joining tells the
+    # panthaky): what matters is that the alert adds none for anyone who is not an admin.
+    before = set((await db.execute(select(AppNotification.id))).scalars())
     await guardrails.alert_admins(db, _settings(admin_phones="+919000000001"), "Not for you", "x", now=now)
     await db.commit()
     assert await _owner_notes(client, headers) == []
-    assert (await db.execute(select(AppNotification))).scalars().all() == []
+    assert set((await db.execute(select(AppNotification.id))).scalars()) == before
 
 
 def test_admin_phones_are_read_from_a_comma_separated_list():
