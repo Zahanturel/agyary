@@ -8,7 +8,7 @@
 
 import { route, setGuard, setNotFound, start, navigate, onNavigated } from "/mobed-app/js/router.js";
 import { watchForUpdates } from "/mobed-app/js/update.js";
-import { chrome, menuBtn, onTab, flashError, setDefaultFabAction } from "/mobed-app/js/ui.js";
+import { chrome, menuBtn, onTab, flashError, setDefaultFabAction, showFab } from "/mobed-app/js/ui.js";
 import { calendarHash } from "/mobed-app/js/calendar.js";
 import { setupSwipeNav } from "/mobed-app/js/swipe.js";
 import { state, saveSession, restoreSession, clearSession } from "./state.js";
@@ -147,6 +147,11 @@ if ("serviceWorker" in navigator) {
 // Pick up a deployed update without waiting for someone to reload by hand.
 // A half-made ask is not worth losing to an update; everything else can wait for the next screen.
 const applyUpdate = watchForUpdates({ busy: () => !!state.ask && location.hash === "#/ask" });
-onNavigated((...args) => { syncBell(); return applyUpdate(...args); });
+onNavigated((...args) => {
+  syncBell();
+  // The add button belongs to the calendar alone.
+  if (!location.hash.startsWith("#/calendar")) showFab(false);
+  return applyUpdate(...args);
+});
 document.title = APP_NAME;
 boot();
