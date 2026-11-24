@@ -479,3 +479,11 @@ Owner's decisions:
   mobed Going, also one on the waiting list or just asked again; it fills the place, cancels that mobed's asking
   again, and is one yes with their own WhatsApp reply. The board is read every 5 seconds while open, and at once
   on returning to the app.
+- **Standbys, joining and erasing (24 Nov 2026, owner):** (1) a standby asked "A place has opened" has 15 minutes to
+  answer (was 30) before the next is asked. (2) A mobed taken off the list, or answered "Not one of ours", is told in
+  the app and by phone notification, in plain words, no reason, no WhatsApp; they remain at the fire temple (this
+  changes the 22 Nov line that they are not told). (3) A sign-up still waiting for the admin shows to the panthaky by
+  name with no notice; turning an account off and on again does not re-confirm a fire temple joined meanwhile; a
+  panthaky is changed or removed by the admin, not by a panthaky. (4) Erasing a number or deleting an account reopens
+  a place they held (before the prayers begin) as "Can't go" does, telling the panthaky without naming them; this
+  replaces "erasing a number does not free a place they held".

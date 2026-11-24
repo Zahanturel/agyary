@@ -267,7 +267,7 @@ their number goes to the family; the message should say both before they answer.
 2. "Still short": 4 hours before the Geh-saarnu.
 3. Backing out: standbys in the order they said Yes, asked again by themselves; the panthaky is
    told at each step, and asked to find someone when none is left (section above). The
-   standby's 30 minutes to answer is the lead's default, not yet the owner's.
+   standby's wait to answer is 15 minutes (the owner, 24 Nov 2026).
 4. The Mobeds page is for panthakys only for now.
 
 ## The lead's choices while building (the owner can change any of them)
@@ -380,23 +380,22 @@ grants nobody's behdins. For prayer requests it counts only once confirmed and n
   panthakys or the admin; anyone else gets the list's 404) and `POST /api/mobed/admin/mobeds/{user_id}/requests`
   (`{agyary_id, action}`). Tests: `tests/test_join_confirmation.py`.
 
-## Open for the owner (next session)
+## Decided by the owner, 24 Nov 2026
 
-- **No panthaky in the app:** templates 5, 6 and 8 name "the panthaky"; at an agyari with none
-  the blank reads "not fixed yet", which sounds odd. Choose before submitting the templates:
-  reword those sentences (e.g. "For anything else, please contact [contact]", filled with the
-  panthaky or else the agyari's name), or leave it.
-- **The standby's 30 minutes** to answer before the next is asked (the lead's default).
-- Every choice in the section above.
-- **Joining needs the panthaky's confirmation (built 22-23 Nov, choices to confirm):** a sign-up
-  still waiting for the admin shows in the panthaky's "Joined, waiting for you" by name, with no
-  notice; a mobed taken off the list is not told (only confirming or putting back tells them);
-  turning an account off and on again does not re-confirm a fire temple joined meanwhile; a
-  panthaky can never be taken off; erasing a number does not free a place they held.
-- **New words since the review page was made** (security fixes and joining): add them to the
-  review page before going through it, so every text is checked (D11).
-- **Not walked in a browser yet:** the security fixes and the joining screens (Mobeds page
-  "Joined, waiting for you", Admin -> Mobeds): one walk-through before R3.1 is pushed.
+- **No panthaky in the app:** settled. The templates fall back to the fire temple's own name (built 24 Nov).
+- **The standby's wait is 15 minutes** (`standbys.REASK_MINUTES`), not 30, before the next on the waiting list is asked.
+- **Joining:** a mobed taken off the list, or not added ("Not one of ours"), IS told, in the app and on their
+  phone, in plain words with no reason and no WhatsApp ("The panthaky of <fire temple> has taken you off its list
+  for prayer requests. You remain at <fire temple> in Mobed Diary."). Nothing is sent to an account that is not on
+  (D9). A sign-up still waiting for the admin shows to the panthaky by name, with no notice. Turning an account off
+  and on again does not re-confirm a fire temple joined meanwhile.
+- **A panthaky is changed or removed by the ADMIN**, never by a panthaky, when one dies or leaves (Admin ->
+  Mobeds: "Remove as panthaky", then "Confirm as panthaky" for the one who says they are).
+- **Erasing a number, or deleting an account, reopens the place they held** on a request still waiting or all set
+  whose prayers have not begun, exactly like "Can't go": the waiting list is asked in order, the panthakys are told
+  in the app and by push without the person's name ("A mobed can't go ..."), an all-set request is waiting again.
+  If reopening fails, the erasing still goes through (it is logged).
+- The review page and the "not walked in a browser yet" notes are no longer open items here.
 
 ## Data changes
 
