@@ -366,7 +366,7 @@ console.log(JSON.stringify({json.dumps(names)}.map(firstName)));
     assert "askMobedText(b, m)" in board
     util = (JS / "util.js").read_text(encoding="utf-8")
     assert "const first = firstName(m && m.name);" in util and util.count("Sahebji ${first}") == 2
-    for path in JS.rglob("*.js"):
+    for path in list(JS.rglob("*.js")) + list((JS.parent.parent / "behdin").rglob("*.js")):
         assert "namaste" not in path.read_text(encoding="utf-8").lower(), path
 
 

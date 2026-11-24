@@ -1,25 +1,30 @@
 "use strict";
 
-/** Add or change one of the person's own events: a birthday, a navjote, an anniversary or anything else. */
+/**
+ * New event, or an event of the person's own: the one place anything is added from the calendar's "+". The kind
+ * is a choice (Birthday, Navjote, Anniversary, Prayers for the departed, Other); the prayers for a departed lead
+ * to their own form, and every other kind is this plain form.
+ */
 
 import { createEvent, updateEvent, deleteEvent, getMyEvents, convertDay } from "../api.js";
 import { state } from "../state.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml, showError, openSheet, closeSheet } from "/mobed-app/js/ui.js";
-import { navGuard, returnTo } from "/mobed-app/js/router.js";
+import { navGuard, navigate, returnTo } from "/mobed-app/js/router.js";
 import { flagProblems } from "/mobed-app/js/fielderrors.js";
+import { calendarHash } from "/mobed-app/js/calendar.js";
 import { esc, todayIst, EVENT_KINDS, parsiWords } from "../util.js";
-import { ensureConsent } from "../consent.js";
 
 const REPEATS = [
   ["none", "Does not repeat"],
   ["yearly_english", "Every year on this English date"],
   ["yearly_parsi", "Every year on this Parsi date"],
 ];
+const DEPARTED = "departed";
 
 export async function renderEvent(params) {
   chrome(true);
   const id = params && params.id ? Number(params.id) : null;
-  setHeader(id ? "Change event" : "Add an event");
+  setHeader(id ? "Change event" : "New event");
   loading();
   const alive = navGuard();
 
@@ -40,33 +45,48 @@ export async function renderEvent(params) {
       wireRetry(mainEl, () => renderEvent(params));
       return;
     }
-  } else {
-    ensureConsent();
   }
 
+  const kinds = id ? EVENT_KINDS : [...EVENT_KINDS.filter(([k]) => k !== "other"), [DEPARTED, "Prayers for the departed"], ["other", "Other"]];
   mainEl.innerHTML = `
     <div class="card" id="evCard">
-      <label for="evTitle">What is it?</label>
-      <input type="text" id="evTitle" maxlength="120" autocomplete="off" value="${esc(ev.title)}" placeholder="For example: Farzin's birthday">
+      <label>Kind of event</label>
+      <div class="choice-group" id="evKinds">${kinds.map(([k, t]) => `<div class="check-row">
+        <input type="radio" name="evKind" id="evKind_${k}" value="${k}" ${ev.kind === k ? "checked" : ""}>
+        <label for="evKind_${k}">${esc(t)}</label></div>`).join("")}</div>
 
-      <label for="evKind">Kind</label>
-      <select id="evKind">${EVENT_KINDS.map(([k, t]) => `<option value="${k}" ${ev.kind === k ? "selected" : ""}>${t}</option>`).join("")}</select>
+      <div id="evFields">
+        <label for="evTitle">Name</label>
+        <input type="text" id="evTitle" maxlength="120" autocomplete="off" value="${esc(ev.title)}">
 
-      <label for="evDate">Date</label>
-      <input type="date" id="evDate" value="${esc(ev.date)}" min="1850-01-01">
-      <p class="meta" id="evParsi" style="margin:6px 0 0"></p>
+        <label for="evDate">Date</label>
+        <input type="date" id="evDate" value="${esc(ev.date)}" min="1850-01-01">
+        <p class="meta" id="evParsi" style="margin:6px 0 0"></p>
 
-      <label for="evRepeat">Repeat</label>
-      <select id="evRepeat">${REPEATS.map(([k, t]) => `<option value="${k}" ${ev.repeats === k ? "selected" : ""}>${t}</option>`).join("")}</select>
+        <label for="evRepeat">Repeat</label>
+        <select id="evRepeat">${REPEATS.map(([k, t]) => `<option value="${k}" ${ev.repeats === k ? "selected" : ""}>${t}</option>`).join("")}</select>
 
-      <label for="evNote">Note (if you like)</label>
-      <textarea id="evNote" rows="3" maxlength="500">${esc(ev.notes || "")}</textarea>
+        <label for="evNote">Note</label>
+        <textarea id="evNote" rows="3" maxlength="500">${esc(ev.notes || "")}</textarea>
+      </div>
 
       <div class="row" style="margin-top:var(--space-4)">
         <button type="button" id="evSave">Save</button>
         ${id ? `<button type="button" class="ghost danger-outline" id="evDelete">Delete</button>` : ""}
       </div>
     </div>`;
+
+  const kindOf = () => document.querySelector('input[name="evKind"]:checked').value;
+  const fields = document.getElementById("evFields");
+  const saveBtn = document.getElementById("evSave");
+  // Prayers for the departed have a form of their own: Next goes there instead of saving.
+  const showKind = () => {
+    const departed = kindOf() === DEPARTED;
+    fields.style.display = departed ? "none" : "";
+    saveBtn.textContent = departed ? "Next" : "Save";
+  };
+  document.querySelectorAll('input[name="evKind"]').forEach((r) => { r.onchange = showKind; });
+  showKind();
 
   // The Parsi name of the date chosen, so "Every year on this Parsi date" is not a guess.
   const dateEl = document.getElementById("evDate");
@@ -84,17 +104,18 @@ export async function renderEvent(params) {
   dateEl.onchange = showParsi;
   showParsi();
 
-  document.getElementById("evSave").onclick = async (e) => {
+  saveBtn.onclick = async (e) => {
+    if (kindOf() === DEPARTED) return navigate("#/departed/new");
     const card = document.getElementById("evCard");
     const body = {
       title: document.getElementById("evTitle").value.trim(),
-      kind: document.getElementById("evKind").value,
+      kind: kindOf(),
       date: dateEl.value,
       repeats: document.getElementById("evRepeat").value,
       notes: document.getElementById("evNote").value.trim() || null,
     };
     const problems = [];
-    if (!body.title) problems.push({ target: "#evTitle", message: "Please enter what it is." });
+    if (!body.title) problems.push({ target: "#evTitle", message: "Please enter a name." });
     if (!body.date) problems.push({ target: "#evDate", message: "Please choose the date." });
     if (problems.length) return flagProblems(card, problems);
     const btn = e.currentTarget;
@@ -105,8 +126,8 @@ export async function renderEvent(params) {
       btn.disabled = false;
       return showError(err.message);
     }
-    state.calMonth = body.date.slice(0, 7);
-    returnTo("#/calendar");
+    state.calendar = { mode: "month", focus: body.date, parsiMonth: null, selectedDay: null };
+    returnTo(calendarHash(state.calendar));
   };
 
   const del = document.getElementById("evDelete");
@@ -115,7 +136,6 @@ export async function renderEvent(params) {
       const { body } = openSheet({
         title: "Delete this event?",
         html: `<p><b>${esc(ev.title)}</b></p>
-          <p class="meta">${ev.repeats === "none" ? "It will be removed." : "It will be removed from every year."} This cannot be undone.</p>
           <div class="row tight"><button type="button" class="danger" id="evYes">Delete</button>
           <button type="button" class="ghost" id="evNo">Keep it</button></div>`,
       });
@@ -130,7 +150,7 @@ export async function renderEvent(params) {
           return showError(err.message);
         }
         closeSheet();
-        returnTo("#/calendar");
+        returnTo(calendarHash(state.calendar));
       };
     };
   }

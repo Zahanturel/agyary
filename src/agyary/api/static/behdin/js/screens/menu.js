@@ -13,7 +13,7 @@ import { flagProblems } from "/mobed-app/js/fielderrors.js";
 import { APP_NAME } from "../brand.js";
 import { esc } from "../util.js";
 import { signOut, forgetEverything } from "../session.js";
-import { paintInstall, shellVersion } from "../install.js";
+import { shellVersion } from "../install.js";
 
 export function renderMenu() {
   chrome(true);
@@ -29,14 +29,12 @@ export function renderMenu() {
 
     <div class="card">
       <h2>My asks</h2>
-      <p class="meta">The prayers you have asked an agyari for, and the answers.</p>
       <button type="button" class="secondary" id="mAsks" style="width:100%">My asks</button>
     </div>
 
     <div class="card">
-      <h2>My agyari</h2>
-      <p class="meta">The agyari you have chosen, or choose one now.</p>
-      <button type="button" class="secondary" id="mAgyari" style="width:100%">My agyari</button>
+      <h2>My fire temple</h2>
+      <button type="button" class="secondary" id="mAgyari" style="width:100%">My fire temple</button>
     </div>
 
     <div class="card">
@@ -48,8 +46,6 @@ export function renderMenu() {
         <label class="choice"><input type="radio" name="mText" value="xl" ${getTextSize() === "xl" ? "checked" : ""}><span>Extra large</span></label>
       </div>
     </div>
-
-    <div class="card" id="mInstall"></div>
 
     <div class="card">
       <button class="ghost" id="mSignOut">Sign out</button>
@@ -63,7 +59,6 @@ export function renderMenu() {
 
   document.getElementById("mAgyari").onclick = () => navigate("#/agyari");
   document.getElementById("mAsks").onclick = () => navigate("#/asks");
-  paintInstall(document.getElementById("mInstall"));
   shellVersion().then((v) => {
     const el = document.getElementById("mVersion");
     if (el && v) el.textContent = "App version " + v;

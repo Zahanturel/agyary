@@ -12,6 +12,7 @@ import {
 import { state, LAST_PHONE_KEY } from "../state.js";
 import { chrome, mainEl, setHeader, showError, toTop } from "/mobed-app/js/ui.js";
 import { flagProblems, clearProblems } from "/mobed-app/js/fielderrors.js";
+import { addGetApp } from "../install.js";
 import { afterSignIn } from "../session.js";
 import { APP_NAME } from "../brand.js";
 import { esc } from "../util.js";
@@ -122,6 +123,7 @@ function renderPhoneStep() {
         <a href="/privacy" target="_blank" rel="noopener">What we store</a>
       </p>
     </div>`;
+  addGetApp(mainEl);
   toTop();
   document.getElementById("lgOther").onclick = (e) => { e.preventDefault(); renderWaChoice(true); };
 
@@ -304,6 +306,7 @@ function renderWaChoice(fromCodes = false) {
       </p>
       ${fromCodes ? `<p class="meta"><a href="#" id="lgBack">Sign in with my number instead</a></p>` : ""}
     </div>`;
+  addGetApp(mainEl);
   toTop();
   document.getElementById("waStart").onclick = startWaLogin;
   if (fromCodes) document.getElementById("lgBack").onclick = (e) => { e.preventDefault(); renderPhoneStep(); };
@@ -424,7 +427,6 @@ function renderNameStep() {
   mainEl.innerHTML = `
     <div class="card">
       <h2>What should we call you?</h2>
-      <p class="meta">This is the name ${esc(APP_NAME)} greets you by. You can change it later in the menu.</p>
       <label for="waName">Your name</label>
       <input type="text" id="waName" placeholder="Your name" autocomplete="name">
       <div style="margin-top:14px"><button id="waNameSave">Continue</button></div>

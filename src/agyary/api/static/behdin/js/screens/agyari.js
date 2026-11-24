@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * My agyari: the one the person has chosen, and a list to choose another from. "Near me" asks the
+ * My fire temple: the one the person has chosen, and a list to choose another from. "Near me" asks the
  * phone where it is once, uses the answer only to sort and measure, and keeps it nowhere: it goes
  * in the body of one request, never in an address, never stored, never written to a log.
  */
@@ -12,7 +12,6 @@ import { navGuard } from "/mobed-app/js/router.js";
 import { esc, KIND_LABELS } from "../util.js";
 import { startAsk } from "./ask.js";
 
-const NOT_CHOSEN = "You have not chosen one yet.";
 
 export function kindLabel(kind) { return KIND_LABELS[kind] || ""; }
 
@@ -24,15 +23,15 @@ function cardHtml(a, mineId) {
     ${a.distance_km != null ? `<p class="meta" style="margin:2px 0 0">${a.distance_km} km away</p>` : ""}
     ${a.answers_in_app ? `<p style="margin:var(--space-2) 0 0"><span class="tag">Answers in the app</span></p>` : ""}
     <div style="margin-top:var(--space-3)">
-      ${mine ? `<span class="tag role">Your agyari</span>`
-        : `<button type="button" class="small" data-choose="${a.id}">Choose as my agyari</button>`}
+      ${mine ? `<span class="tag role">Your fire temple</span>`
+        : `<button type="button" class="small" data-choose="${a.id}">Choose as my fire temple</button>`}
     </div>
   </div>`;
 }
 
 export async function renderAgyari() {
   chrome(true);
-  setHeader("My agyari");
+  setHeader("My fire temple");
   loading();
   const alive = navGuard();
 
@@ -41,7 +40,7 @@ export async function renderAgyari() {
     mine = (await getMyAgyari()).agyari;
   } catch (e) {
     if (!alive()) return;
-    mainEl.innerHTML = loadFailedHtml("your agyari");
+    mainEl.innerHTML = loadFailedHtml("your fire temple");
     wireRetry(mainEl, () => renderAgyari());
     return;
   }
@@ -50,10 +49,9 @@ export async function renderAgyari() {
   mainEl.innerHTML = `
     <div class="card" id="agyMine"></div>
     <div class="card">
-      <h2>Find an agyari</h2>
+      <h2>Find a fire temple</h2>
       <button type="button" class="secondary" id="agyNear" style="width:100%">Near me</button>
-      <p class="meta" id="agyNearNote" style="margin:6px 0 0">Your position is used once to put the nearest first. It is not kept.</p>
-      <label for="agySearch">Or search by name or town</label>
+      <label for="agySearch">Name or town</label>
       <input type="search" id="agySearch" autocomplete="off" maxlength="100" placeholder="For example: Udvada">
     </div>
     <div id="agyList"><div class="empty-state">Loading...</div></div>`;
@@ -66,15 +64,15 @@ export async function renderAgyari() {
     const box = document.getElementById("agyMine");
     if (!box) return;
     if (!mine) {
-      box.innerHTML = `<h2>Your agyari</h2><p class="meta" style="margin:0">${NOT_CHOSEN}</p>`;
+      box.innerHTML = `<h2>Your fire temple</h2>`;
       return;
     }
-    box.innerHTML = `<h2>Your agyari</h2>
+    box.innerHTML = `<h2>Your fire temple</h2>
       <p style="margin:0"><b>${esc(mine.name)}</b></p>
       <p class="meta" style="margin:0">${esc([mine.city, kindLabel(mine.kind)].filter(Boolean).join(" · "))}</p>
-      ${mine.closed ? `<p class="meta" style="margin:6px 0 0">This agyari is no longer listed. You can choose another below.</p>` : ""}
+      ${mine.closed ? `<p class="meta" style="margin:6px 0 0">No longer listed.</p>` : ""}
       ${mine.answers_in_app ? `<p style="margin:var(--space-2) 0 0"><span class="tag">Answers in the app</span></p>` : ""}
-      <div id="agyAsk" style="margin-top:var(--space-3)"><p class="meta" style="margin:0">Checking whether it takes asks...</p></div>
+      <div id="agyAsk" style="margin-top:var(--space-3)"></div>
       <div style="margin-top:var(--space-3)"><button type="button" class="ghost small" id="agyRemove">Remove my choice</button></div>`;
     const chosen = mine;
     getAsking(chosen.id).then((asking) => {
@@ -83,7 +81,7 @@ export async function renderAgyari() {
       if (!asking.takes_asks) { box.innerHTML = `<p class="meta" style="margin:0">${esc(asking.message || "Not taking asks in the app yet")}.</p>`; return; }
       box.innerHTML = `<button type="button" id="agyAskBtn">Ask for a prayer</button>`;
       document.getElementById("agyAskBtn").onclick = () =>
-        startAsk({ agyari: { id: chosen.id, name: chosen.name, city: chosen.city }, back: "#/agyari" });
+        startAsk({ temple: { id: chosen.id, name: chosen.name, city: chosen.city }, back: "#/agyari" });
     }).catch(() => {
       const box = document.getElementById("agyAsk");
       if (box && mine === chosen) box.innerHTML = "";
@@ -113,13 +111,13 @@ export async function renderAgyari() {
       found = (await agyariesNearby(q, here)).agyaries;
     } catch (e) {
       if (mineRun !== asked || !alive()) return;
-      list.innerHTML = loadFailedHtml("the list of agyaries");
+      list.innerHTML = loadFailedHtml("the list of fire temples");
       wireRetry(list, load);
       return;
     }
     if (mineRun !== asked || !alive()) return;
     if (!found.length) {
-      list.innerHTML = `<div class="empty-state">${q ? "No agyari found. Try another name or town." : "No agyaries are listed yet."}</div>`;
+      list.innerHTML = `<div class="empty-state">${q ? "No fire temple found." : ""}</div>`;
       return;
     }
     list.innerHTML = found.map((a) => cardHtml(a, mine && mine.id)).join("");
@@ -134,7 +132,7 @@ export async function renderAgyari() {
         }
         paintMine();
         load();
-        showInfo(`${mine.name} is now your agyari.`);
+        showInfo(`${mine.name} is now your fire temple.`);
       };
     });
   };
@@ -146,21 +144,21 @@ export async function renderAgyari() {
     const btn = e.currentTarget;
     const note = document.getElementById("agyNearNote");
     if (!("geolocation" in navigator)) {
-      note.textContent = "This phone cannot tell us where it is. That is fine: please use the search below.";
+      note.textContent = "Could not get your position.";
       return;
     }
     btn.disabled = true;
-    note.textContent = "Asking your phone where you are...";
+    note.textContent = "Asking your phone...";
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         btn.disabled = false;
-        note.textContent = "Nearest first. Your position is not kept.";
+        note.textContent = "Nearest first.";
         load();
       },
       () => {
         btn.disabled = false;
-        note.textContent = "That is fine. You can find your agyari with the search below.";
+        note.textContent = "Could not get your position.";
       },
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
     );

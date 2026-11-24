@@ -8,8 +8,11 @@ export const state = {
   // True when we booted from the remembered session because the network was down: signed in, but
   // nothing server-backed will answer yet.
   offline: false,
-  // The month the calendar shows ("2026-11"), kept while the person moves between screens.
-  calMonth: null,
+  // The calendar's view (month or day, and where), kept in the address by the shared calendar module.
+  calendar: { mode: "month", focus: null, parsiMonth: null, selectedDay: null },
+  // What the shared calendar keeps in its state object: the months it has read, and the Go-to lists.
+  parsiMonthCache: {},
+  calendarOptions: null,
   // A day chosen in the calendar for a new event to start on.
   draftDate: null,
   // The Parsi calendar the person reads in ("shenshai" until Home has asked).

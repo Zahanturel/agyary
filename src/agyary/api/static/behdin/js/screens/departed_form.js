@@ -11,7 +11,6 @@ import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml, showErro
 import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { flagProblems } from "/mobed-app/js/fielderrors.js";
 import { esc, todayIst, MAH_NAMES, ROJ_NAMES, GATHAS } from "../util.js";
-import { ensureConsent } from "../consent.js";
 
 // The named days, as the fire temples spell them. The 10th is the Dasmu; the Deci is the day before.
 const NAMED_DAYS = [
@@ -21,12 +20,6 @@ const NAMED_DAYS = [
 // What is ticked for a new one: the four days most families keep.
 const DEFAULT_DAYS = [10, 30, 180, 360];
 const MAX = { months: 1200, years: 100, parabs: 1200 };
-
-function ordinal(n) {
-  const mod = n % 100;
-  if (mod >= 11 && mod <= 13) return `${n}th`;
-  return `${n}${({ 1: "st", 2: "nd", 3: "rd" })[n % 10] || "th"}`;
-}
 
 function rojOptions(selected) {
   return `<option value="">Choose</option>`
@@ -68,9 +61,8 @@ function formHtml(v, editing) {
   return `
     <div class="card" id="dpWho">
       <div id="dpSuggest"></div>
-      <label for="dpName">Name of the departed</label>
+      <label for="dpName">Departed person</label>
       <input type="text" id="dpName" autocomplete="off" maxlength="120" value="${esc(v.name)}">
-      <p class="meta" style="margin:6px 0 0">If you do not know the name, leave this empty.</p>
 
       <label>Did they pass away more than a year ago?</label>
       <div class="choice-group">
@@ -79,12 +71,10 @@ function formHtml(v, editing) {
       </div>
 
       <div id="dpDateBox" style="${v.longAgo ? "display:none" : ""}">
-        <label for="dpDeath">Date of passing</label>
+        <label for="dpDeath">Date of death</label>
         <input type="date" id="dpDeath" max="${todayIst()}" value="${esc(v.death)}">
       </div>
       <div id="dpRojBox" style="${v.longAgo ? "" : "display:none"}">
-        <p class="meta" style="margin:var(--space-3) 0 0">Only the Roj and Mah of the passing are needed. The first
-          year's days are over, so what repeats is carried on from today.</p>
         <label for="dpRoj">Roj</label>
         <select id="dpRoj">${rojOptions(v.roj)}</select>
         <div id="dpMahBox" style="${v.roj.startsWith("g") ? "display:none" : ""}">
@@ -96,12 +86,12 @@ function formHtml(v, editing) {
     </div>
 
     <div class="card" id="dpPrayers">
-      <h2>Which prayers?</h2>
+      <h2>Observances</h2>
       <div id="dpDaysBox" style="${v.longAgo ? "display:none" : ""}">
-        <div class="names-group-label"><b>Days after the passing</b></div>
+        <div class="names-group-label"><b>Named days</b></div>
         <div class="choice-group">
           ${check("dpFive", v.fiveToNine, "5th to 9th days")}
-          ${NAMED_DAYS.map(([n, name]) => check(`dpDay${n}`, v.days.includes(n), `${ordinal(n)} day (${name})`, `data-day="${n}"`)).join("")}
+          ${NAMED_DAYS.map(([n, name]) => check(`dpDay${n}`, v.days.includes(n), `${n}th day · ${name}`, `data-day="${n}"`)).join("")}
         </div>
       </div>
 
@@ -109,7 +99,7 @@ function formHtml(v, editing) {
       <div class="choice-group">
         ${check("dpMonthly", v.monthly, "Every month")}
         <div class="sub-field" id="dpMonthlyBox" style="${v.monthly ? "" : "display:none"}">
-          <label for="dpMonths">For how many months (12 is a year)</label>
+          <label for="dpMonths">For how many months (12 to a year)</label>
           <input type="number" inputmode="numeric" min="1" max="${MAX.months}" id="dpMonths" value="${esc(v.months)}"></div>
 
         ${check("dpYearly", v.yearly, "Every year")}
@@ -121,7 +111,7 @@ function formHtml(v, editing) {
         <div class="sub-field" id="dpParabBox" style="${v.parab ? "" : "display:none"}">
           ${radio("dpParabWhich", "dpParabAll", "all", v.parabWhich === "all", "All Parabs")}
           ${radio("dpParabWhich", "dpParabFT", "fravardin_tir", v.parabWhich === "fravardin_tir", "Fravardin and Tir only")}
-          <label for="dpParabCount">How many Parabs (a year has 12, so 24 is two years)</label>
+          <label for="dpParabCount">How many Parabs (a year has 12 of them, so 24 is two years)</label>
           <input type="number" inputmode="numeric" min="1" max="${MAX.parabs}" id="dpParabCount" value="${esc(v.parabCount)}"></div>
       </div>
     </div>
@@ -190,7 +180,7 @@ function readForm(saved) {
 export async function renderDepartedForm(params) {
   chrome(true);
   const id = params && params.id ? Number(params.id) : null;
-  setHeader(id ? "Change prayers" : "A departed's prayers");
+  setHeader(id ? "Change prayers" : "Prayers for the departed");
   loading();
   const alive = navGuard();
 
@@ -207,8 +197,6 @@ export async function renderDepartedForm(params) {
       return;
     }
     if (!alive()) return;
-  } else {
-    ensureConsent();
   }
 
   mainEl.innerHTML = formHtml(startingValues(saved), !!saved);
@@ -226,7 +214,7 @@ export async function renderDepartedForm(params) {
       }).slice(0, 8);
       const box = document.getElementById("dpSuggest");
       if (!names.length || !box) return;
-      box.innerHTML = `<p class="meta" style="margin:0 0 var(--space-2)">Names you have used before. Tap one to fill it in.</p>
+      box.innerHTML = `<p class="meta" style="margin:0 0 var(--space-2)">Your saved names</p>
         <div class="chip-row">${names.map((n, i) =>
           `<button type="button" class="chip" data-fill="${i}">${esc(n.departed_name)}</button>`).join("")}</div>`;
       box.querySelectorAll("[data-fill]").forEach((b) => {

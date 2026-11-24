@@ -33,14 +33,13 @@ function cardHtml(a, currentId, pickLabel) {
  * Draw the picker into `host`. `onPick(agyari, asking)` runs with an agyari that takes asks, and the
  * plain facts about what it offers. `alive()` says whether the screen is still the one on show.
  */
-export function mountPicker(host, { onPick, alive, currentId = null, pickLabel = "Ask this agyari" }) {
+export function mountPicker(host, { onPick, alive, currentId = null, pickLabel = "Ask this fire temple" }) {
   host.innerHTML = `
     <div class="card">
-      <h2>Find an agyari</h2>
+      <h2>Find a fire temple</h2>
       <button type="button" class="secondary" id="pkNear" style="width:100%">Near me</button>
-      <p class="meta" id="pkNearNote" style="margin:6px 0 0">Your position is used once to put the nearest first. It is not kept.</p>
-      <label for="pkSearch">Or search by name or town</label>
-      <input type="search" id="pkSearch" autocomplete="off" maxlength="100" placeholder="For example: Udvada">
+      <label for="pkSearch">Name or town</label>
+      <input type="search" id="pkSearch" autocomplete="off" maxlength="100">
     </div>
     <div id="pkList"><div class="empty-state">Loading...</div></div>`;
 
@@ -56,13 +55,13 @@ export function mountPicker(host, { onPick, alive, currentId = null, pickLabel =
       found = (await agyariesNearby(q, here)).agyaries;
     } catch (e) {
       if (mine !== asked || !alive()) return;
-      list.innerHTML = loadFailedHtml("the list of agyaries");
+      list.innerHTML = loadFailedHtml("the list of fire temples");
       wireRetry(list, load);
       return;
     }
     if (mine !== asked || !alive()) return;
     if (!found.length) {
-      list.innerHTML = `<div class="empty-state">${q ? "No agyari found. Try another name or town." : "No agyaries are listed yet."}</div>`;
+      list.innerHTML = `<div class="empty-state">${q ? "No fire temple found." : ""}</div>`;
       return;
     }
     list.innerHTML = found.map((a) => cardHtml(a, currentId, pickLabel)).join("");
@@ -98,21 +97,21 @@ export function mountPicker(host, { onPick, alive, currentId = null, pickLabel =
     const btn = e.currentTarget;
     const note = host.querySelector("#pkNearNote");
     if (!("geolocation" in navigator)) {
-      note.textContent = "This phone cannot tell us where it is. That is fine: please use the search below.";
+      note.textContent = "Could not get your position.";
       return;
     }
     btn.disabled = true;
-    note.textContent = "Asking your phone where you are...";
+    note.textContent = "Asking your phone...";
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         btn.disabled = false;
-        note.textContent = "Nearest first. Your position is not kept.";
+        note.textContent = "Nearest first.";
         load();
       },
       () => {
         btn.disabled = false;
-        note.textContent = "That is fine. You can find an agyari with the search below.";
+        note.textContent = "Could not get your position.";
       },
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
     );

@@ -36,8 +36,8 @@ const DAYS_AHEAD = 400;
 /** What a person is told about the cost: the agyari's own words, never a charge made here. */
 export function priceLine(service) {
   return service.usual_price != null
-    ? `Usual price Rs ${Number(service.usual_price).toLocaleString("en-IN")}, confirm with the agyari`
-    : "Ask the agyari for the price";
+    ? `Usual price Rs ${Number(service.usual_price).toLocaleString("en-IN")}, confirm with the fire temple`
+    : "Ask the fire temple for the price";
 }
 
 export function repeatWords(r) {
@@ -51,17 +51,17 @@ export function repeatWords(r) {
  * known; `memorial` ({id, name, observances}) when it is for a departed's dates; `back` is where
  * the person was.
  */
-export function startAsk({ agyari = null, memorial = null, back = "#/home" } = {}) {
+export function startAsk({ temple = null, memorial = null, back = "#/home" } = {}) {
   state.ask = {
-    agyari, asking: null, memorial: memorial ? { ...memorial, codes: [] } : null, back,
+    temple, asking: null, memorial: memorial ? { ...memorial, codes: [] } : null, back,
     service: null, purpose: null, date: "", geh: null, time: "", where: "agyari", area: "",
-    names: [], repeat: null, note: "", step: agyari ? "what" : "agyari", pick: false, triedMine: !!agyari,
+    names: [], repeat: null, note: "", step: temple ? "what" : "temple", pick: false, triedMine: !!temple,
   };
   navigate("#/ask");
 }
 
 function stepsOf(d) {
-  const s = ["agyari", "what"];
+  const s = ["temple", "what"];
   if (d.memorial) s.push("dates"); else s.push("purpose", "when");
   if (canHome(d)) s.push("where");
   s.push("names");
@@ -93,8 +93,8 @@ export async function renderAsk() {
   if (!state.ask) {
     // Opened with no flow behind it (a reload, an old link): begin one, here.
     state.ask = {
-      agyari: null, asking: null, memorial: null, back: "#/home", service: null, purpose: null, date: "",
-      geh: null, time: "", where: "agyari", area: "", names: [], repeat: null, note: "", step: "agyari",
+      temple: null, asking: null, memorial: null, back: "#/home", service: null, purpose: null, date: "",
+      geh: null, time: "", where: "agyari", area: "", names: [], repeat: null, note: "", step: "temple",
       pick: false, triedMine: false,
     };
   }
@@ -105,19 +105,19 @@ export async function renderAsk() {
   }
 
   // Started from an agyari already chosen: what it offers is read before the first question.
-  if (d.agyari && (!d.asking || d.asking.id !== d.agyari.id)) {
+  if (d.temple && (!d.asking || d.asking.id !== d.temple.id)) {
     mainEl.innerHTML = `<div class="empty-state">Loading...</div>`;
     try {
-      d.asking = await getAsking(d.agyari.id);
+      d.asking = await getAsking(d.temple.id);
     } catch (e) {
       if (!alive()) return;
-      mainEl.innerHTML = loadFailedHtml("this agyari");
+      mainEl.innerHTML = loadFailedHtml("this fire temple");
       wireRetry(mainEl, () => renderAsk());
       showBack(() => { state.ask = null; returnTo(d.back); });
       return;
     }
     if (!alive()) return;
-    if (!d.asking.takes_asks) d.step = "agyari";
+    if (!d.asking.takes_asks) d.step = "temple";
   }
 
   const ctx = { alive, redraw: () => draw(), go: (step) => { d.step = step; draw(); toTop(); } };
@@ -129,7 +129,7 @@ export async function renderAsk() {
     if (current) current.save();
     const steps = stepsOf(d);
     const i = steps.indexOf(d.step);
-    if (d.step === "agyari" && d.pick && d.agyari && d.asking) { d.pick = false; return draw(); }
+    if (d.step === "temple" && d.pick && d.temple && d.asking) { d.pick = false; return draw(); }
     if (i <= 0) return leave();
     ctx.go(steps[i - 1]);
   };
@@ -150,7 +150,7 @@ export async function renderAsk() {
       <div class="card" id="askCard">${current.html}</div>
       <div class="row ask-actions">
         <button type="button" class="secondary" id="askBack">Back</button>
-        ${d.pick && d.step === "agyari" ? "" : `<button type="button" id="askNext">${last ? "Send my ask" : "Next"}</button>`}
+        ${d.pick && d.step === "temple" ? "" : `<button type="button" id="askNext">${last ? "Send my ask" : "Next"}</button>`}
       </div>`;
     showBack(goBack);
     document.getElementById("askBack").onclick = goBack;
@@ -212,7 +212,7 @@ export async function renderAsk() {
 /** What is sent: only what the server asks for, in the shapes it checks. */
 function bodyOf(d) {
   const body = {
-    agyary_id: d.agyari.id, service_id: d.service.id, where: d.where,
+    agyary_id: d.temple.id, service_id: d.service.id, where: d.where,
     area: d.where === "home" ? d.area.trim() : null,
     names: d.names.map((n) => ({ section: "farmayeshne", title: n.title, name: n.name, status: n.status, pair_group: null })),
     note: d.note.trim() || null,
@@ -239,35 +239,35 @@ const picked = (name) => {
 };
 
 function stepAgyari(d, ctx) {
-  const html = `<h2>Which agyari do you want to ask?</h2><div id="askAgy"><p class="meta">Loading...</p></div>`;
+  const html = `<h2>Which fire temple?</h2><div id="askAgy"><p class="meta">Loading...</p></div>`;
   const after = async (root) => {
     const box = root.querySelector("#askAgy");
-    if (!d.agyari && !d.triedMine) {
+    if (!d.temple && !d.triedMine) {
       d.triedMine = true;
       try {
         const mine = (await getMyAgyari()).agyari;
-        if (mine && !mine.closed) d.agyari = { id: mine.id, name: mine.name, city: mine.city };
+        if (mine && !mine.closed) d.temple = { id: mine.id, name: mine.name, city: mine.city };
       } catch (e) { /* the list is there to choose from */ }
       if (!ctx.alive()) return;
     }
-    if (!d.agyari) d.pick = true;
+    if (!d.temple) d.pick = true;
     if (d.pick) {
       mountPicker(box, {
-        alive: ctx.alive, currentId: d.agyari && d.agyari.id,
+        alive: ctx.alive, currentId: d.temple && d.temple.id,
         onPick: (a, asking) => {
-          if (!d.agyari || d.agyari.id !== a.id) { d.service = null; forgetDependents(d); }
-          d.agyari = a; d.asking = asking; d.pick = false;
+          if (!d.temple || d.temple.id !== a.id) { d.service = null; forgetDependents(d); }
+          d.temple = a; d.asking = asking; d.pick = false;
           ctx.go("what");
         },
       });
       return;
     }
-    if (!d.asking || d.asking.id !== d.agyari.id) {
+    if (!d.asking || d.asking.id !== d.temple.id) {
       try {
-        d.asking = await getAsking(d.agyari.id);
+        d.asking = await getAsking(d.temple.id);
       } catch (e) {
         if (!ctx.alive()) return;
-        box.innerHTML = loadFailedHtml("this agyari");
+        box.innerHTML = loadFailedHtml("this fire temple");
         wireRetry(box, () => ctx.redraw());
         return;
       }
@@ -277,27 +277,25 @@ function stepAgyari(d, ctx) {
     box.innerHTML = `<div class="agy-pick">
         <p style="margin:0"><b>${esc(a.name)}</b></p>
         <p class="meta" style="margin:0">${esc([a.city, KIND_LABELS[a.kind]].filter(Boolean).join(" · "))}</p>
-        ${a.takes_asks ? "" : `<p style="margin:var(--space-2) 0 0"><b>${NOT_TAKING}.</b> Please choose another agyari.</p>`}
+        ${a.takes_asks ? "" : `<p style="margin:var(--space-2) 0 0"><b>${NOT_TAKING}.</b> Please choose another fire temple.</p>`}
       </div>
-      <div style="margin-top:var(--space-3)"><button type="button" class="ghost small" id="askOther">Choose another agyari</button></div>`;
+      <div style="margin-top:var(--space-3)"><button type="button" class="ghost small" id="askOther">Choose another fire temple</button></div>`;
     box.querySelector("#askOther").onclick = () => { d.pick = true; ctx.redraw(); };
   };
   return {
     html, after,
     save() {},
-    check: () => (d.agyari && d.asking && d.asking.id === d.agyari.id && d.asking.takes_asks ? null
-      : [{ target: "#askAgy", message: d.agyari ? `${NOT_TAKING}. Please choose another agyari.` : "Please choose an agyari." }]),
+    check: () => (d.temple && d.asking && d.asking.id === d.temple.id && d.asking.takes_asks ? null
+      : [{ target: "#askAgy", message: d.temple ? `${NOT_TAKING}. Please choose another fire temple.` : "Please choose a fire temple." }]),
   };
 }
 
 function stepWhat(d) {
   const services = ((d.asking && d.asking.services) || []).filter((s) => !(d.memorial && s.by_geh));
   const html = `<h2>What would you like prayed?</h2>
-    <p class="meta" style="margin:0 0 var(--space-2)">At ${esc(d.agyari.name)}.</p>
     <div id="askServices" class="choice-group">${services.length
       ? services.map((s) => choiceRow("askService", s.id, d.service && d.service.id === s.id, s.name, priceLine(s))).join("")
-      : `<p class="meta">This agyari has not listed anything to ask for yet.</p>`}</div>
-    <p class="meta" style="margin:var(--space-2) 0 0">Nothing is paid in the app.</p>`;
+      : `<p class="meta">Nothing listed yet.</p>`}</div>`;
   return {
     html,
     save() {
@@ -328,11 +326,9 @@ function stepWhen(d, ctx) {
     <input type="date" id="askDate" value="${esc(d.date)}" min="${today}" max="${addDays(today, DAYS_AHEAD)}">
     <p class="meta" id="askParsi" style="margin:6px 0 0"></p>
     ${d.service.by_geh ? `<label>Which geh?</label>
-      <div id="askGehs" class="choice-group">${gehs.map((g) => choiceRow("askGeh", g.geh, d.geh === g.geh, g.name)).join("")}</div>
-      <p class="meta" style="margin:var(--space-2) 0 0">The geh is the part of the day. The agyari confirms it.</p>`
+      <div id="askGehs" class="choice-group">${gehs.map((g) => choiceRow("askGeh", g.geh, d.geh === g.geh, g.name)).join("")}</div>`
     : `<label for="askTime">The time</label>
-      <input type="time" id="askTime" value="${esc(d.time)}">
-      <p class="meta" style="margin:6px 0 0">The agyari confirms the time.</p>`}`;
+      <input type="time" id="askTime" value="${esc(d.time)}">`}`;
   const after = (root) => {
     const dateEl = root.querySelector("#askDate");
     const out = root.querySelector("#askParsi");
@@ -372,11 +368,11 @@ function stepDates(d) {
   const today = todayIst();
   const ahead = d.memorial.observances.filter((o) => o.date >= today);
   const html = `<h2>Which days should be prayed?</h2>
-    <p class="meta" style="margin:0 0 var(--space-2)">For ${esc(d.memorial.name)}. Tick every day you would like the agyari to pray.</p>
+    <p class="meta" style="margin:0 0 var(--space-2)">For ${esc(d.memorial.name)}</p>
     <div id="askDates" class="choice-group">${ahead.length ? ahead.map((o) =>
       `<div class="check-row"><input type="checkbox" id="askD${o.id}" value="${esc(o.code)}" ${d.memorial.codes.includes(o.code) ? "checked" : ""}>
         <label for="askD${o.id}"><b>${esc(gregShort(o.date))}</b> ${esc(o.label)}<br><span class="meta">${esc(parsiWords(o.parsi))}</span></label></div>`).join("")
-      : `<p class="meta">There are no more days to come.</p>`}</div>
+      : ""}</div>
     ${ahead.length > 1 ? `<button type="button" class="ghost small" id="askAllDates" style="margin-top:var(--space-2)">Tick all</button>` : ""}`;
   return {
     html,
@@ -394,13 +390,12 @@ function stepDates(d) {
 function stepWhere(d) {
   const html = `<h2>Where?</h2>
     <div id="askWhere" class="choice-group">
-      ${choiceRow("askWhere", "agyari", d.where === "agyari", "At the agyari")}
+      ${choiceRow("askWhere", "agyari", d.where === "agyari", "At the fire temple")}
       ${choiceRow("askWhere", "home", d.where === "home", "At home")}
     </div>
     <div id="askHomeBox" style="${d.where === "home" ? "" : "display:none"}">
       <label for="askArea">Your area</label>
       <input type="text" id="askArea" maxlength="100" autocomplete="off" value="${esc(d.area)}" placeholder="For example: Dadar, Mumbai">
-      <p class="meta" style="margin:6px 0 0">Only the area for now. The address is for later, if the agyari accepts.</p>
     </div>`;
   return {
     html,
@@ -416,7 +411,6 @@ function stepWhere(d) {
 
 function stepNames(d, ctx) {
   const html = `<h2>Whose names should be prayed?</h2>
-    <p class="meta" style="margin:0 0 var(--space-2)">Up to ${NAME_MAX} names. You can leave this empty.</p>
     <div id="askNameBox">
       <div id="askNameList"></div>
       <div id="askSuggest"></div>
@@ -462,7 +456,7 @@ function stepNames(d, ctx) {
         return true;
       }).slice(0, 12);
       if (!box || !pool.length) return;
-      box.innerHTML = `<p class="meta" style="margin:var(--space-2) 0">Names you have used before. Tap one to add it.</p>
+      box.innerHTML = `<p class="meta" style="margin:var(--space-2) 0">Your saved names</p>
         <div class="chip-row">${pool.map((n, i) => `<button type="button" class="chip" data-pool="${i}">${esc(n.departed_name)}</button>`).join("")}</div>`;
       box.querySelectorAll("[data-pool]").forEach((b) => {
         b.onclick = () => {
@@ -490,8 +484,8 @@ function stepRepeat(d, ctx) {
     <div id="askRepeatBox">
       <div class="choice-group">
         ${choiceRow("askRep", "none", !r, "Once")}
-        ${choiceRow("askRep", "monthly", r && r.pattern === "monthly", "Every month", "On the same Roj of each Parsi month")}
-        ${choiceRow("askRep", "yearly", r && r.pattern === "yearly", "Every year", "On the same Roj and Mah each Parsi year")}
+        ${choiceRow("askRep", "monthly", r && r.pattern === "monthly", "Every month")}
+        ${choiceRow("askRep", "yearly", r && r.pattern === "yearly", "Every year")}
       </div>
       <div id="askCountBox" style="${r ? "" : "display:none"}">
         <label for="askCount" id="askCountLabel"></label>
@@ -572,11 +566,10 @@ async function upcoming(startYmd, pattern, how) {
 }
 
 function stepNote(d) {
-  const html = `<h2>Is there anything you would like to add?</h2>
-    <label for="askNote">A note for the panthaky (if you like)</label>
+  const html = `<h2>Note</h2>
+    <label for="askNote">A note for the panthaky</label>
     <textarea id="askNote" rows="4" maxlength="${NOTE_MAX}">${esc(d.note)}</textarea>
-    <p class="meta" style="margin:6px 0 0"><span id="askNoteCount">${d.note.length}</span> of ${NOTE_MAX} letters.
-      Please do not put links, phone numbers or @-handles in it.</p>`;
+    <p class="meta" style="margin:6px 0 0"><span id="askNoteCount">${d.note.length}</span> of ${NOTE_MAX}</p>`;
   return {
     html,
     after(root) {
@@ -591,7 +584,7 @@ function stepNote(d) {
 function stepReview(d, ctx) {
   const row = (title, text, step) => `<div class="rv-row"><div><b>${esc(title)}</b><br>${text}</div>
     <button type="button" class="ghost small" data-go="${step}" aria-label="Change ${esc(title.toLowerCase())}">Change</button></div>`;
-  const rows = [row("Agyari", esc(`${d.agyari.name}${d.agyari.city ? ", " + d.agyari.city : ""}`), "agyari"),
+  const rows = [row("Fire temple", esc(`${d.temple.name}${d.temple.city ? ", " + d.temple.city : ""}`), "temple"),
     row("What", `${esc(d.service.name)}<br><span class="meta">${esc(priceLine(d.service))}</span>`, "what")];
   if (d.memorial) {
     const chosen = d.memorial.observances.filter((o) => d.memorial.codes.includes(o.code));
@@ -600,12 +593,12 @@ function stepReview(d, ctx) {
     rows.push(row("What for", esc(PURPOSES[d.purpose]), "purpose"));
     rows.push(row("When", `${esc(longDay(d.date))}<br>${d.service.by_geh ? esc(((d.asking.gehs.find((g) => g.geh === d.geh)) || {}).name || "") + " geh" : esc(d.time)}`, "when"));
   }
-  if (canHome(d)) rows.push(row("Where", d.where === "home" ? `At home, ${esc(d.area.trim())}` : "At the agyari", "where"));
+  if (canHome(d)) rows.push(row("Where", d.where === "home" ? `At home, ${esc(d.area.trim())}` : "At the fire temple", "where"));
   rows.push(row("Names", d.names.length ? d.names.map((n) => esc(n.name)).join(", ") : "None", "names"));
   if (!d.memorial) rows.push(row("Repeats", esc(repeatWords(d.repeat)), "repeat"));
   rows.push(row("Note", d.note.trim() ? esc(d.note.trim()) : "None", "note"));
   const html = `<h2>Please check your ask</h2>${rows.join("")}
-    <p class="rv-promise"><b>Your name and number go to the panthaky only if they accept.</b></p>`;
+    <p class="meta" style="margin:var(--space-3) 0 0">Your name and number go to the panthaky only if they accept.</p>`;
   return {
     html,
     after(root) { root.querySelectorAll("[data-go]").forEach((b) => { b.onclick = () => ctx.go(b.dataset.go); }); },
@@ -615,6 +608,6 @@ function stepReview(d, ctx) {
 }
 
 const STEPS = {
-  agyari: stepAgyari, what: stepWhat, purpose: stepPurpose, when: stepWhen, dates: stepDates,
+  temple: stepAgyari, what: stepWhat, purpose: stepPurpose, when: stepWhen, dates: stepDates,
   where: stepWhere, names: stepNames, repeat: stepRepeat, note: stepNote, review: stepReview,
 };

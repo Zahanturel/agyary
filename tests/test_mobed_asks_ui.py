@@ -15,7 +15,7 @@ def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
     assert "/mobed-app/js/screens/ask_settings.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v104"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v105"' in worker
 
 
 def test_screens_use_the_finished_routes():

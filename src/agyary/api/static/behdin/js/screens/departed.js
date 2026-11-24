@@ -24,10 +24,11 @@ function passedLine(m) {
 
 function dateRow(o, today, next) {
   const past = o.date < today;
-  return `<div class="obs-row${past ? " past" : ""}${next ? " next" : ""}">
-    <div class="obs-date"><b>${gregShort(o.date)}</b><span>${weekdayOf(o.date).slice(0, 3)}</span></div>
-    <div class="obs-what"><b>${esc(o.label)}</b><span>${esc(parsiWords(o.parsi) || rojMahWords(o.parsi_roj, o.parsi_mah))}</span>
-      ${next ? `<span class="tag">Next</span>` : past ? `<span class="tag grey">Done</span>` : ""}</div>
+  return `<div class="event memorial"${past ? ' style="opacity:.6"' : ""}>
+    <div class="ev-row"><div class="ev-main">
+      <div class="t">${gregShort(o.date)} · ${esc(o.label)}</div>
+      <div class="s">${weekdayOf(o.date)}, ${esc(parsiWords(o.parsi) || rojMahWords(o.parsi_roj, o.parsi_mah))}</div>
+    </div>${next ? `<span class="tag">Next</span>` : past ? `<span class="tag grey">Done</span>` : ""}</div>
   </div>`;
 }
 
@@ -70,9 +71,9 @@ export async function renderDeparted(params) {
       </div>
       <div class="card">
         <h2>Dates still to come</h2>
-        ${ahead.length ? `<button type="button" class="secondary small" id="dAsk" style="margin:var(--space-2) 0">Ask an agyari to pray these days</button>` : ""}
+        ${ahead.length ? `<button type="button" class="secondary small" id="dAsk" style="margin:var(--space-2) 0">Ask a fire temple to pray these days</button>` : ""}
         ${ahead.length ? ahead.slice(0, shown).map((o, i) => dateRow(o, today, i === 0)).join("")
-          : `<p class="meta">There are no more dates to come.</p>`}
+          : ""}
         ${ahead.length > shown ? `<button type="button" class="ghost small" id="dMore" style="margin-top:var(--space-2)">Show ${Math.min(ahead.length - shown, SHOW_AT_FIRST)} more</button>` : ""}
       </div>
       ${done.length ? `<details class="card"><summary><b>Dates already past (${done.length})</b></summary>
@@ -89,7 +90,6 @@ export async function renderDeparted(params) {
     const { body } = openSheet({
       title: "Delete these prayers?",
       html: `<p><b>${esc(name)}</b></p>
-        <p class="meta">All ${m.count} dates are removed from your calendar. This cannot be undone.</p>
         <div class="row tight"><button type="button" class="danger" id="dYes">Delete</button>
         <button type="button" class="ghost" id="dNo">Keep them</button></div>`,
     });

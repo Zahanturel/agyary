@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v7"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v8"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -211,7 +211,7 @@ def test_mobed_diary_has_a_page_for_a_behdins_account_and_its_worker_keeps_the_o
     assert '"/auth/become-mobed"' in (mobed / "api.js").read_text(encoding="utf-8")
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert 'k.startsWith("mobed-shell-") && k !== CACHE_NAME' in worker
-    assert 'CACHE_NAME = "mobed-shell-v104"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v105"' in worker
     assert "/mobed-app/js/screens/become_mobed.js" in worker
 
 
@@ -264,16 +264,6 @@ def test_the_agyari_screen_never_stores_logs_or_addresses_the_position():
     assert not re.search(r"`/agyaries[^`]*(lat|lng)", api)
 
 
-def test_the_consent_words_are_shown_once_and_say_what_the_owner_wrote():
-    code = (STATIC / "behdin" / "js" / "consent.js").read_text(encoding="utf-8")
-    assert ("These dates are kept for you alone. Nobody else can see them. "
-            "You can delete them any time.") in code
-    assert "localStorage" in code and "dismissable: false" in code
-    # Both ways of adding something wait for it.
-    for name in ("event.js", "departed_form.js"):
-        assert "ensureConsent()" in (STATIC / "behdin" / "js" / "screens" / name).read_text(encoding="utf-8")
-
-
 def test_every_screen_of_the_calendar_work_has_its_route_and_the_new_one_comes_first():
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     for pattern in ("#/agyari", "#/event/new", "#/event/:id", "#/departed/new", "#/departed/:id/edit", "#/departed/:id"):
@@ -298,7 +288,7 @@ def test_the_ask_screens_have_their_routes_and_the_longer_one_comes_first():
 def test_the_ask_flow_sends_what_the_server_checks_and_says_what_it_promises():
     flow = (STATIC / "behdin" / "js" / "screens" / "ask.js").read_text(encoding="utf-8")
     assert "Your name and number go to the panthaky only if they accept." in flow
-    assert "Ask the agyari for the price" in flow and "confirm with the agyari" in flow
+    assert "Ask the fire temple for the price" in flow and "confirm with the fire temple" in flow
     assert "Not taking asks in the app yet" in (STATIC / "behdin" / "js" / "screens" / "picker.js").read_text(encoding="utf-8")
     api = (STATIC / "behdin" / "js" / "api.js").read_text(encoding="utf-8")
     for call in ('post("/me/asks"', "/me/asks/${id}/cancel", "/me/asks/${id}/ask-another", 'get("/notifications")',
@@ -310,7 +300,7 @@ def test_the_bell_is_asked_on_focus_and_every_minute_and_the_page_has_one():
     code = (STATIC / "behdin" / "js" / "notices.js").read_text(encoding="utf-8")
     assert "EVERY_MS = 60000" in code and "visibilitychange" in code and '"focus"' in code
     page = (STATIC / "behdin" / "index.html").read_text(encoding="utf-8")
-    assert 'id="bellBtn"' in page and "bell-dot" in page
+    assert 'id="bellBtn"' in page and 'id="bellBadge"' in page
 
 
 async def test_the_parsi_app_has_its_own_icons_and_never_the_mobed_ones(client):
@@ -325,3 +315,47 @@ async def test_the_parsi_app_has_its_own_icons_and_never_the_mobed_ones(client):
 async def test_the_redirect_from_the_root_is_never_kept_by_a_browser(client):
     res = await client.get("/", follow_redirects=False)
     assert res.status_code == 307 and res.headers["cache-control"] == "no-store"
+
+
+# --- Clean-up (25 Nov 2026): one calendar, the community's own words ----------------------------------
+
+def test_the_parsi_calendar_is_the_shared_calendar_module_and_there_is_no_second_grid():
+    code = (STATIC / "behdin" / "js" / "screens" / "calendar.js").read_text(encoding="utf-8")
+    assert '"/mobed-app/js/calendar.js"' in code and "renderCalendar" in code and "useCalendarDeps" in code
+    assert "cal-grid" not in code and "cal-cell" not in (STATIC / "behdin" / "behdin.css").read_text(encoding="utf-8")
+    shared = (STATIC / "mobed" / "js" / "calendar.js").read_text(encoding="utf-8")
+    assert "export function useCalendarDeps" in shared
+    main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
+    assert 'route("#/calendar/:mode/:date"' in main
+    page = (STATIC / "behdin" / "index.html").read_text(encoding="utf-8")
+    assert 'id="fab"' in page and "Add an event" in page
+
+
+def test_the_new_event_screen_has_the_one_choice_of_kind_and_the_install_card_is_on_sign_in():
+    event = (STATIC / "behdin" / "js" / "screens" / "event.js").read_text(encoding="utf-8")
+    for kind in ("Prayers for the departed", "New event"):
+        assert kind in event
+    assert "Add a departed" not in (STATIC / "behdin" / "js" / "screens" / "calendar.js").read_text(encoding="utf-8")
+    assert not (STATIC / "behdin" / "js" / "consent.js").exists()
+    login = (STATIC / "behdin" / "js" / "screens" / "login.js").read_text(encoding="utf-8")
+    menu = (STATIC / "behdin" / "js" / "screens" / "menu.js").read_text(encoding="utf-8")
+    assert "addGetApp(mainEl)" in login and "paintInstall" not in menu and "mInstall" not in menu
+
+
+_BANNED = re.compile(r"(?<![\w/.#$@-])(agyari|agiary)(?!\w)|namaste", re.I)
+
+
+def test_banned_words_are_nowhere_in_what_a_person_reads_in_either_app():
+    """D11 (22 Nov 2026): no "Namaste", and "fire temple", never "agyari" or "agiary". Comments are left out, and so
+    is a bare quoted code word ("agyari" as a value the server uses). Identifiers and addresses do not match."""
+    found = []
+    for path in sorted(STATIC.rglob("*")):
+        if not path.is_file() or path.suffix not in {".js", ".html"}:
+            continue
+        text = _COMMENTS.sub("", path.read_text(encoding="utf-8"))
+        for m in _BANNED.finditer(text):
+            before, after = text[m.start() - 1: m.start()], text[m.end(): m.end() + 1]
+            if before in "\"'" and after in "\"'":
+                continue
+            found.append(f"{path.relative_to(STATIC).as_posix()}: {text[max(0, m.start() - 30): m.end() + 30]!r}")
+    assert not found, chr(10).join(found)

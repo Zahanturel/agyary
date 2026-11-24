@@ -2,7 +2,7 @@
 
 /**
  * "My asks": every ask the person has made, newest first, each with where it stands; one ask in full,
- * with Cancel and (once it has been turned down, cancelled or not answered) "Ask another agyari".
+ * with Cancel and (once it has been turned down, cancelled or not answered) "Ask another fire temple".
  */
 
 import { getMyAsks, getAsk, cancelAsk, askAnother } from "../api.js";
@@ -22,15 +22,17 @@ export function chipHtml(ask) {
 /** "Jashan, 25/12/2026, at Goti Adarian": the one line an ask is known by. */
 export function askLine(a) {
   const when = a.kind === "memorial" ? `from ${gregShort(a.date)}` : gregShort(a.date);
-  return `${a.service.name}, ${when}, at ${a.agyari.name || "an agyari"}`;
+  return `${a.service.name}, ${when}, at ${a.agyari.name || "a fire temple"}`;
 }
 
 function rowHtml(a) {
-  return `<a class="card ask-row" href="#/asks/${a.id}" data-ask="${a.id}">
-    <span class="ask-row-top"><b>${esc(a.service.name)}</b>${chipHtml(a)}</span>
-    <span class="meta">${esc(a.kind === "memorial" ? `From ${gregShort(a.date)}` : longDay(a.date))}${a.parsi ? ", " + esc(a.parsi) : ""}</span>
-    <span class="meta">${esc(a.agyari.name || "")}${a.agyari.city ? ", " + esc(a.agyari.city) : ""}</span>
-  </a>`;
+  return `<div class="event" data-ask="${a.id}">
+    <div class="ev-row"><div class="ev-main">
+      <div class="t">${esc(a.service.name)}</div>
+      <div class="s">${esc(a.kind === "memorial" ? `From ${gregShort(a.date)}` : longDay(a.date))}${a.parsi ? ", " + esc(a.parsi) : ""}</div>
+      <div class="s">${esc(a.agyari.name || "")}${a.agyari.city ? ", " + esc(a.agyari.city) : ""}</div>
+    </div>${chipHtml(a)}</div>
+  </div>`;
 }
 
 export async function renderAsks() {
@@ -50,8 +52,8 @@ export async function renderAsks() {
   if (!alive()) return;
   mainEl.innerHTML = asks.length
     ? asks.map(rowHtml).join("")
-    : `<div class="card empty-card"><h2>No asks yet</h2>
-        <p class="meta">When you ask an agyari to pray for you, you will see here where it stands.</p></div>`;
+    : `<div class="empty-state">No asks yet.</div>`;
+  mainEl.querySelectorAll("[data-ask]").forEach((el) => { el.onclick = () => navigate(`#/asks/${el.dataset.ask}`); });
 }
 
 function line(label, text) {
@@ -74,16 +76,12 @@ function detailHtml(a) {
       <p class="meta" style="margin:0">${esc(a.agyari.name || "")}${a.agyari.city ? ", " + esc(a.agyari.city) : ""}</p>`,
   ];
   if (a.status === "rejected") {
-    out.push(`<p style="margin:var(--space-3) 0 0"><b>${esc(a.agyari.name || "The agyari")} cannot take this.</b>
-      ${a.reject_reason ? `<br>The panthaky wrote: ${esc(a.reject_reason)}` : ""}</p>`);
+    out.push(`<p style="margin:var(--space-3) 0 0"><b>${esc(a.agyari.name || "The fire temple")} cannot take this.</b>
+      ${a.reject_reason ? `<br>${esc(a.reject_reason)}` : ""}</p>`);
   } else if (a.no_answer) {
-    out.push(`<p style="margin:var(--space-3) 0 0"><b>No answer yet.</b> The panthaky has not answered in a day.
-      You can ask another agyari.</p>`);
+    out.push(`<p style="margin:var(--space-3) 0 0"><b>No answer yet.</b></p>`);
   } else if (a.status === "accepted") {
-    out.push(`<p style="margin:var(--space-3) 0 0"><b>${esc(a.agyari.name || "The agyari")} accepted this ask.</b>
-      They now have your name and number.</p>`);
-  } else if (a.status === "waiting") {
-    out.push(`<p style="margin:var(--space-3) 0 0" class="meta">Your name and number go to the panthaky only if they accept.</p>`);
+    out.push(`<p style="margin:var(--space-3) 0 0"><b>${esc(a.agyari.name || "The fire temple")} accepted this ask.</b></p>`);
   }
   out.push(`</div><div class="card">`);
   if (a.purpose && a.kind !== "memorial") out.push(line("For", esc(a.purpose_label)));
@@ -93,13 +91,13 @@ function detailHtml(a) {
   } else {
     out.push(line("When", whenText(a)));
   }
-  out.push(line("Where", a.where === "home" ? `At home, ${esc(a.area || "")}` : "At the agyari"));
+  out.push(line("Where", a.where === "home" ? `At home, ${esc(a.area || "")}` : "At the fire temple"));
   if (a.repeat) out.push(line("Repeats", esc(repeatWords(a.repeat))));
   out.push(line("Names", names.length ? names.map((n) => `${esc(n.name)} <span class="meta">${esc(TITLES[n.title] || "")}</span>`).join("<br>") : "None"));
   if (a.note) out.push(line("Note", esc(a.note)));
   out.push(`</div>`);
   const buttons = [];
-  if (a.can_ask_another) buttons.push(`<button type="button" id="askAnother">Ask another agyari</button>`);
+  if (a.can_ask_another) buttons.push(`<button type="button" id="askAnother">Ask another fire temple</button>`);
   if (a.can_cancel) buttons.push(`<button type="button" class="${a.can_ask_another ? "ghost " : ""}danger-outline" id="askCancel">Cancel this ask</button>`);
   if (buttons.length) out.push(`<div class="stack">${buttons.join("")}</div>`);
   return out.join("");
@@ -137,8 +135,8 @@ export async function renderAskView(params) {
         title: "Cancel this ask?",
         html: `<p><b>${esc(askLine(a))}</b></p>
           <p class="meta">${accepted
-            ? `${esc(a.agyari.name || "The agyari")} will be told, and it will show as cancelled in their book.`
-            : `${esc(a.agyari.name || "The agyari")}'s panthaky will be told you no longer need it.`}
+            ? `${esc(a.agyari.name || "The fire temple")} will be told.`
+            : `${esc(a.agyari.name || "The fire temple")}'s panthaky will be told.`}
             ${accepted && soon ? "<br><b>Please also call them, as the day is so close.</b>" : ""}</p>
           <div class="row tight"><button type="button" class="danger" id="askYes">Cancel this ask</button>
           <button type="button" class="ghost" id="askNo">Keep it</button></div>`,
@@ -161,10 +159,10 @@ export async function renderAskView(params) {
   }
 }
 
-/** Pick another agyari for an ask that was turned down, cancelled or not answered: the ask is copied. */
+/** Pick another fire temple for an ask that was turned down, cancelled or not answered: the ask is copied. */
 export async function renderAskAnother(params) {
   chrome(true);
-  setHeader("Ask another agyari");
+  setHeader("Ask another fire temple");
   loading();
   const alive = navGuard();
   const id = Number(params.id);
@@ -179,17 +177,17 @@ export async function renderAskAnother(params) {
   }
   if (!alive()) return;
   mainEl.innerHTML = `<div class="card"><h2>${esc(a.service.name)}, ${esc(gregShort(a.date))}</h2>
-    <p class="meta" style="margin:0">Choose another agyari. Everything you wrote is copied to it.</p></div><div id="anyPick"></div>`;
+    </div><div id="anyPick"></div>`;
   mountPicker(document.getElementById("anyPick"), {
-    alive, pickLabel: "Ask this agyari",
-    onPick: async (agyari) => {
+    alive, pickLabel: "Ask this fire temple",
+    onPick: async (temple) => {
       let made;
       try {
-        made = await askAnother(id, agyari.id);
+        made = await askAnother(id, temple.id);
       } catch (err) {
         return showError(err.message);
       }
-      showInfo(`Your ask was sent to ${agyari.name}.`);
+      showInfo(`Your ask was sent to ${temple.name}.`);
       navigate(`#/asks/${made.id}`, { replace: true });
     },
   });

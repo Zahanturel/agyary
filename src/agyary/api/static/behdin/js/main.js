@@ -8,14 +8,16 @@
 
 import { route, setGuard, setNotFound, start, navigate, onNavigated } from "/mobed-app/js/router.js";
 import { watchForUpdates } from "/mobed-app/js/update.js";
-import { chrome, menuBtn, onTab, flashError } from "/mobed-app/js/ui.js";
+import { chrome, menuBtn, onTab, flashError, setDefaultFabAction } from "/mobed-app/js/ui.js";
+import { calendarHash } from "/mobed-app/js/calendar.js";
+import { setupSwipeNav } from "/mobed-app/js/swipe.js";
 import { state, saveSession, restoreSession, clearSession } from "./state.js";
 import { tryRefresh, getMe, REFRESH_OFFLINE } from "./api.js";
 import { signedIn } from "./session.js";
 import { APP_NAME } from "./brand.js";
 import { renderLogin } from "./screens/login.js";
 import { renderHome } from "./screens/home.js";
-import { renderCalendar } from "./screens/calendar.js";
+import { renderCalendarScreen } from "./screens/calendar.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderOff } from "./screens/off.js";
 import { renderEvent } from "./screens/event.js";
@@ -31,7 +33,9 @@ import { syncBell } from "./notices.js";
 route("#/login", renderLogin, { open: true });
 route("#/off", renderOff);
 route("#/home", renderHome, { tab: "home" });
-route("#/calendar", renderCalendar, { tab: "calendar" });
+route("#/calendar", renderCalendarScreen, { tab: "calendar" });
+// The view is part of the address, as in the other app: #/calendar/day/2026-09-25.
+route("#/calendar/:mode/:date", renderCalendarScreen, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/home" });
 route("#/agyari", renderAgyari, { parent: "#/home" });
 route("#/ask", renderAsk, { parent: "#/home" });
@@ -40,11 +44,11 @@ route("#/asks", renderAsks, { parent: "#/home" });
 route("#/asks/:id/another", renderAskAnother, { parent: (p) => `#/asks/${p.id}` });
 route("#/asks/:id", renderAskView, { parent: "#/asks" });
 // "new" comes before the numbered one, which would otherwise take it.
-route("#/event/new", renderEvent, { parent: "#/calendar" });
-route("#/event/:id", renderEvent, { parent: "#/calendar" });
-route("#/departed/new", renderDepartedForm, { parent: "#/calendar" });
+route("#/event/new", renderEvent, { parent: "#/calendar", tab: "calendar" });
+route("#/event/:id", renderEvent, { parent: "#/calendar", tab: "calendar" });
+route("#/departed/new", renderDepartedForm, { parent: "#/event/new", tab: "calendar" });
 route("#/departed/:id/edit", renderDepartedForm, { parent: (p) => `#/departed/${p.id}` });
-route("#/departed/:id", renderDeparted, { parent: "#/calendar" });
+route("#/departed/:id", renderDeparted, { parent: "#/calendar", tab: "calendar" });
 
 setNotFound(() => navigate("#/home", { replace: true }));
 
@@ -66,7 +70,13 @@ menuBtn.onclick = () => navigate("#/menu");
   title.onclick = home;
   title.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); home(); } };
 }
-onTab((tab) => navigate({ home: "#/home", calendar: "#/calendar" }[tab]));
+onTab((tab) => navigate(tab === "calendar" ? calendarHash(state.calendar) : "#/home"));
+// What the add button does on the calendar: a new event, on the day that is open.
+setDefaultFabAction(() => {
+  state.draftDate = state.calendar.mode === "day" && state.calendar.focus ? state.calendar.focus : null;
+  navigate("#/event/new");
+});
+setupSwipeNav();
 
 // --- Boot -------------------------------------------------------------------
 async function boot() {

@@ -11,8 +11,8 @@
  * labels per cell is unreadable. Tapping a date opens that day.
  */
 
-import { parsiMonth as fetchParsiMonth, convertDate, fromParsi } from "./api.js";
-import { state, GEH_NAME_BY_NUM, primarySystem, visibleParsiSystems } from "./state.js";
+import { parsiMonth as defaultParsiMonth, convertDate as defaultConvertDate, fromParsi as defaultFromParsi } from "./api.js";
+import { state as defaultState, GEH_NAME_BY_NUM, primarySystem as defaultPrimary, visibleParsiSystems as defaultVisible } from "./state.js";
 import { navigate } from "./router.js";
 import { payChipHtml, flipPaidChip } from "./paid_chip.js";
 import { loadFailedHtml, wireRetry, showError, showInfo, openSheet } from "./ui.js";
@@ -21,14 +21,24 @@ import {
   parsiLabel, stepParsiMonth, monthYearLabel, MAH_NAMES_JS,
 } from "./util.js";
 
+/**
+ * What the calendar reads from the app around it: the three calendar calls, the state object that holds the month
+ * cache and the Go-to lists, and the person's primary and visible systems. The defaults are this app's own, so
+ * nothing changes here; the other app (Parsi) gives its own with useCalendarDeps() and is drawn by this same module.
+ */
+let deps = {
+  parsiMonth: defaultParsiMonth, convertDate: defaultConvertDate, fromParsi: defaultFromParsi,
+  state: defaultState, primarySystem: defaultPrimary, visibleParsiSystems: defaultVisible,
+};
+export function useCalendarDeps(own) { deps = { ...deps, ...own }; }
+
 /** A Parsi month's Roj<->Gregorian mapping never changes once computed, so
  *  re-opening a month already seen this session never re-hits the network. */
 export async function parsiMonthDays(mah, year, system) {
   const key = `${system}-${mah}-${year}`;
-  if (!state.parsiMonthCache[key]) {
-    state.parsiMonthCache[key] = await fetchParsiMonth(mah, year, system);
-  }
-  return state.parsiMonthCache[key];
+  const cache = deps.state.parsiMonthCache;
+  if (!cache[key]) cache[key] = await deps.parsiMonth(mah, year, system);
+  return cache[key];
 }
 
 const MODES = ["day", "month"];
@@ -73,10 +83,10 @@ export async function viewRange(view, system) {
   let pm = view.parsiMonth;
   if (!pm) {
     try {
-      const p = await convertDate(view.focus, system);
+      const p = await deps.convertDate(view.focus, system);
       pm = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
     } catch (e) {
-      const p = await convertDate(todayIst(), system);
+      const p = await deps.convertDate(todayIst(), system);
       pm = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
     }
     view.parsiMonth = pm;
@@ -194,7 +204,7 @@ function monthGridHtml(monthDays, items, selectedDay, chips = {}) {
 
 // Kinds with their own look. Memorial observances are a category of their own,
 // and the closing notice is pinned: it sorts above everything else on its day.
-const KIND_CLASS = { machi: " machi", memorial: " memorial", memorial_closing: " closing" };
+const KIND_CLASS = { machi: " machi", memorial: " memorial", memorial_closing: " closing", departed: " memorial" };
 const pinnedFirst = (a, b) => (b.kind === "memorial_closing") - (a.kind === "memorial_closing");
 
 function itemCardHtml(it) {
@@ -260,7 +270,7 @@ function dayHtml(items) {
  *  where Kadmi lives: on the Day view, not in every month cell. Nothing
  *  is added when the primary is the only one - the header already says it. */
 async function dayReadingsHtml(ymd) {
-  const systems = visibleParsiSystems();
+  const systems = deps.visibleParsiSystems();
   if (systems.length < 2) return "";
   const rows = await Promise.all(systems.map(async (sys) => {
     const label = await parsiLabel(ymd, sys);
@@ -283,7 +293,7 @@ async function dayReadingsHtml(ymd) {
  */
 export async function renderCalendar(container, opts) {
   const view = opts.view;
-  const system = primarySystem();
+  const system = deps.primarySystem();
   view.focus = view.focus || todayIst();
 
   const what = view.mode === "day" ? "this day" : "this month";
@@ -414,7 +424,7 @@ function wireChrome(container, view, system, opts, range) {
 async function monthAnchor(view, system) {
   let pm = view.parsiMonth;
   if (!pm) {
-    const p = await convertDate(view.focus, system);
+    const p = await deps.convertDate(view.focus, system);
     pm = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
   }
   const days = await parsiMonthDays(pm.mah, pm.year, system);
@@ -456,7 +466,7 @@ function goToMonthsHtml(anchor, year, system) {
 }
 
 async function openGoTo(view, system, go) {
-  const opts = state.calendarOptions || { roj: [], mah: [] };
+  const opts = deps.state.calendarOptions || { roj: [], mah: [] };
   let anchor = null;
   try {
     anchor = await monthAnchor(view, system);
@@ -525,7 +535,7 @@ async function openGoTo(view, system, go) {
     rojGo.onclick = async () => {
       rojGo.disabled = true;
       try {
-        const p = await fromParsi(body.querySelector("#gotoRoj").value, body.querySelector("#gotoMah").value, system);
+        const p = await deps.fromParsi(body.querySelector("#gotoRoj").value, body.querySelector("#gotoMah").value, system);
         leave({ mode: "day", focus: p.gregorian_date, parsiMonth: null });
       } catch (e) {
         rojGo.disabled = false;

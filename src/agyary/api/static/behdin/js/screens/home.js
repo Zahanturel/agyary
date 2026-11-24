@@ -1,66 +1,53 @@
 "use strict";
 
 /**
- * Home, the first screen: a greeting by first name, today's date and today's Parsi date, the next
- * prayer or event from the person's own calendar, their agyari, and cards that are honestly empty
- * for now. Those fill in as the app grows; no dates are promised.
+ * Home: today's date and Parsi day, the next prayer or event, the answers to the person's asks, and their
+ * fire temple. Titles and buttons only; a card with nothing to say is left out.
  */
 
 import { getToday, getMyCalendar, getMyAgyari, getMyAsks } from "../api.js";
-import { state } from "../state.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml } from "/mobed-app/js/ui.js";
 import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
-import { esc, firstName, gregShort, todayIst, weekdayOf, addDays, parsiWords, eventKindLabel, departedName } from "../util.js";
+import { esc, gregShort, todayIst, weekdayOf, addDays, parsiWords, eventKindLabel, departedName } from "../util.js";
 import { kindLabel } from "./agyari.js";
 import { startAsk } from "./ask.js";
 import { chipHtml, askLine } from "./asks.js";
 
-/** "Roj Hormuzd, Mah Aspandard", or a Gatha day's own name. */
-function parsiLine(p) {
-  if (p.is_gatha) return `${p.gatha_name || "Extra day"} (Gatha)`;
-  return `Roj ${p.roj_name}, Mah ${p.mah_name}`;
-}
-
 /** The next prayer or event in the next 60 days. `undefined` means it could not be read. */
 function nextCard(it) {
-  if (it === undefined) return `<div class="card"><h2>Your next prayer</h2>${loadFailedHtml("your next prayer", { whole: false })}</div>`;
-  if (!it) {
-    return `<div class="card empty-card"><h2>Your next prayer</h2>
-      <p class="meta">Nothing in the next 60 days. You can add your departed's prayers or an event in the Calendar.</p>
-      <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeNext">Open the Calendar</button></div></div>`;
-  }
+  if (it === undefined) return `<div class="card"><h2>Next</h2>${loadFailedHtml("your next prayer", { whole: false })}</div>`;
+  if (!it) return "";
   const memorial = it.source === "memorial";
   return `<div class="card">
-    <h2>${memorial ? "Your next prayer" : "Coming up"}</h2>
-    <p style="margin:0"><b>${esc(memorial ? `${it.label} - ${departedName(it)}` : it.title)}</b></p>
-    <p class="meta" style="margin:2px 0 0">${weekdayOf(it.date)} ${gregShort(it.date)}${it.parsi ? ", " + esc(parsiWords(it.parsi)) : ""}</p>
-    ${memorial ? "" : `<p class="meta" style="margin:2px 0 0">${esc(eventKindLabel(it.kind))}</p>`}
-    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeNext">Open the Calendar</button></div>
+    <h2>Next</h2>
+    <div class="event${memorial ? " memorial" : ""}" id="homeNext">
+      <div class="ev-row"><div class="ev-main">
+        <div class="t">${esc(memorial ? `${it.label} · ${departedName(it)}` : it.title)}</div>
+        <div class="s">${weekdayOf(it.date)} ${gregShort(it.date)}${it.parsi ? ", " + esc(parsiWords(it.parsi)) : ""}${memorial ? "" : " · " + esc(eventKindLabel(it.kind))}</div>
+      </div></div>
+    </div>
   </div>`;
 }
 
 function agyariCard(a) {
-  if (a === undefined) return `<div class="card"><h2>My agyari</h2>${loadFailedHtml("your agyari", { whole: false })}</div>`;
+  if (a === undefined) return `<div class="card"><h2>My fire temple</h2>${loadFailedHtml("your fire temple", { whole: false })}</div>`;
   const body = a
     ? `<p style="margin:0"><b>${esc(a.name)}</b></p>
        <p class="meta" style="margin:2px 0 0">${esc([a.city, kindLabel(a.kind)].filter(Boolean).join(" · "))}</p>`
-    : `<p class="meta">You have not chosen one yet.</p>`;
-  return `<div class="card"><h2>My agyari</h2>${body}
-    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAgyari">${a ? "Change" : "Choose my agyari"}</button></div></div>`;
+    : "";
+  return `<div class="card"><h2>My fire temple</h2>${body}
+    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAgyari">${a ? "Change" : "Choose your fire temple"}</button></div></div>`;
 }
 
-/** The latest answers to the person's asks (accepted, turned down, or not answered), and what is still waiting. */
+/** The latest answers to the person's asks (accepted, turned down, or not answered). */
 function answersCard(asks) {
   if (asks === undefined) return `<div class="card"><h2>Answers to your asks</h2>${loadFailedHtml("your asks", { whole: false })}</div>`;
   const answered = asks.filter((a) => a.status === "accepted" || a.status === "rejected" || a.no_answer)
     .sort((a, b) => String(b.decided_at || b.created_at).localeCompare(String(a.decided_at || a.created_at))).slice(0, 3);
-  const waiting = asks.filter((a) => a.status === "waiting" && !a.no_answer).length;
-  const body = answered.length
-    ? answered.map((a) => `<a class="home-ask" href="#/asks/${a.id}"><span>${esc(askLine(a))}</span>${chipHtml(a)}</a>`).join("")
-    : `<p class="meta" style="margin:0">${asks.length ? "No answers yet." : "You have not asked an agyari for a prayer yet."}</p>`;
-  return `<div class="card"><h2>Answers to your asks</h2>${body}
-    ${waiting ? `<p class="meta" style="margin:var(--space-2) 0 0">${waiting} waiting for an answer.</p>` : ""}
+  if (!asks.length) return "";
+  return `<div class="card"><h2>Answers to your asks</h2>
+    ${answered.map((a) => `<a class="home-ask" href="#/asks/${a.id}"><span>${esc(askLine(a))}</span>${chipHtml(a)}</a>`).join("")}
     <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAsks">My asks</button></div></div>`;
 }
 
@@ -70,7 +57,6 @@ export async function renderHome() {
   loading();
   const alive = navGuard();
 
-  const name = firstName(state.user && state.user.name);
   let today = null;
   let failed = false;
   const start = todayIst();
@@ -80,25 +66,22 @@ export async function renderHome() {
   if (!alive()) return;
   if (todayRes.status === "fulfilled") today = todayRes.value; else failed = true;
   const next = nextRes.status === "fulfilled" ? (nextRes.value.items[0] || null) : undefined;
-  const agyari = agyariRes.status === "fulfilled" ? agyariRes.value.agyari : undefined;
+  const mine = agyariRes.status === "fulfilled" ? agyariRes.value.agyari : undefined;
   const asks = asksRes.status === "fulfilled" ? asksRes.value.asks : undefined;
 
   // The date comes from the server (India's day); with no answer the phone's own clock, read in India.
   const ymd = today ? today.gregorian_date : todayIst();
-  const greeting = name ? `Namaste ${esc(name)}` : "Namaste";
   mainEl.innerHTML = `
-    <p class="greeting">${greeting}</p>
     <div class="card" id="homeToday">
       <p class="meta" style="margin:0">${weekdayOf(ymd)}</p>
       <p class="today-date">${gregShort(ymd)}</p>
-      ${today ? `<p class="today-parsi">${esc(parsiLine(today))}</p>
-        <p class="meta" style="margin:4px 0 0">Y.Z. ${esc(today.year)}</p>` : ""}
+      ${today ? `<p class="today-parsi">${esc(parsiWords(today))} · Y.Z. ${esc(today.year)}</p>` : ""}
       ${failed ? loadFailedHtml("today's Parsi date", { whole: false }) : ""}
     </div>
     <button type="button" class="ask-big" id="homeAsk">Ask for a prayer</button>
     ${nextCard(next)}
     ${answersCard(asks)}
-    ${agyariCard(agyari)}`;
+    ${agyariCard(mine)}`;
   wireRetry(mainEl, () => renderHome());
   const go = (id, hash) => { const b = document.getElementById(id); if (b) b.onclick = () => navigate(hash); };
   go("homeNext", "#/calendar");

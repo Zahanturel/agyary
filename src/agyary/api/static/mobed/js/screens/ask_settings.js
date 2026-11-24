@@ -57,7 +57,7 @@ export async function paintAskSettings(box, agyary, alive) {
       accept. Off until you turn it on.</p>
     <h3 style="margin:14px 0 4px">Services and prices</h3>
     <p class="meta" style="margin:0 0 6px">The price is only what people are shown, as "usual price, confirm with the
-      agyari". Nothing is charged in the app. Turn a service off to stop people asking for it.</p>
+      fire temple". Nothing is charged in the app. Turn a service off to stop people asking for it.</p>
     <div id="askSvcs">${prices.services.length ? prices.services.map(rowHtml).join("")
       : `<p class="meta">No services yet.</p>`}</div>`;
 

@@ -32,11 +32,11 @@ export function familyLineHtml(b) {
 
 /** The usual fire temple: chosen (with "Not this one"), or a search. */
 function paintAgyari(box, form, placeId) {
-  if (form.agyari) {
+  if (form.place) {
     box.innerHTML = `<div class="search-result" style="cursor:default;min-height:0">
-        <div><strong>${esc(form.agyari.name)}</strong></div><div class="addr">${esc(form.agyari.city || "")}</div></div>
+        <div><strong>${esc(form.place.name)}</strong></div><div class="addr">${esc(form.place.city || "")}</div></div>
       <button type="button" class="ghost small" data-clear>Not this one</button>`;
-    box.querySelector("[data-clear]").onclick = () => { form.agyari = null; paintAgyari(box, form, placeId); };
+    box.querySelector("[data-clear]").onclick = () => { form.place = null; paintAgyari(box, form, placeId); };
     return;
   }
   box.innerHTML = `<input type="text" id="fbAgyari" placeholder="Search by name or town" autocomplete="off">
@@ -64,7 +64,7 @@ function paintAgyari(box, form, placeId) {
       results.querySelectorAll("[data-i]").forEach(row => {
         row.onclick = () => {
           const a = found[+row.dataset.i];
-          form.agyari = { id: a.id, name: a.name, city: a.city };
+          form.place = { id: a.id, name: a.name, city: a.city };
           paintAgyari(box, form, placeId);
         };
       });
@@ -79,7 +79,7 @@ function paintAgyari(box, form, placeId) {
 export function openBehdinSheet({ behdin = null, prefill = null, placeId = null, onSaved, onRemoved = null } = {}) {
   placeId = behdin ? behdin.funeral_place_id : (placeId || (managerPlaces()[0] || {}).id || null);
   const start = behdin || prefill || {};
-  const form = { agyari: behdin ? behdin.usual_agyari : null };
+  const form = { place: behdin ? behdin.usual_agyari : null };
   const sheet = openSheet({
     title: behdin ? "Change the behdin" : "Add a behdin",
     html: `
@@ -121,7 +121,7 @@ export function openBehdinSheet({ behdin = null, prefill = null, placeId = null,
     if (!phone) problems.push({ target: ".phone-field", message: "Please enter a valid WhatsApp number." });
     if (problems.length) return flagProblems(body, problems);
     btn.disabled = true;
-    const payload = { name, phone, usual_agyary_id: form.agyari ? form.agyari.id : null };
+    const payload = { name, phone, usual_agyary_id: form.place ? form.place.id : null };
     let res;
     try {
       res = behdin ? await managerChangeInBook(behdin.id, payload)

@@ -102,7 +102,7 @@ function cardHtml(a) {
     <h2 style="margin:0">${esc(a.service.name)}${a.purpose_label ? ` <span class="meta" style="font-weight:400">${esc(a.purpose_label)}</span>` : ""}</h2>
     <p class="meta" style="margin:2px 0 8px">${esc(a.person.first_name || "A person")} asked ${esc(ago(a.created_at))}</p>
     ${a.kind === "memorial" && a.memorial ? memorialFacts(a) : singleFacts(a)}
-    ${fact("Where", a.where === "home" ? `At home${a.area ? `, ${esc(a.area)}` : ""}` : "At the agyari")}
+    ${fact("Where", a.where === "home" ? `At home${a.area ? `, ${esc(a.area)}` : ""}` : "At the fire temple")}
     ${a.names.length ? fact("Names to pray", a.names.map(nameText).join("<br>")) : ""}
     ${a.note ? fact("Note", esc(a.note)) : ""}
     ${a.status === "rejected" && a.reject_reason ? fact("Your reason", esc(a.reject_reason)) : ""}
@@ -206,7 +206,7 @@ function confirmAccept(a, agyary, msg, update, alive) {
 function confirmReject(a, agyary, update, alive) {
   const sheet = openSheet({
     title: "Can't take it?",
-    html: `<p class="meta" style="margin-top:0">${esc(a.person.first_name || "The person")} is told, and can ask another agyari.</p>
+    html: `<p class="meta" style="margin-top:0">${esc(a.person.first_name || "The person")} is told, and can ask another fire temple.</p>
       <label for="askReason">Reason <span class="meta">(optional, 100 letters at most)</span></label>
       <textarea id="askReason" rows="2" maxlength="100" placeholder="e.g. No mobed free that day"></textarea>
       <p class="meta" role="alert" data-err style="margin:6px 0 0"></p>

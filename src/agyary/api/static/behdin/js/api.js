@@ -143,6 +143,8 @@ export const updateEvent = (id, body) => patch(`/me/events/${id}`, body);
 export const deleteEvent = (id) => del(`/me/events/${id}`);
 // The Parsi name of every day in a range, in one call (the same one the other calendar uses).
 export const parsiRange = (start, end, system) => get(`/../calendar/range?start=${start}&end=${end}&system=${system}`);
+export const parsiMonth = (mah, year, system) => get(`/../calendar/parsi-month?mah=${mah}&year=${year}&system=${system}`);
+export const fromParsi = (roj, mah, system) => get(`/../calendar/from-parsi?roj=${roj}&mah=${mah}&system=${system}`);
 export const convertDay = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);
 
 // R4.2: asking an agyari for a prayer, the person's asks and their notices.

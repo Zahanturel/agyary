@@ -8,7 +8,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by the one page: /behdin, or the root on the
 // app's own hostname.
-const CACHE_NAME = "behdin-shell-v7";
+const CACHE_NAME = "behdin-shell-v8";
 // How long the network gets before the cached shell is shown. The fetch carries on behind it.
 const SHELL_WAIT_MS = 4000;
 const SHELL_FILES = [
@@ -28,12 +28,16 @@ const SHELL_FILES = [
   "/mobed-app/js/fielderrors.js",
   "/mobed-app/js/install.js",
   "/mobed-app/js/update.js",
+  "/mobed-app/js/calendar.js",
+  "/mobed-app/js/swipe.js",
+  "/mobed-app/js/api.js",
+  "/mobed-app/js/util.js",
+  "/mobed-app/js/paid_chip.js",
   // The behdin app's own:
   "/behdin-app/js/main.js",
   "/behdin-app/js/api.js",
   "/behdin-app/js/brand.js",
   "/behdin-app/js/install.js",
-  "/behdin-app/js/consent.js",
   "/behdin-app/js/notices.js",
   "/behdin-app/js/session.js",
   "/behdin-app/js/state.js",
