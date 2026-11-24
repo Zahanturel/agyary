@@ -1,0 +1,116 @@
+"use strict";
+
+/**
+ * The menu, behind the header icon: who you are, the text size, the other app, installing, signing
+ * out, deleting the account, and which version of the app this phone runs.
+ */
+
+import { updateMyName, deleteMyAccount } from "../api.js";
+import { state, saveSession } from "../state.js";
+import { chrome, mainEl, setHeader, showError, showInfo, getTextSize, setTextSize } from "/mobed-app/js/ui.js";
+import { flagProblems } from "/mobed-app/js/fielderrors.js";
+import { navigate } from "/mobed-app/js/router.js";
+import { APP_NAME } from "../brand.js";
+import { esc } from "../util.js";
+import { hasMobedRole, signOut, forgetEverything } from "../session.js";
+import { paintInstall, shellVersion } from "../install.js";
+
+export function renderMenu() {
+  chrome(true);
+  setHeader(APP_NAME);
+  const mobed = hasMobedRole();
+
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2>You</h2>
+      <label for="mName">Name</label>
+      <input type="text" id="mName" value="${esc(state.user.name)}" autocomplete="name">
+      <div style="margin-top:10px"><button class="small" id="mSaveName">Save name</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Text size</h2>
+      <p class="meta">Makes the words in the app bigger on this phone.</p>
+      <div id="mTextSize">
+        <label class="choice"><input type="radio" name="mText" value="regular" ${getTextSize() === "regular" ? "checked" : ""}><span>Regular</span></label>
+        <label class="choice"><input type="radio" name="mText" value="large" ${getTextSize() === "large" ? "checked" : ""}><span>Large</span></label>
+        <label class="choice"><input type="radio" name="mText" value="xl" ${getTextSize() === "xl" ? "checked" : ""}><span>Extra large</span></label>
+      </div>
+    </div>
+
+    ${mobed ? `<div class="card">
+      <h2>Mobed Diary</h2>
+      <p class="meta">Your diary of ceremonies and memorial prayers, in its own app.</p>
+      <a class="button secondary link-button" href="/mobed" id="mOpenMobed">Open Mobed Diary</a>
+    </div>` : `<div class="card">
+      <h2>Are you a mobed?</h2>
+      <p class="meta">Mobeds keep their diary in a separate app. You can ask to become one.</p>
+      <button class="secondary" id="mBecomeMobed">Ask to become one</button>
+    </div>`}
+
+    <div class="card" id="mInstall"></div>
+
+    <div class="card">
+      <button class="ghost" id="mSignOut">Sign out</button>
+      <p class="meta" style="margin:10px 0 0" id="mVersion"></p>
+    </div>
+
+    <div class="card">
+      <button class="ghost small" id="mDelete">Delete my account</button>
+      <div id="mDeleteConfirm"></div>
+    </div>`;
+
+  paintInstall(document.getElementById("mInstall"));
+  shellVersion().then((v) => {
+    const el = document.getElementById("mVersion");
+    if (el && v) el.textContent = "App version " + v;
+  });
+
+  mainEl.querySelectorAll('input[name="mText"]').forEach((r) => { r.onchange = () => setTextSize(r.value); });
+
+  const becomeBtn = document.getElementById("mBecomeMobed");
+  if (becomeBtn) becomeBtn.onclick = () => navigate("#/become-mobed");
+
+  document.getElementById("mSaveName").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    const nameEl = document.getElementById("mName");
+    const name = nameEl.value.trim();
+    if (!name) return flagProblems(nameEl.closest(".card"), [{ target: "#mName", message: "Please enter your name." }]);
+    btn.disabled = true;   // one save per tap
+    try {
+      state.user = await updateMyName(name);
+      saveSession();
+      showInfo("Saved.");
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  document.getElementById("mSignOut").onclick = (ev) => signOut(ev.currentTarget);
+
+  // Two steps, in plain words: what goes, and that it cannot be undone.
+  document.getElementById("mDelete").onclick = () => {
+    const box = document.getElementById("mDeleteConfirm");
+    box.innerHTML = `
+      <p style="margin:12px 0 8px"><b>Delete your account?</b></p>
+      <p class="meta" style="margin:0 0 12px">This removes your account and everything in it. It cannot be
+        undone. You can always sign up again later.</p>
+      <div class="row tight">
+        <button class="danger small" id="mDeleteYes">Delete everything</button>
+        <button class="ghost small" id="mDeleteNo">Keep my account</button>
+      </div>`;
+    document.getElementById("mDeleteNo").onclick = () => { box.innerHTML = ""; };
+    document.getElementById("mDeleteYes").onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        await deleteMyAccount();
+      } catch (err) {
+        e.target.disabled = false;
+        return showError(err.message);
+      }
+      forgetEverything();
+    };
+  };
+}

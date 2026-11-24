@@ -1,0 +1,7 @@
+/* The behdin app wears the Mobed Diary look (/mobed-app/app.css, linked first) with small changes. */
+
+.greeting { font-size: var(--text-lg); font-weight: 700; margin: var(--space-2) 0 var(--space-4); }
+.today-date { font-size: var(--text-lg); font-weight: 700; margin: 0; }
+.today-parsi { font-size: var(--text-md); margin: var(--space-2) 0 0; }
+.empty-card p { margin: 0; }
+.link-button { display: inline-block; }

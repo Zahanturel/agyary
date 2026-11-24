@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#232A4D">
+<!-- The app's name is written once, in routes/behdin.py (APP_NAME); the server fills it in here
+     and in the manifest, and the scripts read it from the application-name line (js/brand.js). -->
+<meta name="application-name" content="{{APP_NAME}}">
+<title>{{APP_NAME}}</title>
+<link rel="manifest" href="/behdin-manifest.json">
+<!-- What an iPhone uses when the app is added to its Home Screen (the mobed icon until one is chosen). -->
+<link rel="apple-touch-icon" href="/mobed-icon-180.png">
+<meta name="apple-mobile-web-app-title" content="{{APP_NAME}}">
+<link rel="preload" href="/mobed-fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/mobed-app/app.css">
+<link rel="stylesheet" href="/behdin-app/behdin.css">
+</head>
+<body>
+
+<!-- The same ids as the Mobed Diary page, because the shared router and ui modules look them up. -->
+<header>
+  <button id="backBtn" class="icon-btn hidden" title="Back" aria-label="Back">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <h1 id="headerTitle">{{APP_NAME}}</h1>
+  <div class="right">
+    <button id="menuBtn" class="icon-btn hidden" title="Menu" aria-label="Menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<nav id="tabs" class="tabs hidden" aria-label="Main">
+  <button data-tab="home" aria-label="Home">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 11l8-7 8 7v8.5a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19.5V11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    </svg><span>Home</span>
+  </button>
+  <button data-tab="calendar" aria-label="Calendar">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="2"/>
+      <path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><span>Calendar</span>
+  </button>
+</nav>
+
+<!-- Never shown here; the shared ui.js module looks for it. -->
+<button id="fab" class="fab hidden" aria-hidden="true" tabindex="-1">+</button>
+
+<script type="module" src="/behdin-app/js/main.js"></script>
+</body>
+</html>
