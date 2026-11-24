@@ -75,8 +75,10 @@ NO_SESSION = {
     ("GET", "/api/mobed/agyaries/search"),
     ("GET", "/api/mobed/reference/calendar-options"),
 }
-# The Parsi calendar's arithmetic, for anyone (no account, nothing stored).
-PUBLIC_PREFIXES = ("/api/calendar/",)
+# The Parsi calendar's arithmetic, for anyone (no account, nothing stored). And the
+# behdin app's own API (R4.0): open to every kind, built on none of the mobed
+# dependencies (tests/test_behdin_identity.py walks it).
+PUBLIC_PREFIXES = ("/api/calendar/", "/api/behdin/")
 
 
 def _routes(routes) -> list[APIRoute]:
@@ -365,6 +367,7 @@ async def test_the_admin_sees_managers_with_their_place_and_counts_what_is_in_th
         "fire_temples_in_use": 1,
         "funeral_places": {"in_use": 1, "off": 1},
         "managers": {"on": 1, "pending": 1, "off": 0},
+        "behdins": {"on": 0, "pending": 0, "off": 0},
     }
     # And on the place's own line.
     listed = (await client.get("/api/mobed/admin/funeral-places", headers=ah)).json()["places"]
