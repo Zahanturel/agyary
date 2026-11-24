@@ -102,6 +102,10 @@ class Agyary(Base):
     request_mode: Mapped[str] = mapped_column(String(20), server_default=REQUEST_MODE_EVERYONE)
     request_escalate_minutes: Mapped[int | None] = mapped_column(SmallInteger)
 
+    # Whether people can ask this agyari for a service in the Parsi app (R4.2). The confirmed panthaky
+    # (or the admin) switches it on; off by default.
+    takes_asks: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
     # Atash Behram, Adaran or Dadgah (R4.1), for the person's list; NULL when not known.
     kind: Mapped[str | None] = mapped_column(String(20))
 

@@ -27,6 +27,7 @@ from agyary.models.preferences import UserPreferences
 from agyary.models.push_subscription import PushSubscription
 from agyary.models.recurrence import RecurrenceRule
 from agyary.models.service import Service
+from agyary.models.service_ask import ServiceAsk
 from agyary.models.user import AgyaryUser, DeletedAccount, User, UserSession
 from agyary.models.wa_login import WaLoginAttempt
 
@@ -70,6 +71,7 @@ __all__ = [
     "RecurrenceRule",
     "ReminderOptOut",
     "Service",
+    "ServiceAsk",
     "User",
     "UserPreferences",
     "UserSession",

@@ -133,6 +133,14 @@ PAYMENT_METHODS = ("upi", "cash", "bank_transfer", "other")
 
 MACHI_PURPOSES = ("patet", "tandarosti")
 BOOKING_PURPOSES = ("gujrela_nu", "khushali_nu", "hama_anjuman")
+ASK_PURPOSES = BOOKING_PURPOSES + MACHI_PURPOSES
+
+# A person's ask to an agyari (R4.2): what it is, where it stands, where it happens.
+# The purpose is a booking's (Gujrela nu, Khushali nu, Hama Anjuman) or a machi's (Patet, Tandarosti).
+ASK_KINDS = ("single", "repeating", "memorial")
+ASK_WAITING, ASK_ACCEPTED, ASK_REJECTED, ASK_CANCELLED = "waiting", "accepted", "rejected", "cancelled"
+ASK_STATUSES = (ASK_WAITING, ASK_ACCEPTED, ASK_REJECTED, ASK_CANCELLED)
+ASK_VENUES = ("agyari", "home")
 
 NAME_SECTIONS = ("pair", "farmayeshne")
 NAME_TITLES = ("khud", "osta", "osti", "ervad", "behdin")

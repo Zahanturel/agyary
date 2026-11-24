@@ -1139,3 +1139,62 @@ async def test_the_r41_migration_backfills_kinds_holds_its_rules_and_refuses_to_
         _ok(_alembic("check"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_service_asks_migration_holds_its_rules_and_comes_off_cleanly():
+    """e5f6a0b1c2d3 (R4.2): an agyari does not take asks until switched on, an ask holds its rules
+    (a kind, a status, a purpose, a geh or a time, a repeat only when repeating), goes with the
+    person's account, leaves the panthaky's own record when that record goes, and going back
+    refuses while any ask exists (D8)."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "d4e5f6a0b1c2"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Asked (test)', 'Mumbai')")
+        _ok(_alembic("upgrade", "head"))
+        assert await _scratch_execute("SELECT takes_asks FROM agyaries") == [(False,)]
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', "
+                               "'+919000000041', 'behdin')")
+        (user,), = await _scratch_execute("SELECT id FROM users")
+        (agyary,), = await _scratch_execute("SELECT id FROM agyaries")
+        await _scratch_execute("INSERT INTO services (agyary_id, name) VALUES (:a, 'Jashan (test)')", {"a": agyary})
+        (service,), = await _scratch_execute("SELECT id FROM services")
+        insert = ("INSERT INTO service_asks (user_id, agyary_id, service_id, kind, purpose, ceremony_date, geh,"
+                  " ceremony_time, venue, status, repeat_pattern, memorial_codes)"
+                  " VALUES (:u, :a, :s, :k, :p, '2026-12-01', :g, :t, :v, :st, :rp, :mc)")
+        ok = {"u": user, "a": agyary, "s": service, "k": "single", "p": "gujrela_nu", "g": None, "t": None,
+              "v": "agyari", "st": "waiting", "rp": None, "mc": None}
+        ok["t"] = time(10, 0)
+        await _scratch_execute(insert, ok)
+        await _scratch_execute(insert, {**ok, "p": "patet", "g": 2, "t": None})
+        await _refused(insert, {**ok, "k": "weekly"}, "an unknown kind")
+        await _refused(insert, {**ok, "st": "maybe"}, "an unknown status")
+        await _refused(insert, {**ok, "p": "tandarosti_x"}, "an unknown purpose")
+        await _refused(insert, {**ok, "v": "street"}, "an unknown place")
+        await _refused(insert, {**ok, "g": 6, "t": None}, "a geh that does not exist")
+        await _refused(insert, {**ok, "t": None}, "neither a geh nor a time")
+        await _refused(insert, {**ok, "g": 1}, "both a geh and a time")
+        await _refused(insert, {**ok, "rp": "monthly"}, "a repeat on an ask that does not repeat")
+        await _refused(insert, {**ok, "k": "repeating"}, "a repeating ask without its repeat")
+        await _refused(insert, {**ok, "mc": '["day_10"]'}, "memorial dates on an ask that is not a memorial")
+
+        # What an accept made is the panthaky's own: it can go without taking the ask with it.
+        await _scratch_execute("INSERT INTO customers (owner_user_id, phone, name) VALUES (:u, '+919000000042', 'Fam')",
+                               {"u": user})
+        (customer,), = await _scratch_execute("SELECT id FROM customers")
+        await _scratch_execute("UPDATE service_asks SET result_customer_id = :c", {"c": customer})
+        await _scratch_execute("DELETE FROM customers WHERE id = :c", {"c": customer})
+        assert await _scratch_execute("SELECT result_customer_id FROM service_asks") == [(None,), (None,)]
+
+        down = _alembic("downgrade", "d4e5f6a0b1c2")
+        assert down.returncode != 0 and "asks" in (down.stdout + down.stderr)
+        assert len(await _scratch_execute("SELECT id FROM service_asks")) == 2
+        # Deleting the account takes its asks (the foreign key cascades).
+        await _scratch_execute("DELETE FROM users WHERE id = :u", {"u": user})
+        assert await _scratch_execute("SELECT 1 FROM service_asks") == []
+        _ok(_alembic("downgrade", "d4e5f6a0b1c2"))
+        cols = await _scratch_execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'agyaries'")
+        assert "takes_asks" not in {c for (c,) in cols}
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)
