@@ -120,11 +120,15 @@ def test_the_page_and_the_worker_name_the_right_files():
     # Its own cache only: Mobed Diary's may sit on the same origin.
     assert 'k.startsWith("behdin-shell-") && k !== CACHE_NAME' in worker
     # The app is registered under its own scope, with the name coming from one place.
-    assert '"/behdin-sw.js", { scope: "/behdin" }' in (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
+    main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
+    assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
+    assert 'CACHE_NAME = "behdin-shell-v2"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
     for url in _shell_files():
+        if url == "/":
+            continue   # on a host with no BEHDIN_HOST it is a redirect; tested below, on its own host
         r = await client.get(url)
         assert r.status_code == 200, url
         # Without this Cloudflare keeps a shell file for hours after a deploy.
@@ -158,14 +162,24 @@ def behdin_host(monkeypatch):
     config.get_settings.cache_clear()
 
 
-async def test_the_behdin_hostname_opens_the_behdin_app_and_every_other_host_the_mobed_app(client, behdin_host):
-    r = await client.get("/", headers={"Host": "parsi.gotiadarian.com"}, follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == "/behdin"
+async def test_the_behdin_hostname_is_the_behdin_app_at_the_root_and_every_other_host_the_mobed_app(client, behdin_host):
+    own = {"Host": "parsi.gotiadarian.com"}
+    r = await client.get("/", headers=own, follow_redirects=False)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+    assert f"<title>{APP_NAME}</title>" in r.text and "{{" not in r.text
+    assert r.headers["cache-control"] == "no-cache"
+    # Its manifest says the app lives at "/", still named from the one place.
+    body = (await client.get("/behdin-manifest.json", headers=own)).json()
+    assert (body["id"], body["start_url"], body["scope"], body["name"]) == ("/", "/", "/", APP_NAME)
+    # Everywhere else the manifest and the page are the /behdin ones.
+    other = (await client.get("/behdin-manifest.json", headers={"Host": "localhost:8000"})).json()
+    assert (other["id"], other["start_url"], other["scope"]) == ("/behdin", "/behdin", "/behdin")
     for host in ("mobed.gotiadarian.com", "localhost:8000"):
         r = await client.get("/", headers={"Host": host}, follow_redirects=False)
         assert r.status_code == 307 and r.headers["location"] == "/mobed", host
-    # The app answers on its hostname, and Mobed Diary's own pages are untouched.
-    assert (await client.get("/behdin", headers={"Host": "parsi.gotiadarian.com"})).status_code == 200
+    # /behdin keeps working on every host, the app's own included.
+    for host in ("parsi.gotiadarian.com", "localhost:8000"):
+        assert (await client.get("/behdin", headers={"Host": host})).status_code == 200, host
 
 
 async def test_with_no_behdin_hostname_set_the_root_is_the_mobed_app(client):

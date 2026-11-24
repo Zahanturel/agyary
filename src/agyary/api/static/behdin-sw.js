@@ -6,12 +6,15 @@
 // (/mobed-app/): a module missing from the cache means a blank screen offline. tests/test_behdin_shell.py
 // checks both lists against what the app really imports.
 //
-// Routing lives in the client (hash-based), so every route is served by "/behdin" itself.
-const CACHE_NAME = "behdin-shell-v1";
+// Routing lives in the client (hash-based), so every route is served by the one page: /behdin, or the root on the
+// app's own hostname.
+const CACHE_NAME = "behdin-shell-v2";
 // How long the network gets before the cached shell is shown. The fetch carries on behind it.
 const SHELL_WAIT_MS = 4000;
 const SHELL_FILES = [
   "/behdin",
+  // The page itself on the app's own hostname (BEHDIN_HOST), where the app is at the root, with no /behdin.
+  "/",
   "/behdin-manifest.json",
   "/behdin-icon.svg",
   "/mobed-fonts/figtree.woff2",

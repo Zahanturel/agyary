@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 import logging
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -46,6 +47,14 @@ if not _app_log.handlers:
 # Every line we or uvicorn write about an error, whichever logger it came from.
 for _log_handler in (*_app_log.handlers, *logging.getLogger("uvicorn").handlers):
     _log_handler.addFilter(MaskNumbers())
+
+
+def _on_behdin_host(request: Request) -> bool:
+    """Whether this request came in on the behdin app's own hostname (BEHDIN_HOST, e.g.
+    parsi.gotiadarian.com), where the app is served at "/" itself. Empty setting: never."""
+    behdin_host = get_settings().behdin_host.strip().lower()
+    host = request.headers.get("host", "").split(":")[0].strip().lower()
+    return bool(behdin_host) and host == behdin_host
 
 
 @asynccontextmanager
@@ -158,7 +167,9 @@ async def security_headers(request, call_next):
     # authority - which is exactly how a shipped deploy stayed invisible on a
     # phone while every server-side check passed.
     path = request.url.path
-    if path in _NO_CACHE_PATHS or path.startswith(("/mobed-app", "/behdin-app")):
+    if path in _NO_CACHE_PATHS or path.startswith(("/mobed-app", "/behdin-app")) or (
+        path == "/" and _on_behdin_host(request)
+    ):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -181,7 +192,7 @@ _BEHDIN_DIR = _STATIC_DIR / "behdin"
 
 
 @app.get("/", include_in_schema=False)
-def root(request: Request) -> RedirectResponse:
+def root(request: Request) -> Response:
     """Send a bare hostname to the app. There is one app (Machi is a tab of it),
     on whatever hostname: without this, "/" would 404 - which is exactly what
     someone hits when a shared link drops the path.
@@ -189,12 +200,11 @@ def root(request: Request) -> RedirectResponse:
     307, never 301: a permanent redirect is cached by browsers indefinitely
     and would outlive any change to where the app lives.
     """
-    # The behdin app's own hostname (BEHDIN_HOST, e.g. parsi.gotiadarian.com) opens the behdin app;
-    # every other host, including when BEHDIN_HOST is empty, opens the mobed app as before.
-    behdin_host = get_settings().behdin_host.strip().lower()
-    host = request.headers.get("host", "").split(":")[0].strip().lower()
-    if behdin_host and host == behdin_host:
-        return RedirectResponse(url="/behdin", status_code=307)
+    # The behdin app's own hostname (BEHDIN_HOST, e.g. parsi.gotiadarian.com) IS the behdin app: its
+    # shell is served right here, so no "/behdin" shows in the address. Every other host, including
+    # when BEHDIN_HOST is empty, opens the mobed app as before.
+    if _on_behdin_host(request):
+        return _behdin_page()
     return RedirectResponse(url="/mobed", status_code=307)
 
 
@@ -218,18 +228,27 @@ app.mount("/mobed-app", StaticFiles(directory=_MOBED_DIR), name="mobed-app")
 # --- The behdin app (R4.0): its own shell, manifest, worker and icon, on /behdin ----------
 # The shell page carries the app's name (APP_NAME in routes/behdin.py, the one place it is
 # written), and the manifest is built from it, so renaming the app is a change in one line.
-@app.get("/behdin", include_in_schema=False)
-def behdin_ui() -> HTMLResponse:
+def _behdin_page() -> HTMLResponse:
     html = (_BEHDIN_DIR / "index.html").read_text(encoding="utf-8").replace("{{APP_NAME}}", BEHDIN_APP_NAME)
     return HTMLResponse(html)
+
+
+@app.get("/behdin", include_in_schema=False)
+def behdin_ui() -> HTMLResponse:
+    return _behdin_page()
 
 
 app.mount("/behdin-app", StaticFiles(directory=_BEHDIN_DIR), name="behdin-app")
 
 
 @app.get("/behdin-manifest.json", include_in_schema=False)
-def behdin_manifest() -> Response:
+def behdin_manifest(request: Request) -> Response:
     text = (_STATIC_DIR / "behdin-manifest.json").read_text(encoding="utf-8").replace("{{APP_NAME}}", BEHDIN_APP_NAME)
+    if _on_behdin_host(request):
+        # On its own hostname the app lives at "/", so that is its identity, start and scope.
+        data = json.loads(text)
+        data.update({"id": "/", "start_url": "/", "scope": "/"})
+        text = json.dumps(data, indent=2)
     return Response(text, media_type="application/manifest+json")
 
 

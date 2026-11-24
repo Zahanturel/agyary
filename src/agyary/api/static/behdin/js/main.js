@@ -112,8 +112,10 @@ window.addEventListener("online", async () => {
 });
 
 if ("serviceWorker" in navigator) {
-  // The worker is served from the root, so its scope is given: it covers /behdin and nothing of Mobed Diary.
-  navigator.serviceWorker.register("/behdin-sw.js", { scope: "/behdin" }).catch(() => {});
+  // The worker is served from the root, so its scope is given: on the app's own hostname the page is
+  // "/" and the scope "/"; anywhere else it is /behdin, which covers nothing of Mobed Diary.
+  const scope = location.pathname === "/" ? "/" : "/behdin";
+  navigator.serviceWorker.register("/behdin-sw.js", { scope }).catch(() => {});
 }
 // Pick up a deployed update without waiting for someone to reload by hand.
 onNavigated(watchForUpdates({ busy: () => false }));
