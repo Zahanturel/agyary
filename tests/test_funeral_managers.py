@@ -33,6 +33,10 @@ MANAGER_MAY = {
     ("GET", "/api/mobed/notifications"),
     ("POST", "/api/mobed/notifications/seen"),
     ("GET", "/api/mobed/manager/place"),
+    # Asking the admin to move to another place (owner, 24 Nov 2026).
+    ("GET", "/api/mobed/manager/place-change/places"),
+    ("POST", "/api/mobed/manager/place-change"),
+    ("DELETE", "/api/mobed/manager/place-change"),
     # Notifications on this phone, for every account that is on.
     ("GET", "/api/mobed/me/push"),
     ("POST", "/api/mobed/me/push/subscribe"),
