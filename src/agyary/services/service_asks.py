@@ -674,7 +674,7 @@ async def reject(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: Us
     await _tell_person(
         db, settings, ask, KIND_REJECTED, "Can't take it",
         f"{agyary.name} can't take your ask for {service.name} {_when_words(ask)}."
-        + (f" They said: {why}" if why else "") + " You can ask another fire temple.")
+        + (f" They said: {why.rstrip('.!? ')}." if why else "") + " You can ask another fire temple.")
 
 
 async def accept(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: User) -> dict:
