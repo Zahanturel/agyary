@@ -11,7 +11,7 @@
  */
 
 import { getAsksSetting, listAsks, acceptAsk, rejectAsk } from "./api.js";
-import { currentAgyary } from "./state.js";
+import { currentAgyary, TITLE_DISPLAY } from "./state.js";
 import { openSheet, showInfo } from "./ui.js";
 import { esc, gregLabel } from "./util.js";
 import { navigate } from "./router.js";
@@ -53,6 +53,12 @@ function repeatText(r) {
   const unit = r.pattern === "yearly" || r.pattern === "same_roj_mah_every_year" ? "year" : "month";
   const word = unit === "year" ? "every year" : "every month";
   return r.count ? `Repeats ${word}, ${r.count} ${unit}s in all` : `Repeats ${word}`;
+}
+
+/** One name to pray, as the diary reads it: "Osta Rustom Test (departed)". */
+function nameText(n) {
+  const title = TITLE_DISPLAY[n.title] || "";
+  return esc(`${title} ${n.name}${n.status === "departed" ? " (departed)" : ""}`.trim());
 }
 
 function fact(label, value) {
@@ -97,7 +103,7 @@ function cardHtml(a) {
     <p class="meta" style="margin:2px 0 8px">${esc(a.person.first_name || "A person")} asked ${esc(ago(a.created_at))}</p>
     ${a.kind === "memorial" && a.memorial ? memorialFacts(a) : singleFacts(a)}
     ${fact("Where", a.where === "home" ? `At home${a.area ? `, ${esc(a.area)}` : ""}` : "At the agyari")}
-    ${a.names.length ? fact("Names to pray", a.names.map(esc).join("<br>")) : ""}
+    ${a.names.length ? fact("Names to pray", a.names.map(nameText).join("<br>")) : ""}
     ${a.note ? fact("Note", esc(a.note)) : ""}
     ${a.status === "rejected" && a.reject_reason ? fact("Your reason", esc(a.reject_reason)) : ""}
     <p class="meta" role="alert" data-msg style="margin:6px 0 0"></p>
