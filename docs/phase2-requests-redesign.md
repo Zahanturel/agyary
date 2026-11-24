@@ -91,6 +91,17 @@ button): Ask everyone, I'll pray, or marking someone Going.
 app, a sheet asks **"Is Ervad A going?"** with **Going** / **Not this time** / **No answer**.
 One tap records it. (The app notices it is back on screen; nothing listens to the call.)
 
+**Going for someone on the waiting list (owner, 24 Nov 2026):** while a place is open, the panthaky
+can mark ANY mobed Going, including one on the waiting list or one just asked again (a Going button
+on the waiting-list row and on the mobed's row). It fills the place, closes that mobed's asking again
+(the next standby is not asked, the 30 minutes move nobody on), and is one yes with the mobed's own
+WhatsApp Yes: under the request's lock whoever comes second finds them going already ("already
+answered" / "not asked again"), never two places. With no place open it is refused in plain words.
+
+**The board refreshes** every 5 seconds while it is open on screen (waiting or confirmed: a back-out
+reopens a confirmed one), one read at a time, stopped when the page is hidden or left, and read at
+once when the app comes back to the front.
+
 **WhatsApp from the app** opens the panthaky's own WhatsApp chat with that mobed and a short
 message ready to edit (no family details), the same as today's "Message the family" button.
 

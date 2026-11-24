@@ -475,3 +475,7 @@ Owner's decisions:
   contact ..." and in the details message to a mobed going, the contact is the confirmed panthaky with their number,
   never another mobed and never only the fire temple's name, even when the family's number is the panthaky's own.
   The fire temple's name stays only where the details message goes to the panthaky themselves.
+- **Going for a mobed on the waiting list** (24 Nov 2026, same test): while a place is open the panthaky can mark any
+  mobed Going, also one on the waiting list or just asked again; it fills the place, cancels that mobed's asking
+  again, and is one yes with their own WhatsApp reply. The board is read every 5 seconds while open, and at once
+  on returning to the app.

@@ -444,8 +444,6 @@ async def test_a_call_can_bring_back_someone_who_said_they_cant_go(client, db, s
     # Someone going, or on standby, is never touched by a call.
     r = await call(LISTED, "going")
     assert r.status_code == 409 and r.json()["detail"] == "Er. Listed is already going."
-    r = await call(SECOND, "going")
-    assert r.status_code == 409 and r.json()["detail"] == "Er. Second already said yes and is on the waiting list."
     # "Not this time" for the one who can't go: noted quietly, nothing changes.
     r = await call(MOBED, "not_going")
     assert r.status_code == 200 and r.json()["done"]["message"] == f"Noted: {MOBED_NAME} cannot pray this time."
@@ -781,3 +779,89 @@ async def test_all_set_again_tells_the_new_names_once_without_repeating_the_rest
     assert [g["is_me"] for g in card["all_set"]["going"]] == [False, True]
     gone = (await client.get(f"{REQUESTS}/{rid}", headers=await _as(client, MOBED))).json()["request"]
     assert gone["all_set"] is None and gone["my_answer"]["state"] == "backed_out"
+
+
+# --- Going for someone on the waiting list (owner, 24 Nov 2026) -------------------------
+
+async def _opened(client, db, aid, meta, *, third=False):
+    """All set with two, then one backs out: a place is open and the first standby asked again."""
+    rid, _ = await _all_set(client, db, aid, third=third)
+    assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))).status_code == 200
+    rows = await _answers(db)
+    return rid, rows, {p: f"c{rows[p].contact_id}" for p in (LISTED, SECOND, THIRD) if p in rows and rows[p].contact_id}
+
+
+async def test_the_panthaky_marks_a_standby_going_while_a_place_is_open_one_yes_with_their_own_reply(
+        client, db, seeded, meta, pushes, live):
+    """The first real test: a place opened, the standby was asked again, and the board had no
+    Going for them. Going fills the place, closes the asking again, and the mobed's own WhatsApp
+    Yes arriving after it (or before) is one yes, never two places."""
+    aid = seeded["agyary_id"]
+    rid, rows, keys = await _opened(client, db, aid, meta, third=True)
+    second, token = rows[SECOND], rows[SECOND].reask_token
+    assert standbys.reask_state(second) == "asked_again" and await prayer_callout._going(db, rid) == 1
+    # The board offers it: a standby is a mobed it can mark (the list says who may be placed).
+    panthaky = await _as(client, PANTHAKY)
+    hormuz = await _user(db, PANTHAKY)
+    r = await client.post(_b(rid, "call-result"), json={"key": keys[SECOND], "result": "going"}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    assert r.json()["done"]["message"] == "Er. Second is going. All the places are filled: it is confirmed."
+    rows = await _answers(db)
+    assert prayer_callout.holds_place(rows[SECOND]) and (rows[SECOND].how, rows[SECOND].recorded_by_user_id) == (
+        "phone", hormuz.id)
+    assert rows[SECOND].reask_answer == "yes" and rows[SECOND].reask_passed_at is not None
+    assert (await _request(db, rid)).status == "all_set" and await prayer_callout._going(db, rid) == 2
+    # The next standby is not asked, and the 30 minutes move nobody on.
+    assert rows[THIRD].reasked_at is None
+    settings = config.get_settings()
+    assert await standbys.timed_out(db, rows[SECOND].reasked_at + standbys.REASK_WAIT, settings, None) == 0
+    # Their own Yes on WhatsApp a moment later: one yes, one place.
+    out = await prayer_callout.record_answer(db, settings, f"pca:{token}:y", SECOND)
+    assert out.endswith("not asked again")
+    assert await prayer_callout._going(db, rid) == 2 and prayer_callout.holds_place((await _answers(db))[SECOND])
+    # Marked again: refused in plain words, nothing changes.
+    r = await client.post(_b(rid, "call-result"), json={"key": keys[SECOND], "result": "going"}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is confirmed."
+    assert await prayer_callout._going(db, rid) == 2
+
+
+async def test_their_own_yes_first_then_the_panthakys_going_is_still_one_place(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, rows, keys = await _opened(client, db, aid, meta)
+    await _signed_tap(client, SECOND, f"pca:{rows[SECOND].reask_token}:y")
+    assert await prayer_callout._going(db, rid) == 2
+    # The board is closed once it is all set; and had the call been read just before their yes,
+    # the locked check finds them going already: "already answered", no second place.
+    r = await client.post(_b(rid, "call-result"), json={"key": keys[SECOND], "result": "going"},
+                          headers=await _as(client, PANTHAKY))
+    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is confirmed."
+    request, row = await _request(db, rid), (await _answers(db))[SECOND]
+    assert await prayer_callout._promote_standby(db, config.get_settings(), request, row,
+                                                 by_user=await _user(db, PANTHAKY), now=prayer_callout._now(),
+                                                 client=None) == "already answered"
+    assert await prayer_callout._going(db, rid) == 2 and (await _request(db, rid)).status == "all_set"
+
+
+async def test_a_waiting_list_mobed_not_asked_yet_can_be_marked_going_and_the_one_asked_is_a_standby_again(
+        client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, rows, keys = await _opened(client, db, aid, meta, third=True)
+    assert rows[THIRD].reasked_at is None
+    r = await client.post(_b(rid, "call-result"), json={"key": keys[THIRD], "result": "going"},
+                          headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200, r.text
+    rows = await _answers(db)
+    assert prayer_callout.holds_place(rows[THIRD]) and (await _request(db, rid)).status == "all_set"
+    # The one asked again says yes after the place filled: thanked, a standby, nothing more filled.
+    await _signed_tap(client, SECOND, f"pca:{rows[SECOND].reask_token}:y")
+    assert prayer_callout.is_standby((await _answers(db))[SECOND]) and await prayer_callout._going(db, rid) == 2
+
+
+async def test_a_standby_cannot_be_marked_going_when_no_place_is_open(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)
+    rows = await _answers(db)
+    r = await client.post(_b(rid, "call-result"), json={"key": f"c{rows[SECOND].contact_id}", "result": "going"},
+                          headers=await _as(client, PANTHAKY))
+    assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is confirmed."
+    assert await prayer_callout._going(db, rid) == 2

@@ -1710,6 +1710,23 @@ async def call_result(
         await db.commit()
         logger.info("Request %s: user %s called %s, who had said no already", request.id, user.id, key)
         return {"outcome": "no, already", "message": f"Noted: {m['name']} cannot pray this time."}
+    if yes and row is not None and any(is_standby(r) for r in rows if _same_person(r, row)):
+        # On the waiting list (or asked again, a place having opened): Going fills an open place
+        # by this call, one yes (owner, 24 Nov 2026).
+        row = next(r for r in rows if _same_person(r, row) and is_standby(r))
+        await take_request(db, request, user, now)
+        outcome = await _promote_standby(db, settings, request, row, by_user=user, now=now, client=client)
+        await db.refresh(request)
+        await db.refresh(row)
+        if outcome == "already answered":
+            raise CalloutError(_already(m["name"], row))
+        if outcome == "no place":
+            raise CalloutError(f"{m['name']} is on the waiting list, and no place is open now.")
+        logger.info("Request %s: user %s marked %s going by phone from the waiting list (%s)",
+                    request_id, user_id, key, outcome)
+        record = await db.get(FuneralRecord, request.funeral_record_id)
+        return {"outcome": outcome,
+                "message": _done_words(row, request, await _going(db, request_id), wanted(record), me=False)}
     if row is not None and row.answer is not None and not (yes and row.answer == CALLOUT_NO):
         raise CalloutError(_already(m["name"], row))
     if row is None:
@@ -1733,6 +1750,44 @@ async def call_result(
     record = await db.get(FuneralRecord, request.funeral_record_id)
     return {"outcome": outcome,
             "message": _done_words(row, request, await _going(db, request_id), wanted(record), me=False)}
+
+
+async def _promote_standby(
+    db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *, by_user: User,
+    now: datetime, client: httpx.AsyncClient | None,
+) -> str:
+    """A call's Going for someone on the waiting list, or asked again for a place
+    that opened (owner, 24 Nov 2026: the panthaky phones them and taps Going). The
+    request is locked first, then the row, and what is read again under the lock
+    decides: no longer a standby (their own WhatsApp Yes, or another Going, took the
+    place a moment before) is "already answered", never a second place; no place
+    open is "no place". Otherwise their asking again is closed as a yes (so the 30
+    minutes move nobody on and a late tap changes nothing: answer_reask sees them
+    going), the yes is marked as by phone, now, and committed, and ``fill`` gives
+    the place (and makes the request all set once full). Returns what happened."""
+    row_id, request_id = row.id, request.id
+    await db.refresh(request, with_for_update=True)
+    await db.refresh(row, with_for_update=True)
+    record = await db.get(FuneralRecord, request.funeral_record_id)
+    if not is_standby(row):
+        await db.commit()
+        return "already answered"
+    if not (is_open(request) and await _going(db, request.id) < wanted(record)):
+        await db.commit()
+        return "no place"
+    if row.reasked_at is not None and row.reask_answer is None:
+        row.reask_answer, row.reask_answered_at = CALLOUT_YES, now
+        if row.reask_passed_at is None:
+            row.reask_passed_at = now
+    row.how, row.recorded_by_user_id = HOW_PHONE, by_user.id
+    await db.commit()
+    logger.info("Answer %s on request %s: a standby marked going by phone", row_id, request_id)
+    try:
+        return "yes from the waiting list, " + await fill(db, settings, request, row, HOW_PHONE, by_user, now, client)
+    except Exception:   # noqa: BLE001 - the yes is kept; what did not follow is on the board
+        logger.exception("After standby %s of request %s was marked going", row_id, request_id)
+        await db.rollback()
+        return "yes from the waiting list, but what follows failed"
 
 
 async def _back_in(
