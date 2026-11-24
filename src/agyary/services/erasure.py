@@ -170,7 +170,14 @@ async def _erase_record(db: AsyncSession, customer_id: int) -> None:
 
 async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = None) -> dict:
     """Erase ``phone`` from every mobed's book, and tell each of them that it
-    happened. Returns what was held. The caller commits."""
+    happened. Returns what was held. The caller commits.
+
+    A place this number holds on a prayer request reopens first, as "Can't go"
+    does, without naming them (owner, 24 Nov 2026; standbys.free_places_of_erased)."""
+    from agyary.services import standbys   # here: standbys reaches all_set, which reaches the books
+    from agyary.core.config import get_settings
+
+    await standbys.free_places_of_erased(db, get_settings(), phone=phone, now=now)
     found = await what_we_hold(db, phone)
     rows = (await db.execute(select(Customer.id, Customer.owner_user_id).where(Customer.phone == phone))).all()
     await db.execute(delete(Notification).where(_sent_to(phone, [i for i, _owner in rows])))

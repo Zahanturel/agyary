@@ -64,6 +64,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.core.config import Settings, get_settings
 from agyary.models import (
     Agyary,
+    AgyaryMobedContact,
     FuneralPlace,
     FuneralRecord,
     FuneralRequest,
@@ -351,6 +352,7 @@ def _named_to_the_place(request: FuneralRequest, row: PrayerCalloutAnswer, first
 async def _tell_step(
     db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *, lead: str,
     unnamed: str, asked: Asked, first: bool, now: datetime, skip_user_id: int | None = None,
+    anonymous: bool = False,
 ) -> Opened:
     """The panthakys the request reached (not ``skip_user_id``, who did it on
     screen), and with none, the funeral place's managers when nobody is left:
@@ -386,7 +388,7 @@ async def _tell_step(
             db, settings, request, row, KIND_PLACE_OPENED, title, body, push=f"{nobody[0].upper()}{nobody[1:]}: "
             "please find someone.", push_title=push_title, now=now, skip_user_id=skip_user_id, link=link)
         if not out.has_panthaky:
-            if _named_to_the_place(request, row, first):
+            if not anonymous and _named_to_the_place(request, row, first):
                 title = all_set.fit_title(f"{lead}: nobody is on the waiting list at {agyary.name}",
                                           f"A mobed can't go at {agyary.name}", "A mobed can't go")
                 said, place_push = lead, push_title
@@ -414,13 +416,15 @@ async def _tell_step(
 
 async def place_opened(
     db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *, now: datetime,
-    client: httpx.AsyncClient | None, skip_user_id: int | None = None,
+    client: httpx.AsyncClient | None, skip_user_id: int | None = None, anonymous: bool = False,
 ) -> Opened:
     """A place opened because ``row`` can't go: the standbys are asked, and
-    the panthakys told. Commits."""
+    the panthakys told. ``anonymous``: nobody is named (the person asked to be
+    erased). Commits."""
     asked = await ask_standbys(db, settings, request, now=now, client=client)
-    return await _tell_step(db, settings, request, row, lead=f"{row.name} can't go", unnamed="A mobed can't go",
-                            asked=asked, first=True, now=now, skip_user_id=skip_user_id)
+    lead = "A mobed can't go" if anonymous else f"{row.name} can't go"
+    return await _tell_step(db, settings, request, row, lead=lead, unnamed="A mobed can't go",
+                            asked=asked, first=True, now=now, skip_user_id=skip_user_id, anonymous=anonymous)
 
 
 async def _move_on(db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *,
@@ -439,7 +443,7 @@ async def _move_on(db: AsyncSession, settings: Settings, request: FuneralRequest
 async def _back_out(
     db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, *,
     by_user: User | None, words: _Words, now: datetime, client: httpx.AsyncClient | None,
-    take_by: User | None = None, skip_user_id: int | None = None,
+    take_by: User | None = None, skip_user_id: int | None = None, anonymous: bool = False,
 ) -> Opened:
     """``row`` can no longer go. The request is locked first (every answer
     and place of a request waits here for the one before), then the row; the
@@ -471,7 +475,8 @@ async def _back_out(
                    f"marked by user {by_user.id}" if by_user is not None else "on WhatsApp",
                    ", so it is waiting again" if was_all_set else "")
     try:
-        return await place_opened(db, settings, request, row, now=now, client=client, skip_user_id=skip_user_id)
+        return await place_opened(db, settings, request, row, now=now, client=client, skip_user_id=skip_user_id,
+                                  anonymous=anonymous)
     except Exception:   # noqa: BLE001 - they have backed out; what did not follow is on the board
         logger.exception("After answer %s backed out of request %s", row.id, request.id)
         await db.rollback()
@@ -670,6 +675,64 @@ async def free_places_of(
         logger.warning("Request %s: the place of answer %s is freed by user %s", request_id, row_id, by_user_id)
         out.append(Freed(request_id=request_id, departed=departed, opened=opened))
     return out
+
+
+async def free_places_of_erased(
+    db: AsyncSession, settings: Settings, *, user_id: int | None = None, phone: str | None = None,
+    now: datetime | None = None, client: httpx.AsyncClient | None = None,
+) -> int:
+    """Someone erased (an admin erasing their number, LEG-04) or deleting their
+    account holds a place on a request still waiting or all set, before the
+    prayers begin: it reopens exactly as "Can't go" reopens it (_back_out: the
+    waiting list asked in order, the panthakys told in the app and by push, an
+    all-set request waiting again), but nobody is named, since they asked to be
+    erased. Their rows are theirs by ``user_id``, by ``phone``, by the account
+    that has the number or by a contact with it. Run BEFORE the erasing, since
+    it matches on what the erasing removes. Idempotent (a place already open
+    is not held); never raises: erasing must not fail because this did, so a
+    failure is logged. Commits. Returns how many places were reopened."""
+    now = now or _now()
+    count = 0
+    try:
+        who = []
+        if user_id is not None:
+            who.append(PrayerCalloutAnswer.user_id == user_id)
+        if phone:
+            accounts = select(User.id).where(User.phone == phone)
+            contacts = select(AgyaryMobedContact.id).where(AgyaryMobedContact.phone == phone)
+            who += [PrayerCalloutAnswer.phone == phone, PrayerCalloutAnswer.user_id.in_(accounts),
+                    PrayerCalloutAnswer.contact_id.in_(contacts)]
+        if not who:
+            return 0
+        found = (await db.execute(
+            select(PrayerCalloutAnswer.id, FuneralRequest.id)
+            .join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+            .join(FuneralRequest, FuneralRequest.id == PrayerCallout.funeral_request_id)
+            .where(or_(*who), *pc.HOLDS_PLACE, FuneralRequest.status.in_(pc.MAY_BACK_OUT))
+            .order_by(FuneralRequest.id, PrayerCalloutAnswer.id)
+        )).all()
+    except Exception:   # noqa: BLE001
+        logger.exception("Could not look for the places held by an erased mobed")
+        await db.rollback()
+        return 0
+    words = _Words(already="", not_going="", begun=BOARD_BEGUN)
+    for row_id, request_id in found:
+        try:
+            row = await db.get(PrayerCalloutAnswer, row_id, populate_existing=True)
+            request = await db.get(FuneralRequest, request_id, populate_existing=True)
+            if row is None or request is None:
+                continue
+            await _back_out(db, settings, request, row, by_user=None, words=words, now=now, client=client,
+                            anonymous=True)
+            count += 1
+            logger.warning("Request %s: the place of answer %s is reopened (erased)", request_id, row_id)
+        except CalloutError as exc:     # not going any more, closed meanwhile, or the prayers have begun
+            await db.rollback()
+            logger.info("Request %s: the place of answer %s is not reopened (%s)", request_id, row_id, exc)
+        except Exception:   # noqa: BLE001 - erasing goes on
+            await db.rollback()
+            logger.exception("Request %s: the place of answer %s could not be reopened", request_id, row_id)
+    return count
 
 
 def freed_words(freed: list[Freed]) -> str:

@@ -110,7 +110,14 @@ def phone_hmac(settings: Settings, phone: str) -> str:
 
 
 async def delete_account(db: AsyncSession, user: User) -> None:
-    """Delete ``user`` and everything that is theirs. The caller commits."""
+    """Delete ``user`` and everything that is theirs. The caller commits. A place
+    they hold on a prayer request reopens first, as "Can't go" does, without
+    naming them (owner, 24 Nov 2026; standbys.free_places_of_erased)."""
+    from agyary.services import standbys   # here: standbys reaches all_set, which reaches the books
+
+    user_id, phone = user.id, user.phone
+    await standbys.free_places_of_erased(db, get_settings(), user_id=user_id, phone=phone)
+    await db.refresh(user)
     digest = phone_hmac(get_settings(), user.phone)
     now = datetime.now(timezone.utc)
     for step in _STEPS:

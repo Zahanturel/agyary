@@ -625,3 +625,62 @@ async def test_switching_off_someone_going_frees_their_place_and_the_panthaky_is
     assert r.status_code == 200 and r.json()["freed"] is None
     r = await client.post(f"/api/mobed/admin/mobeds/{kias.id}/access", json={"access": "off"}, headers=admin)
     assert r.json()["freed"] is None
+
+
+# --- Erasing a number, or deleting an account, reopens the place held (owner, 24 Nov 2026) ---
+
+async def test_erasing_a_going_mobeds_number_reopens_their_place_without_naming_them(
+    client, db, seeded, meta, pushes, live,
+):
+    from agyary.services import erasure
+
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)      # Er. Listed and Kias going, Er. Second on standby
+    asked = len(_reasks(meta, SECOND))
+    await erasure.erase_number(db, MOBED)
+    await db.commit()
+    request = await db.get(FuneralRequest, rid, populate_existing=True)
+    assert request.status == "waiting"
+    answers = await _answers(db)
+    assert answers[MOBED].backed_out_at is not None and answers[MOBED].backed_out_by_user_id is None
+    assert answers[LISTED].backed_out_at is None            # a mobed not going is unaffected
+    assert len(_reasks(meta, SECOND)) == asked + 1
+    (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert note.title == "A mobed can't go; we have asked Er. Second"
+    opened = [p for p in pushes if "place" in p["tag"] and p["title"].startswith("A mobed can't go")]
+    assert opened and "Kias" not in json.dumps([note.title, note.body, opened])
+    # Again: nothing more is asked or said.
+    await erasure.erase_number(db, MOBED)
+    await db.commit()
+    assert len(_reasks(meta, SECOND)) == asked + 1
+    assert len(await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)) == 1
+
+
+async def test_deleting_an_account_reopens_the_place_held_and_a_failure_does_not_stop_it(
+    client, db, seeded, meta, pushes, live, monkeypatch,
+):
+    from agyary.services import account
+
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid)
+    kias = await _user(db, MOBED)
+    await account.delete_account(db, kias)
+    await db.commit()
+    assert (await db.get(FuneralRequest, rid, populate_existing=True)).status == "waiting"
+    (note,) = await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED)
+    assert note.title == "A mobed can't go; we have asked Er. Second" and "Kias" not in note.body
+    assert await db.scalar(select(User).where(User.phone == MOBED)) is None
+
+
+async def test_a_failure_in_reopening_does_not_stop_the_erasing(client, db, seeded, meta, pushes, live, monkeypatch):
+    from agyary.services import account
+
+    await _all_set(client, db, seeded["agyary_id"])
+
+    async def boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(standbys, "ask_standbys", boom)
+    await account.delete_account(db, await _user(db, MOBED))     # does not raise
+    await db.commit()
+    assert await db.scalar(select(User).where(User.phone == MOBED)) is None
