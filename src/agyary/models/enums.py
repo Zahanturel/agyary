@@ -33,6 +33,15 @@ DEFAULT_DISPLAY_LANGUAGE = "en"
 # entry" and "has been set up by a real person" stay different facts.
 AGYARY_STATUSES = ("unclaimed", "active")
 
+# What kind of fire temple an agyari is, for the person's list (R4.1, 25 Nov 2026). NULL is simply
+# "not known": a person sees no tag, the admin can set it later.
+AGYARY_KINDS = ("atash_behram", "adaran", "dadgah")
+
+# What a person's own event is, and how it comes round (R4.1). "yearly_parsi" repeats on the same
+# Roj and Mah; "yearly_english" on the same day of the same English month.
+EVENT_KINDS = ("birthday", "navjote", "anniversary", "other")
+EVENT_REPEATS = ("none", "yearly_english", "yearly_parsi")
+
 # Where a fire temple's position on the map came from (DECISIONS D10). "town" is
 # the town-level starting position from the seed list (only the town, not the
 # temple); "pin" was put on the map by a person - its mobed, panthaky or an admin.

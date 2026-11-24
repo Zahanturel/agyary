@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from agyary.core.database import Base
 from agyary.models.enums import (
+    AGYARY_KINDS,
     AGYARY_STATUSES,
     BEHDIN_LANGUAGES,
     CALENDAR_SYSTEMS,
@@ -101,6 +102,9 @@ class Agyary(Base):
     request_mode: Mapped[str] = mapped_column(String(20), server_default=REQUEST_MODE_EVERYONE)
     request_escalate_minutes: Mapped[int | None] = mapped_column(SmallInteger)
 
+    # Atash Behram, Adaran or Dadgah (R4.1), for the person's list; NULL when not known.
+    kind: Mapped[str | None] = mapped_column(String(20))
+
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -111,6 +115,7 @@ class Agyary(Base):
         CheckConstraint(f"calendar_system IN ({sql_in(CALENDAR_SYSTEMS)})", name="calendar_system"),
         CheckConstraint(f"behdin_language IN ({sql_in(BEHDIN_LANGUAGES)})", name="behdin_language"),
         CheckConstraint(f"status IN ({sql_in(AGYARY_STATUSES)})", name="status"),
+        CheckConstraint(f"kind IS NULL OR kind IN ({sql_in(AGYARY_KINDS)})", name="kind"),
         CheckConstraint(f"location_source IN ({sql_in(LOCATION_SOURCES)})", name="location_source"),
         CheckConstraint(LOCATION_CHECK, name="location"),
         CheckConstraint(f"request_mode IN ({sql_in(REQUEST_MODES)})", name="request_mode"),

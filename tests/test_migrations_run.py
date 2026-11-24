@@ -1086,3 +1086,56 @@ async def test_the_behdin_kind_migration_allows_behdin_and_refuses_to_come_down_
         _ok(_alembic("check"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_r41_migration_backfills_kinds_holds_its_rules_and_refuses_to_come_down_over_data():
+    """d4e5f6a0b1c2 (R4.1): agyari kinds are read from the name (else left empty), a person's own
+    events and memorials hold their rules and go with the account, and going back refuses while a
+    person's data exists (D8) and works once there is none."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "c3d4e5f6a0b1"))
+        for n in ("Wadia Atash Behram (test)", "Test Dadgah", "Test Anjuman Adaran", "Test Agiyari",
+                  "Test Trust Hall"):
+            await _scratch_execute("INSERT INTO agyaries (name, city) VALUES (:n, 'Mumbai')", {"n": n})
+        _ok(_alembic("upgrade", "head"))
+        kinds = dict(await _scratch_execute("SELECT name, kind FROM agyaries"))
+        assert kinds == {"Wadia Atash Behram (test)": "atash_behram", "Test Dadgah": "dadgah",
+                         "Test Anjuman Adaran": "adaran", "Test Agiyari": "adaran", "Test Trust Hall": None}
+        await _refused("UPDATE agyaries SET kind = 'temple' WHERE name = 'Test Dadgah'", {}, "an unknown kind")
+
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', "
+                               "'+919000000031', 'behdin')")
+        (user,), = await _scratch_execute("SELECT id FROM users")
+        (agyary,) = (await _scratch_execute("SELECT id FROM agyaries LIMIT 1"))[0]
+        await _scratch_execute("INSERT INTO person_agyari (user_id, agyary_id) VALUES (:u, :a)",
+                               {"u": user, "a": agyary})
+        event = ("INSERT INTO person_events (user_id, title, kind, gregorian_date, repeats, parsi_roj, parsi_mah,"
+                 " parsi_calendar) VALUES (:u, 'Birthday (test)', :k, '2000-01-01', :r, :roj, :mah, :cal)")
+        ok = {"u": user, "k": "birthday", "r": "yearly_parsi", "roj": 1, "mah": 1, "cal": "shenshai"}
+        await _scratch_execute(event, ok)
+        await _refused(event, {**ok, "k": "party"}, "an unknown event kind")
+        await _refused(event, {**ok, "r": "weekly"}, "an unknown repeat")
+        await _refused(event, {**ok, "roj": None}, "a Parsi repeat without its Roj")
+        await _refused(event, {**ok, "r": "none"}, "a Roj and Mah on an event that does not repeat by Parsi date")
+        memorial = ("INSERT INTO person_memorials (user_id, departed_name, death_gregorian, death_roj, death_mah,"
+                    " death_year, calendar_system, opening) VALUES (:u, 'Name (test)', '2026-01-01', 1, 1, 1395,"
+                    " :c, :o)")
+        await _scratch_execute(memorial, {"u": user, "c": "shenshai", "o": "none"})
+        await _refused(memorial, {"u": user, "c": "gregorian", "o": "none"}, "an unknown calendar")
+        await _refused(memorial, {"u": user, "c": "shenshai", "o": "forever"}, "an unknown opening")
+
+        down = _alembic("downgrade", "c3d4e5f6a0b1")
+        assert down.returncode != 0 and "own data exists" in (down.stdout + down.stderr)
+        assert len(await _scratch_execute("SELECT id FROM person_events")) == 1
+        # Deleting the account takes all of it (the foreign keys cascade).
+        await _scratch_execute("DELETE FROM users WHERE id = :u", {"u": user})
+        for table in ("person_agyari", "person_memorials", "person_memorial_observances", "person_events"):
+            assert await _scratch_execute(f"SELECT 1 FROM {table}") == []
+        _ok(_alembic("downgrade", "c3d4e5f6a0b1"))
+        tables = {t for (t,) in await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
+        assert not {"person_agyari", "person_memorials", "person_events"} & tables
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)
