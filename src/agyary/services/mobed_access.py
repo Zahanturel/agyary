@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings
 from agyary.models import Agyary, AgyaryUser, FuneralPlace, FuneralPlaceManager, User
-from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING, ACCOUNT_FUNERAL_MANAGER, ROLE_PANTHAKY
+from agyary.models.enums import ACCESS_OFF, ACCESS_ON, ACCESS_PENDING, ACCOUNT_BEHDIN, ACCOUNT_FUNERAL_MANAGER, ROLE_PANTHAKY
 from agyary.services import guardrails, panthaky, reminders, web_push
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,7 @@ async def set_access(
     user.access_changed_at = now
     if access == ACCESS_ON and before == ACCESS_PENDING:
         await _confirm_sign_up(db, user, by, now)
-    if access == ACCESS_ON:
+    if access == ACCESS_ON and user.account_kind != ACCOUNT_BEHDIN:
         await reminders.notify(
             db, user.id, KIND_APPROVED,
             "You can now use Mobed Diary" if before == ACCESS_PENDING else "Your access is back on",
@@ -147,7 +147,10 @@ async def list_mobeds(db: AsyncSession, settings: Settings) -> list[dict]:
     """Every account, waiting ones first and the newest of those at the top,
     then the rest by name. Each with what they are at each fire temple, or,
     for a Doongerwadi manager, which place they manage (D10)."""
-    users = (await db.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
+    # Behdins (R4.0) need no approval and are counted apart, not listed here.
+    users = (await db.execute(
+        select(User).where(User.is_active.is_(True), User.account_kind != ACCOUNT_BEHDIN)
+    )).scalars().all()
     names = {u.id: u.name for u in users}
     by_id = {u.id: u for u in users}
     rows_by_user: dict[int, list[tuple[AgyaryUser, Agyary]]] = {}

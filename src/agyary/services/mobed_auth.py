@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import get_settings
 from agyary.models import AgyaryUser, User, UserSession
-from agyary.models.enums import ACCESS_ON, ACCESS_PENDING
+from agyary.models.enums import ACCESS_ON, ACCESS_PENDING, ACCOUNT_BEHDIN, ACCOUNT_MOBED
 from agyary.services import web_push
 
 JWT_ALGORITHM = "HS256"
@@ -77,7 +77,7 @@ async def may_sign_in(db: AsyncSession, phone: str) -> bool:
     return (await db.execute(select(User.id).where(User.phone == phone))).first() is not None
 
 
-async def login_user(db: AsyncSession, phone: str, name: str) -> User:
+async def login_user(db: AsyncSession, phone: str, name: str, kind: str = ACCOUNT_MOBED) -> User:
     """Resolve (or create) the mobed's User row for a proven phone.
 
     First sign-in creates it - if SIGNUP_MODE lets this number sign up
@@ -86,9 +86,19 @@ async def login_user(db: AsyncSession, phone: str, name: str) -> User:
     has bound the number to a claimed attempt - this function itself
     proves nothing, so calling it with an unproven number would hand out
     a session for it.
+
+    ``kind`` is only what a NEW account becomes. "behdin" (the behdin app, R4.0)
+    is open to every number, on, with no approval, whatever SIGNUP_MODE says;
+    an account that exists keeps its kind whichever app it signs in at.
     """
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
+    if user is None and kind == ACCOUNT_BEHDIN:
+        user = User(phone=phone, name=name, access=ACCESS_ON, account_kind=ACCOUNT_BEHDIN,
+                    automatic_reminders=False)
+        db.add(user)
+        await db.flush()
+        return user
     if user is None:
         if not may_sign_up(phone):
             raise SignupRefused(NOT_INVITED)

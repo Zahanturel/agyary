@@ -32,7 +32,9 @@ from agyary.models import (
 from agyary.models.enums import (
     ACCESS_OFF,
     ACCESS_ON,
+    ACCOUNT_BEHDIN,
     ACCOUNT_FUNERAL_MANAGER,
+    ACCOUNT_MOBED,
     DEFAULT_SECONDARY_CALENDAR_SYSTEM,
     DISPLAY_LANGUAGES,
     LOCATION_PIN,
@@ -89,13 +91,23 @@ async def _current(authorization: str, db: AsyncSession) -> tuple[User, int]:
     return user, session.id
 
 
-async def get_signed_in_account(
+async def get_signed_in_person(
     authorization: str = Header(default=""), db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Signed in, with any kind of account (a mobed's or a Doongerwadi
-    manager's), on or not. Only for what every account has whatever it is:
-    who they are, their name, signing out, deleting the account."""
+    """Signed in, any kind at all (a behdin's too), on or not. The base of both
+    apps; the mobed app's routes use get_signed_in_account and so refuse a
+    behdin's account, the behdin app's use get_current_person."""
     user, _ = await _current(authorization, db)
+    return user
+
+
+async def get_signed_in_account(user: User = Depends(get_signed_in_person)) -> User:
+    """Signed in, with a mobed's or a Doongerwadi manager's account, on or not.
+    Only for what every such account has whatever it is: who they are, their
+    name, signing out, deleting the account. A behdin's account (R4.0) is
+    refused, with the kind in a header, like a manager's from the mobed routes."""
+    if user.account_kind == ACCOUNT_BEHDIN:
+        raise HTTPException(status_code=403, detail=NOT_FOR_BEHDINS, headers={ACCOUNT_KIND_HEADER: user.account_kind})
     return user
 
 
@@ -109,17 +121,29 @@ async def get_signed_in_account(
 ACCOUNT_KIND_HEADER = "X-Account-Kind"
 NOT_FOR_MANAGERS = "This part of Mobed Diary is for mobeds. Your account is for a Doongerwadi or prayer hall."
 NOT_FOR_MOBEDS = "This part of Mobed Diary is for Doongerwadi and prayer hall managers."
+# A behdin's account (R4.0) is kept out the same way: it belongs to the behdin app.
+NOT_FOR_BEHDINS = "This part of Mobed Diary is for mobeds. Your account is for the behdin app."
+
+
+def refuse_other_kinds(user: User) -> User:
+    """Refuse a manager's or a behdin's account, with the kind in a header so
+    the app can show their own screen. A mobed's passes."""
+    if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
+        raise HTTPException(
+            status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind},
+        )
+    if user.account_kind == ACCOUNT_BEHDIN:
+        raise HTTPException(
+            status_code=403, detail=NOT_FOR_BEHDINS, headers={ACCOUNT_KIND_HEADER: user.account_kind},
+        )
+    return user
 
 
 async def get_signed_in_user(user: User = Depends(get_signed_in_account)) -> User:
     """Signed in with a mobed's account, whether or not an admin has let them
     use the app yet - only for what a waiting or switched-off mobed may still
-    do: choose a fire temple. A manager's account is refused (see above)."""
-    if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
-        raise HTTPException(
-            status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind},
-        )
-    return user
+    do: choose a fire temple. A manager's or a behdin's account is refused (see above)."""
+    return refuse_other_kinds(user)
 
 
 # Said to a mobed whose access is not on, with the access in a header the app
@@ -144,6 +168,19 @@ async def get_current_user(user: User = Depends(get_signed_in_user)) -> User:
     """A mobed's account, signed in AND switched on by an admin (D9).
     Everything in the mobed app but the few steps of signing up asks for this."""
     return _require_on(user)
+
+
+BEHDIN_OFF = "Your access to the behdin app is switched off."
+
+
+async def get_current_person(user: User = Depends(get_signed_in_person)) -> User:
+    """Signed in and active, any kind of account: what every /api/behdin route is
+    built on (R4.0). A behdin whose access an admin turned off is refused. A
+    mobed or manager who is waiting or switched off is NOT: the D9 switch is the
+    mobed side's only, and they still have the behdin app."""
+    if user.account_kind == ACCOUNT_BEHDIN and mobed_access.effective(get_settings(), user) != ACCESS_ON:
+        raise HTTPException(status_code=403, detail=BEHDIN_OFF, headers={ACCESS_HEADER: ACCESS_OFF})
+    return user
 
 
 async def get_current_account(user: User = Depends(get_signed_in_account)) -> User:
@@ -183,11 +220,25 @@ async def _require_membership(db: AsyncSession, agyary_id: int, user: User) -> A
 # ---------------------------------------------------------------------------
 # Auth: session cookies, refresh, me (see services/mobed_auth.py)
 # ---------------------------------------------------------------------------
-def _set_refresh_cookie(response: Response, session) -> None:
+class Cookies(BaseModel):
+    """Which cookies an app keeps its sign-in in. The behdin app (R4.0) has its
+    own names and its own path, so the two apps never see or clear each
+    other's when both are served from one host."""
+    model_config = {"frozen": True}
+    refresh: str = "refresh_token"
+    wa_login: str = "wa_login"
+    path: str = "/"
+
+
+MOBED_COOKIES = Cookies()
+
+
+def _set_refresh_cookie(response: Response, session, cookies: Cookies = MOBED_COOKIES) -> None:
     settings = get_settings()
     response.set_cookie(
-        "refresh_token",
+        cookies.refresh,
         mobed_auth.issue_refresh_token(session.user_id, session),
+        path=cookies.path,
         httponly=True,
         # Secure cookies are never sent back over plain HTTP - fine in
         # production (this deploys behind a Cloudflare Tunnel terminating
@@ -210,7 +261,8 @@ def _set_refresh_cookie(response: Response, session) -> None:
 # ---------------------------------------------------------------------------
 async def _wa_login_session(
     db: AsyncSession, response: Response, poll_secret: str, phone: str, name: str,
-    *, wa_user_id: str | None = None,
+    *, wa_user_id: str | None = None, kind: str = ACCOUNT_MOBED, cookies: Cookies = MOBED_COOKIES,
+    serialize=None,
 ) -> dict:
     """Turn a claimed attempt into a session, or say a name is still needed.
 
@@ -222,12 +274,12 @@ async def _wa_login_session(
     attempt is spent: polling on would only wait for ever.
     """
     try:
-        user = await mobed_auth.login_user(db, phone, name)
+        user = await mobed_auth.login_user(db, phone, name, kind)
     except mobed_auth.SignupRefused as exc:
         await wa_login.consume(db, poll_secret)
         await db.commit()
         refused = JSONResponse(status_code=403, content={"detail": str(exc)})
-        refused.delete_cookie("wa_login")
+        refused.delete_cookie(cookies.wa_login, path=cookies.path)
         return refused
     if wa_user_id and not user.wa_user_id:
         # Learnt from a sign-in that carried both, so one that later carries
@@ -242,12 +294,12 @@ async def _wa_login_session(
     await wa_login.consume(db, poll_secret)
     session = await mobed_auth.start_session(db, user)
     await db.commit()
-    response.delete_cookie("wa_login")
-    _set_refresh_cookie(response, session)
+    response.delete_cookie(cookies.wa_login, path=cookies.path)
+    _set_refresh_cookie(response, session, cookies)
     return {
         "status": "signed_in",
         "access_token": mobed_auth.issue_access_token(user.id, session.id),
-        "user": await _serialize_user(db, user),
+        "user": await (serialize or _serialize_user)(db, user),
     }
 
 
@@ -568,6 +620,8 @@ async def sign_out_other_devices(
     from before sessions existed. This device stays signed in, and keeps its
     notifications (``keep_endpoint``); the others' stop."""
     user, session_id = await _current(authorization, db)
+    if user.account_kind == ACCOUNT_BEHDIN:
+        raise HTTPException(status_code=403, detail=NOT_FOR_BEHDINS, headers={ACCOUNT_KIND_HEADER: user.account_kind})
     ended = await mobed_auth.end_all_sessions(db, user, keep=session_id,
                                               keep_endpoint=payload.keep_endpoint if payload is not None else None)
     await db.commit()
@@ -845,8 +899,7 @@ async def _joined(
     # Locked, so this and becoming a Doongerwadi manager cannot both happen at
     # once (services/funeral_places.join_as_manager locks the same row).
     await db.refresh(user, with_for_update=True)
-    if user.account_kind == ACCOUNT_FUNERAL_MANAGER:
-        raise HTTPException(status_code=403, detail=NOT_FOR_MANAGERS, headers={ACCOUNT_KIND_HEADER: user.account_kind})
+    refuse_other_kinds(user)
     before = await mobed_auth.get_membership(db, agyary.id, user.id)
     joined_now = before is None or not before.is_active
     membership = await mobed_auth.ensure_agyary_membership(db, agyary.id, user)

@@ -111,8 +111,9 @@ async def _count(db: AsyncSession, *where) -> int:
 
 async def request_code(
     db: AsyncSession, settings: Settings, phone: str, ip: str, client: httpx.AsyncClient,
-    now: datetime | None = None,
+    now: datetime | None = None, open_to_all: bool = False,
 ) -> dict:
+    """``open_to_all``: the behdin app (R4.0), where any number may sign in."""
     now = now or _now()
     if settings.otp_mode != "live":
         raise OtpError("Sign-in by code is not available. Please use the WhatsApp sign-in instead.", 503)
@@ -188,7 +189,7 @@ async def request_code(
     # not let it make one) is sent nothing - no cost, no message to a stranger -
     # but answered exactly as any other, so this endpoint cannot be used to find
     # out who is a mobed. The row keeps the per-number limits honest.
-    if not await mobed_auth.may_sign_in(db, phone):
+    if not open_to_all and not await mobed_auth.may_sign_in(db, phone):
         row.status = "suppressed"
         return out
 

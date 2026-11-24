@@ -15,9 +15,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.api import rate_limit
-from agyary.api.routes.mobed import _wa_login_session
+from agyary.api.routes.mobed import MOBED_COOKIES, Cookies, _wa_login_session
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
+from agyary.models.enums import ACCOUNT_MOBED
 from agyary.services import bot_check, otp, wa_login
 from agyary.services.phone import Phone
 
@@ -56,6 +57,12 @@ async def otp_request(
 ) -> dict:
     """Send a code to this number. The answer is the same whether or not the
     number has an account."""
+    return await send_code(payload, request, db)
+
+
+async def send_code(
+    payload: OtpRequestIn, request: Request, db: AsyncSession, *, open_to_all: bool = False
+) -> dict:
     rate_limit.enforce(request, "otp_request", max_requests=10, window_seconds=600)
     rate_limit.enforce_key(f"otp_request_phone:{payload.phone}", max_requests=5, window_seconds=600)
     settings = get_settings()
@@ -70,7 +77,8 @@ async def otp_request(
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             out = await otp.request_code(
-                db, get_settings(), payload.phone, rate_limit.client_ip(request), client
+                db, get_settings(), payload.phone, rate_limit.client_ip(request), client,
+                open_to_all=open_to_all,
             )
     except otp.OtpError as exc:
         raise _refused(exc) from exc
@@ -84,6 +92,13 @@ async def otp_verify(
 ) -> dict:
     """Check the code. On success this signs the caller in exactly as the other
     method does - including asking a first-time mobed for their name."""
+    return await check_code(payload, request, response, db)
+
+
+async def check_code(
+    payload: OtpVerifyIn, request: Request, response: Response, db: AsyncSession, *,
+    kind: str = ACCOUNT_MOBED, cookies: Cookies = MOBED_COOKIES, serialize=None,
+) -> dict:
     rate_limit.enforce(request, "otp_verify", max_requests=30, window_seconds=600)
     rate_limit.enforce_key(f"otp_verify_phone:{payload.phone}", max_requests=15, window_seconds=600)
     # The app sends clean digits, but a pasted "123 456" or the whole message
@@ -96,10 +111,12 @@ async def otp_verify(
     poll_secret = await wa_login.create_claimed(db, payload.phone)
     settings = get_settings()
     response.set_cookie(
-        "wa_login", poll_secret, httponly=True, secure=not settings.app_debug,
-        samesite="lax", max_age=settings.wa_login_ttl_seconds,
+        cookies.wa_login, poll_secret, httponly=True, secure=not settings.app_debug,
+        samesite="lax", max_age=settings.wa_login_ttl_seconds, path=cookies.path,
     )
-    return await _wa_login_session(db, response, poll_secret, payload.phone, "")
+    return await _wa_login_session(
+        db, response, poll_secret, payload.phone, "", kind=kind, cookies=cookies, serialize=serialize
+    )
 
 
 

@@ -29,6 +29,7 @@ from agyary.core.database import get_db
 from agyary.models import Agyary, AgyaryUser, FuneralPlace, LoginOtp, Notification, User
 from agyary.models.enums import (
     ACCESS_PENDING,
+    ACCOUNT_BEHDIN,
     ACCOUNT_FUNERAL_MANAGER,
     ACCOUNT_MOBED,
     ROLE_MOBED,
@@ -157,7 +158,8 @@ async def _waiting(db: AsyncSession, s, kind: str) -> int:
 async def _in_the_app(db: AsyncSession, s) -> dict:
     """Mobeds and managers by their access (an admin counts as on), confirmed
     panthakys, fire temples with at least one member, and funeral places."""
-    people = {ACCOUNT_MOBED: {"on": 0, "pending": 0, "off": 0}, ACCOUNT_FUNERAL_MANAGER: {"on": 0, "pending": 0, "off": 0}}
+    people = {ACCOUNT_MOBED: {"on": 0, "pending": 0, "off": 0}, ACCOUNT_FUNERAL_MANAGER: {"on": 0, "pending": 0, "off": 0},
+              ACCOUNT_BEHDIN: {"on": 0, "pending": 0, "off": 0}}
     for user in (await db.execute(select(User).where(User.is_active.is_(True)))).scalars():
         people.setdefault(user.account_kind, {"on": 0, "pending": 0, "off": 0})[mobed_access.effective(s, user)] += 1
     member = (
@@ -180,6 +182,8 @@ async def _in_the_app(db: AsyncSession, s) -> dict:
         "fire_temples_in_use": temples,
         "funeral_places": {"in_use": places.get(True, 0), "off": places.get(False, 0)},
         "managers": people[ACCOUNT_FUNERAL_MANAGER],
+        # Ordinary people with the behdin app only (R4.0): no approval, counted apart.
+        "behdins": people[ACCOUNT_BEHDIN],
     }
 
 
