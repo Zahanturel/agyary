@@ -113,7 +113,7 @@ async def list_asks(agyary_id: int, db: AsyncSession = Depends(get_db),
 
 async def _ask(db: AsyncSession, user: User, agyary_id: int, ask_id: int):
     await _managed(db, user, agyary_id)
-    ask = await service_asks.for_agyary(db, agyary_id, ask_id)
+    ask = await service_asks.for_agyary(db, agyary_id, ask_id, lock=True)
     if ask is None:
         raise HTTPException(status_code=404, detail=service_asks.NO_SUCH_ASK)
     if not await service_asks.may_answer(db, user, agyary_id):

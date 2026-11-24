@@ -46,8 +46,8 @@ def _error(exc: service_asks.AskError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=text)
 
 
-async def _own_ask(db: AsyncSession, user: User, ask_id: int):
-    ask = await service_asks.get_for_person(db, user.id, ask_id)
+async def _own_ask(db: AsyncSession, user: User, ask_id: int, *, lock: bool = False):
+    ask = await service_asks.get_for_person(db, user.id, ask_id, lock=lock)
     if ask is None:
         raise HTTPException(status_code=404, detail=service_asks.NO_SUCH_ASK)
     return ask
@@ -120,7 +120,7 @@ async def get_ask(ask_id: int, db: AsyncSession = Depends(get_db), user: User = 
 @router.post("/me/asks/{ask_id}/cancel")
 async def cancel_ask(ask_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)) -> dict:
     _write(user)
-    ask = await _own_ask(db, user, ask_id)
+    ask = await _own_ask(db, user, ask_id, lock=True)
     try:
         await service_asks.cancel(db, get_settings(), ask)
     except service_asks.AskError as exc:
@@ -140,7 +140,7 @@ async def ask_another(
     """Copy an ask that was turned down, cancelled or not answered to another fire temple."""
     _write(user)
     settings = get_settings()
-    ask = await _own_ask(db, user, ask_id)
+    ask = await _own_ask(db, user, ask_id, lock=True)
     try:
         new = await service_asks.ask_another(db, settings, user, ask, payload.agyary_id)
         await db.commit()

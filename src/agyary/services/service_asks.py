@@ -446,11 +446,13 @@ async def list_for_person(db: AsyncSession, user_id: int, system: CalendarSystem
     return [serialize_for_person(a, services.get(a.service_id, ""), agyaries.get(a.agyary_id), system) for a in asks]
 
 
-async def get_for_person(db: AsyncSession, user_id: int, ask_id: int) -> ServiceAsk | None:
-    """Only the person's own: someone else's id is simply not found."""
-    return (await db.execute(
-        select(ServiceAsk).where(ServiceAsk.id == ask_id, ServiceAsk.user_id == user_id)
-    )).scalar_one_or_none()
+async def get_for_person(db: AsyncSession, user_id: int, ask_id: int, *, lock: bool = False) -> ServiceAsk | None:
+    """Only the person's own: someone else's id is simply not found. ``lock`` holds the row until the
+    change is committed, so two answers at once cannot both go through."""
+    stmt = select(ServiceAsk).where(ServiceAsk.id == ask_id, ServiceAsk.user_id == user_id)
+    if lock:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def person_view(db: AsyncSession, ask: ServiceAsk, system: CalendarSystem) -> dict:
@@ -484,10 +486,13 @@ async def list_for_agyary(db: AsyncSession, agyary_id: int, system: CalendarSyst
             for a in asks]
 
 
-async def for_agyary(db: AsyncSession, agyary_id: int, ask_id: int) -> ServiceAsk | None:
-    return (await db.execute(
-        select(ServiceAsk).where(ServiceAsk.id == ask_id, ServiceAsk.agyary_id == agyary_id)
-    )).scalar_one_or_none()
+async def for_agyary(db: AsyncSession, agyary_id: int, ask_id: int, *, lock: bool = False) -> ServiceAsk | None:
+    """An ask made to this agyari. ``lock`` holds the row until the answer is committed, so two
+    panthakys answering at once cannot both go through."""
+    stmt = select(ServiceAsk).where(ServiceAsk.id == ask_id, ServiceAsk.agyary_id == agyary_id)
+    if lock:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def waiting_count(db: AsyncSession, agyary_id: int) -> int:
