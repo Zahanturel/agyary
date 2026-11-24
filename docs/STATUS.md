@@ -16,6 +16,15 @@ file refers to them by role.
 
 ---
 
+## 0b. The behdin app, R4.0 (25 Nov 2026, built, not live)
+
+The second app, working name **Parsi** (`parsi.gotiadarian.com`, served at `/behdin`); design in
+[behdin-r4-0-design.md](behdin-r4-0-design.md). New `account_kind` value `behdin` (migration `c3d4e5f6a0b1`), the
+`/api/behdin` routes (own cookies), `get_current_person`, a shell in `static/behdin/` with its own service worker
+(`behdin-shell-v1`), the mobed app's `#/become` screen and `POST /api/mobed/auth/become-mobed`, `BEHDIN_HOST`.
+Owner to-dos before it is reachable: add the `parsi` hostname to the Cloudflare tunnel and to the Turnstile widget.
+Mobed shell v101.
+
 ## 0a. Place change requests (24 Nov 2026, built, not live)
 
 A Doongerwadi manager asks to move to another place and the admin approves (DECISIONS, amendment of 24 Nov 2026).
