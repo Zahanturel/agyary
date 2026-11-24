@@ -29,7 +29,7 @@ import httpx
 
 from agyary.core.config import Settings, get_settings
 from agyary.core.database import async_session_factory
-from agyary.services import account, daily_report, prayer_timers, reminder_sender, reminders
+from agyary.services import account, daily_report, prayer_timers, reminder_sender, reminders, service_asks
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,21 @@ async def run_prayer_timers(
         logger.exception("Prayer request timers failed")
 
 
+async def run_ask_timers(now: datetime, settings: Settings, session_factory) -> None:
+    """"No answer yet" for people's asks (R4.2), in its own session and step: whatever goes wrong
+    here is logged and rolled back, and the pass goes on."""
+    try:
+        async with session_factory() as db:
+            try:
+                await service_asks.no_answer(db, now, settings)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
+    except Exception:
+        logger.exception("Ask timers failed")
+
+
 async def tick(
     now: datetime | None = None,
     client: httpx.AsyncClient | None = None,
@@ -88,6 +103,7 @@ async def tick(
 
     # Every minute, whatever the hour: before the evening's early return below.
     await run_prayer_timers(now, settings, client, session_factory)
+    await run_ask_timers(now, settings, session_factory)
 
     hour = now.astimezone(reminder_sender.IST).hour
     in_window = settings.reminders_send_hour <= hour < settings.reminders_cutoff_hour

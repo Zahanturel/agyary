@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agyary.api.routes.mobed import _require_behdin, get_current_account, get_current_user
 from agyary.core.database import get_db
 from agyary.models import AppNotification, User
-from agyary.services import prayer_callout, reminders
+from agyary.services import prayer_callout, reminders, service_asks
 
 router = APIRouter(prefix="/api/mobed", tags=["reminders"])
 
@@ -88,7 +88,8 @@ async def list_notifications(
     rows = (
         await db.execute(
             select(AppNotification)
-            .where(AppNotification.user_id == user.id, AppNotification.expires_at > now)
+            .where(AppNotification.user_id == user.id, AppNotification.expires_at > now,
+                   ~service_asks.person_notices_clause())
             .order_by(AppNotification.created_at.desc(), AppNotification.id.desc())
         )
     ).scalars().all()
@@ -109,7 +110,8 @@ async def mark_notifications_seen(
     """The popup has shown these; do not show them again on the next open."""
     stmt = (
         update(AppNotification)
-        .where(AppNotification.user_id == user.id, AppNotification.seen_at.is_(None))
+        .where(AppNotification.user_id == user.id, AppNotification.seen_at.is_(None),
+               ~service_asks.person_notices_clause())
         .values(seen_at=datetime.now(timezone.utc))
     )
     if payload.ids is not None:
