@@ -193,11 +193,11 @@ async def test_the_funeral_place_migration_holds_its_rules_and_comes_off_cleanly
         await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES"
                                " ('Manager', '+919000000002', 'funeral_manager')")
         try:
-            await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('X', '+919000000003', 'behdin')")
+            await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('X', '+919000000003', 'trustee')")
         except Exception as exc:  # noqa: BLE001 - the database's refusal, whatever its class
             assert "check constraint" in str(exc).lower(), exc
         else:
-            raise AssertionError("accepted account_kind behdin")
+            raise AssertionError("accepted account_kind trustee")
         (admin,), (manager,) = await _scratch_execute("SELECT id FROM users ORDER BY id")
 
         insert = ("INSERT INTO funeral_places (name, kind, city, latitude, longitude, created_by_user_id)"
@@ -1058,6 +1058,30 @@ async def test_the_place_change_migration_holds_its_rules_and_comes_off_cleanly(
         tables = {t for (t,) in await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
         assert "place_change_requests" not in tables
         assert len(await _scratch_execute("SELECT id FROM funeral_places")) == 2
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)
+
+
+async def test_the_behdin_kind_migration_allows_behdin_and_refuses_to_come_down_over_one():
+    """c3d4e5f6a0b1: account_kind may be 'behdin'; nothing else new is allowed;
+    going back refuses while a behdin account exists (nothing is deleted, D8)
+    and works once there is none."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        add = "INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', :p, :k)"
+        await _scratch_execute(add, {"p": "+919000000021", "k": "behdin"})
+        await _scratch_execute(add, {"p": "+919000000022", "k": "mobed"})
+        await _scratch_execute(add, {"p": "+919000000023", "k": "funeral_manager"})
+        await _refused(add, {"p": "+919000000024", "k": "trustee"}, "an unknown kind")
+        down = _alembic("downgrade", "b2c3d4e5f6a0")
+        assert down.returncode != 0 and "behdin account" in (down.stdout + down.stderr)
+        assert len(await _scratch_execute("SELECT id FROM users")) == 3
+        await _scratch_execute("UPDATE users SET account_kind = 'mobed' WHERE account_kind = 'behdin'")
+        _ok(_alembic("downgrade", "b2c3d4e5f6a0"))
+        await _refused(add, {"p": "+919000000025", "k": "behdin"}, "behdin after coming down")
         _ok(_alembic("upgrade", "head"))
         _ok(_alembic("check"))
     finally:

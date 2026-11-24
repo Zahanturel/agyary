@@ -55,7 +55,10 @@ USER_ROLES = ("panthaky", "mobed", "caretaker")
 # is a mobed's; a manager's sees none of a mobed's app (behdins, calendar,
 # machis), and a mobed's none of a manager's.
 ACCOUNT_MOBED, ACCOUNT_FUNERAL_MANAGER = "mobed", "funeral_manager"
-ACCOUNT_KINDS = (ACCOUNT_MOBED, ACCOUNT_FUNERAL_MANAGER)
+# An ordinary person with the behdin app only (R4.0, 25 Nov 2026): never a mobed
+# or manager until they ask from the mobed app. No approval needed.
+ACCOUNT_BEHDIN = "behdin"
+ACCOUNT_KINDS = (ACCOUNT_MOBED, ACCOUNT_FUNERAL_MANAGER, ACCOUNT_BEHDIN)
 # A funeral place (D10): a Doongerwadi, a prayer hall (Worli, for cremation) or
 # an aramgah. Only an admin adds one.
 FUNERAL_DOONGERWADI, FUNERAL_PRAYER_HALL, FUNERAL_ARAMGAH = "doongerwadi", "prayer_hall", "aramgah"
