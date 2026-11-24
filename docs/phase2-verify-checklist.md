@@ -24,7 +24,7 @@ rules stay live.
   family's contact, the mobeds going and the panthaky, each with Call and WhatsApp.
 - **The waiting list and backing out:** a Yes after the places are full is kept on the waiting list, in order.
   Someone going can say **I can't go any more** (or the panthaky marks **Can't go**); the place
-  reopens and the first on the waiting list is asked again (30 minutes each). A phone call can also bring
+  reopens and the first on the waiting list is asked again (15 minutes each). A phone call can also bring
   back someone who said they can't go (the panthaky marks them Going).
 - **The Doongerwadi's side** reads where each request stands in plain words: Waiting at, Sent to
   the panthaky of, Finding mobeds: 1 of 2 going, A place has opened, Confirmed (with the names and
@@ -125,7 +125,7 @@ the test ones afterwards.
     the board, for someone who phoned you.)
 11. **The waiting list** needs a third mobed in the app: their I can pray once it is confirmed
     reads **Waiting list**. When someone going can't go, the first on the waiting list is asked
-    again in the app ("A place has opened: can you still pray?"); no answer in 30 minutes asks the
+    again in the app ("A place has opened: can you still pray?"); no answer in 15 minutes asks the
     next; with nobody left, you are told to
     find someone.
 12. **Confirm with who's going:** a new test record (2 wanted); tap **I'll pray** only. [ ] The

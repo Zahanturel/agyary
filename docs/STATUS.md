@@ -37,7 +37,7 @@ What it contains:
   panthaky's and each praying app mobed's own book, calendars, the memorial one tap away, notices
   and phone notifications; "Still short" 4 hours before the Geh-saarnu.
 - **The waiting list (standbys in the code) and backing out**: I can't go any more (app card, WhatsApp button, or the board's
-  Can't go), the waiting list asked again in order (30 minutes each), confirmed again; a phone call can
+  Can't go), the waiting list asked again in order (15 minutes each), confirmed again; a phone call can
   bring back someone who said they can't go.
 - **Recording a death is four short steps (D12, 24 Nov 2026, built, not yet live):** the family
   (from the book, contacts or typed), the departed (names may be left empty; the date is today),

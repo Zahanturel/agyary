@@ -103,7 +103,7 @@ class PrayerCalloutAnswer(Base):
     ``reask_token`` (the re-ask's buttons carry it, never ``token``) and
     ``reasked_at``; their first answer to it is ``reask_answer`` /
     ``reask_answered_at``; ``reask_passed_at`` is when the asking moved on past
-    them (their no, or 30 minutes without an answer), set once."""
+    them (their no, or 15 minutes without an answer), set once."""
 
     __tablename__ = "prayer_callout_answers"
 

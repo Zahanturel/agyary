@@ -617,7 +617,7 @@ async def test_an_app_standby_is_asked_in_the_app_and_answers_on_their_card(clie
     assert r.status_code == 409 and r.json()["detail"] == "You have already said yes: you are going."
 
 
-async def test_a_no_or_thirty_minutes_asks_the_next_once_and_none_left_tells_the_panthaky(client, db, seeded, meta,
+async def test_a_no_or_fifteen_minutes_asks_the_next_once_and_none_left_tells_the_panthaky(client, db, seeded, meta,
                                                                                          pushes, live):
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -640,7 +640,7 @@ async def test_a_no_or_thirty_minutes_asks_the_next_once_and_none_left_tells_the
     # Er. Third does not answer: nothing at 29 minutes; at 30, two loops at once move on once.
     settings = config.get_settings()
     asked_at = third.reasked_at
-    assert await standbys.timed_out(db, asked_at + timedelta(minutes=29), settings, None) == 0
+    assert await standbys.timed_out(db, asked_at + timedelta(minutes=standbys.REASK_MINUTES - 1), settings, None) == 0
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
     at = asked_at + standbys.REASK_WAIT
     async with factory() as one, factory() as two:
@@ -676,7 +676,7 @@ async def test_a_place_filled_meanwhile_stops_the_asking_and_a_late_yes_is_a_sta
     assert r.status_code == 200 and r.json()["status"] == "all_set", r.text
     notes = len(await _notes(db, PANTHAKY, standbys.KIND_PLACE_OPENED))
 
-    # The 30 minutes pass: nobody more is asked, nobody told.
+    # The 15 minutes pass: nobody more is asked, nobody told.
     settings = config.get_settings()
     assert await standbys.timed_out(db, asked_at + standbys.REASK_WAIT, settings, None) == 1
     rows = await _answers(db)
@@ -811,7 +811,7 @@ async def test_the_panthaky_marks_a_standby_going_while_a_place_is_open_one_yes_
         "phone", hormuz.id)
     assert rows[SECOND].reask_answer == "yes" and rows[SECOND].reask_passed_at is not None
     assert (await _request(db, rid)).status == "all_set" and await prayer_callout._going(db, rid) == 2
-    # The next standby is not asked, and the 30 minutes move nobody on.
+    # The next standby is not asked, and the 15 minutes move nobody on.
     assert rows[THIRD].reasked_at is None
     settings = config.get_settings()
     assert await standbys.timed_out(db, rows[SECOND].reasked_at + standbys.REASK_WAIT, settings, None) == 0

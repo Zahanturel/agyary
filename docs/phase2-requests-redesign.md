@@ -94,7 +94,7 @@ One tap records it. (The app notices it is back on screen; nothing listens to th
 **Going for someone on the waiting list (owner, 24 Nov 2026):** while a place is open, the panthaky
 can mark ANY mobed Going, including one on the waiting list or one just asked again (a Going button
 on the waiting-list row and on the mobed's row). It fills the place, closes that mobed's asking again
-(the next standby is not asked, the 30 minutes move nobody on), and is one yes with the mobed's own
+(the next standby is not asked, the 15 minutes move nobody on), and is one yes with the mobed's own
 WhatsApp Yes: under the request's lock whoever comes second finds them going already ("already
 answered" / "not asked again"), never two places. With no place open it is refused in plain words.
 
@@ -158,7 +158,7 @@ then "All set" with the agyari, the panthaky's Call and WhatsApp, and the mobeds
   phoned. The place reopens at once.
 - **Then, by itself:** the first standby is asked again on WhatsApp (the call-out template, so
   it works outside the 24 hours too), and the panthaky is told "Ervad A can't go; we have asked
-  Ervad B". If that standby says no, or has not answered in **30 minutes**, the next standby is
+  Ervad B". If that standby says no, or has not answered in **15 minutes**, the next standby is
   asked, and so on. With no standby left, the panthaky is told: "Ervad A can't go and nobody is
   on standby: please find someone" with the board.
 - **Filled again:** the new mobed gets the details (template 6), the family gets the all-set
@@ -298,7 +298,7 @@ their number goes to the family; the message should say both before they answer.
 - **Template 7** now says "are confirmed", which is true also when the panthaky confirmed with
   fewer (the first wording, "All mobeds are found", was not).
 - **Standbys (step 5b):** one standby is asked per open place, in the order they said yes; one
-  who gave no answer in 30 minutes is not asked again for a later place (a late answer to that
+  who gave no answer in 15 minutes is not asked again for a later place (a late answer to that
   re-ask still counts); the panthaky's own standby ("I'll pray" when full) is never re-asked; a
   standby nobody can reach (WhatsApp off and not in the app) is skipped and the panthaky told.
   Only the re-ask's own buttons answer a re-ask, not the first message's.

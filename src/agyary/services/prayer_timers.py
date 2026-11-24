@@ -36,8 +36,8 @@ with no geh; with no Geh-saarnu day, from the Uthamna's day and time (6:30 am
 with no time); with neither, never. Claimed by a conditional update of
 short_alert_at before anyone is told, so it is told once, two loops included.
 
-A standby's 30 minutes (step 5b; services/standbys.py, timed_out): a standby
-asked again when a place opened who has not answered in 30 minutes is passed
+A standby's 15 minutes (step 5b; services/standbys.py, timed_out): a standby
+asked again when a place opened who has not answered in 15 minutes is passed
 over once (a conditional update of reask_passed_at), and the next standby is
 asked, while the request waits with a place open. The prayers begin
 (prayers_begin) also bounds backing out.

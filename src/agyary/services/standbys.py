@@ -36,7 +36,7 @@ can reach is passed over. Not the panthaky, who fills a place from the board.
 - A yes to it goes through prayer_callout.fill: it fills the place (and may
   make the request all set again), or, the place filled meanwhile by other
   means, they stay a standby and are thanked with the "Enough mobeds" words.
-- A no, or no answer in 30 minutes (``timed_out``, run by the one-minute loop,
+- A no, or no answer in 15 minutes (``timed_out``, run by the one-minute loop,
   claimed once by a conditional update of ``reask_passed_at``, so two loops or
   a no at the same moment move on once), asks the next standby.
 - The panthakys the request reached are told at each step, in the app and on
@@ -94,8 +94,9 @@ KIND_PLACE_OPENED = "prayer_place_opened"
 # To a standby in the app: a place has opened, can you still pray?
 KIND_REASK = "prayer_reask"
 REASK_TITLE = "A place has opened"
-# How long a standby asked again has before the next is asked (the lead's default).
-REASK_WAIT = timedelta(minutes=30)
+# How long a standby asked again has before the next is asked (15 minutes: the owner, 24 Nov 2026).
+REASK_MINUTES = 15
+REASK_WAIT = timedelta(minutes=REASK_MINUTES)
 # Rounds of asking in one go, each passing over those who could not be reached.
 MAX_ROUNDS = 20
 BOARD_BEGUN = "The prayers have begun, so who is going can no longer be changed here."
@@ -132,7 +133,7 @@ class Asked:
 
     # Asked again just now, and reached (in the app or on WhatsApp).
     asked: list[PrayerCalloutAnswer] = field(default_factory=list)
-    # Asked again and not answered within the 30 minutes yet (including those just asked).
+    # Asked again and not answered within the 15 minutes yet (including those just asked).
     waiting_on: list[PrayerCalloutAnswer] = field(default_factory=list)
     # Neither the app nor WhatsApp could reach them, so they were passed over.
     unreachable: list[PrayerCalloutAnswer] = field(default_factory=list)
@@ -154,7 +155,7 @@ class Opened:
 
 def reask_state(row: PrayerCalloutAnswer) -> str:
     """Not asked again (or a late yes: a standby again), asked and waited for,
-    said no, or no answer in the 30 minutes."""
+    said no, or no answer in the 15 minutes."""
     if row.reasked_at is None or row.reask_answer == CALLOUT_YES:
         return REASK_WAITING
     if row.reask_answer == CALLOUT_NO:
@@ -165,7 +166,7 @@ def reask_state(row: PrayerCalloutAnswer) -> str:
 
 
 def awaiting_answer(row: PrayerCalloutAnswer) -> bool:
-    """Asked again and not answered: a late answer still counts after the 30 minutes."""
+    """Asked again and not answered: a late answer still counts after the 15 minutes."""
     return pc.is_standby(row) and row.reasked_at is not None and row.reask_answer is None
 
 
@@ -266,7 +267,7 @@ async def _choose(db: AsyncSession, settings: Settings, request: FuneralRequest,
 
 
 async def _pass(db: AsyncSession, row: PrayerCalloutAnswer, now: datetime) -> bool:
-    """Move on past this standby, once (a no, 30 minutes, or nobody could
+    """Move on past this standby, once (a no, 15 minutes, or nobody could
     reach them): a conditional update, so a no and the timer at the same
     moment move on once. Commits. Returns whether this call did it."""
     done = (await db.execute(
@@ -369,8 +370,8 @@ async def _tell_step(
         title = all_set.fit_title(f"{lead}; we have asked {names}",
                                   f"{lead}; we have asked a mobed on the waiting list",
                                   "We have asked a mobed on the waiting list")
-        body = (f"For the prayers for {departed}: {lead}; we have asked {names}. If there is no yes in 30 "
-                "minutes, the next on the waiting list is asked.")
+        body = (f"For the prayers for {departed}: {lead}; we have asked {names}. If there is no yes in "
+                f"{REASK_MINUTES} minutes, the next on the waiting list is asked.")
         out.panthakys = await pc._tell_panthakys(
             db, settings, request, row, KIND_PLACE_OPENED, title, body, push=f"We have asked {names}.",
             push_title=push_title, now=now, skip_user_id=skip_user_id, link=link)
@@ -688,7 +689,7 @@ async def answer_reask(
     re-ask's own token) or in the app - only their first. Committed before
     anything follows. A yes goes through prayer_callout.fill (a place, or
     with none open a standby again, thanked); a no asks the next standby and
-    tells the panthaky, unless the 30 minutes had already moved on. Returns
+    tells the panthaky, unless the 15 minutes had already moved on. Returns
     what happened, for the log."""
     await db.refresh(request, with_for_update=True)
     await db.refresh(row, with_for_update=True)
@@ -737,10 +738,10 @@ async def answer_reask_in_app(
     return {"outcome": outcome, "message": message}
 
 
-# --- The 30 minutes (run by the one-minute loop: prayer_timers.run) -------------------
+# --- The 15 minutes (run by the one-minute loop: prayer_timers.run) -------------------
 
 async def timed_out(db: AsyncSession, now: datetime, settings: Settings, client: httpx.AsyncClient | None) -> int:
-    """Each standby asked again 30 minutes ago or more who has not answered:
+    """Each standby asked again 15 minutes ago or more who has not answered:
     the asking moves on past them once (claimed by a conditional update,
     committed first, so two loops at the same moment move on once), and the
     next standby is asked - only while the request waits with a place open.
@@ -760,7 +761,7 @@ async def timed_out(db: AsyncSession, now: datetime, settings: Settings, client:
         done += 1
         try:
             request = await db.get(FuneralRequest, request_id, populate_existing=True)
-            logger.warning("Request %s: standby %s did not answer in 30 minutes", request_id, row_id)
+            logger.warning("Request %s: standby %s did not answer in 15 minutes", request_id, row_id)
             await _move_on(db, settings, request, row, lead=f"{row.name} did not answer",
                            unnamed="A mobed on the waiting list did not answer", now=now, client=client)
         except Exception:   # noqa: BLE001 - it is claimed (once); the next one still goes

@@ -135,7 +135,7 @@ wording, laid out in short lines:
 The same six blanks in the same order as template 4 v2 (1 agyari, 2 departed by title and own name, 3 place,
 4 Geh-saarnu, 5 Uthamna, 6 the panthaky's name). Quick-reply buttons, **in this order**: **Yes, I can still pray** /
 **Not this time**; the payloads are the re-ask's own token, answered through `standbys.answer_reask` exactly as
-before: a yes fills the open place (and may make the request Confirmed again), a no or no answer in 30 minutes asks
+before: a yes fills the open place (and may make the request Confirmed again), a no or no answer in 15 minutes asks
 the next standby. Meta's form refuses a body that ends on a blank, so it ends "... {{6}}. Thank you."
 
 ### 6. To each mobed going: `prayer_details_mobed_v3`
