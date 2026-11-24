@@ -683,8 +683,14 @@ function drawAllSet(q, alive) {
 // How a place was filled, in a word or two.
 const HOW = { whatsapp: "On WhatsApp", app: "In the app", phone: "By phone", self: "I'll pray" };
 const SAID_HOW = { whatsapp: "on WhatsApp", app: "in the app", phone: "on the phone", self: "" };
-// While it waits and is on screen, the board is read again this often.
-const LIVE_MS = 10000;
+// While it waits (or is confirmed: a back-out reopens it) and is on screen, the board is read
+// again this often: one read at a time, none while the page is hidden, and one at once on coming back.
+const LIVE_MS = 5000;
+
+/** Whether this board can still change under the panthaky's eyes. */
+function isLive(view) {
+  return view.b.status === "waiting" || view.b.status === "all_set";
+}
 
 function myKey() {
   return state.user ? `u${state.user.id}` : "";
@@ -777,13 +783,17 @@ function goneHtml(p) {
 // Where a standby's being asked again stands (step 5b), as the server says it.
 const REASK = { waiting: "Waiting", asked_again: "Asked again", said_no: "Said no", no_answer: "No answer" };
 
-function standbysHtml(b) {
+function standbysHtml(b, { marks = false } = {}) {
   if (!b.standbys.length) return "";
   const me = myKey();
+  // While a place is open the panthaky can phone someone on the waiting list and mark them Going.
+  const open = marks && b.status === "waiting" && b.going < b.wanted;
   return `<p style="margin:14px 0 4px"><b>Waiting list, in order</b></p>
     <ol style="margin:0;padding-left:28px">${b.standbys.map(s => `<li>${esc(s.name)}${s.key === me ? " (you)" : ""}
       ${HOW[s.how] ? `<span class="meta">· ${esc(HOW[s.how])}</span>` : ""}
-      ${REASK[s.reask] ? `<span class="meta">· <b>${esc(REASK[s.reask])}</b></span>` : ""}</li>`).join("")}</ol>`;
+      ${REASK[s.reask] ? `<span class="meta">· <b>${esc(REASK[s.reask])}</b></span>` : ""}
+      ${open && s.key !== me ? `<button type="button" class="secondary small" data-going="${esc(s.key)}"
+        style="margin-left:8px" aria-label="Is ${esc(s.name)} going?">Going?</button>` : ""}</li>`).join("")}</ol>`;
 }
 
 function boardCardHtml(view) {
@@ -802,7 +812,7 @@ function boardCardHtml(view) {
       <p ${allSet ? "" : `class="meta" `}style="margin:0">${esc(boardStateText(b, !!view.q))}</p>
       <p class="meta" id="rqLive" role="status" style="margin:4px 0 0">${esc(view.liveError)}</p>
       ${contacts ? "" : `${slotsHtml(b, { open: !["declined", "withdrawn", "all_set"].includes(b.status), marks: true })}
-        ${standbysHtml(b)}`}
+        ${standbysHtml(b, { marks: true })}`}
       ${waiting ? `
         <div class="action-bar">
           ${self ? `<button type="button" class="secondary" id="rqSelf">I'll pray</button>` : ""}
@@ -850,7 +860,8 @@ function mobedRowHtml(b, m) {
     </div>` : "";
   // Not for someone whose account is waiting or switched off (D9): said why instead.
   if (MAY_MARK.has(m.state) && m.may_place === false && m.no_place) notes.push(esc(sentence(m.no_place)) + ".");
-  const going = MAY_MARK.has(m.state) && m.may_place !== false ? `<button type="button" class="secondary"
+  const going = (MAY_MARK.has(m.state) || (m.state === "standby" && b.status === "waiting" && b.going < b.wanted))
+    && m.may_place !== false ? `<button type="button" class="secondary"
       data-going="${esc(m.key)}" style="width:100%;margin-top:8px" aria-label="Is ${esc(m.name)} going?">Going?</button>`
     : "";
   return `<div class="fact">
@@ -904,7 +915,8 @@ function paintBoard(view) {
   on("#rqShort", () => confirmShort(view));
   on("#rqCantTake", () => confirmDecline(q, view.alive));
   on("#rqMobedsPage", () => { useFireTempleOf(q); navigate("#/mobeds"); });
-  const mobed = (key) => view.b.mobeds.find(m => m.key === key);
+  // A mobed of the list, or one on the waiting list who is not on it any more (still markable).
+  const mobed = (key) => view.b.mobeds.find(m => m.key === key) || view.b.standbys.find(s => s.key === key);
   // The link does the calling or the chat; remembered, to ask "Is <name> going?" on coming back.
   area.querySelectorAll("[data-call], [data-chat]").forEach(a => {
     a.addEventListener("click", () => {
@@ -1009,14 +1021,14 @@ async function readBoard(view) {
 function keepLive(view) {
   clearTimeout(view.timer);
   view.timer = null;
-  if (!here(view) || view.b.status !== "waiting" || document.hidden) return;
+  if (!here(view) || !isLive(view) || document.hidden) return;
   view.timer = setTimeout(() => tick(view), LIVE_MS);
 }
 
 async function tick(view) {
   clearTimeout(view.timer);
   view.timer = null;
-  if (!here(view) || view.b.status !== "waiting" || document.hidden) return;
+  if (!here(view) || !isLive(view) || document.hidden) return;
   // Never two at once, and not while a tap is being answered: its answer is the board.
   if (!view.acting && !view.reading) await readBoard(view);
   if (here(view) && !view.timer) keepLive(view);
@@ -1069,7 +1081,7 @@ function askAbout(view, call) {
   const m = view.b.mobeds.find(x => x.key === call.key);
   if (!m) return;
   if (MAY_MARK.has(m.state) && m.may_place === false) return showInfo(`${m.name} ${m.no_place}.`);
-  if (MAY_MARK.has(m.state)) return askGoing(view, m);
+  if (MAY_MARK.has(m.state) || (m.state === "standby" && view.b.going < view.b.wanted)) return askGoing(view, m);
   showInfo(m.state === "going" ? `${m.name} is going already.` : `${m.name} is on the waiting list already.`);
 }
 
@@ -1079,7 +1091,7 @@ async function backInApp() {
   const view = onScreen;
   if (!view || !here(view) || document.hidden) return;
   const call = takeCall(view);
-  if (view.b.status === "waiting" && (call || !view.timer)) await tick(view);
+  if (isLive(view)) await tick(view);    // read at once, whatever the timer had left
   if (call) askAbout(view, call);
 }
 
