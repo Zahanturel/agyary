@@ -462,3 +462,12 @@ Owner's decisions:
   could not be tried.
 - **Layout:** every WhatsApp text the app prefills or sends as free text is laid out as short lines with an empty
   line between parts and bold labels, like the templates (the one-paragraph message to Delzeen was the case).
+- **Greeting a behdin (24 Nov 2026):** in a text, a family or behdin is greeted by their FIRST NAME only
+  ("Sahebji Farzin," for "Farzin Meherzad Turel", a title skipped as for a mobed); this overrides the full-name
+  rule of D11 for greetings. Where the name is shown as data (the family contact, lists, slips) the full name stays.
+- **The departed is named in WhatsApp texts by title and own name only** ("Osti Aban"), without the father's or
+  husband's name (owner, 24 Nov 2026, after the first real test showed "Osti Aban Parvez"). The father's or
+  husband's name stays on the record, the slip, the prayers' schedule and in the app. Applies to the template
+  variables and free-text messages, not to what a mobed reads inside the app.
+- **"For anything else, please contact ..."** (the details message): when the message goes to the panthaky, no other
+  mobed is named (it named Delzeen, who is not the panthaky); it falls back to the fire temple's own name.
