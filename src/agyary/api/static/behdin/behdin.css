@@ -63,3 +63,42 @@ details.card summary { cursor: pointer; min-height: var(--tap); display: flex; a
 input[type="search"] { width: 100%; }
 .obs-what .tag { display: inline-block; margin: var(--space-1) 0 0; }
 .obs-what .tag { display: inline-block; margin: var(--space-1) 0 0; }
+
+/* --- R4.2: asking an agyari for a prayer ------------------------------------------------------ */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ask-big { width: 100%; margin: 0 0 var(--space-3); }
+.ask-top { margin-bottom: var(--space-3); }
+.ask-actions { margin-top: var(--space-3); }
+.ask-actions > button { min-width: 0; }
+.agy-grey { opacity: .6; }
+.name-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0;
+  border-top: 1px solid var(--border); }
+.name-row:first-child { border-top: 0; }
+.name-row > span { min-width: 0; overflow-wrap: anywhere; }
+.rv-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0;
+  border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.rv-row > div { min-width: 0; }
+.rv-promise { margin: var(--space-3) 0 0; padding: var(--space-3); background: var(--primary-tint); border-radius: var(--radius-sm); }
+.ask-row { display: block; text-decoration: none; color: var(--text); }
+.ask-row > span { display: block; overflow-wrap: anywhere; }
+.ask-row-top { display: flex !important; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.ask-line { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.ask-line:first-child { border-top: 0; }
+.tag.status-waiting, .tag.status-noanswer { background: var(--accent-tint); color: var(--accent-text); }
+.tag.status-accepted { background: var(--success-tint); color: var(--success); }
+.tag.status-rejected, .tag.status-cancelled { background: var(--ink-100); color: var(--muted); }
+.home-ask { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap;
+  padding: var(--space-2) 0; color: var(--text); text-decoration: none; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.home-ask:first-of-type { border-top: 0; }
+.dot.ask { background: var(--primary); }
+.day-item.ask { border-left-color: var(--primary); }
+.danger-outline { border: 2px solid var(--danger-600); color: var(--danger-600); background: #fff; }
+header button.icon-btn { position: relative; }
+.bell-dot { position: absolute; top: 8px; right: 8px; width: 12px; height: 12px; border-radius: 50%; background: #ff6b5e;
+  border: 2px solid var(--primary, #232A4D); }
+.notice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; padding: var(--space-3);
+  margin-bottom: var(--space-2); background: #fff; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-weight: 400; overflow-wrap: anywhere; }
+.notice.unread { border: 2px solid var(--primary); background: var(--primary-tint); }
+.notice-title { display: flex; align-items: center; gap: var(--space-2); }
+.notice-new { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); flex: none; }

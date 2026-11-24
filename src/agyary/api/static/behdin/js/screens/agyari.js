@@ -6,10 +6,11 @@
  * in the body of one request, never in an address, never stored, never written to a log.
  */
 
-import { agyariesNearby, getMyAgyari, chooseAgyari, forgetAgyari } from "../api.js";
+import { agyariesNearby, getMyAgyari, chooseAgyari, forgetAgyari, getAsking } from "../api.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml, showError, showInfo } from "/mobed-app/js/ui.js";
 import { navGuard } from "/mobed-app/js/router.js";
 import { esc, KIND_LABELS } from "../util.js";
+import { startAsk } from "./ask.js";
 
 const NOT_CHOSEN = "You have not chosen one yet.";
 
@@ -73,7 +74,20 @@ export async function renderAgyari() {
       <p class="meta" style="margin:0">${esc([mine.city, kindLabel(mine.kind)].filter(Boolean).join(" · "))}</p>
       ${mine.closed ? `<p class="meta" style="margin:6px 0 0">This agyari is no longer listed. You can choose another below.</p>` : ""}
       ${mine.answers_in_app ? `<p style="margin:var(--space-2) 0 0"><span class="tag">Answers in the app</span></p>` : ""}
+      <div id="agyAsk" style="margin-top:var(--space-3)"><p class="meta" style="margin:0">Checking whether it takes asks...</p></div>
       <div style="margin-top:var(--space-3)"><button type="button" class="ghost small" id="agyRemove">Remove my choice</button></div>`;
+    const chosen = mine;
+    getAsking(chosen.id).then((asking) => {
+      const box = document.getElementById("agyAsk");
+      if (!box || mine !== chosen) return;
+      if (!asking.takes_asks) { box.innerHTML = `<p class="meta" style="margin:0">${esc(asking.message || "Not taking asks in the app yet")}.</p>`; return; }
+      box.innerHTML = `<button type="button" id="agyAskBtn">Ask for a prayer</button>`;
+      document.getElementById("agyAskBtn").onclick = () =>
+        startAsk({ agyari: { id: chosen.id, name: chosen.name, city: chosen.city }, back: "#/agyari" });
+    }).catch(() => {
+      const box = document.getElementById("agyAsk");
+      if (box && mine === chosen) box.innerHTML = "";
+    });
     document.getElementById("agyRemove").onclick = async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;

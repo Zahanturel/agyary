@@ -6,12 +6,13 @@
  * what is on it; "Add" starts an event or a departed's prayers.
  */
 
-import { getMyCalendar, getToday, parsiRange, deleteEvent } from "../api.js";
+import { getMyCalendar, getToday, parsiRange, deleteEvent, getMyAsks } from "../api.js";
 import { state } from "../state.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml, openSheet, closeSheet, showError, showInfo }
   from "/mobed-app/js/ui.js";
 import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
+import { repeatWords } from "./ask.js";
 import { esc, longDay, monthName, todayIst, ymdOf, parsiWords, eventKindLabel, departedName } from "../util.js";
 
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -57,8 +58,32 @@ function rojCell(p) {
 function dots(list) {
   if (!list.length) return "";
   const mem = list.filter((i) => i.source === "memorial").length;
-  const ev = list.length - mem;
-  return `<span class="cal-dots" aria-hidden="true">${mem ? '<i class="dot mem"></i>' : ""}${ev ? '<i class="dot ev"></i>' : ""}</span>`;
+  const ask = list.filter((i) => i.source === "ask").length;
+  const ev = list.length - mem - ask;
+  return `<span class="cal-dots" aria-hidden="true">${mem ? '<i class="dot mem"></i>' : ""}${ev ? '<i class="dot ev"></i>' : ""}${ask ? '<i class="dot ask"></i>' : ""}</span>`;
+}
+
+/**
+ * The asks an agyari has accepted, as calendar items for the days in view. The calendar of the
+ * person's own things does not carry them, so they are read from "My asks" here. A repeating ask
+ * shows its first day (the agyari holds the rest).
+ */
+function askItems(asks, start, end) {
+  const out = [];
+  for (const a of asks) {
+    if (a.status !== "accepted") continue;
+    const days = a.kind === "memorial" && a.memorial ? a.memorial.dates : [{ date: a.date, label: null }];
+    for (const d of days) {
+      if (d.date < start || d.date > end) continue;
+      out.push({
+        source: "ask", kind: "ask", id: a.id, date: d.date, title: `Prayer at ${a.agyari.name || "an agyari"}`,
+        service: a.service.name, time: a.geh_name ? `${a.geh_name} geh` : a.time, label: d.label,
+        departed: a.memorial ? a.memorial.departed_name : null,
+        repeats: a.repeat ? repeatWords(a.repeat) : "",
+      });
+    }
+  }
+  return out;
 }
 
 export async function renderCalendar() {
@@ -82,10 +107,13 @@ export async function renderCalendar() {
   let items = [];
   let failed = false;
   try {
-    [parsi, items] = await Promise.all([
+    let asks = [];
+    [parsi, items, asks] = await Promise.all([
       parsiRange(start, end, state.system).catch(() => []),
       getMyCalendar(start, end).then((r) => r.items),
+      getMyAsks().then((r) => askItems(r.asks, start, end)).catch(() => []),   // only a help: the calendar shows without it
     ]);
+    items = items.concat(asks);
   } catch (e) {
     failed = true;
   }
@@ -120,7 +148,7 @@ export async function renderCalendar() {
     <div class="cal-grid" role="group" aria-label="${monthName(m)} ${y}">
       ${WEEK.map((w) => `<span class="cal-wd">${w}</span>`).join("")}${cells}
     </div>
-    <p class="cal-key meta"><i class="dot mem"></i> A departed's prayer &nbsp; <i class="dot ev"></i> An event<span class="cal-numnote"><br>The small number under a day is its Roj (1 to 30). Tap a day to see its name.</span></p>`;
+    <p class="cal-key meta"><i class="dot mem"></i> A departed's prayer &nbsp; <i class="dot ev"></i> An event &nbsp; <i class="dot ask"></i> A prayer an agyari accepted<span class="cal-numnote"><br>The small number under a day is its Roj (1 to 30). Tap a day to see its name.</span></p>`;
   wireRetry(mainEl, () => renderCalendar());
 
   const go = (k) => { state.calMonth = k; renderCalendar(); };
@@ -147,6 +175,13 @@ export function openAdd(ymd) {
 }
 
 function itemHtml(it) {
+  if (it.source === "ask") {
+    return `<div class="day-item ask">
+      <p class="di-title">${esc(it.title)}</p>
+      <p class="meta">${esc(it.service)}${it.time ? ", " + esc(it.time) : ""}${it.departed ? `. For ${esc(it.departed)}${it.label ? ": " + esc(it.label) : ""}` : ""}${it.repeats ? ". " + esc(it.repeats) : ""}</p>
+      <button type="button" class="small secondary" data-ask="${it.id}">Open</button>
+    </div>`;
+  }
   if (it.source === "memorial") {
     return `<div class="day-item mem">
       <p class="di-title">${esc(departedName(it))}</p>
@@ -175,6 +210,9 @@ function openDay(ymd, list, parsi) {
   const wire = () => {
     body.querySelectorAll("[data-open]").forEach((b) => {
       b.onclick = () => { closeSheet(); navigate(`#/departed/${b.dataset.open}`); };
+    });
+    body.querySelectorAll("[data-ask]").forEach((b) => {
+      b.onclick = () => { closeSheet(); navigate(`#/asks/${b.dataset.ask}`); };
     });
     body.querySelectorAll("[data-edit]").forEach((b) => {
       b.onclick = () => { closeSheet(); navigate(`#/event/${b.dataset.edit}`); };

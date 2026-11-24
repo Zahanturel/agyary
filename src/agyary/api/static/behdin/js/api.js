@@ -144,3 +144,13 @@ export const deleteEvent = (id) => del(`/me/events/${id}`);
 // The Parsi name of every day in a range, in one call (the same one the other calendar uses).
 export const parsiRange = (start, end, system) => get(`/../calendar/range?start=${start}&end=${end}&system=${system}`);
 export const convertDay = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);
+
+// R4.2: asking an agyari for a prayer, the person's asks and their notices.
+export const getAsking = (agyaryId) => get(`/agyaries/${agyaryId}/asking`);
+export const createAsk = (body) => post("/me/asks", body);
+export const getMyAsks = () => get("/me/asks");
+export const getAsk = (id) => get(`/me/asks/${id}`);
+export const cancelAsk = (id) => post(`/me/asks/${id}/cancel`, {});
+export const askAnother = (id, agyaryId) => post(`/me/asks/${id}/ask-another`, { agyary_id: agyaryId });
+export const getNotifications = () => get("/notifications");
+export const markNoticesSeen = (ids) => post("/notifications/seen", ids ? { ids } : {});

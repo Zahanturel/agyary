@@ -14,6 +14,8 @@ export const state = {
   draftDate: null,
   // The Parsi calendar the person reads in ("shenshai" until Home has asked).
   system: "shenshai",
+  // The "Ask for a prayer" answers so far (js/screens/ask.js); null when no ask is being made.
+  ask: null,
 };
 
 // The refresh cookie is httpOnly, so the page cannot tell "my session is gone" from "I have no

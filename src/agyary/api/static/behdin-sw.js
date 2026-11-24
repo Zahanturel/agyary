@@ -8,7 +8,7 @@
 //
 // Routing lives in the client (hash-based), so every route is served by the one page: /behdin, or the root on the
 // app's own hostname.
-const CACHE_NAME = "behdin-shell-v5";
+const CACHE_NAME = "behdin-shell-v6";
 // How long the network gets before the cached shell is shown. The fetch carries on behind it.
 const SHELL_WAIT_MS = 4000;
 const SHELL_FILES = [
@@ -34,10 +34,13 @@ const SHELL_FILES = [
   "/behdin-app/js/brand.js",
   "/behdin-app/js/install.js",
   "/behdin-app/js/consent.js",
+  "/behdin-app/js/notices.js",
   "/behdin-app/js/session.js",
   "/behdin-app/js/state.js",
   "/behdin-app/js/util.js",
   "/behdin-app/js/screens/agyari.js",
+  "/behdin-app/js/screens/ask.js",
+  "/behdin-app/js/screens/asks.js",
   "/behdin-app/js/screens/calendar.js",
   "/behdin-app/js/screens/departed.js",
   "/behdin-app/js/screens/departed_form.js",
@@ -46,6 +49,7 @@ const SHELL_FILES = [
   "/behdin-app/js/screens/login.js",
   "/behdin-app/js/screens/menu.js",
   "/behdin-app/js/screens/off.js",
+  "/behdin-app/js/screens/picker.js",
 ];
 
 self.addEventListener("install", event => {

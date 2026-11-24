@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v5"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v6"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -280,3 +280,34 @@ def test_every_screen_of_the_calendar_work_has_its_route_and_the_new_one_comes_f
         assert f'route("{pattern}"' in main, pattern
     assert main.index('route("#/event/new"') < main.index('route("#/event/:id"')
     assert main.index('route("#/departed/new"') < main.index('route("#/departed/:id"')
+
+
+# --- R4.2: asking an agyari for a prayer -----------------------------------------------------------
+
+def test_the_ask_screens_have_their_routes_and_the_longer_one_comes_first():
+    main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
+    for pattern in ("#/ask", "#/asks", "#/asks/:id/another", "#/asks/:id"):
+        assert f'route("{pattern}"' in main, pattern
+    assert main.index('route("#/asks/:id/another"') < main.index('route("#/asks/:id"')
+    assert "syncBell" in main
+    shell = set(_shell_files())
+    for name in ("screens/ask.js", "screens/asks.js", "screens/picker.js", "notices.js"):
+        assert f"/behdin-app/js/{name}" in shell, name
+
+
+def test_the_ask_flow_sends_what_the_server_checks_and_says_what_it_promises():
+    flow = (STATIC / "behdin" / "js" / "screens" / "ask.js").read_text(encoding="utf-8")
+    assert "Your name and number go to the panthaky only if they accept." in flow
+    assert "Ask the agyari for the price" in flow and "confirm with the agyari" in flow
+    assert "Not taking asks in the app yet" in (STATIC / "behdin" / "js" / "screens" / "picker.js").read_text(encoding="utf-8")
+    api = (STATIC / "behdin" / "js" / "api.js").read_text(encoding="utf-8")
+    for call in ('post("/me/asks"', "/me/asks/${id}/cancel", "/me/asks/${id}/ask-another", 'get("/notifications")',
+                 'post("/notifications/seen"', "/agyaries/${agyaryId}/asking"):
+        assert call in api, call
+
+
+def test_the_bell_is_asked_on_focus_and_every_minute_and_the_page_has_one():
+    code = (STATIC / "behdin" / "js" / "notices.js").read_text(encoding="utf-8")
+    assert "EVERY_MS = 60000" in code and "visibilitychange" in code and '"focus"' in code
+    page = (STATIC / "behdin" / "index.html").read_text(encoding="utf-8")
+    assert 'id="bellBtn"' in page and "bell-dot" in page

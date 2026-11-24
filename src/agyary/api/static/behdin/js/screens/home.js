@@ -6,22 +6,20 @@
  * for now. Those fill in as the app grows; no dates are promised.
  */
 
-import { getToday, getMyCalendar, getMyAgyari } from "../api.js";
+import { getToday, getMyCalendar, getMyAgyari, getMyAsks } from "../api.js";
 import { state } from "../state.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml } from "/mobed-app/js/ui.js";
 import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
 import { esc, firstName, gregShort, todayIst, weekdayOf, addDays, parsiWords, eventKindLabel, departedName } from "../util.js";
 import { kindLabel } from "./agyari.js";
+import { startAsk } from "./ask.js";
+import { chipHtml, askLine } from "./asks.js";
 
 /** "Roj Hormuzd, Mah Aspandard", or a Gatha day's own name. */
 function parsiLine(p) {
   if (p.is_gatha) return `${p.gatha_name || "Extra day"} (Gatha)`;
   return `Roj ${p.roj_name}, Mah ${p.mah_name}`;
-}
-
-function emptyCard(title, text) {
-  return `<div class="card empty-card"><h2>${title}</h2><p class="meta">${text}</p></div>`;
 }
 
 /** The next prayer or event in the next 60 days. `undefined` means it could not be read. */
@@ -52,7 +50,19 @@ function agyariCard(a) {
     <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAgyari">${a ? "Change" : "Choose my agyari"}</button></div></div>`;
 }
 
-const FILLS_IN = "Nothing here yet. This will fill in as the app grows.";
+/** The latest answers to the person's asks (accepted, turned down, or not answered), and what is still waiting. */
+function answersCard(asks) {
+  if (asks === undefined) return `<div class="card"><h2>Answers to your asks</h2>${loadFailedHtml("your asks", { whole: false })}</div>`;
+  const answered = asks.filter((a) => a.status === "accepted" || a.status === "rejected" || a.no_answer)
+    .sort((a, b) => String(b.decided_at || b.created_at).localeCompare(String(a.decided_at || a.created_at))).slice(0, 3);
+  const waiting = asks.filter((a) => a.status === "waiting" && !a.no_answer).length;
+  const body = answered.length
+    ? answered.map((a) => `<a class="home-ask" href="#/asks/${a.id}"><span>${esc(askLine(a))}</span>${chipHtml(a)}</a>`).join("")
+    : `<p class="meta" style="margin:0">${asks.length ? "No answers yet." : "You have not asked an agyari for a prayer yet."}</p>`;
+  return `<div class="card"><h2>Answers to your asks</h2>${body}
+    ${waiting ? `<p class="meta" style="margin:var(--space-2) 0 0">${waiting} waiting for an answer.</p>` : ""}
+    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAsks">My asks</button></div></div>`;
+}
 
 export async function renderHome() {
   chrome(true);
@@ -64,13 +74,14 @@ export async function renderHome() {
   let today = null;
   let failed = false;
   const start = todayIst();
-  const [todayRes, nextRes, agyariRes] = await Promise.allSettled([
-    getToday(), getMyCalendar(start, addDays(start, 60)), getMyAgyari(),
+  const [todayRes, nextRes, agyariRes, asksRes] = await Promise.allSettled([
+    getToday(), getMyCalendar(start, addDays(start, 60)), getMyAgyari(), getMyAsks(),
   ]);
   if (!alive()) return;
   if (todayRes.status === "fulfilled") today = todayRes.value; else failed = true;
   const next = nextRes.status === "fulfilled" ? (nextRes.value.items[0] || null) : undefined;
   const agyari = agyariRes.status === "fulfilled" ? agyariRes.value.agyari : undefined;
+  const asks = asksRes.status === "fulfilled" ? asksRes.value.asks : undefined;
 
   // The date comes from the server (India's day); with no answer the phone's own clock, read in India.
   const ymd = today ? today.gregorian_date : todayIst();
@@ -84,12 +95,14 @@ export async function renderHome() {
         <p class="meta" style="margin:4px 0 0">Y.Z. ${esc(today.year)}</p>` : ""}
       ${failed ? loadFailedHtml("today's Parsi date", { whole: false }) : ""}
     </div>
+    <button type="button" class="ask-big" id="homeAsk">Ask for a prayer</button>
     ${nextCard(next)}
-    ${agyariCard(agyari)}
-    ${emptyCard("Answers to your asks", FILLS_IN)}
-    ${emptyCard("Notices", FILLS_IN)}`;
+    ${answersCard(asks)}
+    ${agyariCard(agyari)}`;
   wireRetry(mainEl, () => renderHome());
   const go = (id, hash) => { const b = document.getElementById(id); if (b) b.onclick = () => navigate(hash); };
   go("homeNext", "#/calendar");
   go("homeAgyari", "#/agyari");
+  go("homeAsks", "#/asks");
+  document.getElementById("homeAsk").onclick = () => startAsk({ back: "#/home" });
 }

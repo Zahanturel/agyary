@@ -22,6 +22,9 @@ import { renderEvent } from "./screens/event.js";
 import { renderDeparted } from "./screens/departed.js";
 import { renderDepartedForm } from "./screens/departed_form.js";
 import { renderAgyari } from "./screens/agyari.js";
+import { renderAsk } from "./screens/ask.js";
+import { renderAsks, renderAskView, renderAskAnother } from "./screens/asks.js";
+import { syncBell } from "./notices.js";
 
 // --- Routes -----------------------------------------------------------------
 // `open: true` needs no session. `tab` puts a screen under a bottom tab; `parent` is where Back goes.
@@ -31,6 +34,11 @@ route("#/home", renderHome, { tab: "home" });
 route("#/calendar", renderCalendar, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/home" });
 route("#/agyari", renderAgyari, { parent: "#/home" });
+route("#/ask", renderAsk, { parent: "#/home" });
+route("#/asks", renderAsks, { parent: "#/home" });
+// "another" comes before the bare number, which would otherwise take it.
+route("#/asks/:id/another", renderAskAnother, { parent: (p) => `#/asks/${p.id}` });
+route("#/asks/:id", renderAskView, { parent: "#/asks" });
 // "new" comes before the numbered one, which would otherwise take it.
 route("#/event/new", renderEvent, { parent: "#/calendar" });
 route("#/event/:id", renderEvent, { parent: "#/calendar" });
@@ -127,6 +135,8 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/behdin-sw.js", { scope }).catch(() => {});
 }
 // Pick up a deployed update without waiting for someone to reload by hand.
-onNavigated(watchForUpdates({ busy: () => false }));
+// A half-made ask is not worth losing to an update; everything else can wait for the next screen.
+const applyUpdate = watchForUpdates({ busy: () => !!state.ask && location.hash === "#/ask" });
+onNavigated((...args) => { syncBell(); return applyUpdate(...args); });
 document.title = APP_NAME;
 boot();
