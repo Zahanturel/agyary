@@ -322,8 +322,11 @@ async def _send_reask(db: AsyncSession, settings: Settings, request: FuneralRequ
             linked = (await pc.accounts_by_phone(db, [row.phone])).get(row.phone)
             if linked is not None and not pc.account_on(settings, linked):
                 why = "their Mobed Diary access is not on"
-        # The call-out's own words (template 4 v2), with the re-ask's buttons.
+        # The waiting list's own words ("A place has opened ... can you still make it?", template
+        # prayer_place_opened, owner 24 Nov 2026) once its setting names it; until Meta approves it the
+        # call-out's words (template 4 v2) go. Same six blanks in the same order, same two buttons.
         send = fw.Send(
+            template=settings.whatsapp_place_open_template or None,
             kind=fw.TYPE_CALLOUT, phone=row.phone, agyary_id=agyary.id,
             params=[agyary.name, fw.departed_wa(record), place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record), asker],
             quick_replies=(f"{pc.PAYLOAD_PREFIX}{row.reask_token}:y", f"{pc.PAYLOAD_PREFIX}{row.reask_token}:n"),

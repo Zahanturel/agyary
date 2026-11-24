@@ -118,6 +118,26 @@ to hear from Mobed Diary; a STOP from the family is honoured.
 When: when it is **Confirmed**; and again, with the new names, when it is confirmed again after
 someone going backed out and the place was filled.
 
+### 4 b. To someone on the waiting list when a place opens: `prayer_place_opened`
+
+Setting: `WHATSAPP_PLACE_OPEN_TEMPLATE` (empty until Meta approves it; then `prayer_place_opened`; while empty the
+asking-again message goes out on template 4 v2 as before). Submitted for review on 24 Nov 2026 (Utility), owner's
+wording, laid out in short lines:
+
+> A place has opened for the prayers at **[agyari]**.
+>
+> *Prayers for:* **[departed]**> *Place:* **[place]**> *Geh-saarnu:* **[day and geh]**> *Uthamna:* **[day and time]**
+>
+> You said yes, and one of the mobeds can no longer go. Can you still make it?
+>
+> Please reply to tell **[panthaky's name]**. Thank you.
+
+The same six blanks in the same order as template 4 v2 (1 agyari, 2 departed by title and own name, 3 place,
+4 Geh-saarnu, 5 Uthamna, 6 the panthaky's name). Quick-reply buttons, **in this order**: **Yes, I can still pray** /
+**Not this time**; the payloads are the re-ask's own token, answered through `standbys.answer_reask` exactly as
+before: a yes fills the open place (and may make the request Confirmed again), a no or no answer in 30 minutes asks
+the next standby. Meta's form refuses a body that ends on a blank, so it ends "... {{6}}. Thank you."
+
 ### 6. To each mobed going: `prayer_details_mobed_v3`
 
 Setting: `WHATSAPP_ALL_SET_DETAILS_TEMPLATE` (default `prayer_details_mobed_v3`).

@@ -865,3 +865,26 @@ async def test_a_standby_cannot_be_marked_going_when_no_place_is_open(client, db
                           headers=await _as(client, PANTHAKY))
     assert r.status_code == 409 and r.json()["detail"] == "Enough mobeds are going for this request: it is confirmed."
     assert await prayer_callout._going(db, rid) == 2
+
+
+async def test_the_waiting_list_is_asked_on_its_own_template_once_it_is_set(client, db, seeded, meta, pushes, live,
+                                                                            monkeypatch):
+    """"A place has opened ... can you still make it?" (owner, 24 Nov 2026): with WHATSAPP_PLACE_OPEN_TEMPLATE set,
+    the standby asked again goes out on that template with the call-out's six blanks and the same two buttons;
+    the first ask at Send stays on the call-out template."""
+    aid = seeded["agyary_id"]
+    rid, _ = await _all_set(client, db, aid, third=True)
+    monkeypatch.setenv("WHATSAPP_PLACE_OPEN_TEMPLATE", "prayer_place_opened")
+    config.get_settings.cache_clear()
+    try:
+        assert (await client.post(f"{REQUESTS}/{rid}/back-out", headers=await _as(client, MOBED))).status_code == 200
+        second = (await _answers(db))[SECOND]
+        mine = [m for m in _to(meta, SECOND) if m.get("type") == "template"]
+        names = [m["template"]["name"] for m in mine]
+        assert names.count("prayer_place_opened") == 1 and config.get_settings().whatsapp_prayer_request_template in names
+        (asked,) = [m for m in mine if m["template"]["name"] == "prayer_place_opened"]
+        assert _payloads(asked) == [f"pca:{second.reask_token}:y", f"pca:{second.reask_token}:n"]
+        params = [p["text"] for p in asked["template"]["components"][0]["parameters"]]
+        assert len(params) == 6 and params[1] == "Behdin Rustom"
+    finally:
+        config.get_settings.cache_clear()

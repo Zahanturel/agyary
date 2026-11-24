@@ -255,11 +255,16 @@ class Send:
     # Why this one may not go whatever else holds (an account that is not on,
     # D9); it is written down as "failed" with this reason.
     why_not: str | None = None
+    # A template other than the kind's own (the waiting list's "a place has opened" message goes out on its
+    # own template with the call-out's six blanks; None: the kind's template).
+    template: str | None = None
 
 
-def template_name(settings: Settings, kind: str) -> str:
-    """The template a message of this kind goes out on. Templates 1-3 are not
-    sent since R3.1, so they are not here (their settings are kept, unused)."""
+def template_name(settings: Settings, kind: str, override: str | None = None) -> str:
+    """The template a message of this kind goes out on (``override``: the one a Send names itself).
+    Templates 1-3 are not sent since R3.1, so they are not here (their settings are kept, unused)."""
+    if override:
+        return override
     return {
         TYPE_CALLOUT: settings.whatsapp_prayer_request_template,
         TYPE_ALL_SET_FAMILY: settings.whatsapp_all_set_family_template,
@@ -289,7 +294,7 @@ def _payload(settings: Settings, s: Send) -> dict:
         "to": wa_send.to_number(s.phone),
         "type": "template",
         "template": {
-            "name": template_name(settings, s.kind),
+            "name": template_name(settings, s.kind, s.template),
             "language": {"code": settings.whatsapp_template_language},
             "components": components,
         },
@@ -393,7 +398,7 @@ async def deliver(
         why = await _blocked(db, settings, s, used, now)
         n = Notification(
             agyary_id=s.agyary_id, recipient_phone=s.phone, recipient_type=s.recipient_type,
-            recipient_id=s.recipient_id, notification_type=s.kind, template_name=template_name(settings, s.kind),
+            recipient_id=s.recipient_id, notification_type=s.kind, template_name=template_name(settings, s.kind, s.template),
             template_params=_recorded_params(s), scheduled_at=now, created_at=now,
             status="failed" if why else "sending", error_message=f"Not sent: {why}"[:500] if why else None,
         )

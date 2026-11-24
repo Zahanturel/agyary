@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     # approves v2, a server's .env may name the old "prayer_request_mobeds": the
     # blanks fit either.
     whatsapp_prayer_request_template: str = "prayer_request_mobeds_v2"
+    # The waiting list's "A place has opened" message (template prayer_place_opened, submitted 24 Nov 2026):
+    # empty until Meta approves it, then set WHATSAPP_PLACE_OPEN_TEMPLATE=prayer_place_opened. Empty: the
+    # call-out's template above is used for the ask, as before.
+    whatsapp_place_open_template: str = ""
     # R3.1 step 5, at All set (docs/phase2-requests-redesign.md, "Template drafts");
     # templates 1-3 are not sent for these requests.
     whatsapp_all_set_family_template: str = "prayers_all_set_family"        # 5: to the family
