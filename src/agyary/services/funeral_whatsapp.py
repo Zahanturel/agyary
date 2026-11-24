@@ -213,7 +213,16 @@ def uthamna_text(record: FuneralRecord) -> str:
 
 
 def departed(record: FuneralRecord) -> str:
+    """The departed as the app shows it (notices, board, record): with the
+    father's or husband's name. WhatsApp texts use ``departed_wa``."""
     return funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
+
+
+def departed_wa(record: FuneralRecord) -> str:
+    """The departed in a WhatsApp text, template blank or free text: title and
+    own name only, "Osti Aban", never the father's or husband's name (owner,
+    24 Nov 2026). An unknown name still reads "Behdin (name not known)"."""
+    return funeral_records.prayed_name(record.departed_title, record.departed_name, None)
 
 
 # --- One message ------------------------------------------------------------------
@@ -581,7 +590,8 @@ def people_blank(people: list[Person]) -> tuple[str, str]:
 
 
 def contact_people(panthakys: list[Person], going: list[Person], *, to: str | None = None,
-                   fire_temple: str | None = None) -> list[Person]:
+                   fire_temple: str | None = None, to_panthaky: bool = False,
+                   other_than: str | None = None) -> list[Person]:
     """Who "For anything else, please contact {contact}" names in templates 5, 6
     and 8 (owner's word review, 23 Nov 2026): the request's panthaky (or
     panthakys) with their number; at a fire temple with no confirmed panthaky
@@ -590,7 +600,17 @@ def contact_people(panthakys: list[Person], going: list[Person], *, to: str | No
     Template 6 goes to each mobed going (``to``, the number it goes to), and
     never names them as their own contact - a panthaky who prays included: the
     other panthakys, else the first other mobed going, and with nobody else,
-    the fire temple's own name (``fire_temple``) with no number."""
+    the fire temple's own name (``fire_temple``) with no number.
+
+    To a panthaky of the fire temple (``to_panthaky``, or ``to`` / ``other_than``
+    being a number of the request's panthakys) no other person is named
+    (owner, 24 Nov 2026: it named a mobed who is not the panthaky): the fire
+    temple's own name, the same fallback. ``other_than`` is the number a
+    template 5 or 8 goes to, which has only this check."""
+    mine = to or other_than
+    if to_panthaky or (mine is not None and any(p.phone == mine for p in panthakys)):
+        return [Person(fire_temple)] if fire_temple else []
+
     def not_them(people: list[Person]) -> list[Person]:
         return [p for p in people if to is None or p.phone != to]
 
@@ -616,7 +636,7 @@ def _people_checks(people: list[Person], what: str) -> list[tuple[str, str, int]
 
 def _record_checks(record: FuneralRecord, place: FuneralPlace | None, agyary: Agyary | None,
                    family: bool) -> list[tuple[str, str, int]]:
-    out = [("the departed's name", departed(record), template_text.DEPARTED_MAX)]
+    out = [("the departed's name", departed_wa(record), template_text.DEPARTED_MAX)]
     if place is not None:
         out.append(("the place's name", place.name, template_text.TEMPLE_MAX))
     if agyary is not None:
@@ -639,11 +659,12 @@ def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Pe
     Garothman Behesht." would be rejected (owner, 23 Nov 2026: drop it here only;
     the family's wa.me message, the app and the PDF keep it)."""
     mobeds, mobeds_kept = people_blank(going)
-    contact, contact_kept = people_blank(contact_people(panthakys, going))
+    contact, contact_kept = people_blank(contact_people(panthakys, going, fire_temple=agyary.name,
+                                                         other_than=record.family_contact_phone))
     return Send(
         kind=TYPE_ALL_SET_FAMILY, phone=record.family_contact_phone, recipient_type="family", recipient_id=record.id,
         agyary_id=agyary.id,
-        params=[clean(departed(record)), mobeds, clean(agyary.name), geh_saarnu_text(record), uthamna_text(record),
+        params=[clean(departed_wa(record)), mobeds, clean(agyary.name), geh_saarnu_text(record), uthamna_text(record),
                 contact],
         recorded={2: mobeds_kept, 6: contact_kept}, refs=refs,
         names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
@@ -654,7 +675,7 @@ def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Pe
 def all_set_details_send(
     record: FuneralRecord, place: FuneralPlace, *, going: list[Person], panthakys: list[Person], phone: str,
     recipient_type: str, recipient_id: int, agyary_id: int, fire_temple: str, back_out: str, refs: dict,
-    why_not: str | None = None,
+    why_not: str | None = None, to_panthaky: bool = False,
 ) -> Send:
     """Template 6 (prayer_details_mobed_v3): "You will pray for {{1 departed}} at
     {{2 place}}. Geh-saarnu: {{3}}. Uthamna: {{4}}. Family: {{5 family name}},
@@ -664,9 +685,10 @@ def all_set_details_send(
     payload is ``back_out`` (prayer_callout.back_out_payload: Step 5b reads
     it). {{8}} is the panthaky with their number, else the first mobed going
     who is not the one it goes to, else ``fire_temple``, the fire temple's own
-    name with no number (``contact_people``)."""
+    name with no number (``contact_people``); to a panthaky of the fire temple
+    (``to_panthaky``, or one of ``panthakys``) always the fire temple's name."""
     mobeds, mobeds_kept = people_blank(going)
-    contacts = contact_people(panthakys, going, to=phone, fire_temple=fire_temple)
+    contacts = contact_people(panthakys, going, to=phone, fire_temple=fire_temple, to_panthaky=to_panthaky)
     contact, contact_kept = people_blank(contacts)
     # A contact who is neither going nor a panthaky is the fire temple's name.
     temple = [("the fire temple's name", p.name, template_text.TEMPLE_MAX)
@@ -674,7 +696,7 @@ def all_set_details_send(
     return Send(
         kind=TYPE_ALL_SET_DETAILS, phone=phone, recipient_type=recipient_type, recipient_id=recipient_id,
         agyary_id=agyary_id,
-        params=[clean(departed(record)), clean(place.name), geh_saarnu_text(record), uthamna_text(record),
+        params=[clean(departed_wa(record)), clean(place.name), geh_saarnu_text(record), uthamna_text(record),
                 clean(record.family_contact_name) or NOT_FIXED, record.family_contact_phone, mobeds, contact],
         hidden=(6,), recorded={7: mobeds_kept, 8: contact_kept}, quick_replies=(back_out,), refs=refs,
         why_not=why_not,
@@ -695,7 +717,7 @@ def all_set_panthaky_send(record: FuneralRecord, place: FuneralPlace, *, going: 
     return Send(
         kind=TYPE_ALL_SET_PANTHAKY, phone=phone, recipient_type="user", recipient_id=recipient_id,
         agyary_id=agyary_id,
-        params=[clean(departed(record)), clean(place.name), mobeds, geh_saarnu_text(record), uthamna_text(record),
+        params=[clean(departed_wa(record)), clean(place.name), mobeds, geh_saarnu_text(record), uthamna_text(record),
                 clean(record.family_contact_name) or NOT_FIXED, record.family_contact_phone],
         hidden=(7,), recorded={3: mobeds_kept}, refs=refs,
         names=_record_checks(record, place, None, True) + _people_checks(going, "the name of a mobed going"),
@@ -708,10 +730,10 @@ def all_set_manager_send(record: FuneralRecord, agyary: Agyary, *, going: list[P
     will be offered by {{2 mobeds' names}} of {{3 agyari}}. For anything else,
     please contact {{4 contact}}. Thank you." No button. {{4}} is the panthaky with their
     number, else the first mobed going (``contact_people``)."""
-    contact, contact_kept = people_blank(contact_people(panthakys, going))
+    contact, contact_kept = people_blank(contact_people(panthakys, going, fire_temple=agyary.name, other_than=phone))
     return Send(
         kind=TYPE_ALL_SET_MANAGER, phone=phone, recipient_type="user", recipient_id=recipient_id, agyary_id=agyary.id,
-        params=[clean(departed(record)), names_blank(going), clean(agyary.name), contact],
+        params=[clean(departed_wa(record)), names_blank(going), clean(agyary.name), contact],
         recorded={4: contact_kept}, refs=refs,
         names=_record_checks(record, None, agyary, False) + _people_checks(going, "the name of a mobed going")
         + _people_checks(panthakys, "the panthaky's name"),

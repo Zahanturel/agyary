@@ -374,7 +374,7 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert got["memorial_prefill"]["name"] == "Behdin Rustom Jamshed"
     # The message their own WhatsApp opens with, to the family, in their own name.
     assert got["family_message"].startswith("Sahebji Test,\n\nI am Er. Hormuz Dadachanji of ")
-    assert got["family_message"].endswith("May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
+    assert got["family_message"].endswith("May the ruvan of the late Behdin Rustom attain Garothman Behesht.")
     assert (await client.get(f"{REQUESTS}/{rid}", headers=panthaky)).json()["request"]["all_set"] == got
     assert (await _books(db, rid))[PANTHAKY].user_id == hormuz.id
 
@@ -567,14 +567,14 @@ async def test_live_each_one_gets_their_template_with_the_blanks_in_order(client
     (family,) = meta.templates("prayers_all_set_family")
     assert _e164(family) == FAMILY
     # "For anything else, please contact {{6}}. May the ruvan of the late {{7}} ..." (D11, 23 Nov 2026).
-    assert _body(family) == ["Behdin Rustom Jamshed", mobeds, "Goti Adarian", gs, ut, head]
+    assert _body(family) == ["Behdin Rustom", mobeds, "Goti Adarian", gs, ut, head]
     assert _buttons(family) == []
 
     details = _to(meta, "prayer_details_mobed_v3")
     assert set(details) == {LISTED, MOBED}           # each going with a number, app or added by hand
     answers = await _answers(db)
     for phone, m in details.items():
-        assert _body(m) == ["Behdin Rustom Jamshed", "Doongerwadi (test)", gs, ut, "Test Family", FAMILY, mobeds, head]
+        assert _body(m) == ["Behdin Rustom", "Doongerwadi (test)", gs, ut, "Test Family", FAMILY, mobeds, head]
         (button,) = _buttons(m)
         assert button["sub_type"] == "quick_reply" and button["index"] == "0"
         assert button["parameters"] == [{"type": "payload", "payload": f"pca:{answers[phone].token}:x"}]
@@ -582,10 +582,10 @@ async def test_live_each_one_gets_their_template_with_the_blanks_in_order(client
 
     (to_panthaky,) = meta.templates("prayers_all_set_panthaky")
     assert _e164(to_panthaky) == PANTHAKY
-    assert _body(to_panthaky) == ["Behdin Rustom Jamshed", "Doongerwadi (test)", mobeds, gs, ut, "Test Family", FAMILY]
+    assert _body(to_panthaky) == ["Behdin Rustom", "Doongerwadi (test)", mobeds, gs, ut, "Test Family", FAMILY]
     (to_place,) = meta.templates("funeral_accepted_manager_v2")
     assert _e164(to_place) == MANAGER
-    assert _body(to_place) == ["Behdin Rustom Jamshed", "Er. Listed and Er. Pervez Kias", "Goti Adarian", head]
+    assert _body(to_place) == ["Behdin Rustom", "Er. Listed and Er. Pervez Kias", "Goti Adarian", head]
     for m in meta.sent:
         if m.get("type") == "template":
             for text in _body(m):
@@ -749,9 +749,18 @@ def test_template_6_never_names_the_mobed_it_goes_to_as_their_own_contact():
     assert fw.contact_people([], going, to=second.phone, fire_temple="Goti Adarian") == [first]
     assert fw.contact_people([], [first], to=first.phone, fire_temple="Goti Adarian") == [fw.Person("Goti Adarian")]
     assert fw.contact_people([head], going, to=first.phone, fire_temple="Goti Adarian") == [head]
-    # A panthaky who prays is not their own contact either: the first other mobed going, else the
-    # fire temple's own name.
-    assert fw.contact_people([head], [head, first], to=head.phone, fire_temple="Goti Adarian") == [first]
+    # To a panthaky of the fire temple no other person is named (owner, 24 Nov 2026): the fire
+    # temple's own name, whoever else is going or is another panthaky.
+    assert fw.contact_people([head], [head, first], to=head.phone, fire_temple="Goti Adarian") == [
+        fw.Person("Goti Adarian")]
+    other = fw.Person("Er. Other Head", "+919800000005")
+    assert fw.contact_people([head, other], going, to=other.phone, fire_temple="Goti Adarian") == [
+        fw.Person("Goti Adarian")]
+    assert fw.contact_people([head], going, to=first.phone, fire_temple="Goti Adarian", to_panthaky=True) == [
+        fw.Person("Goti Adarian")]
+    assert fw.contact_people([head], going, fire_temple="Goti Adarian", other_than=head.phone) == [
+        fw.Person("Goti Adarian")]
+    assert fw.contact_people([head], going, other_than=first.phone) == [head]
     assert fw.contact_people([head], [head], to=head.phone, fire_temple="Goti Adarian") == [fw.Person("Goti Adarian")]
     record = SimpleNamespace(id=1, departed_title="behdin", departed_name="Rustom", departed_parent_name="Jamshed",
                              geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None,
@@ -769,6 +778,43 @@ def test_template_6_never_names_the_mobed_it_goes_to_as_their_own_contact():
     alone = details([first], first.phone)
     assert alone.params[7] == "Goti Adarian" and alone.recorded[8] == "Goti Adarian"
     assert ("the fire temple's name", "Goti Adarian", fw.template_text.TEMPLE_MAX) in alone.names
+
+
+def test_the_contact_line_to_a_panthaky_names_no_other_person_in_5_6_and_8():
+    """The first real test (24 Nov 2026): template 6 to the panthaky named another mobed. To a
+    confirmed panthaky - as the mobed going, or as the family's number, or as the place's
+    manager (one phone, many roles) - the contact is the fire temple's own name; to anyone
+    else it is still the panthaky."""
+    head = fw.Person("Er. Head", "+919800000001")
+    first = fw.Person("Er. First", "+919800000002")
+    record = SimpleNamespace(id=1, departed_title="behdin", departed_name="Rustom", departed_parent_name="Jamshed",
+                             geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None,
+                             family_contact_name="Test Family", family_contact_phone="+919800000009")
+    agyary, place = SimpleNamespace(id=2, name="Goti Adarian"), SimpleNamespace(name="Doongerwadi (test)")
+
+    def details(to, **extra):
+        return fw.all_set_details_send(record, place, going=[head, first], panthakys=[head], phone=to,
+                                       recipient_type="user", recipient_id=3, agyary_id=2,
+                                       fire_temple="Goti Adarian", back_out="pca:x:x", refs={}, **extra)
+
+    assert details(head.phone).params[7] == "Goti Adarian" and details(head.phone).recorded[8] == "Goti Adarian"
+    # A confirmed panthaky who is not the request's own (another one, with access on):
+    assert details(first.phone, to_panthaky=True).params[7] == "Goti Adarian"
+    assert details(first.phone).params[7] == "Er. Head (+91 9800000001)"
+    # The father's name is not in a WhatsApp blank.
+    assert details(head.phone).params[0] == "Behdin Rustom"
+    for who, send in (
+        (head.phone, fw.all_set_manager_send(record, agyary, going=[first], panthakys=[head], phone=head.phone,
+                                             recipient_id=4, refs={})),
+        ("+919800000004", fw.all_set_manager_send(record, agyary, going=[first], panthakys=[head],
+                                                  phone="+919800000004", recipient_id=4, refs={})),
+    ):
+        want = "Goti Adarian" if who == head.phone else "Er. Head (+91 9800000001)"
+        assert send.params[3] == want
+    record.family_contact_phone = head.phone
+    assert fw.all_set_family_send(record, agyary, going=[first], panthakys=[head], refs={}).params[5] == "Goti Adarian"
+    record.family_contact_phone = "+919800000009"
+    assert fw.all_set_family_send(record, agyary, going=[first], panthakys=[head], refs={}).params[5] ==         "Er. Head (+91 9800000001)"
 
 
 async def test_the_only_mobed_going_at_a_fire_temple_with_no_panthaky_is_told_to_contact_the_fire_temple(
@@ -1088,14 +1134,14 @@ async def test_a_panthaky_not_praying_tells_the_family_the_agyari_was_asked_and_
 
     when = (f"*Geh-saarnu:* {day(today)}, Havan geh\n*Uthamna:* {day(today + timedelta(days=2))}, 4:00 pm\n\n"
             "Please call or message me here for anything you need.\n\n"
-            "May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
+            "May the ruvan of the late Behdin Rustom attain Garothman Behesht.")
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
     assert board["all_set"]["is_panthaky"] is True
     assert board["all_set"]["family_message"] == (
         "Sahebji Test,\n\nI am Er. Hormuz Dadachanji of Goti Adarian.\n\n"
-        "Doongerwadi (test) has asked Goti Adarian to perform the prayers for Behdin Rustom Jamshed.\n"
+        "Doongerwadi (test) has asked Goti Adarian to perform the prayers for Behdin Rustom.\n"
         "Er. Listed and Er. Pervez Kias will pray.\n\n" + when)
     card = (await client.get(f"{REQUESTS}/{rid}", headers=await _as(client, MOBED))).json()["request"]
     assert card["all_set"]["family_message"] == (
         "Sahebji Test,\n\nI am Er. Pervez Kias of Goti Adarian.\n\n"
-        "Doongerwadi (test) has asked me to perform the prayers for Behdin Rustom Jamshed.\n\n" + when)
+        "Doongerwadi (test) has asked me to perform the prayers for Behdin Rustom.\n\n" + when)

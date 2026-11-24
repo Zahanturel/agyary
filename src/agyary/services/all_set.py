@@ -470,6 +470,8 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
     people = [fw.Person(g["name"], g["phone"]) for g in going]
     panthakys = await request_panthakys(db, request_id)
     heads = [fw.Person(p.name, p.phone) for p in panthakys]
+    # Every confirmed panthaky of the fire temple, who is never given another person as their contact.
+    panthaky_phones = {p.phone for p in await panthaky.panthakys_of(db, settings, agyary.id)}
 
     sends = []
     if request.family_whatsapp_agreed:
@@ -494,7 +496,8 @@ async def _whatsapp(db: AsyncSession, settings: Settings, request_id: int, now: 
             record, place, going=people, panthakys=heads, phone=g["phone"], recipient_type=to[0],
             recipient_id=to[1], agyary_id=agyary.id, fire_temple=agyary.name,
             back_out=prayer_callout.back_out_payload(row),
-            refs={"request": request_id, "to": "going", "answer": row.id}, why_not=why))
+            refs={"request": request_id, "to": "going", "answer": row.id}, why_not=why,
+            to_panthaky=g["phone"] in panthaky_phones))
     going_ids = {g["row"].user_id for g in going if g["row"].user_id}
     if not again:
         for p in panthakys:
