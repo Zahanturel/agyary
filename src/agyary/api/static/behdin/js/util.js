@@ -74,6 +74,13 @@ export function parsiWords(p) {
 /** "Wednesday 25/11/2026". */
 export function longDay(ymd) { return `${weekdayOf(ymd)} ${gregShort(ymd)}`; }
 
+/** The name in a calendar item for a departed ("Dasmu - Meherbai"): the server writes "(name not known)" when none was given. */
+export function departedName(it) {
+  const prefix = `${it.label} - `;
+  const name = it.title.startsWith(prefix) ? it.title.slice(prefix.length) : it.title;
+  return name === "(name not known)" ? "Name not known" : name;
+}
+
 export const KIND_LABELS = { atash_behram: "Atash Behram", adaran: "Adaran", dadgah: "Dadgah" };
 export const EVENT_KINDS = [["birthday", "Birthday"], ["navjote", "Navjote"], ["anniversary", "Anniversary"], ["other", "Other"]];
 export function eventKindLabel(kind) {

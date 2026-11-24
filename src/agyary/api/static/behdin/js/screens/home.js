@@ -11,7 +11,7 @@ import { state } from "../state.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml } from "/mobed-app/js/ui.js";
 import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
-import { esc, firstName, gregShort, todayIst, weekdayOf, addDays, parsiWords, eventKindLabel } from "../util.js";
+import { esc, firstName, gregShort, todayIst, weekdayOf, addDays, parsiWords, eventKindLabel, departedName } from "../util.js";
 import { kindLabel } from "./agyari.js";
 
 /** "Roj Hormuzd, Mah Aspandard", or a Gatha day's own name. */
@@ -35,7 +35,7 @@ function nextCard(it) {
   const memorial = it.source === "memorial";
   return `<div class="card">
     <h2>${memorial ? "Your next prayer" : "Coming up"}</h2>
-    <p style="margin:0"><b>${esc(it.title)}</b></p>
+    <p style="margin:0"><b>${esc(memorial ? `${it.label} - ${departedName(it)}` : it.title)}</b></p>
     <p class="meta" style="margin:2px 0 0">${weekdayOf(it.date)} ${gregShort(it.date)}${it.parsi ? ", " + esc(parsiWords(it.parsi)) : ""}</p>
     ${memorial ? "" : `<p class="meta" style="margin:2px 0 0">${esc(eventKindLabel(it.kind))}</p>`}
     <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeNext">Open the Calendar</button></div>

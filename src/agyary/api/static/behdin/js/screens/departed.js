@@ -25,8 +25,8 @@ function dateRow(o, today, next) {
   const past = o.date < today;
   return `<div class="obs-row${past ? " past" : ""}${next ? " next" : ""}">
     <div class="obs-date"><b>${gregShort(o.date)}</b><span>${weekdayOf(o.date).slice(0, 3)}</span></div>
-    <div class="obs-what"><b>${esc(o.label)}</b><span>${esc(parsiWords(o.parsi) || rojMahWords(o.parsi_roj, o.parsi_mah))}</span></div>
-    ${next ? `<span class="tag">Next</span>` : past ? `<span class="tag grey">Done</span>` : ""}
+    <div class="obs-what"><b>${esc(o.label)}</b><span>${esc(parsiWords(o.parsi) || rojMahWords(o.parsi_roj, o.parsi_mah))}</span>
+      ${next ? `<span class="tag">Next</span>` : past ? `<span class="tag grey">Done</span>` : ""}</div>
   </div>`;
 }
 

@@ -12,7 +12,7 @@ import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml, openShee
   from "/mobed-app/js/ui.js";
 import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
-import { esc, longDay, monthName, todayIst, ymdOf, parsiWords, eventKindLabel } from "../util.js";
+import { esc, longDay, monthName, todayIst, ymdOf, parsiWords, eventKindLabel, departedName } from "../util.js";
 
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const REPEAT_TEXT = {
@@ -120,7 +120,7 @@ export async function renderCalendar() {
     <div class="cal-grid" role="group" aria-label="${monthName(m)} ${y}">
       ${WEEK.map((w) => `<span class="cal-wd">${w}</span>`).join("")}${cells}
     </div>
-    <p class="cal-key meta"><i class="dot mem"></i> A departed's prayer &nbsp; <i class="dot ev"></i> An event</p>`;
+    <p class="cal-key meta"><i class="dot mem"></i> A departed's prayer &nbsp; <i class="dot ev"></i> An event<span class="cal-numnote"><br>The small number under a day is its Roj (1 to 30). Tap a day to see its name.</span></p>`;
   wireRetry(mainEl, () => renderCalendar());
 
   const go = (k) => { state.calMonth = k; renderCalendar(); };
@@ -149,7 +149,7 @@ export function openAdd(ymd) {
 function itemHtml(it) {
   if (it.source === "memorial") {
     return `<div class="day-item mem">
-      <p class="di-title">${esc(it.title)}</p>
+      <p class="di-title">${esc(departedName(it))}</p>
       <p class="meta">A departed's prayer: ${esc(it.label)}</p>
       <button type="button" class="small secondary" data-open="${it.memorial_id}">Open</button>
     </div>`;

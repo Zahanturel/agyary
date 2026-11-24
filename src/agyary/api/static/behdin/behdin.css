@@ -36,6 +36,7 @@
   .cal-roj-name { display: block; }
   .cal-roj-num { display: none; }
   .cal-cell { min-height: 82px; }
+  .cal-numnote { display: none; }
 }
 
 .day-item { padding: var(--space-3); margin-bottom: var(--space-2); border: 1px solid var(--border);
@@ -60,3 +61,5 @@ details.card summary { cursor: pointer; min-height: var(--tap); display: flex; a
 .agy-card.agy-mine { border-color: var(--primary); }
 .agy-card h2 { overflow-wrap: anywhere; }
 input[type="search"] { width: 100%; }
+.obs-what .tag { display: inline-block; margin: var(--space-1) 0 0; }
+.obs-what .tag { display: inline-block; margin: var(--space-1) 0 0; }

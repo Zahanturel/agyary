@@ -13,7 +13,7 @@ import { esc, KIND_LABELS } from "../util.js";
 
 const NOT_CHOSEN = "You have not chosen one yet.";
 
-export function kindLabel(kind) { return KIND_LABELS[kind] || "Agyari"; }
+export function kindLabel(kind) { return KIND_LABELS[kind] || ""; }
 
 function cardHtml(a, mineId) {
   const mine = a.id === mineId;
