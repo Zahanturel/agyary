@@ -516,3 +516,18 @@ Owner's answers for R4.0 (design: [behdin-r4-0-design.md](behdin-r4-0-design.md)
   first screen is a home (today's Parsi date, next prayer or memorial, answers, notices) with the calendar as a tab.
   Name and icon may change later.
 - Joining the behdin app is open: no approval, no sign-up caps, whatever SIGNUP_MODE says (it governs the mobed app).
+
+## Amendment, 25 Nov 2026 (later): the two apps never see each other (owner)
+
+The Parsi app and Mobed Diary are separate applications that share the system underneath (accounts, data). **Neither
+names, links to or shows the other.** This replaces the "Open the other app" links of the R4.0 design: Parsi has no
+mention of Mobed Diary or mobeds as a product, and Mobed Diary's screen for a number that is not a mobed says only
+that it is not set up as a mobed's (no mention of Parsi, no link). A person who is both uses each app on its own.
+Data a person gives in Parsi (their departed's dates, their events) is kept for them alone: no mobed, agyari or
+admin screen reads it (D2, D6). Wording shown in Parsi never says "Mobed Diary".
+
+R4.1 answers (owner): "Near me" button (location asked once, only to sort, never stored) plus a search by name or
+town; an agyari card shows name, town, kind (Atash Behram, Adaran, Dadgah), distance and "answers in the app" (has a
+confirmed panthaky); the calendar holds the person's memorials AND their own events (birthdays, navjote and the
+like); consent words (placeholder, the owner may edit): "These dates are kept for you alone. Nobody else can see
+them. You can delete them any time."
