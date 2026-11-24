@@ -422,12 +422,10 @@ function stepNames(d, ctx) {
       <div id="askSuggest"></div>
       <label for="askNewName">Add a name</label>
       <input type="text" id="askNewName" maxlength="120" autocomplete="off">
-      <div class="row" style="margin-top:var(--space-2)">
-        <div><label for="askNewTitle" style="margin-top:0">Title</label>
-          <select id="askNewTitle">${NAME_TITLES.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></div>
-        <div><label for="askNewStatus" style="margin-top:0">Is this person</label>
-          <select id="askNewStatus"><option value="departed">Passed away</option><option value="living">Living</option></select></div>
-      </div>
+      <label for="askNewTitle">Title</label>
+      <select id="askNewTitle">${NAME_TITLES.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
+      <label for="askNewStatus">Is this person</label>
+      <select id="askNewStatus"><option value="departed">Passed away</option><option value="living">Living</option></select>
       <button type="button" class="secondary small" id="askAddName" style="margin-top:var(--space-2)">Add this name</button>
     </div>`;
   const after = (root) => {

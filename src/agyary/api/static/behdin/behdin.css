@@ -102,3 +102,6 @@ header button.icon-btn { position: relative; }
 .notice.unread { border: 2px solid var(--primary); background: var(--primary-tint); }
 .notice-title { display: flex; align-items: center; gap: var(--space-2); }
 .notice-new { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); flex: none; }
+.rv-row > button { flex: 0 0 auto; white-space: nowrap; width: auto; }
+.name-row > button { flex: 0 0 auto; white-space: nowrap; }
+#askAgy .card { box-shadow: none; border-width: 1px; }
