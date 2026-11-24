@@ -447,3 +447,18 @@ names follow the person. The privacy rule, built exactly:
   removes it. Nothing is written when both names are empty.
 - It goes when that family is erased (docs/DATA-REQUESTS.md) or when that person deletes their account, and never
   because of its age (D8).
+
+## Amendment, 24 Nov 2026 (after the first real WhatsApp test): greetings and the panthaky (D10, D11, D12)
+
+Owner's decisions:
+
+- **A behdin is greeted by their FIRST NAME ONLY** in a text written to them ("Sahebji Farzin,"), never first and
+  middle and never the full name. This changes the D11 line "a behdin is addressed by their own full name" for
+  greetings only; where a name is data (the family's name and number a mobed reads, the Behdins list, slips) the
+  full name as given stays, and the behdin app (R4) still shows a behdin their own full name.
+- **Every prayer request is also asked of the panthaky on WhatsApp, like any mobed** (the same template and answer
+  buttons), so a panthaky can answer from inside WhatsApp; "I can pray" there is the same as "I'll pray" on the
+  board. Found in the first real test: the panthaky was only told in the app, so with one phone the reply route
+  could not be tried.
+- **Layout:** every WhatsApp text the app prefills or sends as free text is laid out as short lines with an empty
+  line between parts and bold labels, like the templates (the one-paragraph message to Delzeen was the case).
