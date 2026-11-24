@@ -59,6 +59,13 @@ let defaultFabAction = () => {};
 export function setDefaultFabAction(fn) { defaultFabAction = fn; }
 
 const TEXT_KEY = "mobed.textsize";
+
+/** The name of whichever app this page is: the other app (Parsi) shares this file and says its own name in an
+ *  application-name line; Mobed Diary has none, so it is "Mobed Diary". */
+function appName() {
+  const tag = document.querySelector('meta[name="application-name"]');
+  return (tag && tag.content) || "Mobed Diary";
+}
 /** "regular", "large" (the default) or "xl". Kept on this device only, like a draft. */
 export function getTextSize() {
   try {
@@ -274,7 +281,7 @@ export function paintOffline() {
   strip.id = "offlineBar";
   strip.className = "offline-bar no-print";
   strip.setAttribute("role", "status");
-  strip.textContent = "Can't reach Mobed Diary. What you see may be out of date.";
+  strip.textContent = `Can't reach ${appName()}. What you see may be out of date.`;
   mainEl.parentNode.insertBefore(strip, mainEl);
 }
 
@@ -330,7 +337,7 @@ export function shortName(full) {
 
 /** Header line every signed-in screen shares: who you are and where. */
 export function refreshHeader() {
-  if (!state.user) return setHeader("Mobed Diary");
+  if (!state.user) return setHeader(appName());
   const agyary = currentAgyary();
   // A Doongerwadi manager has no fire temple; their place is where they are (D10).
   const place = (state.user.funeral_places || [])[0];
