@@ -238,15 +238,15 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     await db.commit()
 
     rid, res, _ = await _send(client, db, aid, mobeds_wanted=1)
-    assert res["callout"]["state"] == "sent" and res["callout"]["asked"] == 2
-    assert res["callout"]["message"] == "1 mobed of Goti Adarian was asked in the app, and 2 on WhatsApp."
-    # Not the panthaky (the request is in their app, and it asks the mobeds to tell them),
-    # not a STOP'd number, not an account that is off.
+    assert res["callout"]["state"] == "sent" and res["callout"]["asked"] == 3
+    assert res["callout"]["message"] == "1 mobed of Goti Adarian was asked in the app, and 3 on WhatsApp."
+    # The panthaky too (owner, 24 Nov 2026: so they can answer from WhatsApp), not a STOP'd
+    # number, not an account that is off.
     asked = meta.templates("prayer_request_mobeds_v2")
-    assert sorted(m["to"] for m in asked) == sorted([MOBED, LISTED])
+    assert sorted(m["to"] for m in asked) == sorted([PANTHAKY, MOBED, LISTED])
     for m in asked:
         body = [p["text"] for p in m["template"]["components"][0]["parameters"]]
-        assert body[0] == "Goti Adarian" and body[1] == "Behdin Rustom Jamshed" and body[2] == "Doongerwadi (test)"
+        assert body[0] == "Goti Adarian" and body[1] == "Behdin Rustom" and body[2] == "Doongerwadi (test)"
         assert body[5] == "Er. Hormuz Dadachanji" and len(body) == 6
         assert FAMILY.lstrip("+") not in json.dumps(m) and "Test Family" not in json.dumps(m)
         buttons = [c for c in m["template"]["components"] if c["type"] == "button"]
@@ -268,7 +268,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     assert board["ask_everyone"]["can"] is False
     r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
     assert r.status_code == 409 and "asked already" in r.json()["detail"]
-    assert len(meta.templates("prayer_request_mobeds_v2")) == 2
+    assert len(meta.templates("prayer_request_mobeds_v2")) == 3
 
     # Forged, unknown, or from another number: nothing changes.
     meta.sent.clear()
@@ -321,7 +321,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     assert [p["name"] for p in board["places"]] == ["Er. Pervez Kias"]
     assert [s["name"] for s in board["standbys"]] == ["Er. Listed"]
     page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
-    assert page["status"] == "all_set" and page["callout"] == {"asked": 2, "yes": 2, "going": 1, "wanted": 1}
+    assert page["status"] == "all_set" and page["callout"] == {"asked": 3, "yes": 2, "going": 1, "wanted": 1}
     assert "family_contact" not in page
     for number in (PANTHAKY, MOBED, LISTED, FAMILY, STOPPED):
         assert number not in caplog.text and number.lstrip("+") not in caplog.text
@@ -334,7 +334,7 @@ async def test_two_go_when_nobody_said_how_many(client, db, seeded, meta, pushes
         r = await client.post(_list(aid), json={"name": name, "phone": phone, "agreed": True}, headers=panthaky)
         assert r.status_code == 200, r.text
     rid, res, _ = await _send(client, db, aid, mobeds_wanted=None)
-    assert res["callout"]["asked"] == 3
+    assert res["callout"]["asked"] == 4        # the panthaky too
     meta.sent.clear()
     answers = await _answers(db)
     for phone in (SECOND, MOBED, LISTED):
@@ -345,7 +345,7 @@ async def test_two_go_when_nobody_said_how_many(client, db, seeded, meta, pushes
     answers = await _answers(db)
     assert [p for p in (SECOND, MOBED, LISTED) if answers[p].picked_at] == [SECOND, MOBED]
     page = (await client.get(f"/api/mobed/requests/{rid}", headers=panthaky)).json()["request"]
-    assert page["callout"] == {"asked": 3, "yes": 3, "going": 2, "wanted": prayer_callout.DEFAULT_WANTED}
+    assert page["callout"] == {"asked": 4, "yes": 3, "going": 2, "wanted": prayer_callout.DEFAULT_WANTED}
     assert prayer_callout.DEFAULT_WANTED == 2
     assert page["status"] == "all_set"
 
@@ -466,9 +466,10 @@ async def test_everyone_at_once_keeps_the_call_out_at_send(client, db, seeded, m
     aid = seeded["agyary_id"]
     await _way(db, aid, "everyone", 15)          # the minutes matter only in Come to me first
     rid, res, _ = await _send(client, db, aid)
-    assert res["callout"] == {"state": "sent", "asked": 1, "asked_in_app": 1,
-                              "message": "1 mobed of Goti Adarian was asked in the app, and 1 on WhatsApp."}
-    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [MOBED]
+    assert res["callout"] == {"state": "sent", "asked": 2, "asked_in_app": 1,
+                              "message": "1 mobed of Goti Adarian was asked in the app, and 2 on WhatsApp."}
+    # The panthaky too, with the mobeds, at the moment they are told.
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [PANTHAKY, MOBED]
     assert len(await _callouts(db)) == 1
 
 
@@ -484,7 +485,9 @@ async def test_come_to_me_first_tells_only_the_panthaky_and_asks_nobody_at_send(
     assert res["callout"] == {"state": "panthaky_first", "asked": 0, "asked_in_app": 0,
                               "message": "Sent to the panthaky of Goti Adarian. They choose who to ask."}
     assert res["asked"] == 1 and res["record"]["requests"][0]["status"] == "waiting"
-    assert meta.sent == [] and await _callouts(db) == [] and await _answers(db) == {}
+    # Only the panthaky is asked on WhatsApp, at once (owner, 24 Nov 2026); no mobed is.
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [PANTHAKY] and len(meta.sent) == 1
+    assert list(await _answers(db)) == [PANTHAKY] and len(await _callouts(db)) == 1
     # The request reaches the confirmed panthaky, as before.
     (note,) = await _notes(db, PANTHAKY, "funeral_request")
     assert "Goti Adarian" in note.body
@@ -497,7 +500,8 @@ async def test_come_to_me_first_tells_only_the_panthaky_and_asks_nobody_at_send(
     assert {m["state"] for m in board["mobeds"]} == {"not_asked"}
     r = await client.post(f"/api/mobed/requests/{rid}/ask-everyone", headers=panthaky)
     assert r.status_code == 200 and r.json()["done"]["asked"] == 2, r.text
-    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted([MOBED, LISTED])
+    # The panthaky who taps Ask everyone is not asked a second time.
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted([PANTHAKY, MOBED, LISTED])
 
 
 async def test_come_to_me_first_with_two_panthakys_says_panthakys(client, db, seeded, meta, pushes, live):
@@ -506,7 +510,8 @@ async def test_come_to_me_first_with_two_panthakys_says_panthakys(client, db, se
     await _way(db, aid, "panthaky_first")
     _, res, _ = await _send(client, db, aid)
     assert res["callout"]["message"] == "Sent to the panthakys of Goti Adarian. They choose who to ask."
-    assert res["asked"] == 2 and meta.sent == []
+    assert res["asked"] == 2
+    assert sorted(m["to"] for m in meta.sent) == sorted([PANTHAKY, "+919822200113"])     # only the panthakys
 
 
 async def test_come_to_me_first_with_no_confirmed_panthaky_on_is_everyone_at_once(client, db, seeded, meta, pushes,

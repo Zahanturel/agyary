@@ -201,12 +201,12 @@ async def test_live_no_phone_number_reaches_the_rows_or_the_logs(client, db, see
 
 
 async def test_the_daily_limit_stops_sends_and_tells_the_admins(client, db, seeded, meta, pushes, live, monkeypatch):
-    # Two: the call-out at sending takes one (to the one mobed there), All set the other.
-    monkeypatch.setenv("FUNERAL_WHATSAPP_DAILY_CAP", "2")
+    # Three: the call-out at sending takes two (the one mobed there and the panthaky), All set the other.
+    monkeypatch.setenv("FUNERAL_WHATSAPP_DAILY_CAP", "3")
     config.get_settings.cache_clear()
     await sign_in(client, ADMIN)
     rid = await _sent(client, db, seeded["agyary_id"], mobeds_wanted=1)
-    assert len(meta.sent) == 1
+    assert len(meta.sent) == 2
     await _pray(client, rid)
     assert len(_all_set_sent(meta)) == 1
     rows = await _rows(db)

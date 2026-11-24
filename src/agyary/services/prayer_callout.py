@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.core.config import Settings, get_settings
@@ -527,7 +527,7 @@ def _new_token() -> str:
 
 def _names(record: FuneralRecord, place: FuneralPlace, agyary: Agyary, asker: str,
            asker_max: int) -> list[tuple[str, str, int]]:
-    return [("the departed's name", fw.departed(record), template_text.DEPARTED_MAX),
+    return [("the departed's name", fw.departed_wa(record), template_text.DEPARTED_MAX),
             ("the place's name", place.name, template_text.TEMPLE_MAX),
             ("the panthaky's name", asker, asker_max),
             ("the fire temple's name", agyary.name, template_text.TEMPLE_MAX)]
@@ -566,7 +566,7 @@ async def _ask(
     # The order of the approved template (docs/phase2-whatsapp-templates.md): "A prayer request has
     # come to {{1 agyari}} for {{2 departed}} at {{3 place}}. Geh-saarnu: {{4}}. Uthamna: {{5}}.
     # Please reply to tell {{6 panthaky}} whether you can take it."
-    params = [agyary.name, fw.departed(record), place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record),
+    params = [agyary.name, fw.departed_wa(record), place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record),
               asker]
     sends = [fw.Send(kind=fw.TYPE_CALLOUT, phone=a.phone, recipient_type="user" if m["kind"] == "app" else "contact",
                      recipient_id=m["id"], agyary_id=agyary.id, params=params,
@@ -606,6 +606,8 @@ async def after_send(
             panthakys = await panthaky.panthakys_of(db, settings, agyary.id)
             logger.info("Request %s: Come to me first at fire temple %s, so nobody more is asked at sending",
                         request.id, agyary.id)
+            # The panthaky is asked on WhatsApp too, at once (owner, 24 Nov 2026), and only they.
+            await ask_panthakys(db, settings, request_id, now=now, client=client)
             return {"state": "panthaky_first", "asked": 0, "asked_in_app": 0,
                     "message": panthaky_first_words(agyary, panthakys)}
     except Exception:   # noqa: BLE001 - the request is sent; this must not undo or fail it
@@ -624,8 +626,15 @@ async def panthaky_acted(db: AsyncSession, request: FuneralRequest) -> bool:
     already)."""
     if request.status != REQUEST_WAITING or request.taken_at is not None:
         return True
+    # A message to the panthaky themselves (asked on WhatsApp at Send, owner, 24 Nov 2026) is
+    # not the panthaky acting: only someone else being asked is.
+    panthaky_ids = select(AgyaryUser.user_id).where(
+        AgyaryUser.agyary_id == request.agyary_id, AgyaryUser.role == ROLE_PANTHAKY)
     return (await db.execute(
-        select(PrayerCallout.id).where(PrayerCallout.funeral_request_id == request.id).limit(1)
+        select(PrayerCalloutAnswer.id).join(PrayerCallout, PrayerCallout.id == PrayerCalloutAnswer.callout_id)
+        .where(PrayerCallout.funeral_request_id == request.id,
+               or_(PrayerCalloutAnswer.user_id.is_(None), PrayerCalloutAnswer.user_id.not_in(panthaky_ids)))
+        .limit(1)
     )).first() is not None
 
 
@@ -788,7 +797,10 @@ async def _ask_everyone(db, settings, request_id, *, by_user, take, now, client)
     if len(plan.whatsapp) > cap:
         logger.warning("Request %s: %d to ask on WhatsApp, only the first %d asked", request.id,
                        len(plan.whatsapp), cap)
-    if not (plan.new_recipients or plan.app_rows or whatsapp):
+    # The fire temple's panthakys are asked on WhatsApp too, in the same call and with the same
+    # template (owner, 24 Nov 2026), unless this is one of them acting on the board just now.
+    heads = await _panthaky_asks(db, settings, request, agyary, skip_user_id=by_user.id if by_user else None)
+    if not (plan.new_recipients or plan.app_rows or whatsapp or heads):
         await db.commit()
         why = plan.why_not_whatsapp
         state = ("off" if not fw.mode_on(settings) else "not_now") if why else "none"
@@ -810,12 +822,12 @@ async def _ask_everyone(db, settings, request_id, *, by_user, take, now, client)
                                link=funeral_requests.REQUESTS_LINK, agyary_id=agyary.id, now=now,
                                ttl=funeral_requests.NOTICE_TTL)
     went = 0
-    if whatsapp:
+    if whatsapp or heads:
         # "Please reply to tell <panthaky> whether you can take it": the panthaky who
         # asks, else the fire temple's, else the fire temple itself when it has none.
         asker = by_user if by_user is not None and by_user.id in {p.id for p in plan.panthakys} else \
             (plan.panthakys[0] if plan.panthakys else None)
-        went = await _ask(db, settings, request, whatsapp,
+        went = await _ask(db, settings, request, heads + whatsapp,
                           asker=asker.name if asker else agyary.name,
                           asker_max=template_text.MOBED_NAME_MAX if asker else template_text.TEMPLE_MAX,
                           sent_by_user_id=sent_by, now=now, client=client)
@@ -828,20 +840,74 @@ async def _ask_everyone(db, settings, request_id, *, by_user, take, now, client)
                                      tag=f"funeral-request-{request.id}")
         await db.commit()
     in_app = len(plan.new_recipients)
+    asking = len(heads) + len(whatsapp)
     logger.warning("Request %s: everyone at fire temple %s asked%s: %d in the app, %d of %d on WhatsApp",
                    request.id, agyary.id, f" by user {by_user.id}" if by_user is not None else "", in_app, went,
-                   len(whatsapp))
+                   asking)
     why = plan.why_not_whatsapp
     if in_app or went:
-        state, message = "sent", _asked_words(agyary, in_app, went, len(whatsapp) - went, None if whatsapp else why)
-    elif whatsapp:
-        state, message = "failed", _asked_words(agyary, 0, 0, len(whatsapp), None)
+        state, message = "sent", _asked_words(agyary, in_app, went, asking - went, None if asking else why)
+    elif asking:
+        state, message = "failed", _asked_words(agyary, 0, 0, asking, None)
     else:
         # Only rows for people the request had reached at Send (a fire temple
         # with no panthaky): nobody new was asked.
         state = ("off" if not fw.mode_on(settings) else "not_now") if why else "none"
         message = _nobody_words(agyary, plan)
     return {"state": state, "asked": went, "asked_in_app": in_app, "message": message}
+
+
+async def _panthaky_asks(db: AsyncSession, settings: Settings, request: FuneralRequest, agyary: Agyary, *,
+                         skip_user_id: int | None = None) -> list[dict]:
+    """The fire temple's confirmed panthakys to ask on WhatsApp now (our_mobeds
+    entries), who are asked like any mobed (owner, 24 Nov 2026: so a panthaky
+    can answer from inside WhatsApp): access on (panthakys_of), not STOPped
+    (can_message), not one who has answered (on the board, "I'll pray", or on
+    WhatsApp), not one this request was asked of on WhatsApp already. Nothing
+    while WhatsApp cannot send now (the pause switch, live mode). ``skip_user_id``:
+    the panthaky who is acting on the board just now."""
+    from agyary.services import panthaky   # here: as in _plan
+
+    panthakys = [p for p in await panthaky.panthakys_of(db, settings, agyary.id) if p.id != skip_user_id]
+    if not panthakys or await fw.why_not_now(db, settings) is not None:
+        return []
+    people = {m["id"]: m for m in await our_mobeds(db, settings, agyary.id) if m["kind"] == "app"}
+    rows = await _request_rows(db, request.id)
+    latest = _latest(await fw.rows_for(db, request_id=request.id, kinds=(fw.TYPE_CALLOUT,)))
+    out = []
+    for p in panthakys:
+        m = people.get(p.id)
+        if m is None or not m["can_message"]:
+            continue
+        row = _find(rows, m["key"], p.phone)
+        if row is not None and (row.answer is not None or fw.went(latest.get((fw.TYPE_CALLOUT, str(row.id))))):
+            continue
+        out.append(m)
+    return out
+
+
+async def ask_panthakys(db: AsyncSession, settings: Settings, request_id: int, *, now: datetime | None = None,
+                        client: httpx.AsyncClient | None = None) -> int:
+    """Come to me first: at Send the fire temple's confirmed panthakys, and only
+    they, are asked on WhatsApp, with the call-out's template and buttons; the
+    mobeds wait for the panthaky's Ask everyone or the safety net. Returns how
+    many went. Never raises."""
+    now = now or _now()
+    try:
+        request = await db.get(FuneralRequest, request_id)
+        await db.refresh(request, with_for_update=True)
+        agyary = await db.get(Agyary, request.agyary_id)
+        chosen = await _panthaky_asks(db, settings, request, agyary) if request.status == REQUEST_WAITING else []
+        if not chosen:
+            await db.commit()
+            return 0
+        return await _ask(db, settings, request, chosen, asker=chosen[0]["name"],
+                          asker_max=template_text.MOBED_NAME_MAX, sent_by_user_id=request.sent_by_user_id,
+                          now=now, client=client)
+    except Exception:   # noqa: BLE001 - the request is sent; this must not undo or fail it
+        logger.exception("Asking the panthaky of request %s failed", request_id)
+        await db.rollback()
+        return 0
 
 
 async def ask_everyone_now(db: AsyncSession, settings: Settings, request: FuneralRequest,
@@ -1005,14 +1071,18 @@ async def record_answer(
     elif choice == BACK_OUT:
         outcome = await standbys.back_out_on_whatsapp(db, settings, request, answer, now=now, client=client)
     else:
+        # A confirmed panthaky's "I can pray" is their "I'll pray": the same row, the same one yes.
+        panthaky_user = await db.get(User, answer.user_id) if answer.user_id and await is_confirmed_panthaky(
+            db, request.agyary_id, answer.user_id) else None
         outcome = await _answer(db, settings, request, answer, choice == "y", how=HOW_WHATSAPP, by_user=None,
-                                now=now, client=client)
+                                now=now, client=client, taker=panthaky_user)
     return f"answer {answer_id}: {outcome}"
 
 
 async def _answer(
     db: AsyncSession, settings: Settings, request: FuneralRequest, row: PrayerCalloutAnswer, yes: bool, *,
     how: str, by_user: User | None, now: datetime, client: httpx.AsyncClient | None, over_no: bool = False,
+    taker: User | None = None,
 ) -> str:
     """Record one person's answer on ``row``, if it is their first: the
     request is locked first (every answer and place of a request waits here
@@ -1023,7 +1093,10 @@ async def _answer(
     ``over_no`` (a call's Going, call_result): a yes may take the place of an
     earlier no of theirs - people change their mind on the phone (lead's
     choice, 21 Nov 2026) - but never of a yes: someone going or on standby
-    is left as they are."""
+    is left as they are.
+
+    ``taker`` (a confirmed panthaky's yes on WhatsApp): the yes takes the
+    request for the fire temple, as their "I'll pray" on the board does."""
     await db.refresh(request, with_for_update=True)
     await db.refresh(row, with_for_update=True)
     said = [r.answer for r in (row, *(r for r in await _request_rows(db, request.id)
@@ -1033,6 +1106,8 @@ async def _answer(
         return "already answered"
     if said:
         logger.info("Answer %s on request %s: an earlier no becomes a yes by phone", row.id, request.id)
+    if yes and taker is not None and request.status == REQUEST_WAITING:
+        await take_request(db, request, taker, now)
     row.answer, row.answered_at, row.how = (CALLOUT_YES if yes else CALLOUT_NO), now, how
     row.recorded_by_user_id = by_user.id if by_user is not None and how in (HOW_PHONE, HOW_SELF) else None
     await db.commit()
@@ -1501,7 +1576,9 @@ async def pray_myself(
         raise CalloutError("Only the fire temple's panthaky can fill a place from here.")
     await _lock_waiting(db, request)
     row = _find(await _request_rows(db, request.id), f"u{user.id}", user.phone)
-    if row is not None and row.answer is not None:
+    # A "Not this time" they tapped on WhatsApp is not final: they may change their mind here.
+    changed_mind = row is not None and row.answer == CALLOUT_NO and row.how == HOW_WHATSAPP
+    if row is not None and row.answer is not None and not changed_mind:
         raise CalloutError(_already(user.name, row, me=True))
     if row is None:
         callout = await _callout_of(db, request, sent_by_user_id=user.id, now=now)
@@ -1509,7 +1586,8 @@ async def pray_myself(
         db.add(row)
         await db.flush()
     await take_request(db, request, user, now)
-    outcome = await _answer(db, settings, request, row, True, how=HOW_SELF, by_user=user, now=now, client=client)
+    outcome = await _answer(db, settings, request, row, True, how=HOW_SELF, by_user=user, now=now, client=client,
+                            over_no=changed_mind)
     record = await db.get(FuneralRecord, request.funeral_record_id)
     await db.refresh(request)
     await db.refresh(row)

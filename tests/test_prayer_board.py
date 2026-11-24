@@ -99,7 +99,7 @@ async def test_yeses_fill_the_places_in_order_and_a_later_yes_is_a_standby(clien
     panthaky = await _as(client, PANTHAKY)
     await _listed(client, aid, panthaky, ("Er. Listed", LISTED), ("Er. Second", SECOND))
     rid, res, _ = await _send(client, db, aid, mobeds_wanted=2)
-    assert res["callout"]["asked"] == 3
+    assert res["callout"]["asked"] == 4        # the panthaky too (owner, 24 Nov 2026)
     answers = await _answers(db)
     meta.sent.clear()
     await _signed_tap(client, LISTED, f"pca:{answers[LISTED].token}:y")
@@ -273,16 +273,18 @@ async def test_asking_everyone_asks_the_app_mobeds_in_the_app_even_with_whatsapp
     settings = config.get_settings()
     first_row = rows[MOBED]
     done = await prayer_callout.ask_everyone(db, settings, rid)
-    assert done == {"state": "sent", "asked": 2, "asked_in_app": 0,
-                    "message": "2 mobeds of Goti Adarian were asked on WhatsApp."}
-    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted([MOBED, LISTED])
+    # The two panthakys too (owner, 24 Nov 2026): WhatsApp was off at Send, so they are asked now.
+    assert done == {"state": "sent", "asked": 4, "asked_in_app": 0,
+                    "message": "4 mobeds of Goti Adarian were asked on WhatsApp."}
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted(
+        [MOBED, LISTED, PANTHAKY, "+919822200113"])
     rows = await _answers(db)
-    assert set(rows) == {MOBED, LISTED} and rows[MOBED].id == first_row.id and rows[LISTED].how == "whatsapp"
+    assert set(rows) == {MOBED, LISTED, PANTHAKY, "+919822200113"} and rows[MOBED].id == first_row.id and rows[LISTED].how == "whatsapp"
     payload = next(m for m in meta.sent if m["to"] == MOBED)["template"]["components"][1]["parameters"][0]["payload"]
     assert payload == f"pca:{first_row.token}:y"
     done = await prayer_callout.ask_everyone(db, settings, rid)
     assert done["state"] == "none" and done["message"] == "Everyone on Goti Adarian's list of mobeds has been asked already."
-    assert len(meta.templates("prayer_request_mobeds_v2")) == 2
+    assert len(meta.templates("prayer_request_mobeds_v2")) == 4
     _no_family(meta)
 
 
@@ -415,7 +417,7 @@ async def test_a_calls_result_going_not_going_or_no_answer(client, db, seeded, m
     # No answer: nothing kept, but the panthaky has acted.
     r = await client.post(url, json={"key": keys["Er. Listed"], "result": "no_answer"}, headers=panthaky)
     assert r.status_code == 200 and r.json()["done"]["message"] == "Noted: Er. Listed did not answer."
-    assert await _answers(db) == {} and (await _request(db, rid)).taken_at is not None
+    assert set(await _answers(db)) == {PANTHAKY} and (await _request(db, rid)).taken_at is not None
     taken = (await _request(db, rid)).taken_at
 
     # Not going: a no by phone.
@@ -426,6 +428,7 @@ async def test_a_calls_result_going_not_going_or_no_answer(client, db, seeded, m
 
     # Going: a place, by phone; the app mobed is told in the app, nobody on WhatsApp.
     pushes.clear()
+    meta.sent.clear()      # (the panthaky's own call-out message at Send is not what this counts)
     r = await client.post(url, json={"key": keys["Er. Pervez Kias"], "result": "going"}, headers=panthaky)
     assert r.status_code == 200 and r.json()["done"]["message"] == "Er. Pervez Kias is going: 1 of 2."
     kias = (await _answers(db))[MOBED]
@@ -587,7 +590,7 @@ async def test_an_app_mobed_answers_in_the_app_and_the_first_answer_counts_acros
     panthaky = await _as(client, PANTHAKY)
     await _listed(client, aid, panthaky, ("Er. Listed", LISTED))
     rid, res, _ = await _send(client, db, aid, mobeds_wanted=2)
-    assert res["callout"]["asked_in_app"] == 1 and res["callout"]["asked"] == 2
+    assert res["callout"]["asked_in_app"] == 1 and res["callout"]["asked"] == 3     # the panthaky too
     mobed = await _as(client, MOBED)
 
     # The card: the prayers, n of N going, their own answer; no family, nobody else's number.
@@ -757,3 +760,132 @@ async def test_the_red_count_is_what_waits_for_each_one(client, db, seeded, meta
     r = await client.post(_b(rid3, "call-result"), json={"key": key, "result": "no_answer"}, headers=panthaky)
     assert r.status_code == 200
     assert (await _count(client, panthaky), await _count(client, mobed)) == (0, 0)
+
+
+# --- The panthaky is asked on WhatsApp too (owner, 24 Nov 2026) -------------------------
+
+def _body(m) -> list[str]:
+    return [p["text"] for p in m["template"]["components"][0]["parameters"]]
+
+
+def _payload(m, button: int) -> str:
+    return next(c for c in m["template"]["components"]
+                if c["type"] == "button" and c["index"] == str(button))["parameters"][0]["payload"]
+
+
+async def test_the_panthaky_is_asked_on_whatsapp_and_their_yes_is_their_ill_pray_once(
+        client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, res, _ = await _send(client, db, aid, mobeds_wanted=2)
+    # Everyone at once: the panthaky with the mobeds, the same template and the same buttons,
+    # the departed by title and own name only; in the app the father's name is still there.
+    asked = {m["to"]: m for m in meta.templates("prayer_request_mobeds_v2")}
+    assert set(asked) == {PANTHAKY, MOBED} and res["callout"]["asked"] == 2
+    assert _body(asked[PANTHAKY]) == _body(asked[MOBED])
+    assert _body(asked[PANTHAKY])[1] == "Behdin Rustom" and "Jamshed" not in json.dumps(asked[PANTHAKY])
+    (note,) = await _notes(db, MOBED, "funeral_request")
+    assert "Rustom Jamshed" in note.body
+    rows = await _answers(db)
+    token = rows[PANTHAKY].token
+    assert _payload(asked[PANTHAKY], 0) == f"pca:{token}:y" and _payload(asked[PANTHAKY], 1) == f"pca:{token}:n"
+    assert rows[PANTHAKY].user_id and rows[PANTHAKY].how == "whatsapp" and rows[PANTHAKY].answer is None
+
+    # Their "Yes, I can pray" on WhatsApp is the board's "I'll pray": a place, the request taken.
+    meta.sent.clear()
+    pushes.clear()
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:y")
+    row = (await _answers(db))[PANTHAKY]
+    assert row.answer == "yes" and row.how == "whatsapp" and row.picked_at is not None
+    request = await _request(db, rid)
+    assert request.taken_by_user_id == row.user_id and request.taken_at is not None and request.status == "waiting"
+    board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
+    assert [(p["name"], p["how"]) for p in board["places"]] == [("Er. Hormuz Dadachanji", "whatsapp")]
+    assert board["going"] == 1 and board["mobeds"][0]["state"] == "asked_whatsapp"
+
+    # Meta delivering it again, a second tap, a "no" after it, and the board's "I'll pray": one yes.
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:y")
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:n")
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+    assert r.status_code == 409 and r.json()["detail"] == "You are already going."
+    rows = await _answers(db)
+    assert len([a for a in rows.values() if a.user_id == row.user_id]) == 1
+    assert (await client.get(_b(rid), headers=panthaky)).json()["going"] == 1
+    assert [n for n in meta.sent if n["to"] == PANTHAKY] == []        # nothing more to them
+
+    # A mobed's yes fills the second place: all set, once.
+    await _signed_tap(client, MOBED, f"pca:{rows[MOBED].token}:y")
+    assert (await _request(db, rid)).status == "all_set"
+
+
+async def test_a_board_ill_pray_then_their_whatsapp_yes_is_one_yes(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    token = (await _answers(db))[PANTHAKY].token
+    panthaky = await _as(client, PANTHAKY)
+    r = await client.post(_b(rid, "self"), json={}, headers=panthaky)
+    assert r.status_code == 200, r.text
+    row = (await _answers(db))[PANTHAKY]
+    assert row.how == "self" and row.picked_at is not None and row.token == token       # the one row
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:y")
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:n")
+    rows = await _answers(db)
+    assert rows[PANTHAKY].how == "self" and rows[PANTHAKY].answer == "yes" and await prayer_callout._going(db, rid) == 1
+    assert len([a for a in rows.values() if a.user_id == row.user_id]) == 1
+
+
+async def test_a_no_on_whatsapp_is_a_no_and_they_may_still_tap_ill_pray(client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _, _ = await _send(client, db, aid, mobeds_wanted=2)
+    token = (await _answers(db))[PANTHAKY].token
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:n")
+    row = (await _answers(db))[PANTHAKY]
+    assert row.answer == "no" and row.picked_at is None and (await _request(db, rid)).taken_at is None
+    r = await client.post(_b(rid, "self"), json={}, headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200, r.text
+    rows = await _answers(db)
+    assert rows[PANTHAKY].answer == "yes" and rows[PANTHAKY].picked_at is not None and rows[PANTHAKY].how == "self"
+    assert len([a for a in rows.values() if a.user_id == row.user_id]) == 1
+
+
+async def test_come_to_me_first_asks_the_panthaky_at_once_and_their_yes_stops_the_safety_net(
+        client, db, seeded, meta, pushes, live):
+    aid = seeded["agyary_id"]
+    rid, _ = await _first(client, db, aid, minutes=15, mobeds_wanted=2)
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [PANTHAKY]     # and no mobed
+    token = (await _answers(db))[PANTHAKY].token
+    # Asking only the panthaky is not the panthaky acting: the safety net still waits to fire.
+    assert await prayer_callout.panthaky_acted(db, await _request(db, rid)) is False
+    # Asking everyone from the board asks the mobeds, not the panthaky again.
+    r = await client.post(_b(rid, "ask-everyone"), headers=await _as(client, PANTHAKY))
+    assert r.status_code == 200 and r.json()["done"]["asked"] == 1, r.text
+    assert sorted(m["to"] for m in meta.templates("prayer_request_mobeds_v2")) == sorted([PANTHAKY, MOBED])
+    await _signed_tap(client, PANTHAKY, f"pca:{token}:y")
+    assert await prayer_callout.panthaky_acted(db, await _request(db, rid)) is True
+    assert (await _request(db, rid)).taken_by_user_id is not None and await prayer_callout._going(db, rid) == 1
+
+
+async def test_a_stopped_or_paused_panthaky_is_not_messaged(client, db, seeded, meta, pushes, live, monkeypatch):
+    from agyary.models import ReminderOptOut
+    from agyary.services import guardrails
+
+    aid = seeded["agyary_id"]
+    db.add(ReminderOptOut(phone=PANTHAKY, stopped_at=datetime.now(timezone.utc)))
+    await db.commit()
+    _, _, mgr = await _send(client, db, aid)
+    assert [m["to"] for m in meta.templates("prayer_request_mobeds_v2")] == [MOBED]     # not the STOP'd one
+    assert PANTHAKY not in await _answers(db)
+
+    # The pause switch holds everything, the panthaky's message too.
+    from sqlalchemy import delete
+
+    await db.execute(delete(ReminderOptOut))
+    await db.commit()
+
+    async def paused(db):
+        return "paused for the test"
+
+    monkeypatch.setattr(guardrails, "paused_reason", paused)
+    meta.sent.clear()
+    await _send(client, db, aid, mgr)
+    assert meta.sent == []

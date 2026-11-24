@@ -93,11 +93,17 @@ def no_still_short(monkeypatch):
     monkeypatch.setattr(prayer_timers, "no_answer", nothing)
 
 
-async def _come_to_me_first(client, db, aid, minutes=30, mgr=None) -> tuple[int, datetime, dict]:
-    """A request sent to Goti Adarian in Come to me first: nobody is asked at Send."""
+async def _come_to_me_first(client, db, aid, minutes=30, mgr=None, meta=None) -> tuple[int, datetime, dict]:
+    """A request sent to Goti Adarian in Come to me first: no mobed is asked at Send, only the
+    panthaky (on WhatsApp too since 24 Nov 2026), whose message is cleared from ``meta`` here so
+    the tests count what the safety net sends."""
     await _way(db, aid, "panthaky_first", minutes)
+    before = len(meta.sent) if meta is not None else 0
     rid, res, mgr = await _send(client, db, aid, mgr)
     assert res["callout"]["state"] == "panthaky_first"
+    if meta is not None:
+        assert {m["to"] for m in meta.sent[before:]} <= {PANTHAKY}
+        meta.sent.clear()
     return rid, (await db.get(FuneralRequest, rid)).sent_at, mgr
 
 
@@ -122,7 +128,7 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
     panthaky = await _as(client, PANTHAKY)
     r = await client.post(_list(aid), json={"name": "Er. Listed", "phone": LISTED, "agreed": True}, headers=panthaky)
     assert r.status_code == 200, r.text
-    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 30)
+    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 30, meta=meta)
     assert meta.sent == [] and pushes[-1]["to"] == [await _uid(db, PANTHAKY)]
     pushes.clear()
 
@@ -139,7 +145,7 @@ async def test_it_asks_everyone_once_when_the_minutes_have_passed(client, db, se
         body = [p["text"] for p in m["template"]["components"][0]["parameters"]]
         assert body[5] == "Er. Hormuz Dadachanji" and FAMILY.lstrip("+") not in json.dumps(m)
     assert (await _request(db, rid)).escalated_at == at
-    assert set(await _answers(db)) == {MOBED, LISTED}
+    assert set(await _answers(db)) == {MOBED, LISTED, PANTHAKY}     # the panthaky's own, from Send
 
     # The panthaky is told, in the app and on their phone; nothing about the family.
     (note,) = await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED)
@@ -174,16 +180,16 @@ async def test_nothing_once_the_panthaky_acted_or_the_request_stopped_waiting(cl
     aid = seeded["agyary_id"]
     panthaky = await _as(client, PANTHAKY)
     # The panthaky asked everyone from the board.
-    asked_rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15)
+    asked_rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15, meta=meta)
     r = await client.post(f"/api/mobed/requests/{asked_rid}/ask-everyone", headers=panthaky)
     assert r.status_code == 200 and r.json()["done"]["asked"] == 1, r.text
     # Accepted the old way (before R3.1), declined, withdrawn.
-    accepted, _, _ = await _come_to_me_first(client, db, aid, 15, mgr)
+    accepted, _, _ = await _come_to_me_first(client, db, aid, 15, mgr, meta=meta)
     await accepted_the_old_way(db, accepted, PANTHAKY, share=False, book=False)
-    declined, _, _ = await _come_to_me_first(client, db, aid, 15, mgr)
+    declined, _, _ = await _come_to_me_first(client, db, aid, 15, mgr, meta=meta)
     r = await client.post(f"/api/mobed/requests/{declined}/decline", json={"reason": None}, headers=panthaky)
     assert r.status_code == 200, r.text
-    withdrawn, _, _ = await _come_to_me_first(client, db, aid, 15, mgr)
+    withdrawn, _, _ = await _come_to_me_first(client, db, aid, 15, mgr, meta=meta)
     r = await client.post(f"/api/mobed/manager/requests/{withdrawn}/withdraw", headers=mgr)
     assert r.status_code == 200, r.text
 
@@ -193,7 +199,9 @@ async def test_nothing_once_the_panthaky_acted_or_the_request_stopped_waiting(cl
     assert meta.sent == [] and pushes == []
     for rid in (asked_rid, accepted, declined, withdrawn):
         assert (await _request(db, rid)).escalated_at is None
-    assert len(list((await db.execute(select(PrayerCallout))).scalars())) == 1      # the panthaky's own
+    # One call-out for each request, made when the panthaky was asked at Send, and the one that
+    # asked everyone from the board; the safety net made none.
+    assert len(list((await db.execute(select(PrayerCallout))).scalars())) == 4
     assert await _notes(db, PANTHAKY, prayer_timers.KIND_ESCALATED) == []
 
 
@@ -201,7 +209,7 @@ async def test_never_or_everyone_at_once_when_it_looks_does_nothing(client, db, 
     aid = seeded["agyary_id"]
     panthaky = await _as(client, PANTHAKY)
     settings_url = f"/api/mobed/agyaries/{aid}/request-settings"
-    rid, sent_at, _ = await _come_to_me_first(client, db, aid, None)       # Never, the default
+    rid, sent_at, _ = await _come_to_me_first(client, db, aid, None, meta=meta)       # Never, the default
     assert await _tick(db, sent_at + timedelta(days=1)) == 0
 
     # The safety net turned on afterwards, then the panthaky switched to Everyone at once.
@@ -222,7 +230,7 @@ async def test_never_or_everyone_at_once_when_it_looks_does_nothing(client, db, 
 
 async def test_with_whatsapp_off_it_is_done_once_and_the_panthaky_told_why(client, db, seeded, meta, pushes):
     aid = seeded["agyary_id"]
-    rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15)
+    rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15, meta=meta)
     pushes.clear()
     at = sent_at + timedelta(minutes=15)
     assert await _tick(db, at) == 1
@@ -240,7 +248,7 @@ async def test_with_whatsapp_off_it_is_done_once_and_the_panthaky_told_why(clien
     # Nobody in the app to ask either: still done once, and the panthaky is told why.
     await db.execute(update(User).where(User.phone == MOBED).values(access="off"))
     await db.commit()
-    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 15, mgr)
+    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 15, mgr, meta=meta)
     pushes.clear()
     at = sent_at + timedelta(minutes=15)
     assert await _tick(db, at) == 1
@@ -258,7 +266,7 @@ async def test_nothing_goes_to_or_under_an_account_that_is_not_on(client, db, se
     aid = seeded["agyary_id"]
     await member(db, await db.get(Agyary, aid), OFF, access="off", name="Er. Switched Off")
     await db.commit()
-    rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15)
+    rid, sent_at, mgr = await _come_to_me_first(client, db, aid, 15, meta=meta)
     # The panthaky's access is switched off before the minutes pass.
     await db.execute(update(User).where(User.phone == PANTHAKY).values(access="off"))
     await db.commit()
@@ -276,7 +284,7 @@ async def test_nothing_goes_to_or_under_an_account_that_is_not_on(client, db, se
     await db.execute(update(User).where(User.phone == PANTHAKY).values(access="on"))
     await db.commit()
     meta.sent.clear()
-    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 15, mgr)
+    rid, sent_at, _ = await _come_to_me_first(client, db, aid, 15, mgr, meta=meta)
     pushes.clear()
     assert await _tick(db, sent_at + timedelta(minutes=15)) == 1
     assert meta.sent == [] and (await _request(db, rid)).escalated_at is not None
@@ -286,7 +294,7 @@ async def test_nothing_goes_to_or_under_an_account_that_is_not_on(client, db, se
 
 
 async def test_two_loops_at_the_same_moment_ask_once(client, db, seeded, meta, pushes, live):
-    rid, sent_at, _ = await _come_to_me_first(client, db, seeded["agyary_id"], 30)
+    rid, sent_at, _ = await _come_to_me_first(client, db, seeded["agyary_id"], 30, meta=meta)
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
     at = sent_at + timedelta(minutes=30)
     async with factory() as one, factory() as two:
@@ -319,7 +327,8 @@ async def test_the_loop_runs_the_safety_net_at_three_in_the_morning(client, db, 
     async with httpx.AsyncClient(transport=httpx.MockTransport(fake.handler)) as http:
         report = await reminder_worker.tick(now=three_am, client=http, session_factory=factory)
     assert (report.closing, report.planned, report.sent) == (0, 0, 0)        # no evening job at 3 am
-    assert [m["to"] for m in fake.templates("prayer_request_mobeds_v2")] == [MOBED]
+    # Nobody was asked at Send (WhatsApp was off then), so the panthaky is asked now too.
+    assert [m["to"] for m in fake.templates("prayer_request_mobeds_v2")] == [PANTHAKY, MOBED]
     assert (await _request(db, rid)).escalated_at == three_am
 
 
