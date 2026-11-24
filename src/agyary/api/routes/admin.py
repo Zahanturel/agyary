@@ -43,6 +43,7 @@ from agyary.services import (
     mobed_access,
     mobed_auth,
     panthaky,
+    place_change,
     standbys,
     web_push,
 )
@@ -122,6 +123,7 @@ async def overview(db: AsyncSession = Depends(get_db), admin: User = Depends(req
             {"when": when.isoformat(), "reason": reason or "", "to": _masked(phone)}
             for when, reason, phone in failures
         ],
+        "place_changes_waiting": await place_change.count_waiting(db),
         # And how many say they are a panthaky, waiting for the admin's word (D10).
         "panthaky_claims_waiting": (
             await db.execute(
@@ -501,3 +503,39 @@ async def set_funeral_place_active(
     place = await funeral_places.set_active(db, await _place(db, place_id, lock=True), admin, payload.active)
     await db.commit()
     return funeral_places.summary(place)
+
+
+# ---------------------------------------------------------------------------
+# A manager asking to move to another place (owner, 24 Nov 2026)
+# ---------------------------------------------------------------------------
+@router.get("/place-changes")
+async def list_place_changes(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)) -> dict:
+    """The requests waiting for the admin: who, from which place to which."""
+    return {"requests": await place_change.waiting_for_admin(db)}
+
+
+async def _decide_place_change(request_id: int, db: AsyncSession, admin: User, act) -> dict:
+    rate_limit.enforce_key(f"admin_place_change:{admin.id}", max_requests=60, window_seconds=60)
+    try:
+        req = await act(db, get_settings(), request_id, admin)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except place_change.ChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await db.commit()
+    return {"id": req.id, "status": req.status}
+
+
+@router.post("/place-changes/{request_id}/approve")
+async def approve_place_change(
+    request_id: int, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> dict:
+    """Move the manager to the new place (one transaction); the old place's records stay with it."""
+    return await _decide_place_change(request_id, db, admin, place_change.approve)
+
+
+@router.post("/place-changes/{request_id}/decline")
+async def decline_place_change(
+    request_id: int, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> dict:
+    return await _decide_place_change(request_id, db, admin, place_change.decline)

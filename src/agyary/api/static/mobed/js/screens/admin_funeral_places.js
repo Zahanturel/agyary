@@ -16,7 +16,7 @@
 
 import {
   adminFuneralPlaces, adminFuneralPlace, adminCreateFuneralPlace, adminUpdateFuneralPlace,
-  adminSetFuneralPlaceActive,
+  adminSetFuneralPlaceActive, adminPlaceChanges, adminDecidePlaceChange,
 } from "../api.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, backBar, screenFailed, flashInfo,
@@ -66,6 +66,13 @@ export async function renderAdminFuneralPlaces() {
     return screenFailed(e.message, () => renderAdminFuneralPlaces());
   }
   if (!alive()) return;
+  let changes = [];
+  try {
+    changes = (await adminPlaceChanges()).requests;
+  } catch (e) {
+    showError(e.message);   // the places still show
+  }
+  if (!alive()) return;
   const inUse = data.places.filter(p => p.is_active);
   const off = data.places.filter(p => !p.is_active);
 
@@ -77,6 +84,22 @@ export async function renderAdminFuneralPlaces() {
       <div class="action-bar"><button id="fpAdd">Add a place</button></div>
     </div>
 
+    ${changes.length ? `<div class="card" id="fpChanges">
+      <h2>Place change requests (${changes.length})</h2>
+      <p class="meta" style="margin:4px 0 8px">A manager asks to work at another place. Nothing changes until
+        you approve. Their old place's records stay with that place.</p>
+      ${changes.map(c => `
+        <div class="search-result" data-change="${c.id}" style="cursor:default">
+          <div><strong>${esc(c.manager.name)}</strong> <span class="meta">${esc(c.manager.phone)}</span></div>
+          <div class="addr">${c.from_place ? esc(c.from_place.name) : "No place"} &rarr; ${esc(c.to_place.name)}${
+            c.to_place.is_active ? "" : " (turned off)"}</div>
+          <div class="row tight" style="margin-top:8px">
+            <button type="button" class="small" data-approve="${c.id}">Approve</button>
+            <button type="button" class="ghost small" data-decline="${c.id}">Decline</button>
+          </div>
+        </div>`).join("")}
+    </div>` : ""}
+
     <div class="card">
       <h2>In use (${inUse.length})</h2>
       ${inUse.length ? inUse.map(placeRow).join("") : `<p class="meta">None yet. Add the first one above.</p>`}
@@ -87,6 +110,23 @@ export async function renderAdminFuneralPlaces() {
       <p class="meta" style="margin:4px 0 0">Not offered to new managers. Nothing about them is deleted.</p>
       ${off.map(placeRow).join("")}
     </div>` : ""}`;
+
+  const decide = (attr, decision, done) => mainEl.querySelectorAll(`[${attr}]`).forEach(btn => {
+    btn.onclick = async () => {
+      mainEl.querySelectorAll("[data-approve],[data-decline]").forEach(x => { x.disabled = true; });
+      try {
+        await adminDecidePlaceChange(btn.getAttribute(attr), decision);
+      } catch (e) {
+        showError(e.message);
+        if (alive()) renderAdminFuneralPlaces();   // it may have been decided or taken back meanwhile
+        return;
+      }
+      showInfo(done);
+      if (alive()) renderAdminFuneralPlaces();
+    };
+  });
+  decide("data-approve", "approve", "Moved. The manager has been told.");
+  decide("data-decline", "decline", "Declined. The manager has been told.");
 
   document.getElementById("fpAdd").onclick = () => navigate(LIST + "/new");
   mainEl.querySelectorAll("[data-place]").forEach(row => {

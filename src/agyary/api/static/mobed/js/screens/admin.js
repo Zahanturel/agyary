@@ -81,7 +81,8 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
-      <h2>Doongerwadis</h2>
+      <h2>Doongerwadis ${o.place_changes_waiting
+        ? `<span class="tag" style="background:var(--amber-100);color:var(--amber-600)">${o.place_changes_waiting} asking to move</span>` : ""}</h2>
       <p class="meta">The Doongerwadis, prayer halls and aramgahs a manager can choose when they sign up.
         Only you can add them. ${n.funeral_places.in_use
           ? `${n.funeral_places.in_use} in use${n.funeral_places.off ? `, ${n.funeral_places.off} turned off` : ""}.`

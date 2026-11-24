@@ -167,6 +167,8 @@ export const adminDecideRequests = (userId, agyaryId, action) =>
   post(`/admin/mobeds/${userId}/requests`, { agyary_id: agyaryId, action });
 /** Admin only: the Doongerwadis, prayer halls and aramgahs (D10). Turned off, never deleted. */
 export const adminFuneralPlaces = () => get("/admin/funeral-places");
+export const adminPlaceChanges = () => get("/admin/place-changes");
+export const adminDecidePlaceChange = (id, decision) => post(`/admin/place-changes/${id}/${decision}`, {});
 export const adminFuneralPlace = (id) => get(`/admin/funeral-places/${id}`);
 export const adminCreateFuneralPlace = (body) => post("/admin/funeral-places", body);
 export const adminUpdateFuneralPlace = (id, body) => put(`/admin/funeral-places/${id}`, body);
