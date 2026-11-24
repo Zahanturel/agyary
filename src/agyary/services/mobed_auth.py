@@ -93,7 +93,9 @@ async def login_user(db: AsyncSession, phone: str, name: str, kind: str = ACCOUN
     """
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
-    if user is None and kind == ACCOUNT_BEHDIN:
+    # An admin is never a behdin: signing in first at the behdin app still makes
+    # a mobed (on, as at the mobed app), so the owner can never lock themselves out.
+    if user is None and kind == ACCOUNT_BEHDIN and not _listed(get_settings().admin_phones, phone):
         user = User(phone=phone, name=name, access=ACCESS_ON, account_kind=ACCOUNT_BEHDIN,
                     automatic_reminders=False)
         db.add(user)
