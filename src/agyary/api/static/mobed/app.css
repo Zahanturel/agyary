@@ -735,3 +735,5 @@ body.sheet-open { overflow: hidden; }
 /* A fire temple a request cannot reach yet (nobody there in the app): shown, not tappable. */
 .search-result.unavailable { cursor: default; background: var(--ink-100); border-style: dashed; }
 .search-result.unavailable:hover { background: var(--ink-100); }
+
+.search-result.selected { border-color: var(--primary); background: var(--primary-tint); }

@@ -64,6 +64,7 @@ from agyary.services import (
     funeral_records,
     funeral_requests,
     guardrails,
+    place_change,
     prayer_callout,
     standbys,
 )
@@ -157,10 +158,63 @@ async def get_acting_manager(
 
 
 @router.get("/manager/place")
-async def my_funeral_place(acting: Acting = Depends(get_acting_manager)) -> dict:
+async def my_funeral_place(
+    db: AsyncSession = Depends(get_db), acting: Acting = Depends(get_acting_manager)
+) -> dict:
     """The place (or places) this manager works at, for their home screen;
     for an admin acting for a place, that place."""
-    return {"places": [funeral_places.summary(p) for p in acting.places], "as_admin": acting.as_admin}
+    return {
+        "places": [funeral_places.summary(p) for p in acting.places], "as_admin": acting.as_admin,
+        # Their own waiting request to move to another place, if any (never for an admin acting).
+        "place_change": None if acting.as_admin else await place_change.pending_summary(db, acting.user.id),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Asking to change place (owner, 24 Nov 2026): the manager asks, the admin approves
+# ---------------------------------------------------------------------------
+class PlaceChangeIn(BaseModel):
+    to_place_id: int
+
+
+@router.get("/manager/place-change/places")
+async def place_change_choices(
+    q: str = Query(default="", max_length=200), db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_manager),
+) -> dict:
+    """The places in use this manager may ask to move to (not their own)."""
+    rate_limit.enforce_key(f"place_change_search:{user.id}", max_requests=60, window_seconds=60)
+    return {"places": [funeral_places.summary(p) for p in await place_change.choices(db, user, q)]}
+
+
+@router.post("/manager/place-change")
+async def ask_to_change_place(
+    payload: PlaceChangeIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+) -> dict:
+    """Ask the admin to move this manager to another place. Nothing changes until the admin approves."""
+    rate_limit.enforce_key(f"place_change_ask:{user.id}", max_requests=10, window_seconds=3600)
+    to_place = await db.get(FuneralPlace, payload.to_place_id)
+    if to_place is None or not to_place.is_active:
+        raise HTTPException(status_code=404, detail="That place could not be found. Please choose it again.")
+    try:
+        await place_change.ask(db, get_settings(), user, to_place)
+    except place_change.ChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await db.commit()
+    return {"place_change": await place_change.pending_summary(db, user.id)}
+
+
+@router.delete("/manager/place-change")
+async def take_back_place_change(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_manager),
+) -> dict:
+    rate_limit.enforce_key(f"place_change_back:{user.id}", max_requests=20, window_seconds=3600)
+    try:
+        await place_change.take_back(db, user)
+    except place_change.ChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await db.commit()
+    return {"place_change": None}
 
 
 # ---------------------------------------------------------------------------

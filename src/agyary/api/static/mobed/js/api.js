@@ -221,6 +221,9 @@ function asManager(path) {
 }
 /** A manager's own place(s), for their home screen (the admin's: the one they act for). */
 export const managerPlace = () => get(asManager("/manager/place"));
+export const placeChangeChoices = (q) => get(`/manager/place-change/places?q=${encodeURIComponent(q || "")}`);
+export const askToChangePlace = (toPlaceId) => post("/manager/place-change", { to_place_id: toPlaceId });
+export const takeBackPlaceChange = () => del("/manager/place-change");
 /** Recording a death and sending it to a fire temple (D10, Step 4). */
 export const managerDeathDay = (body) => post(asManager("/manager/death-day"), body);
 export const managerRecords = (before) => get(asManager("/manager/records" + (before ? `?before=${before}` : "")));

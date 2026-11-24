@@ -22,7 +22,7 @@
 
 import {
   searchFuneralPlaces, joinFuneralPlace, managerPlace, managerRecords, updateMyName, signOutOtherDevices,
-  deleteMyAccount,
+  deleteMyAccount, placeChangeChoices, askToChangePlace, takeBackPlaceChange,
 } from "../api.js";
 import { recordState } from "./manager_record.js";
 import { state, saveSession, clearSession, forgetLastPhone } from "../state.js";
@@ -258,6 +258,125 @@ async function paintRecords(box, alive, before = null) {
 
 // --- Settings ---------------------------------------------------------------
 
+/** "My place": where they work now, and asking the admin to move them. The
+ *  manager cannot change it themselves; nothing changes until the admin approves. */
+async function paintMyPlace(box, alive) {
+  let data;
+  try {
+    data = await managerPlace();
+  } catch (e) {
+    if (!alive()) return;
+    box.innerHTML = `<div class="load-failed" role="alert"><p><b></b></p>
+      <button class="small" type="button">Try again</button></div>`;
+    box.querySelector("b").textContent = e.message;
+    box.querySelector("button").onclick = () => paintMyPlace(box, alive);
+    return;
+  }
+  if (!alive()) return;
+  // What the app keeps follows what the server has now (an approved move shows here).
+  state.user.funeral_places = data.places;
+  saveSession();
+  const here = data.places[0];
+  const waiting = data.place_change;
+  box.innerHTML = `
+    <p style="margin:0 0 4px"><b>${here ? esc(here.name) : "No place yet"}</b></p>
+    ${here ? `<p class="meta" style="margin:0">${esc(placeLine(here))}</p>` : ""}
+    ${waiting ? `
+      <p style="margin:12px 0 8px">Waiting for the admin: <b>${esc(waiting.to_place.name)}</b></p>
+      <p class="meta" style="margin:0 0 10px">Nothing changes until the admin approves. You will be told
+        either way.</p>
+      <button type="button" class="ghost small" id="msPcBack">Take back the request</button>`
+    : `<div style="margin-top:12px"><button type="button" class="secondary small" id="msPcAsk">Ask to change my
+        place</button></div>
+      <p class="meta" style="margin:8px 0 0">The admin moves you. Your place's records stay with that place.</p>`}`;
+  const back = box.querySelector("#msPcBack");
+  if (back) back.onclick = async () => {
+    back.disabled = true;
+    try {
+      await takeBackPlaceChange();
+    } catch (e) {
+      back.disabled = false;
+      return showError(e.message);
+    }
+    showInfo("The request is taken back.");
+    if (alive()) paintMyPlace(box, alive);
+  };
+  const ask = box.querySelector("#msPcAsk");
+  if (ask) ask.onclick = () => openPlaceChangeSheet(() => alive() && paintMyPlace(box, alive));
+}
+
+/** The places in use, other than their own, with a search box when the list is long. */
+function openPlaceChangeSheet(done) {
+  const sheet = openSheet({
+    title: "Ask to change my place",
+    html: `
+      <p class="meta" style="margin-top:0">Choose the place you will work at. The admin decides, and nothing
+        changes until then.</p>
+      <input type="text" id="pcSearch" placeholder="Search by name or town" autocomplete="off" hidden>
+      <div id="pcResults" style="margin-top:8px"><p class="meta">Loading...</p></div>
+      <div class="stack" style="margin-top:12px">
+        <button type="button" id="pcSend" disabled>Send request</button>
+        <button type="button" class="ghost" id="pcCancel">Cancel</button>
+      </div>`,
+  });
+  const input = sheet.body.querySelector("#pcSearch");
+  const results = sheet.body.querySelector("#pcResults");
+  const send = sheet.body.querySelector("#pcSend");
+  sheet.body.querySelector("#pcCancel").onclick = sheet.close;
+  let chosen = null, timer, token = 0, sending = false;
+
+  const run = async () => {
+    const mine = ++token;
+    let places;
+    try {
+      places = (await placeChangeChoices(input.value.trim())).places;
+    } catch (e) {
+      if (mine !== token) return;
+      results.innerHTML = `<p role="alert"><b></b></p><button class="small" type="button">Try again</button>`;
+      results.querySelector("b").textContent = e.message;
+      results.querySelector("button").onclick = run;
+      return;
+    }
+    if (mine !== token) return;
+    // Long lists get a search box; it stays once shown, so a search with no result can be changed.
+    if (places.length > 6 || input.value.trim()) input.hidden = false;
+    if (!places.length) {
+      results.innerHTML = `<p class="meta">${input.value.trim()
+        ? "No other place matches that." : "There is no other place in Mobed Diary yet."}</p>`;
+      return;
+    }
+    results.innerHTML = places.map((p, i) => `
+      <div class="search-result${chosen === p.id ? " selected" : ""}" data-i="${i}">
+        <div><strong>${esc(p.name)}</strong></div>
+        <div class="addr">${esc(placeLine(p))}</div>
+      </div>`).join("");
+    results.querySelectorAll("[data-i]").forEach(row => {
+      row.onclick = () => {
+        chosen = places[+row.dataset.i].id;
+        results.querySelectorAll("[data-i]").forEach(r => r.classList.toggle("selected", r === row));
+        send.disabled = false;
+      };
+    });
+  };
+  input.oninput = () => { clearTimeout(timer); timer = setTimeout(run, 200); };
+  send.onclick = async () => {
+    if (sending || chosen === null) return;
+    sending = true;
+    send.disabled = true;   // one request per tap
+    try {
+      await askToChangePlace(chosen);
+    } catch (e) {
+      sending = false;
+      send.disabled = false;
+      return showError(e.message);
+    }
+    sheet.close();
+    showInfo("Asked. The admin will decide, and you will be told.");
+    done();
+  };
+  run();
+}
+
 export function renderManagerSettings() {
   chrome(true);
   refreshHeader();
@@ -276,6 +395,11 @@ export function renderManagerSettings() {
         ${places.map(p => `<div class="fact"><div class="fl">Manager at</div>
           <div class="fv">${esc(p.name)}</div></div>`).join("")}
       </div>
+    </div>
+
+    <div class="card">
+      <h2>My place</h2>
+      <div id="msPlace"><p class="meta">Checking...</p></div>
     </div>
 
     <div class="card">
@@ -302,6 +426,7 @@ export function renderManagerSettings() {
       <button class="ghost small" id="msDelete">Delete my account</button>
       <div id="msDeleteConfirm"></div>
     </div>`;
+  paintMyPlace(document.getElementById("msPlace"), navGuard());
   paintPushCard(document.getElementById("msPush"), navGuard(),
     { what: "Mobed Diary has news for you" });
   shellVersion().then((v) => {
