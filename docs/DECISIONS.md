@@ -544,3 +544,16 @@ them. You can delete them any time."
   day and the panthaky is told.
 - **Prices:** the panthaky sets a usual price per service ("Services and prices" in Settings); the person sees
   "Usual price Rs X, confirm with the agyari" or "Ask the agyari for the price". Nothing is charged in the app.
+
+## Amendment, 25 Nov 2026 (clean-up rules for the Parsi app, owner)
+
+The Parsi app follows every rule of the mobed app; nothing is invented for it:
+- **D11 applies in full**: no "Namaste" or any greeting that is not the community's own (Parsi has no greeting at all on
+  Home); the word is **"fire temple"**, never "agyari" or "agiary" on screen; "Passed away", "Days of prayers", dates
+  dd/mm/yyyy and Y.Z. years, plain words for errors.
+- **One calendar**: the Parsi app uses the SAME calendar module and layout and navigation as the mobed app (month and
+  day, year and Parsi-month navigation, the same header and "+"); no second grid.
+- **Everything is an event**: a departed's prayer dates, a birthday, an accepted ask: each shows on the calendar like
+  any event and opens like one; adding anything is the one "+" (New event) as in the mobed app.
+- **Install** sits outside Settings, where the mobed app has it (the sign-in screen), not in the menu.
+- **Little explanation**: no consent sheet, no hints under fields, no explanatory cards; plain labels like the mobed app.
