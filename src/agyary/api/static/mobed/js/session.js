@@ -54,8 +54,14 @@ export function isFuneralManager() {
   return !!(state.user && state.user.account_kind === "funeral_manager");
 }
 
+/** A behdin's account (the Parsi app's): none of the mobed app, only the page that offers to make it a mobed's. */
+export function isBehdin() {
+  return !!(state.user && state.user.account_kind === "behdin");
+}
+
 /** Where this account's app opens. */
 export function homeFor() {
+  if (isBehdin()) return "#/become";
   return isFuneralManager() ? "#/manager" : "#/calendar";
 }
 
@@ -66,6 +72,8 @@ export function hasAccess() {
 }
 
 export async function loadSessionExtras() {
+  // A behdin has no calendar here: nothing to load, and the server would refuse it.
+  if (isBehdin()) return;
   // A manager has no calendar: nothing to load, and the server would refuse it.
   if (isFuneralManager()) return;
   // Preferences drive every calendar label, so a failure here must not take
@@ -94,6 +102,11 @@ export async function loadSessionExtras() {
  *  already has a membership, so this lands them straight in the app; a
  *  first-time one goes to fire-temple search. */
 export async function afterSignIn() {
+  if (isBehdin()) {
+    saveSession();
+    chrome(false);
+    return navigate("#/become", { replace: true });
+  }
   state.currentAgyaryId = state.user.agyaries[0] ? state.user.agyaries[0].id : null;
   await loadSessionExtras();
   chrome(true);

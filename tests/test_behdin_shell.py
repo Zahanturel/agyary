@@ -182,3 +182,20 @@ async def test_today_gives_the_parsi_date_to_any_signed_in_person(client):
     assert body["gregorian_date"] and body["calendar"] == "shenshai"
     assert body["roj_name"] and body["mah_name"] and body["year"]
     assert (await client.get("/api/behdin/today")).status_code == 401
+
+
+def test_mobed_diary_has_a_page_for_a_behdins_account_and_its_worker_keeps_the_other_apps_cache():
+    mobed = STATIC / "mobed" / "js"
+    main = (mobed / "main.js").read_text(encoding="utf-8")
+    # The refusal of a behdin's account must reach the page, not blank the app or send it round in circles.
+    assert 'route("#/become", renderBecomeMobed)' in main
+    assert 'e.status === 403 && e.kind === "behdin"' in main
+    assert 'if (isBehdin()) return matched.pattern === "#/become"' in main
+    session = (mobed / "session.js").read_text(encoding="utf-8")
+    assert 'if (isBehdin()) return "#/become";' in session
+    assert "err.kind = kind;" in (mobed / "api.js").read_text(encoding="utf-8")
+    assert '"/auth/become-mobed"' in (mobed / "api.js").read_text(encoding="utf-8")
+    worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
+    assert 'k.startsWith("mobed-shell-") && k !== CACHE_NAME' in worker
+    assert 'CACHE_NAME = "mobed-shell-v101"' in worker
+    assert "/mobed-app/js/screens/become_mobed.js" in worker

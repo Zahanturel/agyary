@@ -17,7 +17,7 @@
 // Leaflet (/mobed-app/vendor/leaflet/) is not in the shell: it is loaded only
 // when a screen shows a map, and a map needs the network for its tiles anyway.
 // Offline, the picker says the map could not load.
-const CACHE_NAME = "mobed-shell-v100";
+const CACHE_NAME = "mobed-shell-v101";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -55,6 +55,7 @@ const SHELL_FILES = [
   "/mobed-app/js/requests_count.js",
   "/mobed-app/js/acting.js",
   "/mobed-app/js/screens/login.js",
+  "/mobed-app/js/screens/become_mobed.js",
   "/mobed-app/js/screens/onboarding.js",
   "/mobed-app/js/screens/calendar.js",
   "/mobed-app/js/screens/event.js",
@@ -95,7 +96,8 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      // Only this app's own old shells: the behdin app may live on the same origin, and its cache is not ours to delete.
+      Promise.all(keys.filter(k => k.startsWith("mobed-shell-") && k !== CACHE_NAME).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();

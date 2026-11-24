@@ -21,9 +21,10 @@ import { tryRefresh, getMe, managerPlace, REFRESH_OFFLINE } from "./api.js";
 import {
   chrome, refreshHeader, menuBtn, setDefaultFabAction, onTab, paintOffline, flashError, flashInfo,
 } from "./ui.js";
-import { loadSessionExtras, signedIn, hasAccess, isFuneralManager, homeFor } from "./session.js";
+import { loadSessionExtras, signedIn, hasAccess, isFuneralManager, isBehdin, homeFor } from "./session.js";
 import { renderLogin } from "./screens/login.js";
 import { renderOnboarding } from "./screens/onboarding.js";
+import { renderBecomeMobed } from "./screens/become_mobed.js";
 import { renderCalendarScreen } from "./screens/calendar.js";
 import { renderNewEvent, renderEditEvent } from "./screens/event.js";
 import { renderNewMachi, renderEditMachi } from "./screens/machi_event.js";
@@ -55,6 +56,8 @@ import { paintActBanner } from "./acting.js";
 // `open: true` needs no session.
 route("#/login", renderLogin, { open: true });
 route("#/onboarding", renderOnboarding);
+// A behdin's account (the Parsi app's) that signed in here: the one page, which offers to make it a mobed's.
+route("#/become", renderBecomeMobed);
 // A mobed an admin has not let in yet, or has switched off (DECISIONS D9).
 route("#/waiting", renderWaiting);
 
@@ -183,6 +186,11 @@ async function guardFor(matched, params) {
   }
   if (!signedIn()) return "#/login";
 
+  // A behdin's account (R4.0): this one page, whatever was asked for. Asking to be a mobed there
+  // changes the account's kind, and then the rest of the guard applies as for any new mobed.
+  if (isBehdin()) return matched.pattern === "#/become" ? null : "#/become";
+  if (matched.pattern === "#/become") return homeFor();
+
   // A Doongerwadi manager (D10): the waiting screen until approved (D9), then
   // only their own screens. Settings is theirs too. Anything else typed or
   // linked goes to their home, saying why unless it was only the app's default.
@@ -220,6 +228,7 @@ menuBtn.onclick = () => navigate("#/menu");
   const home = () => {
     if (!state.user || !state.accessToken) return;
     if (state.user.account_kind === "funeral_manager") return navigate("#/manager");
+    if (isBehdin()) return navigate("#/become");
     navigate(state.calendarView === "machi" ? boardHash(state.calendar) : calendarHash(state.calendar));
   };
   title.setAttribute("role", "link");
@@ -286,8 +295,15 @@ async function boot() {
       chrome(true);
       refreshHeader();
     } catch (e) {
-      state.accessToken = null;
-      state.user = null;
+      if (e.status === 403 && e.kind === "behdin") {
+        // Signed in, with a behdin's account: kept, and sent to its own page rather than back to sign-in.
+        state.user = { account_kind: "behdin", name: "", agyaries: [] };
+        saveSession();
+        chrome(false);
+      } else {
+        state.accessToken = null;
+        state.user = null;
+      }
     }
   } else if (refreshed === REFRESH_OFFLINE) {
     // No network - which says nothing about whether the session is good.
@@ -310,7 +326,7 @@ async function boot() {
   }
   await start();
   // What a mobed must not miss goes in front of them as the app opens.
-  if (signedIn() && !state.offline && hasAccess()) refreshNotifications({ popup: true });
+  if (signedIn() && !state.offline && hasAccess() && !isBehdin()) refreshNotifications({ popup: true });
   refreshRequestCount();
 }
 
@@ -342,7 +358,7 @@ window.addEventListener("mobed:access", (e) => {
 // was showing part of the mobed app: to their own screen, which is all they have.
 window.addEventListener("mobed:account-kind", (e) => {
   if (!state.user) return;
-  if (state.user.account_kind === e.detail && location.hash.startsWith("#/manager")) return;
+  if (state.user.account_kind === e.detail && location.hash.startsWith(e.detail === "behdin" ? "#/become" : "#/manager")) return;
   state.user.account_kind = e.detail;
   saveSession();
   navigate(homeFor(), { replace: true });

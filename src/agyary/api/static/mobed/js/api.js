@@ -86,7 +86,10 @@ export async function api(path, opts = {}) {
       // handlers return.
       if (typeof body.detail === "string") detail = body.detail;
     } catch (e) { /* non-JSON body; the plain sentence it is */ }
-    throw new ApiError(res.status, detail, res.headers.get("X-Field"));
+    const err = new ApiError(res.status, detail, res.headers.get("X-Field"));
+    // Which kind of account the server says this is, when it refused it (a behdin's, a manager's).
+    err.kind = kind;
+    throw err;
   }
   return res.status === 204 ? null : res.json();
 }
@@ -204,6 +207,8 @@ export const deleteMyAccount = () => post("/auth/account/delete", { confirm: tru
 export const adminSignOutEverywhere = (phone) => post("/admin/sign-out-everywhere", { phone });
 export const adminEraseNumber = (phone, confirm) => post("/admin/erase-number", { phone, confirm });
 export const getMe = () => get("/auth/me");
+/** A behdin (the Parsi app's account) asks to be a mobed: the account waits for approval. Returns the mobed's own record. */
+export const becomeMobed = () => post("/auth/become-mobed", {});
 export const updateMyName = (name) => patch("/auth/me", { name });
 
 /** The evening-before report on or off, for this mobed. */
