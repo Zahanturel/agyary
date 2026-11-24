@@ -502,3 +502,17 @@ A request whose manager's account or target place is no longer in use cannot be 
 told what was decided, in the app and by phone ("The admin has not moved you to <place>" when declined).
 Requests are kept as the record of who moved and when (`place_change_requests`) and go with the manager's
 account when it is deleted.
+
+## Amendment, 25 Nov 2026: the behdin app's identity (D9, D10)
+
+Owner's answers for R4.0 (design: [behdin-r4-0-design.md](behdin-r4-0-design.md)):
+
+- One number is never both a mobed and a Doongerwadi manager (unchanged). Every account is also a behdin; the
+  new `account_kind` value `behdin` is an ordinary person and needs no approval; mobed and manager still need the
+  admin's approval (D9).
+- Two separate apps, one sign-in: no role switch inside an app, an "Open the other app" link in each menu for a
+  person who holds that role.
+- The behdin app is named **Parsi** for now, at **parsi.gotiadarian.com** (served at `/behdin` on any host); its
+  first screen is a home (today's Parsi date, next prayer or memorial, answers, notices) with the calendar as a tab.
+  Name and icon may change later.
+- Joining the behdin app is open: no approval, no sign-up caps, whatever SIGNUP_MODE says (it governs the mobed app).
