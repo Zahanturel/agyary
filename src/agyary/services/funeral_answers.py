@@ -212,7 +212,7 @@ def family_message(record: FuneralRecord, place: FuneralPlace, agyary: Agyary, m
     family but who is not praying themselves (R3.1 step 7): the agyari was
     asked, and they will pray. Without it - a mobed going, a panthaky who
     prays, the one who accepted the old way - it is "asked me"."""
-    departed = funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
+    departed = funeral_records.prayed_name(record.departed_title, record.departed_name, None)   # WhatsApp: own name only
     intro = [f"I am {mobed.name} of {agyary.name}."]
     if going is None:
         asked = [f"{place.name} has asked me to perform the prayers for {departed}."]

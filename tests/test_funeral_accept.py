@@ -171,10 +171,10 @@ async def test_one_accepted_the_old_way_reads_as_before_and_its_book_is_the_acce
     day = lambda d: f"{d:%a} {d:%d/%m/%Y}"   # noqa: E731
     assert req["family_message"] == (
         f"Sahebji Test,\n\nI am Er. Hormuz Dadachanji of {req['agyari']['name']}.\n\n"
-        "Doongerwadi (test) has asked me to perform the prayers for Behdin Rustom Jamshed.\n\n"
+        "Doongerwadi (test) has asked me to perform the prayers for Behdin Rustom.\n\n"
         f"*Geh-saarnu:* {day(today)}, Havan geh\n*Uthamna:* {day(today + timedelta(days=2))}, 4:00 pm\n\n"
         "Please call or message me here for anything you need.\n\n"
-        "May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
+        "May the ruvan of the late Behdin Rustom attain Garothman Behesht.")
     assert_laid_out(req["family_message"])
     assert req["memorial_prefill"] == {
         "name": "Behdin Rustom Jamshed", "calendar": "shenshai", "deathBy": "date",

@@ -546,6 +546,7 @@ async def test_the_first_standby_is_asked_again_with_a_fresh_token_and_the_panth
     assert second.reask_token and second.reask_token != first_token and len(second.reask_token) >= 20
     (asked,) = [m for m in _reasks(meta, SECOND) if second.reask_token in json.dumps(m)]
     assert _payloads(asked) == [f"pca:{second.reask_token}:y", f"pca:{second.reask_token}:n"]
+    assert [p["text"] for p in asked["template"]["components"][0]["parameters"]][1] == "Behdin Rustom"   # own name only
     assert len(_reasks(meta, THIRD)) == 1      # only the call-out at Send
     _no_family(json.dumps(asked))
 

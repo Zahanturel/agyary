@@ -325,7 +325,7 @@ async def _send_reask(db: AsyncSession, settings: Settings, request: FuneralRequ
         # The call-out's own words (template 4 v2), with the re-ask's buttons.
         send = fw.Send(
             kind=fw.TYPE_CALLOUT, phone=row.phone, agyary_id=agyary.id,
-            params=[agyary.name, departed, place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record), asker],
+            params=[agyary.name, fw.departed_wa(record), place.name, fw.geh_saarnu_text(record), fw.uthamna_text(record), asker],
             quick_replies=(f"{pc.PAYLOAD_PREFIX}{row.reask_token}:y", f"{pc.PAYLOAD_PREFIX}{row.reask_token}:n"),
             refs={"request": request.id, "answer": row.id, "reask": "1"},
             names=pc._names(record, place, agyary, asker, asker_max), why_not=why, **pc._to(row))
