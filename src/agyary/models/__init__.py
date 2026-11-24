@@ -19,6 +19,7 @@ from agyary.models.machi import Machi
 from agyary.models.memorial import Memorial, MemorialObservance, MemorialObservanceService
 from agyary.models.notification import Notification
 from agyary.models.payment import Payment
+from agyary.models.place_change import PlaceChangeRequest
 from agyary.models.prayer_callout import AgyaryMobedContact, PrayerCallout, PrayerCalloutAnswer
 from agyary.models.person_name import PersonName
 from agyary.models.preferences import UserPreferences
@@ -57,6 +58,7 @@ __all__ = [
     "Notification",
     "Payment",
     "PersonName",
+    "PlaceChangeRequest",
     "PrayerCallout",
     "PrayerCalloutAnswer",
     "PushSubscription",

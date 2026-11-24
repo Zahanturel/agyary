@@ -63,6 +63,10 @@ FUNERAL_PLACE_KINDS = (FUNERAL_DOONGERWADI, FUNERAL_PRAYER_HALL, FUNERAL_ARAMGAH
 # What a person is at their funeral place. Only "manager" for now; staff later.
 FUNERAL_MANAGER = "manager"
 FUNERAL_PLACE_ROLES = (FUNERAL_MANAGER,)
+# A manager's request to move to another place (owner, 24 Nov 2026): the manager
+# asks, the admin approves; nothing changes until then.
+CHANGE_PENDING, CHANGE_APPROVED, CHANGE_DECLINED, CHANGE_CANCELLED = "pending", "approved", "declined", "cancelled"
+PLACE_CHANGE_STATUSES = (CHANGE_PENDING, CHANGE_APPROVED, CHANGE_DECLINED, CHANGE_CANCELLED)
 # A death recorded at a funeral place (D10, Phase 2 Step 4). The title the
 # departed is prayed with: the name titles of the rest of the app, Khud too
 # (owner, 19 Nov 2026). Four days or one day of obsequies. How the death was

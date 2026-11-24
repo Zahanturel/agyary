@@ -198,6 +198,8 @@ async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = N
     await db.execute(delete(FuneralBehdin).where(FuneralBehdin.phone == phone))
     # The departed's names kept for this person's number (D12): the whole pool goes.
     await db.execute(delete(PersonName).where(PersonName.phone == phone))
+    # (A manager's request to move to another place holds no number, only their account: it goes
+    # with the account, services/account.py.)
     # A fire temple's list of mobeds, if a panthaky added the number by hand (D10).
     await _erase_mobed_contact(db, phone)
     for owner in {owner for _i, owner in rows if owner is not None}:

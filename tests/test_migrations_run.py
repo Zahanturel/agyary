@@ -1027,3 +1027,38 @@ async def test_the_person_names_migration_holds_its_rules_and_comes_off_cleanly(
         _ok(_alembic("upgrade", "head"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_place_change_migration_holds_its_rules_and_comes_off_cleanly():
+    """b2c3d4e5f6a0 (owner, 24 Nov 2026): a manager's request to move holds a known status, at most
+    one is pending per manager, a decided one does not count against that, and the downgrade
+    takes the table off without touching the places or the manager."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        await _scratch_execute("INSERT INTO users (name, phone) VALUES ('Manager (test)', '+919000000011')")
+        for n in ("Old place (test)", "New place (test)"):
+            await _scratch_execute(
+                "INSERT INTO funeral_places (name, kind, city) VALUES (:n, 'doongerwadi', 'Mumbai')", {"n": n})
+        (user,), = await _scratch_execute("SELECT id FROM users")
+        (old,), (new,) = await _scratch_execute("SELECT id FROM funeral_places ORDER BY id")
+        add = ("INSERT INTO place_change_requests (user_id, from_place_id, to_place_id, status)"
+               " VALUES (:u, :f, :t, :s)")
+        args = {"u": user, "f": old, "t": new}
+        await _scratch_execute(add, {**args, "s": "declined"})
+        await _scratch_execute(add, {**args, "s": "pending"})
+        await _refused(add, {**args, "s": "pending"}, "a second pending request for the same manager", "unique")
+        await _refused(add, {**args, "s": "maybe"}, "an unknown status")
+        await _scratch_execute(add, {**args, "s": "cancelled"})   # decided ones are not limited
+        names = await _scratch_execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'place_change_requests'::regclass")
+        assert {"ck_place_change_requests_status", "fk_place_change_requests_user_id_users",
+                "fk_place_change_requests_decided_by_user_id_users"} <= {n for (n,) in names}
+        _ok(_alembic("downgrade", "a1b2c3d4e5f9"))
+        tables = {t for (t,) in await _scratch_execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
+        assert "place_change_requests" not in tables
+        assert len(await _scratch_execute("SELECT id FROM funeral_places")) == 2
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)
