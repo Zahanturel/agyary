@@ -475,9 +475,10 @@ async def test_each_reminder_carries_its_wording_and_a_whatsapp_link(client, db,
     text = item["message"]
     agyary_name = (await db.execute(select(Agyary.name).where(Agyary.id == aid))).scalar_one()
     # The owner's words (D11, 23 Nov 2026): the behdin by their own name, the mobed and the fire temple.
-    assert text.startswith(f"Sahebji Behdin Memorial, a reminder from New Mobed of {agyary_name}:\n\n")
-    assert text.splitlines()[2] == "Afringan and Baaj for Dinshaw"
-    assert text.splitlines()[3].startswith("Tomorrow, ") and "(Roj " in text
+    # The family by first name only, in lines (owner, 24 Nov 2026).
+    assert text.startswith(f"Sahebji Memorial,\n\nA reminder from New Mobed of {agyary_name}:\n\n")
+    assert text.splitlines()[4] == "*Prayers:* Afringan and Baaj for Dinshaw"
+    assert text.splitlines()[5].startswith("*When:* Tomorrow, ") and "(Roj " in text
     assert text.endswith("\n\nMay the ruvan of the late Dinshaw attain Garothman Behesht.")
     # It already is booked: nothing asks the family to arrange or reply.
     assert "arrange" not in text and "reply" not in text and "observance" not in text.lower()

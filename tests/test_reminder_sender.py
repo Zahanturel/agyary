@@ -121,10 +121,11 @@ async def test_on_template_v2_the_reminder_is_planned_with_its_own_six_blanks(cl
     [n] = await _rows(db)
     assert n.template_name == "memorial_reminder_v3"
     params = [n.template_params[k] for k in sorted(n.template_params, key=int)]
-    assert params[:4] == ["Delzeen Test", "Goti Adarian", "Afringan and Baaj", "Ardeshir Mehta"]
+    # The family by first name only (owner, 24 Nov 2026).
+    assert params[:4] == ["Delzeen", "Goti Adarian", "Afringan and Baaj", "Ardeshir Mehta"]
     assert "(Roj " in params[4] and len(params) == 5
     assert reminder_message.render(reminder_message.TEMPLATE_V2_BODY, params).startswith(
-        "Sahebji Delzeen Test,\n\nA reminder from Goti Adarian:\nAfringan and Baaj for Ardeshir Mehta on ")
+        "Sahebji Delzeen,\n\nA reminder from Goti Adarian:\nAfringan and Baaj for Ardeshir Mehta on ")
 
 
 async def test_planning_twice_plans_once(client, db, seeded):
