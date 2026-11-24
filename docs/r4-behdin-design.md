@@ -1,5 +1,8 @@
 # R4: the behdin (family) side. Design draft
 
+> **25 Nov 2026: superseded in framing by [behdin-app-plan.md](behdin-app-plan.md)** (a separate app for everyone, one person per number with roles, no approval, a chat with the panthaky). Keep this document for its research and risk notes only; its 20 questions are answered there or no longer apply.
+
+
 **Draft, 22 Nov 2026. Nothing is decided and nothing is built.** It gives the choices, a
 recommendation for each, and the questions for the owner (section 10), in rounds of up to four.
 Once answered, the answers go into `docs/DECISIONS.md`, mockups are made (section 9), and the
