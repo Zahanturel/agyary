@@ -52,6 +52,11 @@ What it contains:
   (off); 1-3 are no longer sent. The owner submits 4 v2 and 5-8 (step 8,
   [phase2-whatsapp-templates.md](phase2-whatsapp-templates.md)); sending stays off until they
   are approved.
+- WhatsApp texts, 24 Nov 2026 (owner, after the first real test): every prayer request is also asked on
+  WhatsApp of each confirmed panthaky (same template and buttons; their "I can pray" is the board's "I'll
+  pray", one yes); the details message never names another person as a panthaky's contact (the fire
+  temple's name instead); the departed is named by title and own name only in WhatsApp texts (the app
+  keeps the father's or husband's name). Built, not yet pushed or deployed.
 
 Migrations added by R3.1, in order (each with a working downgrade, proved by
 `tests/test_migrations_run.py`; the deploy runs them before the new version serves):

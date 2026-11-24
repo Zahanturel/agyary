@@ -56,6 +56,13 @@ first, app or WhatsApp, counts; the other then reads as already answered. In "Co
 they get nothing until the panthaky asks everyone (or the safety net does). Their card shows no
 family details until All set.
 
+**The panthaky is asked on WhatsApp too** (owner, 24 Nov 2026, after the first real test): every
+confirmed panthaky of the agyari (access on, not STOPped, on the allowlist like anyone) gets the same
+template 4 with the same buttons, at the moment they are told in the app: in "Everyone at once" with
+the mobeds; in "Come to me first" at once, and only they. **I can pray** there is their "I'll pray" on
+the board (the same row, so a board tap and a WhatsApp tap by them are one yes; it takes the request);
+**Not this time** is a no. A repeat tap, or Meta delivering twice, changes nothing.
+
 **No answer for an hour** (owner, third round): if nobody at the agyari has done anything with a
 request for 1 hour after it was sent, the Doongerwadi is told in the app and on their phone "No
 answer yet from <agyari>", with **Send to another agyari** on the record. The request stays open
@@ -171,7 +178,10 @@ entered for that person (services/phone.py), never from free text.
 Owner's word review (23 Nov 2026, D11): 5, 6 and 8 say "For anything else, please contact
 **[contact]**": the panthaky with their number, or with no confirmed panthaky in the app, the
 first mobed going with their number (in 6 sent to that first mobed, the next mobed going, else the
-fire temple's own name with no number). 5 was to end "May the ruvan of the late [departed] ...";
+fire temple's own name with no number). Sent to a panthaky of the agyari (6, and 5 or 8 where the
+number is theirs) no other person is named, only the fire temple's own name (owner, 24 Nov 2026).
+In every WhatsApp text the departed is named by title and own name only, "Osti Aban", without the
+father's or husband's name (owner, 24 Nov 2026); the app keeps both. 5 was to end "May the ruvan of the late [departed] ...";
 dropped the same day because Meta's form classed it as Marketing (DECISIONS D11), so 5 ends
 "Please contact [contact] for anything else."
 

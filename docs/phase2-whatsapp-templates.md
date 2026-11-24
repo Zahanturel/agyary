@@ -77,9 +77,12 @@ Quick-reply buttons, **in this order**: **Yes, I can pray** / **Not this time** 
 first button as yes and the second as no).
 
 Who gets it: the agyari's approved mobeds in the app whose access is on, and the mobeds the
-panthaky added by hand with the tick that they agreed to get these messages; not its confirmed
-panthakys, not whoever sent the request; never a number that replied STOP. Each is asked once per
-request.
+panthaky added by hand with the tick that they agreed to get these messages, and (owner, 24 Nov
+2026) its confirmed panthakys too, with the same template and buttons, at the moment they are told
+in the app (in Come to me first at Send, only they); never a number that replied STOP. Each is asked
+once per request. A panthaky's "Yes, I can pray" is their "I'll pray" on the board (the same row:
+one yes, it takes the request); "Not this time" is a no. {{2}} here and in every WhatsApp text is
+the departed by title and own name only ("Osti Aban"), never with the father's or husband's name.
 
 When: at Send, if the agyari's way is **Everyone at once**; when the panthaky taps **Ask everyone**
 on the board; when the **safety net** fires in **Come to me first**; and to a mobed on the
@@ -217,6 +220,9 @@ panthaky's name and number, or with no confirmed panthaky in the app, the first 
 and number). In template 6 sent to that first mobed, they are not named as their own contact: the
 next mobed going, or with nobody else going, the fire temple's own name (no number). The drafts
 above and the code (services/funeral_whatsapp.py, `contact_people`) say so.
+
+Sent to a confirmed panthaky of the agyari, the contact names no other person (owner, 24 Nov 2026:
+it named a mobed who was not the panthaky): the fire temple's own name, the same fallback.
 
 ### When to switch on
 
