@@ -222,7 +222,9 @@ next mobed going, or with nobody else going, the fire temple's own name (no numb
 above and the code (services/funeral_whatsapp.py, `contact_people`) say so.
 
 Sent to a confirmed panthaky of the agyari, the contact names no other person (owner, 24 Nov 2026:
-it named a mobed who was not the panthaky): the fire temple's own name, the same fallback.
+it named a mobed who was not the panthaky): the fire temple's own name, the same fallback. Not for
+template 5: the family always gets the panthaky with their number, even when its number is the
+panthaky's own (owner, 24 Nov 2026).
 
 ### When to switch on
 

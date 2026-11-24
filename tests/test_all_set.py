@@ -782,9 +782,9 @@ def test_template_6_never_names_the_mobed_it_goes_to_as_their_own_contact():
 
 def test_the_contact_line_to_a_panthaky_names_no_other_person_in_5_6_and_8():
     """The first real test (24 Nov 2026): template 6 to the panthaky named another mobed. To a
-    confirmed panthaky - as the mobed going, or as the family's number, or as the place's
-    manager (one phone, many roles) - the contact is the fire temple's own name; to anyone
-    else it is still the panthaky."""
+    confirmed panthaky - as the mobed going, or as the place's manager (one phone, many roles)
+    - the contact is the fire temple's own name; to anyone else it is still the panthaky. The
+    family message is the exception: always the panthaky with number, even on the same phone."""
     head = fw.Person("Er. Head", "+919800000001")
     first = fw.Person("Er. First", "+919800000002")
     record = SimpleNamespace(id=1, departed_title="behdin", departed_name="Rustom", departed_parent_name="Jamshed",
@@ -812,7 +812,9 @@ def test_the_contact_line_to_a_panthaky_names_no_other_person_in_5_6_and_8():
         want = "Goti Adarian" if who == head.phone else "Er. Head (+91 9800000001)"
         assert send.params[3] == want
     record.family_contact_phone = head.phone
-    assert fw.all_set_family_send(record, agyary, going=[first], panthakys=[head], refs={}).params[5] == "Goti Adarian"
+    # The family is always given the panthaky with their number, even when its number is theirs.
+    fam = fw.all_set_family_send(record, agyary, going=[first], panthakys=[head], refs={})
+    assert fam.params[5] == "Er. Head (+91 9800000001)" and fam.recorded[6] == "Er. Head ([number])"
     record.family_contact_phone = "+919800000009"
     assert fw.all_set_family_send(record, agyary, going=[first], panthakys=[head], refs={}).params[5] ==         "Er. Head (+91 9800000001)"
 

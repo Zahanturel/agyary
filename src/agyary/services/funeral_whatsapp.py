@@ -606,7 +606,9 @@ def contact_people(panthakys: list[Person], going: list[Person], *, to: str | No
     being a number of the request's panthakys) no other person is named
     (owner, 24 Nov 2026: it named a mobed who is not the panthaky): the fire
     temple's own name, the same fallback. ``other_than`` is the number a
-    template 5 or 8 goes to, which has only this check."""
+    template 8 goes to, which has only this check. Template 5 (the family) never
+    uses it: the family is always given the panthaky with their number, even when
+    the family's number is the panthaky's own (owner, 24 Nov 2026)."""
     mine = to or other_than
     if to_panthaky or (mine is not None and any(p.phone == mine for p in panthakys)):
         return [Person(fire_temple)] if fire_temple else []
@@ -659,8 +661,9 @@ def all_set_family_send(record: FuneralRecord, agyary: Agyary, *, going: list[Pe
     Garothman Behesht." would be rejected (owner, 23 Nov 2026: drop it here only;
     the family's wa.me message, the app and the PDF keep it)."""
     mobeds, mobeds_kept = people_blank(going)
-    contact, contact_kept = people_blank(contact_people(panthakys, going, fire_temple=agyary.name,
-                                                         other_than=record.family_contact_phone))
+    # Always the panthaky with their number, even when the family's number is the panthaky's own
+    # (owner, 24 Nov 2026: "we provide the panthaky's phone number there, the panthaky's only").
+    contact, contact_kept = people_blank(contact_people(panthakys, going, fire_temple=agyary.name))
     return Send(
         kind=TYPE_ALL_SET_FAMILY, phone=record.family_contact_phone, recipient_type="family", recipient_id=record.id,
         agyary_id=agyary.id,

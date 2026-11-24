@@ -471,3 +471,7 @@ Owner's decisions:
   variables and free-text messages, not to what a mobed reads inside the app.
 - **"For anything else, please contact ..."** (the details message): when the message goes to the panthaky, no other
   mobed is named (it named Delzeen, who is not the panthaky); it falls back to the fire temple's own name.
+- **The family is always given the panthaky's name and number** (24 Nov 2026, same day): in template 5 "Please
+  contact ..." and in the details message to a mobed going, the contact is the confirmed panthaky with their number,
+  never another mobed and never only the fire temple's name, even when the family's number is the panthaky's own.
+  The fire temple's name stays only where the details message goes to the panthaky themselves.

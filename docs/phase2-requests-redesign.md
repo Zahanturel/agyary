@@ -178,8 +178,10 @@ entered for that person (services/phone.py), never from free text.
 Owner's word review (23 Nov 2026, D11): 5, 6 and 8 say "For anything else, please contact
 **[contact]**": the panthaky with their number, or with no confirmed panthaky in the app, the
 first mobed going with their number (in 6 sent to that first mobed, the next mobed going, else the
-fire temple's own name with no number). Sent to a panthaky of the agyari (6, and 5 or 8 where the
+fire temple's own name with no number). Sent to a panthaky of the agyari (6, and 8 where the
 number is theirs) no other person is named, only the fire temple's own name (owner, 24 Nov 2026).
+The FAMILY (5) is always given the confirmed panthaky with their number, even when the family's
+number is the panthaky's own, never the fire temple's name alone (owner, 24 Nov 2026).
 In every WhatsApp text the departed is named by title and own name only, "Osti Aban", without the
 father's or husband's name (owner, 24 Nov 2026); the app keeps both. 5 was to end "May the ruvan of the late [departed] ...";
 dropped the same day because Meta's form classed it as Marketing (DECISIONS D11), so 5 ends
