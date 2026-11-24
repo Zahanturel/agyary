@@ -153,6 +153,13 @@ the test ones afterwards.
 18. **Withdraw:** as the Doongerwadi, **Withdraw** a waiting request. [ ] The panthaky's board says
     it was withdrawn and nothing more can be done; the mobeds asked are told in the app.
 
+19. **Asking to change place:** as a Doongerwadi manager, Settings -> **My place** -> **Ask to change my
+    place**, choose another place, **Send request**. [ ] It says **Waiting for the admin**, and a second
+    request is refused until you **Take back the request**. As the admin, [ ] you are told in the app and on
+    the phone, and Admin -> Doongerwadis shows **Place change requests**. **Approve** it: [ ] the manager is
+    told, their next screen shows the new place, and the old place's deaths no longer show for them (they
+    stay at the old place). **Decline** another: [ ] "The admin has not moved you to ..." and nothing changes.
+
 Tell me afterwards which test records to remove.
 
 ## Still for you on the server / Meta
@@ -170,7 +177,7 @@ Tell me afterwards which test records to remove.
 
 - **R3.1 step 8:** the templates submitted and approved, then a live test with your own numbers.
 - A real-phone check of notifications; a security pass over everything new.
-- **Small follow-ups:** a manager cannot change their place in the app. Done 22 Nov 2026 (built,
+- **Small follow-ups:** a manager cannot change their place in the app (now: they ask, the admin approves, 24 Nov 2026). Done 22 Nov 2026 (built,
   not live yet): the sign-up name screen no longer says "slips" to managers; sign-up dates in India
   time; the bell and the Requests count refresh after acting on a request.
 - **Before real deaths at scale:** the lawyer's question on the departed's data (research doc).

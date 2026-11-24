@@ -16,6 +16,14 @@ file refers to them by role.
 
 ---
 
+## 0a. Place change requests (24 Nov 2026, built, not live)
+
+A Doongerwadi manager asks to move to another place and the admin approves (DECISIONS, amendment of 24 Nov 2026).
+Table `place_change_requests` (migration b2c3d4e5f6a0, one pending per manager); service
+`services/place_change.py`; manager routes `/api/mobed/manager/place-change` (and `/places`); admin routes
+`/api/mobed/admin/place-changes`; Settings -> My place, and a card on the admin Doongerwadis page. Tests:
+`tests/test_place_change.py`. Not committed to the server: a push needs the owner's yes.
+
 ## 0. Latest: R3.1 built, not live (22 Nov 2026)
 
 Phase 2 (the Doongerwadi side, D10) is live up to the 19 Nov 2026 changes, app version

@@ -487,3 +487,18 @@ Owner's decisions:
   panthaky is changed or removed by the admin, not by a panthaky. (4) Erasing a number or deleting an account reopens
   a place they held (before the prayers begin) as "Can't go" does, telling the panthaky without naming them; this
   replaces "erasing a number does not free a place they held".
+
+## Amendment, 24 Nov 2026: a manager asks to change their place, the admin approves (D2, D8, D10)
+
+A Doongerwadi manager cannot change their place themselves; **the manager asks, the admin approves**, and
+nothing changes until then, because a place's family records are private (D2, D10). In the manager's Settings,
+"My place" has **Ask to change my place** (the places in use except their own, searchable), and while it waits
+it says "Waiting for the admin: <place>" with **Take back the request**. One request waits at a time. The
+admin's Doongerwadis page has **Place change requests**: manager, from place to place, **Approve** or
+**Decline**; the admins are told when a request is made, in the app and by phone, like a panthaky claim.
+Approving, in one step, turns the manager's link to the old place off and gives them the new one: the old
+place's records stay with the old place and the manager no longer sees them; nothing is copied or deleted (D8).
+A request whose manager's account or target place is no longer in use cannot be approved. The manager is
+told what was decided, in the app and by phone ("The admin has not moved you to <place>" when declined).
+Requests are kept as the record of who moved and when (`place_change_requests`) and go with the manager's
+account when it is deleted.

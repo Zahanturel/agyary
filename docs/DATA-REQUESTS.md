@@ -49,6 +49,9 @@ family still expects them.
   10 deploys. Their copy of the family ages out; nothing else needs doing. If a backup is ever
   restored within that time, run the erase again.
 - **In-app notices** that mention the family expire within 7 days.
+- **A manager's request to change place** (`place_change_requests`) holds no family's name or number,
+  only the manager's account and two places. It goes when the manager's account is deleted, not when a
+  number is erased.
 - **Meta.** WhatsApp keeps its own records of messages it delivered, under Meta's policy.
 
 Say so in your reply.
