@@ -99,7 +99,8 @@ async def test_get_returns_only_the_callers_own_number_newest_first(client, db, 
 
 
 def test_the_only_route_that_reads_the_pool_takes_no_phone():
-    assert {c for c in _api_calls() if "person-names" in c[1]} == {("GET", MINE)}
+    # One per app (the behdin app's, R4.0, answers the same way: the signed-in number's own pool, no phone taken).
+    assert {c for c in _api_calls() if "person-names" in c[1]} == {("GET", MINE), ("GET", "/api/behdin/me/person-names")}
 
 
 async def test_a_pair_copies_on_top_once_and_only_whole_pairs(client, db, seeded):
