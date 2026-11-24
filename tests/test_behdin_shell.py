@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v3"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v4"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -250,3 +250,33 @@ def test_mobed_diarys_page_for_an_account_that_is_not_a_mobeds_never_names_the_p
         "This part of Mobed Diary is for mobeds. This number is not set up as a mobed's."
     )
 
+
+
+# --- R4.1: what a person keeps for themselves ------------------------------------------------------
+
+def test_the_agyari_screen_never_stores_logs_or_addresses_the_position():
+    code = _COMMENTS.sub("", (STATIC / "behdin" / "js" / "screens" / "agyari.js").read_text(encoding="utf-8"))
+    assert "navigator.geolocation.getCurrentPosition" in code
+    assert not re.search(r"localStorage|sessionStorage|indexedDB|console\.|document\.cookie", code)
+    api = (STATIC / "behdin" / "js" / "api.js").read_text(encoding="utf-8")
+    # The position is a body field of one POST, never part of an address.
+    assert 'post("/agyaries/nearby"' in api
+    assert not re.search(r"`/agyaries[^`]*(lat|lng)", api)
+
+
+def test_the_consent_words_are_shown_once_and_say_what_the_owner_wrote():
+    code = (STATIC / "behdin" / "js" / "consent.js").read_text(encoding="utf-8")
+    assert ("These dates are kept for you alone. Nobody else can see them. "
+            "You can delete them any time.") in code
+    assert "localStorage" in code and "dismissable: false" in code
+    # Both ways of adding something wait for it.
+    for name in ("event.js", "departed_form.js"):
+        assert "ensureConsent()" in (STATIC / "behdin" / "js" / "screens" / name).read_text(encoding="utf-8")
+
+
+def test_every_screen_of_the_calendar_work_has_its_route_and_the_new_one_comes_first():
+    main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
+    for pattern in ("#/agyari", "#/event/new", "#/event/:id", "#/departed/new", "#/departed/:id/edit", "#/departed/:id"):
+        assert f'route("{pattern}"' in main, pattern
+    assert main.index('route("#/event/new"') < main.index('route("#/event/:id"')
+    assert main.index('route("#/departed/new"') < main.index('route("#/departed/:id"')

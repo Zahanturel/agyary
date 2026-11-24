@@ -40,3 +40,43 @@ export function weekdayOf(ymd) {
   const [y, m, d] = ymd.split("-").map(Number);
   return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
 }
+
+export const MAH_NAMES = ["Fravardin", "Ardibehesht", "Khordad", "Tir", "Amardad", "Shahrevar",
+  "Meher", "Avan", "Adar", "Dae-Dadar", "Bahman", "Aspandard"];
+export const ROJ_NAMES = ["Hormazd", "Bahman", "Ardibehesht", "Shahrevar", "Aspandard", "Khordad",
+  "Amardad", "Dae-Pa-Adar", "Adar", "Avan", "Khorshed", "Mohor", "Tir", "Gosh",
+  "Dae-Pa-Meher", "Meher", "Sarosh", "Rashne", "Fravardin", "Behram", "Ram",
+  "Govad", "Dae-Pa-Din", "Din", "Ashishvangh", "Ashtad", "Asman", "Zamyad",
+  "Mareshpand", "Aneran"];
+export const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+  "October", "November", "December"];
+
+export function monthName(m) { return MONTHS[m - 1]; }
+
+/** "2026-11-25" from the parts (month 1 to 12). */
+export function ymdOf(y, m, d) { return `${y}-${two(m)}-${two(d)}`; }
+
+/** The same day moved by `n` days (calendar arithmetic only, no clock). */
+export function addDays(ymd, n) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return ymdOf(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+}
+
+/** A Parsi day as the calendar API gives it, in words: "Roj Hormazd, Mah Fravardin". */
+export function parsiWords(p) {
+  if (!p) return "";
+  if (p.is_gatha) return `${p.gatha_name || "Extra day"} (Gatha)`;
+  return `Roj ${p.roj_name}, Mah ${p.mah_name}`;
+}
+
+/** "Wednesday 25/11/2026". */
+export function longDay(ymd) { return `${weekdayOf(ymd)} ${gregShort(ymd)}`; }
+
+export const KIND_LABELS = { atash_behram: "Atash Behram", adaran: "Adaran", dadgah: "Dadgah" };
+export const EVENT_KINDS = [["birthday", "Birthday"], ["navjote", "Navjote"], ["anniversary", "Anniversary"], ["other", "Other"]];
+export function eventKindLabel(kind) {
+  const hit = EVENT_KINDS.find(([k]) => k === kind);
+  return hit ? hit[1] : "Event";
+}

@@ -8,6 +8,12 @@ export const state = {
   // True when we booted from the remembered session because the network was down: signed in, but
   // nothing server-backed will answer yet.
   offline: false,
+  // The month the calendar shows ("2026-11"), kept while the person moves between screens.
+  calMonth: null,
+  // A day chosen in the calendar for a new event to start on.
+  draftDate: null,
+  // The Parsi calendar the person reads in ("shenshai" until Home has asked).
+  system: "shenshai",
 };
 
 // The refresh cookie is httpOnly, so the page cannot tell "my session is gone" from "I have no

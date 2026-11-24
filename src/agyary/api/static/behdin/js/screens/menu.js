@@ -8,6 +8,7 @@
 import { updateMyName, deleteMyAccount } from "../api.js";
 import { state, saveSession } from "../state.js";
 import { chrome, mainEl, setHeader, showError, showInfo, getTextSize, setTextSize } from "/mobed-app/js/ui.js";
+import { navigate } from "/mobed-app/js/router.js";
 import { flagProblems } from "/mobed-app/js/fielderrors.js";
 import { APP_NAME } from "../brand.js";
 import { esc } from "../util.js";
@@ -24,6 +25,12 @@ export function renderMenu() {
       <label for="mName">Name</label>
       <input type="text" id="mName" value="${esc(state.user.name)}" autocomplete="name">
       <div style="margin-top:10px"><button class="small" id="mSaveName">Save name</button></div>
+    </div>
+
+    <div class="card">
+      <h2>My agyari</h2>
+      <p class="meta">The agyari you have chosen, or choose one now.</p>
+      <button type="button" class="secondary" id="mAgyari" style="width:100%">My agyari</button>
     </div>
 
     <div class="card">
@@ -48,6 +55,7 @@ export function renderMenu() {
       <div id="mDeleteConfirm"></div>
     </div>`;
 
+  document.getElementById("mAgyari").onclick = () => navigate("#/agyari");
   paintInstall(document.getElementById("mInstall"));
   shellVersion().then((v) => {
     const el = document.getElementById("mVersion");

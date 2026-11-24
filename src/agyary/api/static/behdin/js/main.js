@@ -18,6 +18,10 @@ import { renderHome } from "./screens/home.js";
 import { renderCalendar } from "./screens/calendar.js";
 import { renderMenu } from "./screens/menu.js";
 import { renderOff } from "./screens/off.js";
+import { renderEvent } from "./screens/event.js";
+import { renderDeparted } from "./screens/departed.js";
+import { renderDepartedForm } from "./screens/departed_form.js";
+import { renderAgyari } from "./screens/agyari.js";
 
 // --- Routes -----------------------------------------------------------------
 // `open: true` needs no session. `tab` puts a screen under a bottom tab; `parent` is where Back goes.
@@ -26,6 +30,13 @@ route("#/off", renderOff);
 route("#/home", renderHome, { tab: "home" });
 route("#/calendar", renderCalendar, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/home" });
+route("#/agyari", renderAgyari, { parent: "#/home" });
+// "new" comes before the numbered one, which would otherwise take it.
+route("#/event/new", renderEvent, { parent: "#/calendar" });
+route("#/event/:id", renderEvent, { parent: "#/calendar" });
+route("#/departed/new", renderDepartedForm, { parent: "#/calendar" });
+route("#/departed/:id/edit", renderDepartedForm, { parent: (p) => `#/departed/${p.id}` });
+route("#/departed/:id", renderDeparted, { parent: "#/calendar" });
 
 setNotFound(() => navigate("#/home", { replace: true }));
 

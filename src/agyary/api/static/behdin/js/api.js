@@ -124,3 +124,23 @@ export const getMe = () => get("/me");
 export const updateMyName = (name) => patch("/me", { name });
 export const deleteMyAccount = () => del("/account", { confirm: true });
 export const getToday = () => get("/today");
+
+// R4.1: what a person keeps for themselves. The position for "Near me" goes in the body, never in a URL.
+export const agyariesNearby = (q, pos) => post("/agyaries/nearby", pos ? { q, lat: pos.lat, lng: pos.lng } : { q });
+export const getMyAgyari = () => get("/me/agyari");
+export const chooseAgyari = (id) => api("/me/agyari", { method: "PUT", body: JSON.stringify({ agyary_id: id }) });
+export const forgetAgyari = () => del("/me/agyari");
+export const getPersonNames = () => get("/me/person-names");
+export const getMyCalendar = (from, to) => get(`/me/calendar?from=${from}&to=${to}`);
+export const getMemorials = () => get("/me/memorials");
+export const getMemorial = (id) => get(`/me/memorials/${id}`);
+export const createMemorial = (body) => post("/me/memorials", body);
+export const reworkMemorial = (id, body) => patch(`/me/memorials/${id}`, body);
+export const deleteMemorial = (id) => del(`/me/memorials/${id}`);
+export const getMyEvents = () => get("/me/events");
+export const createEvent = (body) => post("/me/events", body);
+export const updateEvent = (id, body) => patch(`/me/events/${id}`, body);
+export const deleteEvent = (id) => del(`/me/events/${id}`);
+// The Parsi name of every day in a range, in one call (the same one the other calendar uses).
+export const parsiRange = (start, end, system) => get(`/../calendar/range?start=${start}&end=${end}&system=${system}`);
+export const convertDay = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);
