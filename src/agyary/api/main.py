@@ -211,7 +211,9 @@ def root(request: Request) -> Response:
     # when BEHDIN_HOST is empty, opens the mobed app as before.
     if _on_behdin_host(request):
         return _behdin_page()
-    return RedirectResponse(url="/mobed", status_code=307)
+    # Never kept by a browser or Cloudflare: a phone that kept this redirect would show the mobed app at the
+    # behdin app's address for hours after the hostname was set up.
+    return RedirectResponse(url="/mobed", status_code=307, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/mobed", include_in_schema=False)
@@ -290,6 +292,8 @@ def mobed_icon() -> FileResponse:
 # a transparent corner black, so that one is solid to the edge.
 _PNG_ICONS = frozenset({
     "mobed-icon-180.png", "mobed-icon-192.png", "mobed-icon-512.png", "mobed-icon-maskable-512.png",
+    # The behdin app's own (a placeholder flame until the owner chooses its icon).
+    "behdin-icon-180.png", "behdin-icon-192.png", "behdin-icon-512.png", "behdin-icon-maskable-512.png",
 })
 
 

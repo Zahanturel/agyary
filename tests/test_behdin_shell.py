@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v6"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v7"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -311,3 +311,17 @@ def test_the_bell_is_asked_on_focus_and_every_minute_and_the_page_has_one():
     assert "EVERY_MS = 60000" in code and "visibilitychange" in code and '"focus"' in code
     page = (STATIC / "behdin" / "index.html").read_text(encoding="utf-8")
     assert 'id="bellBtn"' in page and "bell-dot" in page
+
+
+async def test_the_parsi_app_has_its_own_icons_and_never_the_mobed_ones(client):
+    page = (await client.get("/behdin")).text
+    manifest = (await client.get("/behdin-manifest.json")).text
+    assert "mobed-icon" not in page and "mobed-icon" not in manifest
+    for name in ("behdin-icon-180.png", "behdin-icon-192.png", "behdin-icon-512.png", "behdin-icon-maskable-512.png"):
+        res = await client.get("/" + name)
+        assert res.status_code == 200 and res.headers["content-type"] == "image/png"
+
+
+async def test_the_redirect_from_the_root_is_never_kept_by_a_browser(client):
+    res = await client.get("/", follow_redirects=False)
+    assert res.status_code == 307 and res.headers["cache-control"] == "no-store"
