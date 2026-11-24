@@ -70,7 +70,7 @@ function draftFrom(rec) {
     contactName: rec.family_contact.name, contactPhone: rec.family_contact.phone,
     title: rec.departed_title, name: rec.departed_name || "", parent: rec.departed_parent_name || "",
     calendar: rec.death.calendar, deathBy: rec.death.given_by === "roj_mah" ? "parsi" : "date",
-    death: rec.death.date, deathTouched: true, deathRoj: String(rec.death.roj), deathMah: String(rec.death.mah),
+    death: (rec.death || {}).date || "", deathTouched: true, deathRoj: String((rec.death || {}).roj || ""), deathMah: String((rec.death || {}).mah || ""),
     obsequies: rec.obsequies,
     gsDate: rec.geh_saarnu ? rec.geh_saarnu.date : "", gsGeh: rec.geh_saarnu ? String(rec.geh_saarnu.geh) : "",
     utDate: rec.uthamna ? rec.uthamna.date : "", utTime: rec.uthamna && rec.uthamna.time ? rec.uthamna.time : "",

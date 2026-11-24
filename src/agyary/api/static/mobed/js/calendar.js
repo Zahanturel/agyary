@@ -67,18 +67,23 @@ export function applyCalendarRoute(view, { mode, date } = {}, root = "calendar")
  *  of events must be bounded by. */
 export async function viewRange(view, system) {
   if (view.mode === "day") return { days: [view.focus], from: view.focus, to: view.focus };
-  if (!view.parsiMonth) {
+  // A local copy of the month being drawn: another tap or route can clear view.parsiMonth while this
+  // awaits (the red "Cannot read properties of null (reading 'mah')", owner, 24 Nov 2026), so nothing
+  // below reads it again after an await.
+  let pm = view.parsiMonth;
+  if (!pm) {
     try {
       const p = await convertDate(view.focus, system);
-      view.parsiMonth = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
+      pm = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
     } catch (e) {
       const p = await convertDate(todayIst(), system);
-      view.parsiMonth = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
+      pm = { mah: p.is_gatha ? 13 : p.mah, year: p.year };
     }
+    view.parsiMonth = pm;
   }
-  const monthDays = await parsiMonthDays(view.parsiMonth.mah, view.parsiMonth.year, system);
+  const monthDays = await parsiMonthDays(pm.mah, pm.year, system);
   const days = monthDays.map(p => p.gregorian_date);
-  return { days, from: days[0], to: days[days.length - 1], monthDays };
+  return { days, from: days[0], to: days[days.length - 1], monthDays, parsiMonth: pm };
 }
 
 function chromeHtml(view, label, secondaryLabel, picker) {
@@ -303,7 +308,7 @@ export async function renderCalendar(container, opts) {
   }
 
   const label = view.mode === "day" ? gregLabel(view.focus)
-    : monthYearLabel(view.parsiMonth.mah, view.parsiMonth.year);
+    : monthYearLabel(range.parsiMonth.mah, range.parsiMonth.year);
   const secondaryLabel = view.mode === "day"
     ? await parsiLabel(view.focus, system)
     : `${gregShort(range.from)} - ${gregShort(range.to)}`;
@@ -327,10 +332,10 @@ export async function renderCalendar(container, opts) {
   container.innerHTML = chromeHtml(view, label, secondaryLabel, !!opts.onDayPick) + notice + body;
   wireRetry(container, opts.rerender);
   if (opts.wireDay && view.mode === "day" && !failed) opts.wireDay(container);
-  wireChrome(container, view, system, opts);
+  wireChrome(container, view, system, opts, range);
 }
 
-function wireChrome(container, view, system, opts) {
+function wireChrome(container, view, system, opts, range) {
   // Every change of what is showing goes through here. On the app's own
   // screens that is a navigation (opts.viewHash): a drill-down pushes an
   // entry so Back undoes it, paging replaces the current one so Back is not
@@ -349,7 +354,10 @@ function wireChrome(container, view, system, opts) {
 
   const step = async (delta) => {
     if (view.mode === "month") {
-      const pm = stepParsiMonth(view.parsiMonth.mah, view.parsiMonth.year, delta);
+      // The month on screen (range), not view.parsiMonth, which a tap or a route may have cleared meanwhile.
+      const cur = range.parsiMonth || view.parsiMonth;
+      if (!cur) return;
+      const pm = stepParsiMonth(cur.mah, cur.year, delta);
       const days = await parsiMonthDays(pm.mah, pm.year, system);
       return go({ focus: days[0].gregorian_date, parsiMonth: null });
     }
