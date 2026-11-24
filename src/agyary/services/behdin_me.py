@@ -450,3 +450,51 @@ async def calendar(db: AsyncSession, user_id: int, start: date, end: date) -> li
     items.sort(key=lambda i: (i["date"], i["source"] != "memorial", i["title"].lower(), i["id"]))
     return items
 
+
+
+# ---------------------------------------------------------------------------
+# Asking an agyari to keep a memorial's dates (R4.2)
+# ---------------------------------------------------------------------------
+MAX_ASKED_DATES = 120
+
+
+async def memorial_for_ask(db: AsyncSession, user_id: int, memorial_id: int, codes: list[str]) -> dict:
+    """What an ask to an agyari carries of one of the person's own memorials: the choices as they
+    were made (a copy, so no screen of the agyari's leads into the person's own tables) and the
+    chosen dates, each still to come. Only the person's own memorial; anything else is a PersonError
+    in plain words, and an id that is not theirs is simply not found."""
+    row = await get_memorial(db, user_id, memorial_id)
+    if row is None:
+        raise PersonError("That memorial could not be found.")
+    wanted = list(dict.fromkeys(codes or []))
+    if not wanted:
+        raise PersonError("Please choose at least one date.")
+    if len(wanted) > MAX_ASKED_DATES:
+        raise PersonError(f"Please choose up to {MAX_ASKED_DATES} dates at a time.")
+    by_code = {o.code: o for o in row.observances}
+    today = today_ist()
+    dates = []
+    for code in wanted:
+        o = by_code.get(code)
+        if o is None:
+            raise PersonError("One of those dates is not in this memorial.")
+        if o.gregorian_date < today:
+            raise PersonError("One of those dates has already passed.")
+        dates.append({"code": o.code, "label": o.label, "date": o.gregorian_date.isoformat()})
+    dates.sort(key=lambda d: (d["date"], d["code"]))
+    choice = memorials.stored_choice(row, row.start_from)
+    saved = {
+        k: (v.isoformat() if isinstance(v, date) else list(v) if isinstance(v, tuple) else v)
+        for k, v in choice.__dict__.items()
+    }
+    return {"choice": saved, "dates": dates}
+
+
+def choice_from_ask(saved: dict) -> memorials.Choice:
+    """The memorial's choices as saved with an ask, back into the engine's own type."""
+    fields = dict(saved)
+    for key in ("death_date", "death_known", "start_from", "birthday_date"):
+        if fields.get(key):
+            fields[key] = date.fromisoformat(fields[key])
+    fields["day_counts"] = tuple(fields.get("day_counts") or ())
+    return memorials.Choice(**fields)

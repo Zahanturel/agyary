@@ -66,8 +66,8 @@ class ServiceAsk(Base):
     repeat_count: Mapped[int | None] = mapped_column(SmallInteger)
 
     # A memorial ask: the person's choices as they were when asking, and the codes of the chosen dates.
-    memorial_choice: Mapped[dict | None] = mapped_column(JSONB)
-    memorial_codes: Mapped[list | None] = mapped_column(JSONB)
+    memorial_choice: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    memorial_codes: Mapped[list | None] = mapped_column(JSONB(none_as_null=True))
 
     status: Mapped[str] = mapped_column(String(10), server_default="waiting")
     reject_reason: Mapped[str | None] = mapped_column(String(100))
