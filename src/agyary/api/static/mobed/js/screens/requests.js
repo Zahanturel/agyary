@@ -53,6 +53,7 @@ import { flagProblems } from "../fielderrors.js";
 import { refreshRequestCount } from "../requests_count.js";
 import { refreshAfterAction } from "../notifications.js";
 import { memorialFromRequest } from "./memorial_new.js";
+import { paintAsks } from "../asks_section.js";
 
 // --- Words ------------------------------------------------------------------------
 
@@ -185,6 +186,7 @@ export async function renderRequests() {
   // still waits here but no longer waits for this person.
   refreshRequestCount();
   mainEl.innerHTML = `
+    <div id="asksBox"></div>
     <h2 style="margin:0 0 4px">Requests</h2>
     <p class="meta" style="margin:0 0 12px">When a Doongerwadi or prayer hall asks your fire temple for the prayers,
       it is here. The family's name and number are not shown until enough mobeds are going.</p>
@@ -195,6 +197,7 @@ export async function renderRequests() {
   mainEl.querySelectorAll("[data-rid]").forEach(el => {
     el.onclick = () => navigate(`#/requests/${el.dataset.rid}`);
   });
+  paintAsks(document.getElementById("asksBox"), alive);
 }
 
 // --- One request ------------------------------------------------------------------

@@ -8,7 +8,7 @@
  * manager has no Requests tab. (No import of session.js, which calls this.)
  */
 
-import { myRequestCount } from "./api.js";
+import { myRequestCount, listAsks } from "./api.js";
 import { state, currentAgyary } from "./state.js";
 
 let shown = 0;
@@ -45,9 +45,22 @@ export async function refreshRequestCount() {
     return paintRequestCount(0);
   }
   try {
-    paintRequestCount((await myRequestCount()).waiting);
+    const funeral = (await myRequestCount()).waiting;
+    // Asks from people wait for the panthaky only; a failure there leaves the funeral count as it is.
+    paintRequestCount(funeral + await waitingAsks());
   } catch (e) {
     paintRequestCount(shown);
+  }
+}
+
+/** Asks from people waiting for this person's answer: the panthaky's own, none for anyone else. */
+async function waitingAsks() {
+  const a = currentAgyary();
+  if (!a || a.role !== "panthaky") return 0;
+  try {
+    return Math.max(0, Number((await listAsks(a.id)).waiting) || 0);
+  } catch (e) {
+    return 0;
   }
 }
 

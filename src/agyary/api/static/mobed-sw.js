@@ -17,7 +17,7 @@
 // Leaflet (/mobed-app/vendor/leaflet/) is not in the shell: it is loaded only
 // when a screen shows a map, and a map needs the network for its tiles anyway.
 // Offline, the picker says the map could not load.
-const CACHE_NAME = "mobed-shell-v103";
+const CACHE_NAME = "mobed-shell-v104";
 // How long the network gets before the cached shell is shown (FE-05). The
 // fetch carries on behind it, so the next launch has the new one.
 const SHELL_WAIT_MS = 4000;
@@ -53,6 +53,7 @@ const SHELL_FILES = [
   "/mobed-app/js/push_card.js",
   "/mobed-app/js/location_picker.js",
   "/mobed-app/js/requests_count.js",
+  "/mobed-app/js/asks_section.js",
   "/mobed-app/js/acting.js",
   "/mobed-app/js/screens/login.js",
   "/mobed-app/js/screens/become_mobed.js",
@@ -77,6 +78,7 @@ const SHELL_FILES = [
   "/mobed-app/js/screens/requests.js",
   "/mobed-app/js/screens/our_mobeds.js",
   "/mobed-app/js/screens/request_settings.js",
+  "/mobed-app/js/screens/ask_settings.js",
   "/mobed-app/js/cal_switch.js",
   "/mobed-app/js/screens/menu.js",
   "/mobed-app/js/screens/agyari_location.js",

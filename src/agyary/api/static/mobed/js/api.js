@@ -291,6 +291,16 @@ export const getRequestSettings = (aid) => get(`/agyaries/${aid}/request-setting
 export const putRequestSettings = (aid, mode, escalateMinutes) =>
   put(`/agyaries/${aid}/request-settings`, { mode, escalate_minutes: escalateMinutes });
 
+/** Asks from people (R4.2): the panthaky's side. The person's first name only; no number until accepted. */
+export const getAsksSetting = (aid) => get(`/agyaries/${aid}/asks-setting`);
+export const putAsksSetting = (aid, takesAsks) => put(`/agyaries/${aid}/asks-setting`, { takes_asks: takesAsks });
+export const listAsks = (aid) => get(`/agyaries/${aid}/asks`);
+export const acceptAsk = (aid, askId) => post(`/agyaries/${aid}/asks/${askId}/accept`, {});
+export const rejectAsk = (aid, askId, reason) => post(`/agyaries/${aid}/asks/${askId}/reject`, { reason: reason || null });
+export const getServicePrices = (aid) => get(`/agyaries/${aid}/service-prices`);
+/** `body` holds only what changes: default_price (a number, or null for none) and/or is_active. */
+export const putServiceAsk = (aid, serviceId, body) => put(`/agyaries/${aid}/services/${serviceId}`, body);
+
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);
 // claimedRole: "mobed" or "panthaky", what they said they are there (D10).
 export const joinAgyary = (id, claimedRole) => post(`/agyaries/${id}/join`, { claimed_role: claimedRole });
