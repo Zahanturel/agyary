@@ -1,0 +1,6 @@
+<!-- A placeholder flame: the owner has not chosen the behdin app's icon yet. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560">
+  <rect width="560" height="560" rx="93" fill="#232A4D"/>
+  <path d="M280 96c22 66 98 112 98 202 0 66-44 118-98 118s-98-52-98-118c0-40 20-68 40-92 4 28 18 44 34 50-14-58 2-118 24-160z" fill="#E0973A"/>
+  <path d="M280 250c12 30 44 50 44 92 0 30-20 54-44 54s-44-24-44-54c0-26 14-40 26-56 2 14 8 22 16 24-6-22 0-42 2-60z" fill="#FBF8F3"/>
+</svg>

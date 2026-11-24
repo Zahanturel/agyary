@@ -11,6 +11,9 @@ when served from one host.
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -20,6 +23,8 @@ from agyary.api import rate_limit
 from agyary.api.routes import mobed as mobed_routes
 from agyary.api.routes import otp as otp_routes
 from agyary.api.routes.mobed import Cookies, get_current_person, get_signed_in_person
+from agyary.api.routes.calendar import _serialize as _parsi_date
+from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import User, UserPreferences
@@ -27,6 +32,11 @@ from agyary.models.enums import ACCOUNT_BEHDIN, ACCOUNT_FUNERAL_MANAGER, ACCOUNT
 from agyary.services import account, mobed_access, mobed_auth, template_text, wa_login, web_push
 
 router = APIRouter(prefix="/api/behdin", tags=["behdin"])
+
+# The app's name, the ONE place it is written (a placeholder until the owner chooses). The shell
+# page and the manifest are served with it filled in (api/main.py), and the pages read it from there.
+APP_NAME = "Parsi"
+IST = ZoneInfo("Asia/Kolkata")
 
 # Bumped when the behdin API changes shape; the app shows it on its menu.
 APP_VERSION = "r4.0"
@@ -59,6 +69,19 @@ async def _serialize(db: AsyncSession, user: User) -> dict:
 @router.get("/me")
 async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)) -> dict:
     return await _serialize(db, user)
+
+
+@router.get("/today")
+async def today(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)) -> dict:
+    """Today's Parsi date (Roj and Mah) for the home screen. India's day, not the server's; in the
+    calendar the person reads in (their preference, Shenshai when they have none)."""
+    prefs = await db.get(UserPreferences, user.id)
+    chosen = getattr(prefs, "default_secondary_system", None) if prefs is not None else None
+    try:
+        system = CalendarSystem(chosen) if chosen else CalendarSystem.SHENSHAI
+    except ValueError:
+        system = CalendarSystem.SHENSHAI
+    return _parsi_date(gregorian_to_parsi(datetime.now(IST).date(), system))
 
 
 class NameIn(BaseModel):
@@ -325,7 +348,7 @@ async def my_push_test(db: AsyncSession = Depends(get_db), user: User = Depends(
     if not web_push.configured(s):
         raise HTTPException(status_code=409, detail=mobed_routes.NO_PUSH_KEYS)
     sent = await web_push.send_to_users(
-        db, s, [user.id], title="Parsi", body="Notifications are working on this phone.",
+        db, s, [user.id], title=APP_NAME, body="Notifications are working on this phone.",
         url="/behdin", tag="push-test",
     )
     await db.commit()

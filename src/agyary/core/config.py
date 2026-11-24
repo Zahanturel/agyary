@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     turnstile_secret_key: str = ""
     # The site a Turnstile token must have been earned on. Empty skips the check.
     turnstile_hostname: str = "mobed.gotiadarian.com"
+    # The behdin app's own hostname (R4.0), e.g. parsi.gotiadarian.com: "/" on this host opens
+    # /behdin, and a bot check passed on it counts too. Empty (the default): there is none, "/"
+    # opens the mobed app, and the behdin app is only at /behdin.
+    behdin_host: str = ""
 
     # --- Spend and abuse guardrails -----------------------------------------
     # Every reminder costs money, and a bug or a bad actor must not be able to

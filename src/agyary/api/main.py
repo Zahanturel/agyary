@@ -6,13 +6,14 @@ from pathlib import Path
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.staticfiles import StaticFiles
 
 from agyary.api.routes.admin import router as admin_router
+from agyary.api.routes.behdin import APP_NAME as BEHDIN_APP_NAME
 from agyary.api.routes.behdin import router as behdin_router
 from agyary.api.routes.calendar import router as calendar_router
 from agyary.api.routes.callouts import router as callouts_router
@@ -82,6 +83,10 @@ _NO_CACHE_PATHS = frozenset({
     "/mobed",
     "/mobed-sw.js",
     "/mobed-manifest.json",
+    "/behdin",
+    "/behdin-sw.js",
+    "/behdin-manifest.json",
+    "/behdin-icon.svg",   # a placeholder, to be replaced when the owner picks one
     "/privacy",
     "/delete-account",
 })
@@ -153,7 +158,7 @@ async def security_headers(request, call_next):
     # authority - which is exactly how a shipped deploy stayed invisible on a
     # phone while every server-side check passed.
     path = request.url.path
-    if path in _NO_CACHE_PATHS or path.startswith("/mobed-app"):
+    if path in _NO_CACHE_PATHS or path.startswith(("/mobed-app", "/behdin-app")):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -172,10 +177,11 @@ app.include_router(whatsapp_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _MOBED_DIR = _STATIC_DIR / "mobed"
+_BEHDIN_DIR = _STATIC_DIR / "behdin"
 
 
 @app.get("/", include_in_schema=False)
-def root() -> RedirectResponse:
+def root(request: Request) -> RedirectResponse:
     """Send a bare hostname to the app. There is one app (Machi is a tab of it),
     on whatever hostname: without this, "/" would 404 - which is exactly what
     someone hits when a shared link drops the path.
@@ -183,6 +189,12 @@ def root() -> RedirectResponse:
     307, never 301: a permanent redirect is cached by browsers indefinitely
     and would outlive any change to where the app lives.
     """
+    # The behdin app's own hostname (BEHDIN_HOST, e.g. parsi.gotiadarian.com) opens the behdin app;
+    # every other host, including when BEHDIN_HOST is empty, opens the mobed app as before.
+    behdin_host = get_settings().behdin_host.strip().lower()
+    host = request.headers.get("host", "").split(":")[0].strip().lower()
+    if behdin_host and host == behdin_host:
+        return RedirectResponse(url="/behdin", status_code=307)
     return RedirectResponse(url="/mobed", status_code=307)
 
 
@@ -201,6 +213,35 @@ def mobed_ui() -> FileResponse:
 # and native `import` needs each one served with a JS content type, which
 # StaticFiles handles.
 app.mount("/mobed-app", StaticFiles(directory=_MOBED_DIR), name="mobed-app")
+
+
+# --- The behdin app (R4.0): its own shell, manifest, worker and icon, on /behdin ----------
+# The shell page carries the app's name (APP_NAME in routes/behdin.py, the one place it is
+# written), and the manifest is built from it, so renaming the app is a change in one line.
+@app.get("/behdin", include_in_schema=False)
+def behdin_ui() -> HTMLResponse:
+    html = (_BEHDIN_DIR / "index.html").read_text(encoding="utf-8").replace("{{APP_NAME}}", BEHDIN_APP_NAME)
+    return HTMLResponse(html)
+
+
+app.mount("/behdin-app", StaticFiles(directory=_BEHDIN_DIR), name="behdin-app")
+
+
+@app.get("/behdin-manifest.json", include_in_schema=False)
+def behdin_manifest() -> Response:
+    text = (_STATIC_DIR / "behdin-manifest.json").read_text(encoding="utf-8").replace("{{APP_NAME}}", BEHDIN_APP_NAME)
+    return Response(text, media_type="application/manifest+json")
+
+
+@app.get("/behdin-sw.js", include_in_schema=False)
+def behdin_service_worker() -> FileResponse:
+    # Its scope is /behdin because it is served from the root, so no Service-Worker-Allowed is needed.
+    return FileResponse(_STATIC_DIR / "behdin-sw.js", media_type="application/javascript")
+
+
+@app.get("/behdin-icon.svg", include_in_schema=False)
+def behdin_icon() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "behdin-icon.svg", media_type="image/svg+xml")
 
 
 @app.get("/mobed-manifest.json", include_in_schema=False)

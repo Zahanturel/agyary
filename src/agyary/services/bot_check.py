@@ -44,7 +44,8 @@ async def verify(settings: Settings, token: str | None, ip: str, client: httpx.A
         )
         answer = resp.json() if resp.status_code == 200 else {}
         expected = settings.turnstile_hostname.strip()
-        return answer.get("success") is True and (not expected or answer.get("hostname") == expected)
+        allowed = {expected, settings.behdin_host.strip().lower()} - {""}
+        return answer.get("success") is True and (not expected or answer.get("hostname") in allowed)
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Bot check could not be verified: %s", exc.__class__.__name__)
         return False
