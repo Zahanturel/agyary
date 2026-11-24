@@ -410,14 +410,21 @@ async def test_not_one_of_ours_take_off_the_list_and_put_back(client, db, seeded
     assert LATE[3:] not in json.dumps(got)
     m = await _membership(db, uid, aid)
     assert m.is_active and m.requests_off_at is not None and m.requests_off_by_user_id == (await _user(db, PANTHAKY)).id
-    # Still a member, as before: only prayer requests are not theirs. They are not told.
+    # Still a member, as before: only prayer requests are not theirs. They are told, in plain words.
     me = (await client.get("/api/mobed/auth/me", headers=late)).json()
     assert aid in [a["id"] for a in me["agyaries"]]
     assert await _notes(db, LATE, "requests_confirmed") == []
+    (told,) = await _notes(db, LATE, "requests_taken_off")
+    assert told.body == ("The panthaky of Goti Adarian has not added you to its list for prayer requests. "
+                         "You remain at Goti Adarian in Mobed Diary.")
+    (push,) = [p for p in pushes if p["tag"].startswith("requests-taken-off")]
+    assert push["to"] == [uid] and push["body"] == told.body and push["title"] == told.title
+    assert PANTHAKY[3:] not in json.dumps(push) and LATE[3:] not in told.body
     for what, words in (("off", "Er. Late Joiner is off the list already."),
                         ("confirm", "Er. Late Joiner is off the list. Tap Put back to send them prayer requests.")):
         r = await client.post(_member_url(aid, uid, what), headers=panthaky_h)
         assert r.status_code == 409 and r.json()["detail"] == words
+    assert len(await _notes(db, LATE, "requests_taken_off")) == 1   # already off: nothing more is said
     # Joining again changes nothing, and tells nobody again.
     await _join(client, aid, late)
     assert (await _membership(db, uid, aid)).requests_off_at is not None
@@ -440,6 +447,10 @@ async def test_not_one_of_ours_take_off_the_list_and_put_back(client, db, seeded
     r = await client.post(_member_url(aid, kias.id, "off"), headers=panthaky_h)
     assert r.status_code == 200, r.text
     assert "Er. Pervez Kias" not in [m["name"] for m in r.json()["mobeds"]]
+    (kias_told,) = await _notes(db, MOBED, "requests_taken_off")
+    assert kias_told.body == ("The panthaky of Goti Adarian has taken you off its list for prayer requests. "
+                              "You remain at Goti Adarian in Mobed Diary.")
+    assert len([p for p in pushes if p["tag"].startswith("requests-taken-off")]) == 2
     r = await client.post(_member_url(aid, (await _user(db, PANTHAKY)).id, "off"), headers=await _as(client, ADMIN))
     assert r.status_code == 409 and r.json()["detail"] == (
         "Er. Hormuz Dadachanji is a panthaky of Goti Adarian, so they stay on the list.")

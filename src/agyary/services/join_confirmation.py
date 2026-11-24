@@ -24,7 +24,8 @@ its mobeds; and can **Put back** one taken off. Taken off, they stay a member
 (nothing else changes for them), a mobed the panthaky had added by hand with
 the same number goes off the list with them, and a place they hold on one of
 its requests is freed as "Can't go" frees it. Confirmed or put back, the mobed is
-told in the app. A waiting mobed's number is never shown, nor one taken off:
+told in the app; taken off or not added, in the app and on their phone (no
+reason; owner, 24 Nov 2026), never on WhatsApp. A waiting mobed's number is never shown, nor one taken off:
 only the fire temple's mobeds' numbers are on the page (D10, "approved mobeds
 with their numbers").
 """
@@ -58,6 +59,9 @@ TITLE_MAX = 120
 CONFIRM_WORDS = "Confirm them on Mobeds to send them prayer requests."
 ADMIN_CONFIRM_WORDS = "Confirm them on the Mobeds page to send them prayer requests."
 CONFIRMED_TITLE = "Confirmed for prayer requests"
+# To the mobed: taken off the list, or not added (owner, 24 Nov 2026). No reason is given.
+KIND_TAKEN_OFF = "requests_taken_off"
+TAKEN_OFF_TITLE = "Not on the list for prayer requests"
 NOT_FOUND = "That mobed could not be found at this fire temple."
 
 
@@ -81,6 +85,13 @@ def joined_title(user: User, agyary: Agyary) -> str:
 
 def confirmed_words(agyary: Agyary) -> str:
     return f"{agyary.name} has confirmed you: you will now get its prayer requests."
+
+
+def taken_off_words(agyary_name: str, *, waiting: bool) -> str:
+    """What the mobed is told: no reason, only that they remain at the fire temple."""
+    what = ("has not added you to its list for prayer requests" if waiting
+            else "has taken you off its list for prayer requests")
+    return f"The panthaky of {agyary_name} {what}. You remain at {agyary_name} in Mobed Diary."
 
 
 # --- Joining ----------------------------------------------------------------------
@@ -232,6 +243,7 @@ async def take_off(
     if m.requests_off_at is not None:
         raise JoinError(f"{user.name} is off the list already.")
     waiting = panthaky.request_state(settings, m, user) == panthaky.REQUESTS_WAITING
+    told = mobed_access.has_access(settings, user)   # D9: nothing to an account that is not on
     m.requests_off_at, m.requests_off_by_user_id = now, actor.id
     await db.execute(
         update(AgyaryMobedContact)
@@ -240,10 +252,21 @@ async def take_off(
         .values(is_active=False)
     )
     await db.commit()
-    name, uid, phone, aid = user.name, user.id, user.phone, agyary.id
+    name, uid, phone, aid, agyary_name = user.name, user.id, user.phone, agyary.id, agyary.name
     logger.warning("User %s took user %s off the list of fire temple %s%s", actor.id, uid, aid,
                    " (not one of ours)" if waiting else "")
     freed = await standbys.free_places_of(db, settings, by_user=actor, agyary_id=aid, user_id=uid, phone=phone,
                                           now=now, client=client)
+    if told:
+        try:
+            words = taken_off_words(agyary_name, waiting=waiting)
+            await reminders.notify(db, uid, KIND_TAKEN_OFF, TAKEN_OFF_TITLE, words, link="#/requests",
+                                   agyary_id=aid, now=now, ttl=NOTICE_TTL)
+            await web_push.send_to_users(db, settings, [uid], title=TAKEN_OFF_TITLE, body=words,
+                                         url="/mobed#/requests", tag=f"requests-taken-off-{aid}-{uid}")
+            await db.commit()
+        except Exception:   # the action is done; telling them must not undo or fail it
+            logger.exception("Could not tell user %s they were taken off the list of fire temple %s", uid, aid)
+            await db.rollback()
     return {"message": " ".join(w for w in (f"{name} is off the list.", standbys.freed_words(freed)) if w),
             "places_freed": len(freed)}
