@@ -107,6 +107,10 @@ _STEPS = [
     "DELETE FROM person_memorials WHERE user_id = :u",
     "DELETE FROM person_events WHERE user_id = :u",
     "DELETE FROM person_agyari WHERE user_id = :u",
+    # Their asks to fire temples and the notices about them (R4.2). What an accepted ask made in a
+    # panthaky's own diary is that panthaky's record and stays (D6); the asks only pointed at it.
+    "DELETE FROM service_asks WHERE user_id = :u",
+    "DELETE FROM app_notifications WHERE user_id = :u",
     "DELETE FROM wa_login_attempts WHERE claimed_phone = (SELECT phone FROM users WHERE id = :u)",
     "DELETE FROM users WHERE id = :u",
 ]

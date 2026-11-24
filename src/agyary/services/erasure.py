@@ -200,10 +200,16 @@ async def erase_number(db: AsyncSession, phone: str, *, now: datetime | None = N
     await db.execute(delete(PersonName).where(PersonName.phone == phone))
     # What an account with this number kept for itself in the behdin app (R4.1: its own memorials
     # with their dates, its events, "my agyari"). Plain SQL, so this module never imports those models.
-    for table in ("person_memorial_observances", "person_memorials", "person_events", "person_agyari"):
+    for table in ("person_memorial_observances", "person_memorials", "person_events", "person_agyari",
+                  "service_asks"):
         await db.execute(
             text(f"DELETE FROM {table} WHERE user_id IN (SELECT id FROM users WHERE phone = :p)"), {"p": phone}
         )
+    # The notices that account was given about those asks (told apart by kind from the mobed side's).
+    await db.execute(
+        text("DELETE FROM app_notifications WHERE kind LIKE 'person!_%' ESCAPE '!'"
+             " AND user_id IN (SELECT id FROM users WHERE phone = :p)"), {"p": phone}
+    )
     # (A manager's request to move to another place holds no number, only their account: it goes
     # with the account, services/account.py.)
     # A fire temple's list of mobeds, if a panthaky added the number by hand (D10).
