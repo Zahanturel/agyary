@@ -531,3 +531,16 @@ town; an agyari card shows name, town, kind (Atash Behram, Adaran, Dadgah), dist
 confirmed panthaky); the calendar holds the person's memorials AND their own events (birthdays, navjote and the
 like); consent words (placeholder, the owner may edit): "These dates are kept for you alone. Nobody else can see
 them. You can delete them any time."
+
+## Amendment, 25 Nov 2026 (R4.2): asking an agyari for a service (owner)
+
+- **One release** for single, repeating and memorial asks (the owner declined a split).
+- **Who can be asked:** only agyaries whose panthaky switched on "Take asks from people" (Settings; off by default).
+  Others show "Not taking asks in the app yet". The ask always goes to the panthaky, who accepts or rejects it on the
+  Requests tab; with 24 hours unanswered the person is told "No answer yet" and may ask another agyari.
+- **On accept** the person's name and number are shared with that panthaky (not before, D2) and the ask becomes a
+  booking, or the repeating series or the memorial, in the panthaky's own diary like any other; the person is told in
+  the app. A rejected ask can be copied to another agyari ("Ask another agyari"); a person cancels any time before the
+  day and the panthaky is told.
+- **Prices:** the panthaky sets a usual price per service ("Services and prices" in Settings); the person sees
+  "Usual price Rs X, confirm with the agyari" or "Ask the agyari for the price". Nothing is charged in the app.
