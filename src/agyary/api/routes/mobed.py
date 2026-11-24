@@ -123,7 +123,7 @@ ACCOUNT_KIND_HEADER = "X-Account-Kind"
 NOT_FOR_MANAGERS = "This part of Mobed Diary is for mobeds. Your account is for a Doongerwadi or prayer hall."
 NOT_FOR_MOBEDS = "This part of Mobed Diary is for Doongerwadi and prayer hall managers."
 # A behdin's account (R4.0) is kept out the same way: it belongs to the behdin app.
-NOT_FOR_BEHDINS = "This part of Mobed Diary is for mobeds. Your account is for the behdin app."
+NOT_FOR_BEHDINS = "This part of Mobed Diary is for mobeds. This number is not set up as a mobed's."
 
 
 def refuse_other_kinds(user: User) -> User:
@@ -171,7 +171,7 @@ async def get_current_user(user: User = Depends(get_signed_in_user)) -> User:
     return _require_on(user)
 
 
-BEHDIN_OFF = "Your access to the behdin app is switched off."
+BEHDIN_OFF = "Your access is switched off."
 
 
 async def get_current_person(user: User = Depends(get_signed_in_person)) -> User:

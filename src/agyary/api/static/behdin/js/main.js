@@ -2,7 +2,7 @@
 
 /**
  * Wiring: the route table, the guard, and boot. The router, the page helpers and the form-error
- * marks are Mobed Diary's own shared modules (/mobed-app/js/); everything that knows about a person,
+ * marks are shared modules (/mobed-app/js/); everything that knows about a person,
  * the sign-in or the API is this app's.
  */
 
@@ -17,7 +17,6 @@ import { renderLogin } from "./screens/login.js";
 import { renderHome } from "./screens/home.js";
 import { renderCalendar } from "./screens/calendar.js";
 import { renderMenu } from "./screens/menu.js";
-import { renderBecomeMobed } from "./screens/become_mobed.js";
 import { renderOff } from "./screens/off.js";
 
 // --- Routes -----------------------------------------------------------------
@@ -27,7 +26,6 @@ route("#/off", renderOff);
 route("#/home", renderHome, { tab: "home" });
 route("#/calendar", renderCalendar, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/home" });
-route("#/become-mobed", renderBecomeMobed, { parent: "#/menu" });
 
 setNotFound(() => navigate("#/home", { replace: true }));
 
@@ -113,7 +111,7 @@ window.addEventListener("online", async () => {
 
 if ("serviceWorker" in navigator) {
   // The worker is served from the root, so its scope is given: on the app's own hostname the page is
-  // "/" and the scope "/"; anywhere else it is /behdin, which covers nothing of Mobed Diary.
+  // "/" and the scope "/"; anywhere else it is /behdin, which covers nothing else.
   const scope = location.pathname === "/" ? "/" : "/behdin";
   navigator.serviceWorker.register("/behdin-sw.js", { scope }).catch(() => {});
 }

@@ -15,12 +15,6 @@ export function signedIn() {
   return !!(state.user && (state.accessToken || state.offline));
 }
 
-/** Whether this person is also a mobed or a Doongerwadi manager (shows "Open Mobed Diary"). */
-export function hasMobedRole() {
-  const roles = (state.user && state.user.roles) || [];
-  return roles.includes("mobed") || roles.includes("funeral_manager");
-}
-
 /** Forget everything of this person on this phone and start again at sign-in. */
 export function forgetEverything() {
   clearSession();

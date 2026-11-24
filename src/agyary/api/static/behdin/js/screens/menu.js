@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The menu, behind the header icon: who you are, the text size, the other app, installing, signing
+ * The menu, behind the header icon: who you are, the text size, installing, signing
  * out, deleting the account, and which version of the app this phone runs.
  */
 
@@ -9,16 +9,14 @@ import { updateMyName, deleteMyAccount } from "../api.js";
 import { state, saveSession } from "../state.js";
 import { chrome, mainEl, setHeader, showError, showInfo, getTextSize, setTextSize } from "/mobed-app/js/ui.js";
 import { flagProblems } from "/mobed-app/js/fielderrors.js";
-import { navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
 import { esc } from "../util.js";
-import { hasMobedRole, signOut, forgetEverything } from "../session.js";
+import { signOut, forgetEverything } from "../session.js";
 import { paintInstall, shellVersion } from "../install.js";
 
 export function renderMenu() {
   chrome(true);
   setHeader(APP_NAME);
-  const mobed = hasMobedRole();
 
   mainEl.innerHTML = `
     <div class="card">
@@ -37,16 +35,6 @@ export function renderMenu() {
         <label class="choice"><input type="radio" name="mText" value="xl" ${getTextSize() === "xl" ? "checked" : ""}><span>Extra large</span></label>
       </div>
     </div>
-
-    ${mobed ? `<div class="card">
-      <h2>Mobed Diary</h2>
-      <p class="meta">Your diary of ceremonies and memorial prayers, in its own app.</p>
-      <a class="button secondary link-button" href="/mobed" id="mOpenMobed">Open Mobed Diary</a>
-    </div>` : `<div class="card">
-      <h2>Are you a mobed?</h2>
-      <p class="meta">Mobeds keep their diary in a separate app. You can ask to become one.</p>
-      <button class="secondary" id="mBecomeMobed">Ask to become one</button>
-    </div>`}
 
     <div class="card" id="mInstall"></div>
 
@@ -67,9 +55,6 @@ export function renderMenu() {
   });
 
   mainEl.querySelectorAll('input[name="mText"]').forEach((r) => { r.onchange = () => setTextSize(r.value); });
-
-  const becomeBtn = document.getElementById("mBecomeMobed");
-  if (becomeBtn) becomeBtn.onclick = () => navigate("#/become-mobed");
 
   document.getElementById("mSaveName").onclick = async (ev) => {
     const btn = ev.currentTarget;

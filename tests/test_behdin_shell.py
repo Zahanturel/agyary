@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v2"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v3"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -211,5 +211,42 @@ def test_mobed_diary_has_a_page_for_a_behdins_account_and_its_worker_keeps_the_o
     assert '"/auth/become-mobed"' in (mobed / "api.js").read_text(encoding="utf-8")
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert 'k.startsWith("mobed-shell-") && k !== CACHE_NAME' in worker
-    assert 'CACHE_NAME = "mobed-shell-v101"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v102"' in worker
     assert "/mobed-app/js/screens/become_mobed.js" in worker
+
+
+# --- The two apps never see each other (owner's decision, 25 Nov 2026) ---------------------------
+
+_COMMENTS = re.compile(r"/\*.*?\*/|<!--.*?-->|(?<![:\"'\w])//[^\n]*", re.S)
+# Code, not words a person reads: file paths of the shared folders, a header name, and the titles
+# (Er, Ervad, Mobed...) stripped from the front of a typed name.
+_NOT_WORDS = re.compile(r"/mobed-[\w./-]*|X-Mobed-Access|NAME_PREFIXES = new Set\(\[[^\]]*\]")
+
+
+def test_nothing_in_the_behdin_app_names_or_links_to_mobed_diary():
+    found = []
+    for path in sorted((STATIC / "behdin").rglob("*")):
+        if not path.is_file() or path.suffix not in {".js", ".html", ".css"}:
+            continue
+        text = _NOT_WORDS.sub("", _COMMENTS.sub("", path.read_text(encoding="utf-8")))
+        if re.search(r"mobed", text, re.I) or re.search(r'href="/mobed', text):
+            found.append(path.relative_to(STATIC).as_posix())
+    assert not found, f"these show or link to the other app: {found}"
+    assert not (STATIC / "behdin" / "js" / "screens" / "become_mobed.js").exists()
+
+
+def test_what_a_parsi_user_can_be_told_by_the_server_never_names_the_other_app():
+    from agyary.api.routes import mobed as mobed_routes
+    assert "mobed" not in mobed_routes.BEHDIN_OFF.lower()
+    assert "behdin" not in mobed_routes.BEHDIN_OFF.lower()
+
+
+def test_mobed_diarys_page_for_an_account_that_is_not_a_mobeds_never_names_the_parsi_app():
+    page = (STATIC / "mobed" / "js" / "screens" / "become_mobed.js").read_text(encoding="utf-8")
+    assert not re.search(r"parsi|behdin app|/behdin", page, re.I)
+    assert "This number is not set up as a mobed's" in page and "Ask to become a mobed" in page
+    from agyary.api.routes import mobed as mobed_routes
+    assert mobed_routes.NOT_FOR_BEHDINS == (
+        "This part of Mobed Diary is for mobeds. This number is not set up as a mobed's."
+    )
+
