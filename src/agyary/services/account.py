@@ -101,6 +101,12 @@ _STEPS = [
     "DELETE FROM place_change_requests WHERE user_id = :u",
     # The departed's names kept for this number: the person's own pool goes with the person (D12).
     "DELETE FROM person_names WHERE phone = (SELECT phone FROM users WHERE id = :u)",
+    # What the person kept for themselves in the behdin app (R4.1): their own memorials with their
+    # dates, their events and "my agyari". The foreign keys would take them too; said here so it is plain.
+    "DELETE FROM person_memorial_observances WHERE user_id = :u",
+    "DELETE FROM person_memorials WHERE user_id = :u",
+    "DELETE FROM person_events WHERE user_id = :u",
+    "DELETE FROM person_agyari WHERE user_id = :u",
     "DELETE FROM wa_login_attempts WHERE claimed_phone = (SELECT phone FROM users WHERE id = :u)",
     "DELETE FROM users WHERE id = :u",
 ]

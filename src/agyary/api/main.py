@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from agyary.api.routes.admin import router as admin_router
 from agyary.api.routes.behdin import APP_NAME as BEHDIN_APP_NAME
 from agyary.api.routes.behdin import router as behdin_router
+from agyary.api.routes.behdin_me import router as behdin_me_router
 from agyary.api.routes.calendar import router as calendar_router
 from agyary.api.routes.callouts import router as callouts_router
 from agyary.api.routes.funeral import router as funeral_router
@@ -182,6 +183,7 @@ app.include_router(callouts_router)
 app.include_router(memorials_router)
 app.include_router(otp_router)
 app.include_router(behdin_router)
+app.include_router(behdin_me_router)
 app.include_router(places_router)
 app.include_router(reminders_router)
 app.include_router(whatsapp_router)
