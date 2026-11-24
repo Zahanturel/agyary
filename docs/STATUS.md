@@ -16,6 +16,13 @@ file refers to them by role.
 
 ---
 
+## 0c. The Parsi app, R4.1 (25 Nov 2026, LIVE at e4bb616, mobed shell v103, behdin shell v5)
+
+My agyari (kind column on agyaries, `person_agyari`), a person's own memorials and events (`person_memorials`,
+`person_memorial_observances`, `person_events`; migration `d4e5f6a0b1c2`), `/api/behdin/me/*`, `POST /api/behdin/agyaries/nearby`
+(position in the body only, never stored), the calendar, Home with the next prayer. The two apps never name or link
+to each other (DECISIONS, 25 Nov 2026 later). Next: R4.2 asking for a service.
+
 ## 0b. The behdin app, R4.0 (25 Nov 2026, LIVE at ce2b352, mobed shell v101, behdin shell v2)
 
 The second app, working name **Parsi** (`parsi.gotiadarian.com`, served at `/behdin`); design in
