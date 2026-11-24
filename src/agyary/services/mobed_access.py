@@ -50,7 +50,7 @@ def has_access(settings: Settings, user: User) -> bool:
 
 
 async def tell_admins_of_request(
-    db: AsyncSession, settings: Settings, user: User, agyary: Agyary, *,
+    db: AsyncSession, settings: Settings, user: User, agyary: Agyary | None, *,
     says_panthaky: bool = False, now: datetime | None = None,
 ) -> int:
     """Tell every admin, in the app, that this mobed has chosen a fire temple
@@ -65,11 +65,12 @@ async def tell_admins_of_request(
         logger.error("Mobed %s is waiting for approval, but no ADMIN_PHONES is set, so nobody was told", user.id)
         return 0
     admins = (await db.execute(select(User.id).where(User.phone.in_(phones)))).scalars().all()
+    where = f" from {agyary.name}" if agyary is not None else ""
     body = (
-        f"{user.name} ({user.phone}) from {agyary.name} wants to use Mobed Diary, and says they are "
+        f"{user.name} ({user.phone}){where} wants to use Mobed Diary, and says they are "
         "the panthaky there. Approve them, and confirm whether they are the panthaky, on the Mobeds page."
         if says_panthaky else
-        f"{user.name} ({user.phone}) from {agyary.name} wants to use Mobed Diary. "
+        f"{user.name} ({user.phone}){where} wants to use Mobed Diary. "
         "Approve them on the Mobeds page."
     )
     for uid in admins:
@@ -81,7 +82,7 @@ async def tell_admins_of_request(
     # the lock screen; it is in the app.
     await web_push.send_to_users(
         db, settings, admins, title="A new mobed is waiting",
-        body=f"{user.name} from {agyary.name} wants to use Mobed Diary. Tap to approve.",
+        body=f"{user.name}{where} wants to use Mobed Diary. Tap to approve.",
         url="/mobed" + MOBEDS_LINK, tag="mobed-request",
     )
     return len(admins)

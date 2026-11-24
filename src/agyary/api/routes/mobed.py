@@ -32,6 +32,7 @@ from agyary.models import (
 from agyary.models.enums import (
     ACCESS_OFF,
     ACCESS_ON,
+    ACCESS_PENDING,
     ACCOUNT_BEHDIN,
     ACCOUNT_FUNERAL_MANAGER,
     ACCOUNT_MOBED,
@@ -630,6 +631,27 @@ async def sign_out_other_devices(
 
 @router.get("/auth/me")
 async def me(db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_account)) -> dict:
+    return await _serialize_user(db, user)
+
+
+@router.post("/auth/become-mobed")
+async def become_mobed(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_signed_in_person)
+) -> dict:
+    """A behdin (R4.0) asks to be a mobed: the account becomes a mobed's, waiting
+    for an admin's approval (D9), and every admin is told as for any new sign-up.
+    Nothing else of theirs changes. Open to a behdin only (the one account the
+    rest of the mobed app refuses); anyone else already is one."""
+    await db.refresh(user, with_for_update=True)
+    if user.account_kind != ACCOUNT_BEHDIN:
+        raise HTTPException(status_code=409, detail="Your account is already a mobed's or a manager's.")
+    now = datetime.now(timezone.utc)
+    user.account_kind = ACCOUNT_MOBED
+    user.access = ACCESS_PENDING
+    user.access_changed_at = now
+    await db.flush()
+    await mobed_access.tell_admins_of_request(db, get_settings(), user, None, now=now)
+    await db.commit()
     return await _serialize_user(db, user)
 
 

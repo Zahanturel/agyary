@@ -29,6 +29,8 @@ MANAGER_MAY = {
     ("GET", "/api/mobed/auth/me"),
     ("PATCH", "/api/mobed/auth/me"),
     ("POST", "/api/mobed/auth/account/delete"),
+    # A behdin's ask to become a mobed: open to a behdin, a plain 409 to anyone else.
+    ("POST", "/api/mobed/auth/become-mobed"),
     ("POST", "/api/mobed/auth/sessions/sign-out-others"),
     ("GET", "/api/mobed/notifications"),
     ("POST", "/api/mobed/notifications/seen"),

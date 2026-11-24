@@ -102,7 +102,7 @@ async def test_a_behdin_reaches_none_of_the_mobed_app(client, db, seeded):
     person = await behdin_sign_in(client, PERSON)
     headers = auth(person)
     closed = sorted(
-        c for c in fm._api_calls() - fm.NO_SESSION
+        c for c in fm._api_calls() - fm.NO_SESSION - {("POST", "/api/mobed/auth/become-mobed")}
         if not c[1].startswith(fm.PUBLIC_PREFIXES) and not c[1].startswith("/api/behdin/")
     )
     assert len(closed) > 60 and ("GET", "/api/mobed/auth/me") in closed
@@ -218,3 +218,58 @@ async def test_a_code_sent_to_a_new_number_is_sent_for_the_behdin_app_only(clien
     assert r.json()["status"] == "needs_name"
     r = await client.post("/api/behdin/auth/wa/complete", json={"name": "Test Person"})
     assert r.json()["user"]["account_kind"] == "behdin"
+
+
+async def test_an_admin_who_signs_in_first_at_the_behdin_app_is_a_mobed_not_a_behdin(client, db, seeded, invite_only, monkeypatch):
+    monkeypatch.setenv("ADMIN_PHONES", "+919911100055")
+    config.get_settings.cache_clear()
+    body = await behdin_sign_in(client, "+919911100055", "Owner")
+    assert body["user"]["account_kind"] == "mobed" and body["user"]["roles"] == ["behdin", "mobed"]
+    row = (await db.execute(select(User).where(User.phone == "+919911100055"))).scalar_one()
+    assert (row.account_kind, row.access) == ("mobed", "on")
+
+
+async def test_a_behdin_becomes_a_waiting_mobed_and_the_admins_are_told(client, db, seeded, monkeypatch):
+    from agyary.models import AppNotification
+
+    monkeypatch.setenv("ADMIN_PHONES", seeded["panthaky_phone"])
+    config.get_settings.cache_clear()
+    pushed = []
+
+    async def capture(db, settings, user_ids, **kw):
+        pushed.append({"to": list(user_ids), **kw})
+        return 0
+
+    from agyary.services import web_push
+
+    monkeypatch.setattr(web_push, "send_to_users", capture)
+    admin = await sign_in(client, seeded["panthaky_phone"])
+    person = await behdin_sign_in(client, PERSON)
+    headers = auth(person)
+
+    r = await client.get("/api/mobed/auth/me", headers=headers)
+    assert r.status_code == 403 and r.headers["X-Account-Kind"] == "behdin"
+    r = await client.post("/api/mobed/auth/become-mobed", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["account_kind"] == "mobed" and r.json()["access"] == "pending"
+    row = (await db.execute(select(User).where(User.phone == PERSON))).scalar_one()
+    assert (row.account_kind, row.access) == ("mobed", "pending") and row.access_changed_at is not None
+
+    (note,) = (await db.execute(
+        select(AppNotification).where(AppNotification.kind == "mobed_request", AppNotification.user_id == admin["user"]["id"])
+    )).scalars()
+    assert "Test Person" in note.body and PERSON in note.body
+    assert pushed and pushed[0]["to"] == [admin["user"]["id"]]
+
+    # Still a person in the behdin app, with the mobed role waiting.
+    me = (await client.get("/api/behdin/me", headers=headers)).json()
+    assert me["roles"] == ["behdin", "mobed"] and me["role_access"]["mobed"] == "pending"
+    # And the mobed app lets them choose a fire temple like any waiting mobed.
+    assert (await client.get("/api/mobed/auth/me", headers=headers)).json()["access"] == "pending"
+    r = await client.post(f"/api/mobed/agyaries/{seeded['agyary_id']}/join", headers=headers)
+    assert r.status_code == 200, r.text
+    # A second ask is refused, as is one from a mobed or a manager.
+    assert (await client.post("/api/mobed/auth/become-mobed", headers=headers)).status_code == 409
+    mobed = await sign_in(client, seeded["mobed_phone"])
+    assert (await client.post("/api/mobed/auth/become-mobed", headers=auth(mobed))).status_code == 409
+    assert (await client.post("/api/mobed/auth/become-mobed")).status_code == 401
