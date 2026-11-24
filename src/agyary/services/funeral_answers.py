@@ -78,6 +78,7 @@ from agyary.services import (
     funeral_whatsapp,
     guardrails,
     mobed_access,
+    name_words,
     prayer_callout,
     mobed_dashboard,
     reminders,
@@ -212,28 +213,24 @@ def family_message(record: FuneralRecord, place: FuneralPlace, agyary: Agyary, m
     asked, and they will pray. Without it - a mobed going, a panthaky who
     prays, the one who accepted the old way - it is "asked me"."""
     departed = funeral_records.prayed_name(record.departed_title, record.departed_name, record.departed_parent_name)
-    parts = [f"Sahebji {record.family_contact_name}, I am {mobed.name} of {agyary.name}."]
+    intro = [f"I am {mobed.name} of {agyary.name}."]
     if going is None:
-        parts.append(f"{place.name} has asked me to perform the prayers for {departed}.")
+        asked = [f"{place.name} has asked me to perform the prayers for {departed}."]
     else:
-        parts.append(f"{place.name} has asked {agyary.name} to perform the prayers for {departed}.")
+        asked = [f"{place.name} has asked {agyary.name} to perform the prayers for {departed}."]
         if going:
             names = going[0] if len(going) == 1 else ", ".join(going[:-1]) + " and " + going[-1]
-            parts.append(f"{names} will pray.")
-    gs = (f"on {_day(record.geh_saarnu_date)}, {GEH_NAMES.get(record.geh_saarnu_geh)} geh"
-          if record.geh_saarnu_date else None)
-    ut = None
+            asked.append(f"{names} will pray.")
+    facts = []
+    if record.geh_saarnu_date:
+        facts.append(f"*Geh-saarnu:* {_day(record.geh_saarnu_date)}, {GEH_NAMES.get(record.geh_saarnu_geh)} geh")
     if record.uthamna_date:
-        ut = f"on {_day(record.uthamna_date)}" + (f", {_clock(record.uthamna_time)}" if record.uthamna_time else "")
-    if gs and ut:
-        parts.append(f"The Geh-saarnu is {gs}, and the Uthamna {ut}.")
-    elif gs:
-        parts.append(f"The Geh-saarnu is {gs}.")
-    elif ut:
-        parts.append(f"The Uthamna is {ut}.")
-    parts.append("Please call or message me here for anything you need.")
-    parts.append(f"May the ruvan of the late {departed} attain Garothman Behesht.")
-    return " ".join(parts)
+        facts.append(f"*Uthamna:* {_day(record.uthamna_date)}"
+                     + (f", {_clock(record.uthamna_time)}" if record.uthamna_time else ""))
+    blocks = [[f"Sahebji {name_words.first_name(record.family_contact_name)},"], intro, asked, facts,
+              ["Please call or message me here for anything you need."],
+              [f"May the ruvan of the late {departed} attain Garothman Behesht."]]
+    return "\n\n".join("\n".join(b) for b in blocks if b)
 
 
 def memorial_prefill(record: FuneralRecord) -> dict:

@@ -204,6 +204,8 @@ answer or tap; after that nothing is sent:
   now, but we will keep you updated. Thank you." ([first name] skips a title typed before the
   name, as the app's "Sahebji" does; with no name: "Sahebji, this prayer request has been
   closed, ...")
+- These three free-text replies keep their words but are laid out (owner, 24 Nov 2026): the
+  greeting alone on the first line and one idea a paragraph, an empty line between them.
 - to a tap on **I can't go any more**: "Thank you for letting us know. The panthaky has been
   told." (at an agyari with no panthaky in the app: "Thank you for letting us know.")
 

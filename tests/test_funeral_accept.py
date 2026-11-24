@@ -39,7 +39,7 @@ from agyary.models import (
 )
 from agyary.services import funeral_records
 from tests.conftest import sign_in
-from tests.funeral_helpers import FAMILY, accepted_the_old_way, agyari, auth, form, manager, member
+from tests.funeral_helpers import FAMILY, accepted_the_old_way, agyari, assert_laid_out, auth, form, manager, member
 
 RECORDS = "/api/mobed/manager/records"
 REQUESTS = "/api/mobed/requests"
@@ -170,11 +170,12 @@ async def test_one_accepted_the_old_way_reads_as_before_and_its_book_is_the_acce
     today = funeral_records.today_ist()
     day = lambda d: f"{d:%a} {d:%d/%m/%Y}"   # noqa: E731
     assert req["family_message"] == (
-        f"Sahebji Test Family, I am Er. Hormuz Dadachanji of {req['agyari']['name']}. Doongerwadi (test) has asked me "
-        "to perform the prayers for Behdin Rustom Jamshed. "
-        f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, 4:00 pm. "
-        "Please call or message me here for anything you need. "
+        f"Sahebji Test,\n\nI am Er. Hormuz Dadachanji of {req['agyari']['name']}.\n\n"
+        "Doongerwadi (test) has asked me to perform the prayers for Behdin Rustom Jamshed.\n\n"
+        f"*Geh-saarnu:* {day(today)}, Havan geh\n*Uthamna:* {day(today + timedelta(days=2))}, 4:00 pm\n\n"
+        "Please call or message me here for anything you need.\n\n"
         "May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
+    assert_laid_out(req["family_message"])
     assert req["memorial_prefill"] == {
         "name": "Behdin Rustom Jamshed", "calendar": "shenshai", "deathBy": "date",
         "death": rec["death"]["date"], "deathRoj": "", "deathMah": "",
@@ -402,9 +403,11 @@ def test_the_family_message_leaves_out_what_is_not_known():
     record = NS(departed_title="khud", departed_name="Rustom", departed_parent_name=None, family_contact_name="Test Family",
                 geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None)
     words = family_message(record, NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test"))
-    assert words == ("Sahebji Test Family, I am Er. Test of Goti Adarian. Doongerwadi (test) has asked me to perform "
-                     "the prayers for Khud Rustom. Please call or message me here for anything you need. "
+    assert words == ("Sahebji Test,\n\nI am Er. Test of Goti Adarian.\n\n"
+                     "Doongerwadi (test) has asked me to perform the prayers for Khud Rustom.\n\n"
+                     "Please call or message me here for anything you need.\n\n"
                      "May the ruvan of the late Khud Rustom attain Garothman Behesht.")
+    assert_laid_out(words)
     assert "Our prayers" not in words and "Geh-saarnu" not in words
 
 
@@ -419,9 +422,33 @@ def test_the_family_message_of_a_panthaky_not_praying_says_the_agyari_was_asked(
                 geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None)
     place, agyary, panthaky = NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test")
     words = family_message(record, place, agyary, panthaky, going=["Er. A"])
-    assert words == ("Sahebji Test Family, I am Er. Test of Goti Adarian. Doongerwadi (test) has asked Goti Adarian "
-                     "to perform the prayers for Khud Rustom. Er. A will pray. Please call or message me here for "
-                     "anything you need. May the ruvan of the late Khud Rustom attain Garothman Behesht.")
+    assert words == ("Sahebji Test,\n\nI am Er. Test of Goti Adarian.\n\n"
+                     "Doongerwadi (test) has asked Goti Adarian to perform the prayers for Khud Rustom.\n"
+                     "Er. A will pray.\n\n"
+                     "Please call or message me here for anything you need.\n\n"
+                     "May the ruvan of the late Khud Rustom attain Garothman Behesht.")
+    assert_laid_out(words)
     assert "Er. A, Er. B and Er. C will pray." in family_message(record, place, agyary, panthaky,
                                                                  going=["Er. A", "Er. B", "Er. C"])
     assert "has asked me" in family_message(record, place, agyary, panthaky)
+
+
+def test_the_family_message_greets_the_first_name_only():
+    """Owner, 24 Nov 2026: "Sahebji Farzin," for "Farzin Meherzad Turel"; the family's own
+    name and number line (the contact the mobed reads) keeps the full name, as data."""
+    from pathlib import Path
+    from types import SimpleNamespace as NS
+
+    from agyary.services.funeral_answers import family_message
+
+    record = NS(departed_title="khud", departed_name="Rustom", departed_parent_name=None,
+                family_contact_name="Farzin Meherzad Turel", geh_saarnu_date=None, geh_saarnu_geh=None,
+                uthamna_date=None, uthamna_time=None)
+    words = family_message(record, NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test"))
+    assert words.startswith("Sahebji Farzin,\n\nI am Er. Test") and "Meherzad" not in words
+    assert_laid_out(words)
+    # The card keeps the full name next to the number: the "Family contact" fact in requests.js.
+    js = (Path(__file__).resolve().parent.parent / "src/agyary/api/static/mobed/js/screens/requests.js").read_text(
+        encoding="utf-8")
+    assert 'fact("Family contact", `${esc(c.name)}<br>' in js
+

@@ -118,7 +118,7 @@ async def test_it_is_saved_without_a_date_and_never_shown_with_one(client, db, s
     text = memorial_share.message_text(made, agyary_name="Goti Adarian", mobed_name="Er. Test")
     assert "Remembered on Roj" in text and "Passed away on" not in text
     stand_in = str(row.death_gregorian.year)
-    assert stand_in not in memorial_share.message_text(made, agyary_name="A", mobed_name="B").split("\n")[2]
+    assert stand_in not in memorial_share.message_text(made, agyary_name="A", mobed_name="B").split("\n\n")[2]
     assert memorial_share.render_pdf(made, agyary_name="Goti Adarian", mobed_name="Er. Test")[:4] == b"%PDF"
 
 

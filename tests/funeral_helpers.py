@@ -100,3 +100,15 @@ async def accepted_the_old_way(db, request_id: int, phone: str, *, share: bool =
         done = await funeral_answers.put_in_book(db, user, agyary, record, place, today=funeral_records.today_ist())
     await db.commit()
     return done
+
+
+def assert_laid_out(text: str, *, greeted: bool = True) -> None:
+    """The shape of every WhatsApp text (owner, 24 Nov 2026): the greeting alone on line 1 and an
+    empty line after it (when there is a greeting), never two empty lines in a row, no trailing
+    spaces, nothing blank at either end, and every label in bold: `*Label:* value`."""
+    lines = text.split("\n")
+    if greeted:
+        assert lines[0].startswith("Sahebji") and lines[0].endswith(",") and lines[1] == ""
+    assert "\n\n\n" not in text and text == text.strip()
+    assert all(line == line.rstrip() for line in lines)
+    assert all(not line.startswith("*") or line.startswith("*") and ":* " in line for line in lines)

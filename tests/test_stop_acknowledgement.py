@@ -14,6 +14,7 @@ from sqlalchemy import select
 from agyary.core import config
 from agyary.models import Customer, ReminderOptOut, User
 from agyary.services import guardrails, reminders, wa_send
+from tests.funeral_helpers import assert_laid_out
 from tests.test_family_replies import _reminded, _signed
 from tests.test_reminder_sender import BEHDIN_PHONE, _settings
 
@@ -50,7 +51,7 @@ async def test_a_first_stop_gets_one_kind_reply_naming_the_mobed(client, db, see
     assert (await client.post("/webhooks/whatsapp", content=raw, headers=h)).status_code == 200
     name = await _mobed_name(db)
     assert sent == [(BEHDIN_PHONE, reminders.STOP_ACK_TEXT.format(mobed=name))]
-    assert sent[0][1].endswith(". Ushta te.")          # D6, changed 23 Nov 2026 (D11)
+    assert sent[0][1].endswith(".\n\nUshta te.")          # D6, changed 23 Nov 2026 (D11)
     row = await db.get(ReminderOptOut, BEHDIN_PHONE)
     await db.refresh(row)
     assert row.acknowledged_at is not None
@@ -93,3 +94,11 @@ async def test_no_reply_while_paused_over_its_cap_or_not_live(client, db, seeded
     await guardrails.resume(db)
     assert await reminders.acknowledge_stop(db, _settings(), BEHDIN_PHONE) == "sent"
     assert len(sent) == 1
+
+
+def test_the_stop_reply_and_the_sign_in_reply_are_laid_out_in_short_lines():
+    from agyary.services import wa_login
+
+    assert_laid_out(reminders.STOP_ACK_TEXT.format(mobed="Er. Test"), greeted=False)
+    assert_laid_out(wa_login.confirmation_message("123456"), greeted=False)
+    assert reminders.STOP_ACK_TEXT.format(mobed="Er. Test").endswith("Er. Test.\n\nUshta te.")

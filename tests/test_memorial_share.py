@@ -21,6 +21,7 @@ from agyary.core.database import get_db
 from agyary.models import AppNotification, Customer, DeletedAccount, Notification, User
 from agyary.services import account, memorial_share
 from tests.conftest import TEST_DATABASE_URL
+from tests.funeral_helpers import assert_laid_out
 from tests.test_memorial_api import PHONE, _create, _setup
 
 
@@ -70,8 +71,9 @@ async def test_the_message_lists_every_date_and_carries_the_note(client, db, see
     assert r.status_code == 200, r.text
     body = r.json()
     assert "Memorial prayers for Dinshaw" in body["text"] and "Please come at 7am" in body["text"]
-    assert body["text"].count("\n- ") >= 13        # days 1-10, Masiso and the months
+    assert body["text"].count("\n*") >= 13        # days 1-10, Masiso and the months
     # The owner's closing line (D11, 23 Nov 2026).
+    assert_laid_out(body["text"], greeted=False)
     assert body["text"].endswith("\n\nMay the ruvan of the late Dinshaw attain Garothman Behesht.")
     assert body["phone"] == PHONE
     # Not switched on (the default) and the family has not agreed: both are said.
@@ -213,7 +215,9 @@ async def test_the_short_message_is_short_and_carries_the_note(client, db, seede
                          params={"note": "Please come at 7am"}, headers=headers)
     short = r.json()["short_text"]
     assert "Memorial prayers for Dinshaw" in short and "Please come at 7am" in short
-    assert "in the PDF" in short and len(short) < 400 and "\n- " not in short
+    assert_laid_out(short, greeted=False)
+    assert short.startswith("Memorial prayers for Dinshaw\n\n*Fire temple:* ") and "\n*Mobed:* " in short
+    assert "in the PDF" in short and len(short) < 400 and "\n*1" not in short
     assert short.endswith("\n\nMay the ruvan of the late Dinshaw attain Garothman Behesht.")
 
 

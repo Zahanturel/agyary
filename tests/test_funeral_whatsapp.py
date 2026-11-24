@@ -29,7 +29,7 @@ from agyary.models import AppNotification, FuneralRequest, Notification, User
 from agyary.services import funeral_whatsapp as fw
 from agyary.services import guardrails
 from tests.conftest import sign_in
-from tests.funeral_helpers import FAMILY, accepted_the_old_way, auth, form, manager
+from tests.funeral_helpers import FAMILY, accepted_the_old_way, assert_laid_out, auth, form, manager
 
 RECORDS = "/api/mobed/manager/records"
 REQUESTS = "/api/mobed/requests"
@@ -267,6 +267,10 @@ def test_the_first_name_skips_only_a_title_typed_before_it():
 def test_the_text_when_a_yes_is_no_longer_needed():
     """The owner's words (word review, 23 Nov 2026)."""
     assert fw.withdrawn_text("Er. Pervez Kias") == (
-        "Sahebji Pervez, this prayer request has been closed, so you are not needed for now, "
-        "but we will keep you updated. Thank you.")
-    assert fw.withdrawn_text("").startswith("Sahebji, this prayer request has been closed, ")
+        "Sahebji Pervez,\n\nThis prayer request has been closed, so you are not needed for now.\n\n"
+        "We will keep you updated.\n\nThank you.")
+    assert fw.withdrawn_text("").startswith("Sahebji,\n\nThis prayer request has been closed, ")
+    for text in (fw.withdrawn_text("Er. Pervez Kias"), fw.withdrawn_text("")):
+        assert_laid_out(text)
+    for text in (fw.ENOUGH_TEXT, fw.BACKED_OUT_TEXT):
+        assert_laid_out(text, greeted=False)

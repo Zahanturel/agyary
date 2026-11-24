@@ -82,7 +82,9 @@ from agyary.core.config import Settings, get_settings
 from agyary.messaging.formatting import weekday_date
 from agyary.models import Agyary, FuneralPlace, FuneralRecord, FuneralRequest, Notification
 from agyary.models.enums import GEH_NAMES
-from agyary.services import funeral_records, guardrails, reminder_sender, reminders, template_text, wa_send
+from agyary.services import (
+    funeral_records, guardrails, name_words, reminder_sender, reminders, template_text, wa_send,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +114,23 @@ OFF_WORDS = "WhatsApp messages from Mobed Diary start once Meta approves them."
 NOT_SET_UP = "WhatsApp sending is not set up on this server."
 PAUSED = "All WhatsApp sending from Mobed Diary is paused at the moment."
 NOT_FIXED = "not fixed yet"
-ENOUGH_TEXT = "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again."
+ENOUGH_TEXT = ("Thank you.\n\n"
+               "Enough mobeds are going this time.\n\n"
+               "If a place opens, we may ask you again.")
 # To a mobed whose yes is no longer needed because the request was withdrawn or
 # declined: the owner's words (D11, word review of 23 Nov 2026), via withdrawn_text.
-WITHDRAWN_TEXT = ("Sahebji {first_name}, this prayer request has been closed, so you are not needed for now, "
-                  "but we will keep you updated. Thank you.")
-WITHDRAWN_NO_NAME_TEXT = ("Sahebji, this prayer request has been closed, so you are not needed for now, "
-                          "but we will keep you updated. Thank you.")
+# Laid out in short lines (owner, 24 Nov 2026): the greeting alone, then one idea a paragraph.
+WITHDRAWN_TEXT = ("Sahebji {first_name},\n\n"
+                  "This prayer request has been closed, so you are not needed for now.\n\n"
+                  "We will keep you updated.\n\n"
+                  "Thank you.")
+WITHDRAWN_NO_NAME_TEXT = ("Sahebji,\n\n"
+                          "This prayer request has been closed, so you are not needed for now.\n\n"
+                          "We will keep you updated.\n\n"
+                          "Thank you.")
 # To a tap on "I can't go any more" (step 5b); without "The panthaky has been
 # told." at a fire temple with no panthaky in the app, where nobody is.
-BACKED_OUT_TEXT = "Thank you for letting us know. The panthaky has been told."
+BACKED_OUT_TEXT = "Thank you for letting us know.\n\nThe panthaky has been told."
 BACKED_OUT_NO_PANTHAKY_TEXT = "Thank you for letting us know."
 # WhatsApp's customer-service window: plain text may answer a person only this
 # long after their last message to us.
@@ -168,23 +177,8 @@ def digits(phone: str) -> str:
     return "".join(c for c in phone if c.isdigit())
 
 
-# Titles typed before a mobed's name, left out of "Sahebji <first name>": the
-# same list as util.js NAME_PREFIXES (compared without dots, in any case): Parsi
-# titles only (owner's word review, 23 Nov 2026), so no Shri or Smt, and "Dastur"
-# is a surname ("Dasturji" is the title).
-NAME_PREFIXES = frozenset({"er", "ervad", "mobed", "mobedji", "dasturji", "dr", "behdin",
-                           "osta", "osti", "khud", "mr", "mrs", "ms"})
-
-
-def first_name(full: str | None) -> str:
-    """The first name, for "Sahebji <first name>" (D11), as util.js firstName:
-    a title typed before it ("Er.", "Ervad", "Dasturji", ...) is skipped, and
-    the whole name is used when nothing else is left."""
-    words = str(full or "").split()
-    i = 0
-    while i < len(words) and words[i].replace(".", "").lower() in NAME_PREFIXES:
-        i += 1
-    return words[i] if i < len(words) else " ".join(words)
+# The first name for "Sahebji <first name>" (D11): services/name_words.py.
+first_name = name_words.first_name
 
 
 def withdrawn_text(name: str | None) -> str:

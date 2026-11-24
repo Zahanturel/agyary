@@ -189,8 +189,9 @@ async def require_confirmation(db: AsyncSession, row: WaLoginAttempt) -> str:
 def confirmation_message(number: str) -> str:
     """The owner's words (D11, word review of 23 Nov 2026)."""
     return (
-        f"Someone is signing in to Mobed Diary as you. If that is you, type {number} "
-        "on the sign-in screen. If it is not you, do not share this number with anyone: "
+        "Someone is signing in to Mobed Diary as you.\n\n"
+        f"If that is you, type {number} on the sign-in screen.\n\n"
+        "If it is not you, do not share this number with anyone: "
         "nobody can sign in as you without it."
     )
 

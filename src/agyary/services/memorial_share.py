@@ -99,38 +99,40 @@ def closing_line(m: dict) -> str:
     return f"May the ruvan of the late {m['departed_name']} attain Garothman Behesht."
 
 
-def message_text(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
-    """The message to send the family: who it is for, then every date, then the
-    closing line."""
-    note = clean_note(note)
-    lines = [
-        f"Memorial prayers for {m['departed_name']}",
-        f"{agyary_name} - {mobed_name}",
-        passed_away(m),
+def _laid_out(*paragraphs: list[str]) -> str:
+    """Paragraphs of lines with ONE empty line between them; an empty one is left out
+    (owner, 24 Nov 2026: every WhatsApp text is in short lines)."""
+    return "\n\n".join("\n".join(p) for p in paragraphs if p)
+
+
+def _who(m: dict, agyary_name: str, mobed_name: str, note: str) -> list[list[str]]:
+    return [
+        [f"Memorial prayers for {m['departed_name']}"],
+        [f"*Fire temple:* {agyary_name}", f"*Mobed:* {mobed_name}"],
+        [passed_away(m)],
+        [note] if note else [],
     ]
-    if note:
-        lines += ["", note]
-    lines.append("")
+
+
+def message_text(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
+    """The message to send the family: who it is for, then every date on its own
+    line with its date in bold, then the closing line."""
+    dates = []
     for o in m["observances"]:
         prayers = _prayers(o)
-        lines.append(
-            f"- {short_date(o['date'])}: {o['label']}"
+        dates.append(
+            f"*{short_date(o['date'])}:* {o['label']}"
             + (f" ({parsi_day(o['roj'], o['mah'], o['gatha_index'])})" if o["roj"] or o["gatha_index"] else "")
             + (f" - {prayers}" if prayers else "")
         )
-    lines += ["", closing_line(m)]
-    return "\n".join(lines)
+    return _laid_out(*_who(m, agyary_name, mobed_name, clean_note(note)), dates, [closing_line(m)])
 
 
 def short_message(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> str:
     """A few lines that always fit in a WhatsApp link or next to an attached PDF:
     who it is for, the mobed's note, where the dates are, and the closing line."""
-    note = clean_note(note)
-    lines = [f"Memorial prayers for {m['departed_name']}", f"{agyary_name} - {mobed_name}"]
-    if note:
-        lines += ["", note]
-    lines += ["", "All the dates are in the PDF.", "", closing_line(m)]
-    return "\n".join(lines)
+    return _laid_out(*_who(m, agyary_name, mobed_name, clean_note(note)),
+                     ["All the dates are in the PDF."], [closing_line(m)])
 
 
 def render_pdf(m: dict, *, agyary_name: str, mobed_name: str, note: str = "") -> bytes:

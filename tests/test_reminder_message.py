@@ -7,6 +7,7 @@ from datetime import date, time, timedelta
 from types import SimpleNamespace
 
 from agyary.services import reminder_message as rm
+from tests.funeral_helpers import assert_laid_out
 
 DAY = date(2030, 3, 14)
 ROJ_MAH = "Roj Hormazd, Mah Fravardin"
@@ -26,16 +27,17 @@ def _parts(today=DAY - timedelta(days=1), services=("Afringan", "Baaj"), family=
 def test_the_manual_message_says_when_and_what_without_asking_for_anything():
     # The owner's words (D11, word review of 23 Nov 2026).
     assert rm.manual_text(_parts()) == (
-        "Sahebji Rustom Mistry, a reminder from Er. Jehangir Mistry of Goti Adarian:\n\n"
-        "Afringan and Baaj for Dinshaw\n"
-        f"Tomorrow, Thu 14/03/2030 ({ROJ_MAH})\n\n"
+        "Sahebji Rustom,\n\n"
+        "A reminder from Er. Jehangir Mistry of Goti Adarian:\n\n"
+        "*Prayers:* Afringan and Baaj for Dinshaw\n"
+        f"*When:* Tomorrow, Thu 14/03/2030 ({ROJ_MAH})\n\n"
         "May the ruvan of the late Dinshaw attain Garothman Behesht."
     )
 
 
 def test_the_manual_message_without_a_behdin_name_or_a_mobed_name():
     text = rm.manual_text(_parts(family="", mobed=""))
-    assert text.startswith("Sahebji, a reminder from Goti Adarian:\n\n")
+    assert text.startswith("Sahebji,\n\nA reminder from Goti Adarian:\n\n")
 
 
 def test_the_automatic_message_adds_how_to_stop():
@@ -50,13 +52,13 @@ def test_the_automatic_message_adds_how_to_stop():
 
 
 def test_today_and_tomorrow_are_said_only_when_true():
-    assert f"\nToday, Thu 14/03/2030 ({ROJ_MAH})" in rm.manual_text(_parts(today=DAY))
+    assert f"\n*When:* Today, Thu 14/03/2030 ({ROJ_MAH})" in rm.manual_text(_parts(today=DAY))
     # Further off it is just the date; no "tomorrow" that would be wrong.
-    assert f"\nThu 14/03/2030 ({ROJ_MAH})\n" in rm.manual_text(_parts(today=DAY - timedelta(days=4)))
+    assert f"\n*When:* Thu 14/03/2030 ({ROJ_MAH})\n" in rm.manual_text(_parts(today=DAY - timedelta(days=4)))
 
 
 def test_the_time_appears_only_when_there_is_one():
-    assert f"Tomorrow, Thu 14/03/2030 ({ROJ_MAH}), at 9:00 am\n" in rm.manual_text(
+    assert f"*When:* Tomorrow, Thu 14/03/2030 ({ROJ_MAH}), at 9:00 am\n" in rm.manual_text(
         _parts(services=["Afringan"], at=(9, 0)))
     assert ", at 5:30 pm" in rm.manual_text(_parts(at=(17, 30)))
     assert ", at 12:00 pm" in rm.manual_text(_parts(at=(12, 0)))
@@ -68,7 +70,7 @@ def test_the_time_appears_only_when_there_is_one():
 
 
 def test_with_no_services_it_falls_back_to_the_observance_name():
-    assert ":\n\nVarsi for Dinshaw\n" in rm.manual_text(_parts(services=[]))
+    assert ":\n\n*Prayers:* Varsi for Dinshaw\n" in rm.manual_text(_parts(services=[]))
     assert _parts(services=[]).what == "Varsi for Dinshaw."
 
 
@@ -127,9 +129,9 @@ def test_the_next_template_greets_the_family_and_carries_no_blessing():
 def test_the_next_template_reads_in_the_owners_words():
     parts = _parts(at=(9, 0))
     assert parts.params_for(rm.TEMPLATE_V2_NAME) == [
-        "Rustom Mistry", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14/03/2030 ({ROJ_MAH}) at 9:00 am"]
+        "Rustom", "Goti Adarian", "Afringan and Baaj", "Dinshaw", f"Thu 14/03/2030 ({ROJ_MAH}) at 9:00 am"]
     assert rm.template_text(parts, rm.TEMPLATE_V2_NAME) == (
-        "Sahebji Rustom Mistry,\n\n"
+        "Sahebji Rustom,\n\n"
         "A reminder from Goti Adarian:\n"
         f"Afringan and Baaj for Dinshaw on Thu 14/03/2030 ({ROJ_MAH}) at 9:00 am.\n\n"
         "The prayers are already arranged; you need not reply."
@@ -147,3 +149,20 @@ def test_the_text_shown_follows_the_template_in_use():
         "The prayers are already arranged; you need not reply.")
     # The mobed's own message keeps the closing blessing.
     assert rm.manual_text(parts).endswith("May the ruvan of the late Dinshaw attain Garothman Behesht.")
+
+
+def test_the_manual_message_is_laid_out_in_short_lines():
+    for kw in ({}, {"family": "", "mobed": ""}, {"at": (9, 0)}):
+        assert_laid_out(rm.manual_text(_parts(**kw)))
+    lines = rm.manual_text(_parts()).split("\n")
+    assert lines[0] == "Sahebji Rustom," and lines[2].startswith("A reminder from ")
+    assert lines[4].startswith("*Prayers:* ") and lines[5].startswith("*When:* ")
+
+
+def test_a_family_is_greeted_by_the_first_name_only_but_the_data_keeps_the_full_name():
+    """Owner, 24 Nov 2026: "Sahebji Farzin," whatever the middle names; the full name stays as data."""
+    parts = _parts(family="Farzin Meherzad Turel")
+    assert rm.manual_text(parts).startswith("Sahebji Farzin,\n\nA reminder from ")
+    assert parts.params_for(rm.TEMPLATE_V2_NAME)[0] == "Farzin"
+    assert rm.template_text(parts, rm.TEMPLATE_V2_NAME).startswith("Sahebji Farzin,\n\n")
+    assert parts.family == "Farzin Meherzad Turel"

@@ -24,6 +24,7 @@ from datetime import date, time
 
 from agyary.calendar import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 from agyary.messaging.formatting import weekday_date
+from agyary.services.name_words import first_name
 
 # The text submitted to Meta for approval, with its four numbered blanks:
 #   {{1}} the fire temple   {{2}} when, e.g. "Tomorrow, Thu 15 Oct"
@@ -100,7 +101,8 @@ class Parts:
     def v2_params(self) -> list[str]:
         """The five blanks of memorial_reminder_v3, in order."""
         on = f"{self.day} ({self.parsi})" + (f" at {self.at}" if self.at else "")
-        return [self.family, self.agyary, self.prayer, self.departed, on]
+        # The family is greeted by their first name only (owner, 24 Nov 2026).
+        return [first_name(self.family), self.agyary, self.prayer, self.departed, on]
 
     def params_for(self, template_name: str) -> list[str]:
         """The blanks of the template a reminder goes out on."""
@@ -169,16 +171,19 @@ def render(body: str, params: list[str]) -> str:
 
 def manual_text(parts: Parts) -> str:
     """The message the mobed sends from their own WhatsApp ("Remind on
-    WhatsApp"): "Sahebji <family>, a reminder from <mobed> of <fire temple>:",
-    the prayers and the day, and the closing line. "Sahebji, a reminder ..."
+    WhatsApp"): "Sahebji <family>," alone, "A reminder from <mobed> of <fire
+    temple>:", the prayers and the day on bold-labelled lines, and the closing
+    line, with an empty line between the parts (owner, 24 Nov 2026). "Sahebji,"
     when the behdin's name is blank."""
-    greeting = f"Sahebji {parts.family}" if parts.family else "Sahebji"
+    family = first_name(parts.family)
+    greeting = f"Sahebji {family}," if family else "Sahebji,"
     sender = f"{parts.mobed} of {parts.agyary}" if parts.mobed else parts.agyary
     at = f", at {parts.at}" if parts.at else ""
     return (
-        f"{greeting}, a reminder from {sender}:\n\n"
-        f"{parts.prayer} for {parts.departed}\n"
-        f"{parts.when} ({parts.parsi}){at}\n\n"
+        f"{greeting}\n\n"
+        f"A reminder from {sender}:\n\n"
+        f"*Prayers:* {parts.prayer} for {parts.departed}\n"
+        f"*When:* {parts.when} ({parts.parsi}){at}\n\n"
         + CLOSING.format(departed=parts.departed)
     )
 

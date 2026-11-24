@@ -373,7 +373,7 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert got["customer_id"] == (await _books(db, rid))[PANTHAKY].customer_id
     assert got["memorial_prefill"]["name"] == "Behdin Rustom Jamshed"
     # The message their own WhatsApp opens with, to the family, in their own name.
-    assert got["family_message"].startswith("Sahebji Test Family, I am Er. Hormuz Dadachanji of ")
+    assert got["family_message"].startswith("Sahebji Test,\n\nI am Er. Hormuz Dadachanji of ")
     assert got["family_message"].endswith("May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
     assert (await client.get(f"{REQUESTS}/{rid}", headers=panthaky)).json()["request"]["all_set"] == got
     assert (await _books(db, rid))[PANTHAKY].user_id == hormuz.id
@@ -384,7 +384,7 @@ async def test_the_familys_contact_reaches_only_those_praying_and_only_once_all_
     assert card["all_set"]["panthakys"] == [{"name": "Er. Hormuz Dadachanji", "phone": PANTHAKY, "is_me": False}]
     assert [g["is_me"] for g in card["all_set"]["going"]] == [False, True]
     assert card["all_set"]["customer_id"] == (await _books(db, rid))[MOBED].customer_id
-    assert card["all_set"]["family_message"].startswith("Sahebji Test Family, I am Er. Pervez Kias of ")
+    assert card["all_set"]["family_message"].startswith("Sahebji Test,\n\nI am Er. Pervez Kias of ")
 
     # Nobody else: another panthaky it reached, the admin, a mobed not going - nor the manager.
     for headers in (second, admin):
@@ -1086,15 +1086,16 @@ async def test_a_panthaky_not_praying_tells_the_family_the_agyari_was_asked_and_
     def day(d) -> str:
         return f"{d:%a} {d:%d/%m/%Y}"
 
-    when = (f"The Geh-saarnu is on {day(today)}, Havan geh, and the Uthamna on {day(today + timedelta(days=2))}, "
-            "4:00 pm. Please call or message me here for anything you need. "
+    when = (f"*Geh-saarnu:* {day(today)}, Havan geh\n*Uthamna:* {day(today + timedelta(days=2))}, 4:00 pm\n\n"
+            "Please call or message me here for anything you need.\n\n"
             "May the ruvan of the late Behdin Rustom Jamshed attain Garothman Behesht.")
     board = (await client.get(_b(rid), headers=await _as(client, PANTHAKY))).json()
     assert board["all_set"]["is_panthaky"] is True
     assert board["all_set"]["family_message"] == (
-        "Sahebji Test Family, I am Er. Hormuz Dadachanji of Goti Adarian. Doongerwadi (test) has asked Goti Adarian "
-        "to perform the prayers for Behdin Rustom Jamshed. Er. Listed and Er. Pervez Kias will pray. " + when)
+        "Sahebji Test,\n\nI am Er. Hormuz Dadachanji of Goti Adarian.\n\n"
+        "Doongerwadi (test) has asked Goti Adarian to perform the prayers for Behdin Rustom Jamshed.\n"
+        "Er. Listed and Er. Pervez Kias will pray.\n\n" + when)
     card = (await client.get(f"{REQUESTS}/{rid}", headers=await _as(client, MOBED))).json()["request"]
     assert card["all_set"]["family_message"] == (
-        "Sahebji Test Family, I am Er. Pervez Kias of Goti Adarian. Doongerwadi (test) has asked me to perform the "
-        "prayers for Behdin Rustom Jamshed. " + when)
+        "Sahebji Test,\n\nI am Er. Pervez Kias of Goti Adarian.\n\n"
+        "Doongerwadi (test) has asked me to perform the prayers for Behdin Rustom Jamshed.\n\n" + when)

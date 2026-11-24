@@ -288,7 +288,7 @@ REPLY_WINDOW = timedelta(days=30)
 # window the STOP opened; since 1 Oct 2026 Meta charges it at about the utility
 # rate, so it has its own daily cap. Its words are D6's, ending "Ushta te."
 # since the owner's word review (D11, 23 Nov 2026).
-STOP_ACK_TEXT = "You will not receive any more reminders from {mobed}. Ushta te."
+STOP_ACK_TEXT = "You will not receive any more reminders from {mobed}.\n\nUshta te."
 
 
 async def _answered_record(

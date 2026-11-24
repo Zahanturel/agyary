@@ -309,7 +309,7 @@ async def test_the_call_out_goes_at_send_and_the_first_yes_goes(client, db, seed
     assert meta.templates("prayer_details_mobed_v2") == []
     (text,) = meta.texts()
     assert text["to"] == LISTED and text["text"]["body"] == fw.ENOUGH_TEXT == (
-        "Thank you. Enough mobeds are going this time. If a place opens, we may ask you again.")
+        "Thank you.\n\nEnough mobeds are going this time.\n\nIf a place opens, we may ask you again.")
     listed = (await _answers(db))[LISTED]
     assert listed.answer == "yes" and listed.picked_at is None and listed.enough_sent_at is not None
     (also,) = await _notes(db, PANTHAKY, prayer_callout.KIND_YES)
