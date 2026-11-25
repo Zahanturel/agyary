@@ -604,3 +604,7 @@ R4.2 redesign, third round (owner, 25 Nov 2026):
 - **Home:** keep the present Home for now; a better one comes when more modules exist.
 - **Words:** **Request / Requests** (as the mobed side's Requests tab); states Pending, Confirmed, Declined, Cancelled
   (plus "Cancelled by the fire temple" and "Changed" when the panthaky acts on a confirmed one).
+
+R4.2 redesign, fourth round (owner, 25 Nov 2026): a request holds **several prayers, each with its own date** (time may be
+left open; a repeating prayer has its own dates). The panthaky **confirms or declines the whole request** (anything partial is
+sorted out in the chat). Names are typed in this release; photos arrive with the chat.
