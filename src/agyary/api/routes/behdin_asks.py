@@ -56,36 +56,45 @@ async def _own_ask(db: AsyncSession, user: User, ask_id: int, *, lock: bool = Fa
 # ---------------------------------------------------------------------------
 # What an agyari offers, for the person about to ask
 # ---------------------------------------------------------------------------
-@router.get("/agyaries/{agyary_id}/asking")
-async def agyari_asking(
+@router.get("/agyaries/{agyary_id}/offering")
+async def agyari_offering(
     agyary_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)
 ) -> dict:
-    """The services, their usual prices and whether this agyari takes asks in the app. Nothing private."""
+    """What a person can pick at this fire temple: its priced services, the Memorial item if it offers
+    one, and whether it takes requests. Nothing private. (Replaces /asking.)"""
     _read(user)
     agyary = await db.get(Agyary, agyary_id)
     if agyary is None or not agyary.is_active:
         raise HTTPException(status_code=404, detail=service_asks.NO_SUCH_AGYARI)
-    return await service_asks.asking_view(db, get_settings(), agyary)
+    return await service_asks.offering_view(db, get_settings(), agyary)
 
 
 # ---------------------------------------------------------------------------
 # The person's asks
 # ---------------------------------------------------------------------------
-class AskIn(BaseModel):
-    agyary_id: int
-    service_id: int
-    purpose: str | None = None
+class ItemIn(BaseModel):
+    """One prayer of a request. A service: ``service_id``, ``date``, and for Machi a ``geh``; ``time`` may
+    be left out (the fire temple confirms it). ``recurring`` ("monthly" or "yearly") and ``recurring_count``
+    are the repeat of "+ Add". A memorial: ``type`` "memorial", ``death_date``, ``departed_name`` (may be
+    left out), and the same ``recurring`` and ``recurring_count``."""
+
+    type: str = "service"
+    service_id: int | None = None
     date: dt.date | None = None
     geh: int | None = None
     time: str | None = None
-    where: str = "agyari"
-    area: str | None = None
-    names: list[dict] | None = None
-    note: str | None = None
-    # {"pattern": "monthly" | "yearly", "count": 2..120 (60 for yearly) or left out}
-    repeat: dict | None = None
-    # {"memorial_id": the person's own memorial, "codes": the dates they want}
-    memorial: dict | None = None
+    purpose: str | None = None
+    recurring: str | None = None
+    recurring_count: int | None = None
+    departed_name: str | None = None
+    death_date: dt.date | None = None
+
+
+class AskIn(BaseModel):
+    agyary_id: int
+    items: list[ItemIn]
+    # The names to pray, typed.
+    names: list[str] | None = None
 
 
 @router.post("/me/asks")

@@ -20,7 +20,6 @@ from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import Agyary, Service, User
 from agyary.services import mobed_dashboard, prayer_callout, service_asks
-from agyary.services.name_words import first_name
 
 router = APIRouter(prefix="/api/mobed", tags=["asks"])
 
@@ -123,19 +122,22 @@ async def _ask(db: AsyncSession, user: User, agyary_id: int, ask_id: int):
 
 async def _view(db: AsyncSession, user: User, ask) -> dict:
     system = await mobed_dashboard.reading_system(db, user.id)
-    person = await db.get(User, ask.user_id)
-    service = await db.get(Service, ask.service_id)
-    return service_asks.serialize_for_panthaky(ask, service.name, first_name(person.name) if person else "", system)
+    return (await service_asks.panthaky_views(db, [ask], system))[0]
+
+
+class AcceptIn(BaseModel):
+    # The time of day for each prayer the person left open: {"<item id>": "HH:MM"}.
+    times: Any = None
 
 
 @router.post("/agyaries/{agyary_id}/asks/{ask_id}/accept")
-async def accept_ask(agyary_id: int, ask_id: int, db: AsyncSession = Depends(get_db),
+async def accept_ask(agyary_id: int, ask_id: int, payload: AcceptIn | None = None, db: AsyncSession = Depends(get_db),
                      user: User = Depends(get_current_user)) -> dict:
-    """Accept: the person becomes a record in the panthaky's own book (their number is shared now) and
-    the booking, machi, repeating series or memorial is made in the panthaky's own diary."""
+    """Confirm the whole request: the person becomes a record in the panthaky's own book (their number is
+    shared now) and one entry per prayer is made in the panthaky's own diary, in one go."""
     ask = await _ask(db, user, agyary_id, ask_id)
     try:
-        made = await service_asks.accept(db, get_settings(), ask, user)
+        made = await service_asks.accept(db, get_settings(), ask, user, payload.times if payload else None)
     except service_asks.AskError as exc:
         await db.rollback()
         raise _error(exc) from exc
