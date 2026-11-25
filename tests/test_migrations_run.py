@@ -1198,3 +1198,38 @@ async def test_the_service_asks_migration_holds_its_rules_and_comes_off_cleanly(
         _ok(_alembic("check"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_requests_follow_the_fire_temple_migration_widens_the_status_and_comes_off_cleanly():
+    """f6a0b1c2d3e4 (R4.2 redesign): a request may be "cancelled_by_fire_temple" and carries a
+    changed_at; the status stays one of the five; going back refuses while such a request exists."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Asked (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', "
+                               "'+919000000051', 'behdin')")
+        (user,), = await _scratch_execute("SELECT id FROM users")
+        (agyary,), = await _scratch_execute("SELECT id FROM agyaries")
+        await _scratch_execute("INSERT INTO services (agyary_id, name) VALUES (:a, 'Jashan (test)')", {"a": agyary})
+        (service,), = await _scratch_execute("SELECT id FROM services")
+        insert = ("INSERT INTO service_asks (user_id, agyary_id, service_id, purpose, ceremony_date, ceremony_time,"
+                  " status) VALUES (:u, :a, :s, 'gujrela_nu', '2026-12-01', '10:00', :st)")
+        base = {"u": user, "a": agyary, "s": service}
+        from datetime import time as _time
+
+        base_params = {**base}
+        sql = insert.replace("'10:00'", ":t")
+        await _scratch_execute(sql, {**base_params, "t": _time(10, 0), "st": "cancelled_by_fire_temple"})
+        await _refused(sql, {**base_params, "t": _time(10, 0), "st": "deleted"}, "an unknown status")
+        await _scratch_execute("UPDATE service_asks SET changed_at = now()")
+        down = _alembic("downgrade", "e5f6a0b1c2d3")
+        assert down.returncode != 0 and "cancelled by a fire temple" in (down.stdout + down.stderr)
+        await _scratch_execute("UPDATE service_asks SET status = 'cancelled'")
+        _ok(_alembic("downgrade", "e5f6a0b1c2d3"))
+        cols = await _scratch_execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'service_asks'")
+        assert "changed_at" not in {c for (c,) in cols}
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)

@@ -35,3 +35,10 @@ D2: no number before accept. D6: deleting the account removes the person's asks 
 made at accept stay as that mobed's own records, with the person's number only if they consented by asking). D8: nothing
 deleted by age. Rate limits per person (asks a day, open asks per person per agyari). Plain wording; the two apps never
 name each other. No WhatsApp sent in R4.2 (R4.4 adds the switches): in-app notices and phone push only.
+
+## Redesign changes, backend step 1 (25 Nov 2026)
+
+- Wording: "ask" becomes "request" in every message and notice (Pending, Confirmed, Declined, Cancelled; "Reason: <text>"); API names are unchanged.
+- Setting up first: `GET /api/mobed/agyaries/{id}/asks-setting` also returns the services that will be offered (the active ones of the diary's catalog) with their prices and `ready`; switching on is refused (409, "Enter a price for every service first.") until every offered service has a price. While on, a price cannot be cleared, an unpriced service cannot be switched on, and the last service cannot be switched off (409). Off is always allowed.
+- People are shown only fire temples that take requests and have a confirmed panthaky whose access is on: `POST /api/behdin/agyaries/find {town?, q?, lat?, lng?}` (town first, then town, then name; a distance only for an exact pin and only when a position is sent) and `GET /api/behdin/agyaries/towns`. `POST /agyaries/nearby` is removed. A service with no price is never offered to people.
+- A confirmed request follows the fire temple's diary (new status `cancelled_by_fire_temple`, new `changed_at`): deleting the booking, machi or memorial, or stopping a series, cancels it; changing the date, time or geh (or a memorial's dates) marks it changed. Each tells the person ("Cancelled by <fire temple>: <service> on <date>", "Changed by <fire temple>: <service>, now <date>"), in the app and by phone. One hook pair in `services/service_asks.py` (`fire_temple_removed`, `fire_temple_changed`) is called from each place. The request and `/me/calendar` read the date, time, geh and memorial dates from what the diary holds now; `/me/calendar` now includes confirmed requests (source "request").

@@ -44,7 +44,7 @@ async def panthaky_headers(client, phone: str = PANTHAKY) -> dict:
 async def switch_on(client, db, agyary_id: int = 1, headers: dict | None = None) -> dict:
     headers = headers or await panthaky_headers(client)
     r = await client.put(f"/api/mobed/agyaries/{agyary_id}/asks-setting", headers=headers, json={"takes_asks": True})
-    assert r.status_code == 200 and r.json() == {"takes_asks": True}, r.text
+    assert r.status_code == 200 and r.json()["takes_asks"] is True, r.text
     return headers
 
 
@@ -75,7 +75,9 @@ def panthaky_asks(client, headers, aid: int = 1):
 # --- the switch, the services and their prices ---------------------------------------------
 async def test_the_panthaky_switches_asks_on_and_a_plain_mobed_is_refused(client, db, seeded):
     headers = await panthaky_headers(client)
-    assert (await client.get("/api/mobed/agyaries/1/asks-setting", headers=headers)).json() == {"takes_asks": False}
+    first = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=headers)).json()
+    assert first["takes_asks"] is False and first["ready"] is True       # the seeded services all have prices
+    assert {s["name"] for s in first["services"]} >= {"Jashan", "Machi"} and all(s["price"] is not None for s in first["services"])
     for bad in ("yes", 1, None):
         r = await client.put("/api/mobed/agyaries/1/asks-setting", headers=headers, json={"takes_asks": bad})
         assert r.status_code == 400
@@ -88,7 +90,7 @@ async def test_the_panthaky_switches_asks_on_and_a_plain_mobed_is_refused(client
     for method, tail in calls:
         r = await client.request(method, f"/api/mobed/agyaries/1{tail}", headers=mobed, json={"takes_asks": False})
         assert r.status_code == 403, (method, tail, r.text)
-    assert (await client.get("/api/mobed/agyaries/1/asks-setting", headers=headers)).json() == {"takes_asks": True}
+    assert (await client.get("/api/mobed/agyaries/1/asks-setting", headers=headers)).json()["takes_asks"] is True
 
 
 async def test_the_panthaky_sets_usual_prices_and_switches_a_service_off(client, db, seeded):
@@ -123,7 +125,7 @@ async def test_a_person_sees_what_an_agyari_offers_only_when_it_takes_asks(clien
     r = await client.get("/api/behdin/agyaries/1/asking", headers=mine)
     assert r.status_code == 200
     closed = r.json()
-    assert closed["takes_asks"] is False and closed["message"] == "Not taking asks in the app yet"
+    assert closed["takes_asks"] is False and closed["message"] == "Not taking requests yet"
     assert closed["services"] == []
     await switch_on(client, db)
     seen = (await client.get("/api/behdin/agyaries/1/asking", headers=mine)).json()
@@ -143,7 +145,7 @@ async def test_an_ask_is_read_without_a_number_and_accepted_into_the_panthakys_o
     mine = await person(client)
     jashan = await service_id(db, "Jashan")
     made = await ask(client, mine, booking_ask(jashan))
-    assert made["status"] == "waiting" and made["label"] == "Waiting" and made["can_cancel"] is True
+    assert made["status"] == "waiting" and made["label"] == "Pending" and made["can_cancel"] is True
     assert made["service"]["name"] == "Jashan" and made["agyari"]["name"] == "Goti Adarian"
 
     # The panthaky reads it: first name only, nothing that says who they are.
@@ -183,9 +185,9 @@ async def test_an_ask_is_read_without_a_number_and_accepted_into_the_panthakys_o
     # The person is told, in plain words, in the app.
     notes = (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"]
     assert len(notes) == 1 and notes[0]["kind"] == "person_ask_accepted" and notes[0]["seen"] is False
-    assert "Goti Adarian accepted your ask for Jashan" in notes[0]["body"]
+    assert notes[0]["title"] == "Request confirmed" and notes[0]["body"].startswith("Goti Adarian: Jashan on ")
     mine_now = (await client.get(f"/api/behdin/me/asks/{made['id']}", headers=mine)).json()
-    assert mine_now["status"] == "accepted" and mine_now["label"] == "Accepted"
+    assert mine_now["status"] == "accepted" and mine_now["label"] == "Confirmed"
     # Answered once.
     again = await client.post(f"/api/mobed/agyaries/1/asks/{made['id']}/accept", headers=pan)
     assert again.status_code == 409
@@ -325,10 +327,10 @@ async def test_a_rejected_ask_is_told_with_the_reason_and_can_be_copied_to_anoth
                           json={"reason": "We are closed that day"})
     assert r.status_code == 200 and r.json()["status"] == "rejected"
     note = (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"][0]
-    assert note["kind"] == "person_ask_rejected" and "We are closed that day" in note["body"]
-    assert "ask another fire temple" in note["body"]
+    assert note["kind"] == "person_ask_rejected" and note["title"] == "Request declined"
+    assert note["body"].endswith("Reason: We are closed that day")
     view = (await client.get(f"/api/behdin/me/asks/{made['id']}", headers=mine)).json()
-    assert view["label"] == "Can't take it" and view["can_ask_another"] is True and view["can_cancel"] is False
+    assert view["label"] == "Declined" and view["can_ask_another"] is True and view["can_cancel"] is False
     assert view["reject_reason"] == "We are closed that day"
     # Nothing was made, and it cannot be accepted after.
     assert (await db.execute(select(Booking))).first() is None
@@ -347,7 +349,7 @@ async def test_a_rejected_ask_is_told_with_the_reason_and_can_be_copied_to_anoth
     await db.execute(update(Agyary).where(Agyary.id == other.id).values(takes_asks=False))
     await db.commit()
     again = await client.post(f"/api/behdin/me/asks/{made['id']}/ask-another", headers=mine, json={"agyary_id": other.id})
-    assert again.status_code == 400 and "Not taking asks in the app yet" in again.json()["detail"]
+    assert again.status_code == 400 and "Not taking requests yet" in again.json()["detail"]
 
 
 async def test_a_person_cancels_a_waiting_ask_and_an_accepted_one_stays_in_the_diary_as_cancelled(client, db, seeded):
@@ -358,7 +360,7 @@ async def test_a_person_cancels_a_waiting_ask_and_an_accepted_one_stays_in_the_d
     r = await client.post(f"/api/behdin/me/asks/{waiting['id']}/cancel", headers=mine)
     assert r.status_code == 200 and r.json()["status"] == "cancelled" and r.json()["can_ask_another"] is True
     told = (await db.execute(select(AppNotification).where(AppNotification.kind == "ask_cancelled"))).scalar_one()
-    assert "Farzin cancelled the ask for Jashan" in told.body and ME not in told.body
+    assert told.body.startswith("Farzin: Jashan") and ME not in told.body
     assert (await panthaky_asks(client, pan)).json()["waiting"] == 0
     assert (await client.post(f"/api/behdin/me/asks/{waiting['id']}/cancel", headers=mine)).status_code == 409
     assert (await client.post(f"/api/mobed/agyaries/1/asks/{waiting['id']}/accept", headers=pan)).status_code == 409
@@ -443,19 +445,19 @@ async def test_an_ask_is_checked_and_limited(client, db, seeded):
     for _ in range(3):
         await ask(client, mine, booking_ask(jashan))
     r = await client.post("/api/behdin/me/asks", headers=mine, json=booking_ask(jashan))
-    assert r.status_code == 429 and "waiting at this fire temple" in r.json()["detail"]
+    assert r.status_code == 429 and "pending here" in r.json()["detail"]
     other, _ = await second_agyari(client, db)
     from agyary.messaging import booking_service
     other_jashan = (await booking_service.list_services(db, other.id))[0].id
     for _ in range(2):
         await ask(client, mine, booking_ask(other_jashan, agyary_id=other.id))
     r = await client.post("/api/behdin/me/asks", headers=mine, json=booking_ask(other_jashan, agyary_id=other.id))
-    assert r.status_code == 429 and "5 asks a day" in r.json()["detail"]
+    assert r.status_code == 429 and "5 requests a day" in r.json()["detail"]
     # An agyari that does not take asks, or has nobody who can answer.
     await db.execute(update(Agyary).where(Agyary.id == other.id).values(takes_asks=False))
     await db.commit()
     r = await client.post("/api/behdin/me/asks", headers=mine, json=booking_ask(other_jashan, agyary_id=other.id))
-    assert r.status_code == 400 and "Not taking asks in the app yet" in r.json()["detail"]
+    assert r.status_code == 400 and "Not taking requests yet" in r.json()["detail"]
 
 
 async def test_asking_needs_a_panthaky_who_can_answer(client, db, seeded):
@@ -465,7 +467,7 @@ async def test_asking_needs_a_panthaky_who_can_answer(client, db, seeded):
     await db.execute(update(User).where(User.phone == PANTHAKY).values(access="off"))
     await db.commit()
     r = await client.post("/api/behdin/me/asks", headers=mine, json=booking_ask(await service_id(db, "Jashan")))
-    assert r.status_code == 400 and r.json()["detail"].startswith("Not taking asks in the app yet")
+    assert r.status_code == 400 and r.json()["detail"].startswith("Not taking requests yet")
     assert (await client.get("/api/behdin/agyaries/1/asking", headers=mine)).json()["takes_asks"] is False
     assert headers
 
@@ -592,14 +594,196 @@ async def test_deleting_the_account_or_erasing_the_number_takes_the_asks_and_the
     assert (await panthaky_asks(client, pan)).json()["asks"] == []
 
 
-async def test_deleting_a_panthakys_diary_entry_or_account_leaves_the_persons_ask(client, db, seeded):
+async def test_deleting_the_booking_cancels_the_request_by_the_fire_temple_and_tells_the_person(client, db, seeded):
     pan = await switch_on(client, db)
     mine = await person(client)
     made = await ask(client, mine, booking_ask(await service_id(db, "Jashan")))
     done = (await client.post(f"/api/mobed/agyaries/1/asks/{made['id']}/accept", headers=pan)).json()
+    cal = (await client.get(f"/api/behdin/me/calendar?from={day(0)}&to={day(10)}", headers=mine)).json()["items"]
+    assert [i["source"] for i in cal] == ["request"] and cal[0]["date"] == day() and cal[0]["time"] == "10:00"
     r = await client.delete(f"/api/mobed/agyaries/1/bookings/{done['booking_id']}", headers=pan)
     assert r.status_code == 200, r.text
     row = (await db.execute(select(ServiceAsk).execution_options(populate_existing=True))).scalar_one()
-    assert row.status == "accepted" and row.result_booking_id is None
+    assert row.status == "cancelled_by_fire_temple" and row.result_booking_id is None
     view = (await client.get(f"/api/behdin/me/asks/{made['id']}", headers=mine)).json()
-    assert view["status"] == "accepted"
+    assert view["label"] == "Cancelled by the fire temple" and view["can_cancel"] is False
+    assert view["can_ask_another"] is True
+    notes = (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"]
+    assert notes[0]["kind"] == "person_ask_cancelled_by_temple"
+    assert notes[0]["body"] == f"Cancelled by Goti Adarian: Jashan on {day()[8:]}/{day()[5:7]}/{day()[:4]} 10:00"
+    assert (await client.get(f"/api/behdin/me/calendar?from={day(0)}&to={day(10)}", headers=mine)).json()["items"] == []
+    # It cannot be cancelled again by the person.
+    assert (await client.post(f"/api/behdin/me/asks/{made['id']}/cancel", headers=mine)).status_code == 409
+
+
+async def test_deleting_the_memorial_cancels_the_request_and_the_calendar_reads_the_memorials_dates_live(client, db, seeded):
+    pan = await switch_on(client, db)
+    mine = await person(client)
+    today = service_asks.today_ist()
+    memorial = (await client.post("/api/behdin/me/memorials", headers=mine, json={
+        "departed_name": "Dinshaw Rustom Mehta", "death_date": (today - timedelta(days=2)).isoformat(),
+        "calendar": "shenshai", "day_counts": [10, 30], "monthly": {"count": 3}, "yearly": {"count": 2}})).json()
+    chosen = [o["code"] for o in memorial["observances"] if o["code"] in ("day_30", "month_1", "month_2")]
+    made = await ask(client, mine, {"agyary_id": 1, "service_id": await service_id(db, "Afringan"),
+                                    "memorial": {"memorial_id": memorial["id"], "codes": chosen}})
+    done = (await client.post(f"/api/mobed/agyaries/1/asks/{made['id']}/accept", headers=pan)).json()
+    far = (today + timedelta(days=500)).isoformat()
+    cal = (await client.get(f"/api/behdin/me/calendar?from={today.isoformat()}&to={(today + timedelta(days=399)).isoformat()}",
+                            headers=mine)).json()["items"]
+    mine_items = [i for i in cal if i["source"] == "request"]
+    assert 1 <= len(mine_items) <= len(chosen) and far
+
+    # The panthaky moves one date: the person's request and calendar follow, and they are told.
+    saved = (await client.get(f"/api/mobed/agyaries/1/memorials/{done['memorial_id']}", headers=pan)).json()
+    obs = saved["observances"][0]
+    moved_to = (today + timedelta(days=200)).isoformat()
+    r = await client.patch(
+        f"/api/mobed/agyaries/1/memorials/{done['memorial_id']}/observances/{obs['id']}", headers=pan,
+        json={"move_to": moved_to})
+    assert r.status_code == 200, r.text
+    view = (await client.get(f"/api/behdin/me/asks/{made['id']}", headers=mine)).json()
+    assert view["status"] == "accepted" and view["changed"] is True and view["label"] == "Changed"
+    assert moved_to in [d["date"] for d in view["memorial"]["dates"]]
+    notes = (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"]
+    assert notes[0]["kind"] == "person_ask_changed" and notes[0]["body"].startswith("Changed by Goti Adarian: Afringan, now ")
+
+    # The panthaky deletes the memorial: the request is cancelled by the fire temple, the calendar empties.
+    assert (await client.delete(f"/api/mobed/agyaries/1/memorials/{done['memorial_id']}", headers=pan)).status_code == 200
+    view = (await client.get(f"/api/behdin/me/asks/{made['id']}", headers=mine)).json()
+    assert view["status"] == "cancelled_by_fire_temple" and view["label"] == "Cancelled by the fire temple"
+    notes = (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"]
+    assert notes[0]["kind"] == "person_ask_cancelled_by_temple"
+    assert notes[0]["body"].startswith("Cancelled by Goti Adarian: Afringan on ")
+    cal = (await client.get(f"/api/behdin/me/calendar?from={today.isoformat()}&to={(today + timedelta(days=399)).isoformat()}",
+                            headers=mine)).json()["items"]
+    assert [i for i in cal if i["source"] == "request"] == []
+
+
+async def test_editing_the_time_or_the_geh_tells_the_person_and_the_request_shows_the_new_one(client, db, seeded):
+    pan = await switch_on(client, db)
+    mine = await person(client)
+    made = await ask(client, mine, booking_ask(await service_id(db, "Jashan")))
+    done = (await client.post(f"/api/mobed/agyaries/1/asks/{made['id']}/accept", headers=pan)).json()
+    booking = await db.get(Booking, done["booking_id"], populate_existing=True)
+    edit = {"behdin_phone": ME, "behdin_name": "Farzin Meherzad Turel", "service_id": booking.service_id,
+            "ceremony_datetime": f"{day(5)}T11:30:00", "purpose": "gujrela_nu"}
+    # Saving with nothing changed says nothing.
+    same = {**edit, "ceremony_datetime": f"{day()}T10:00:00"}
+    assert (await client.put(f"/api/mobed/agyaries/1/bookings/{booking.id}", headers=pan, json=same)).status_code == 200
+    assert (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"][0]["kind"] == "person_ask_accepted"
+    r = await client.put(f"/api/mobed/agyaries/1/bookings/{booking.id}", headers=pan, json=edit)
+    assert r.status_code == 200, r.text
+    view = (await client.get(f"/api/behdin/me/asks/{made['id']}", headers=mine)).json()
+    assert view["date"] == day(5) and view["time"] == "11:30" and view["changed"] is True
+    note = (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"][0]
+    d5 = day(5)
+    assert note["kind"] == "person_ask_changed"
+    assert note["body"] == f"Changed by Goti Adarian: Jashan, now {d5[8:]}/{d5[5:7]}/{d5[:4]} 11:30"
+    cal = (await client.get(f"/api/behdin/me/calendar?from={day(0)}&to={day(10)}", headers=mine)).json()["items"]
+    assert [(i["date"], i["time"]) for i in cal] == [(day(5), "11:30")]
+
+
+async def test_deleting_the_machi_or_stopping_the_series_cancels_the_request(client, db, seeded):
+    pan = await switch_on(client, db)
+    mine = await person(client)
+    machi = await service_id(db, "Machi")
+    one = await ask(client, mine, {"agyary_id": 1, "service_id": machi, "purpose": "patet", "date": day(5), "geh": 2})
+    done = (await client.post(f"/api/mobed/agyaries/1/asks/{one['id']}/accept", headers=pan)).json()
+    # A geh changed by the panthaky is told as a change.
+    held = await db.get(Machi, done["machi_id"], populate_existing=True)
+    r = await client.put(f"/api/mobed/agyaries/1/machis/{held.id}", headers=pan, json={
+        "behdin_phone": ME, "behdin_name": "Farzin Meherzad Turel", "roj": 1, "mah": 1, "year": 1400, "geh": 3,
+        "gregorian": day(5), "purpose": "patet"})
+    assert r.status_code == 200 and r.json().get("confirmed", True), r.text
+    view = (await client.get(f"/api/behdin/me/asks/{one['id']}", headers=mine)).json()
+    assert view["geh"] == 3 and view["geh_name"] == "Uzirin" and view["changed"] is True
+    assert (await client.get("/api/behdin/notifications", headers=mine)).json()["notifications"][0]["body"].endswith(", Uzirin")
+    assert (await client.delete(f"/api/mobed/agyaries/1/machis/{held.id}", headers=pan)).status_code == 200
+    assert (await client.get(f"/api/behdin/me/asks/{one['id']}", headers=mine)).json()["status"] == "cancelled_by_fire_temple"
+
+    # A repeating series stopped from a later occurrence ends the request, though its first date stays.
+    jashan = await service_id(db, "Jashan")
+    series = await ask(client, mine, booking_ask(jashan, date=day(6), repeat={"pattern": "monthly", "count": 6}))
+    done = (await client.post(f"/api/mobed/agyaries/1/asks/{series['id']}/accept", headers=pan)).json()
+    first = await db.get(Booking, done["booking_id"], populate_existing=True)
+    later = (await db.execute(select(Booking).where(Booking.recurrence_rule_id == first.recurrence_rule_id,
+                                                     Booking.id != first.id).order_by(Booking.ceremony_datetime))).scalars().first()
+    assert (await client.delete(f"/api/mobed/agyaries/1/bookings/{later.id}?future=true", headers=pan)).status_code == 200
+    assert (await client.get(f"/api/behdin/me/asks/{series['id']}", headers=mine)).json()["status"] == "cancelled_by_fire_temple"
+    assert (await client.get(f"/api/behdin/me/calendar?from={day(0)}&to={day(300)}", headers=mine)).json()["items"] == []
+
+
+# --- setting up: prices first, then switch on -------------------------------------------------
+async def test_requests_cannot_be_switched_on_until_every_offered_service_has_a_price(client, db, seeded):
+    pan = await panthaky_headers(client)
+    satum = await service_id(db, "Satum")
+    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": None})
+    state = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()
+    assert state["ready"] is False and {s["name"]: s["price"] for s in state["services"]}["Satum"] is None
+    refused = await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})
+    assert refused.status_code == 409 and refused.json()["detail"] == "Enter a price for every service first."
+    # A service switched off is not offered, so it needs no price; zero is a price.
+    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"is_active": False})
+    assert (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()["ready"] is True
+    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": 0, "is_active": True})
+    assert (await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})).status_code == 200
+
+    # While it is on: no price cleared, no unpriced service switched on, the last service stays on.
+    r = await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": None})
+    assert r.status_code == 409
+    listed = (await client.get("/api/mobed/agyaries/1/service-prices", headers=pan)).json()["services"]
+    assert len(listed) == 10 and {s["name"] for s in listed} >= {"Machi", "Jashan", "Yazeshni"}   # the diary's catalog
+    ids = [s["id"] for s in listed]
+    for sid in ids[:-1]:
+        assert (await client.put(f"/api/mobed/agyaries/1/services/{sid}", headers=pan, json={"is_active": False})).status_code == 200
+    last = await client.put(f"/api/mobed/agyaries/1/services/{ids[-1]}", headers=pan, json={"is_active": False})
+    assert last.status_code == 409 and "at least one" in last.json()["detail"]
+    # Switching off is always allowed, and then the last one can go.
+    assert (await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": False})).status_code == 200
+    assert (await client.put(f"/api/mobed/agyaries/1/services/{ids[-1]}", headers=pan, json={"is_active": False})).status_code == 200
+    state = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()
+    assert state["ready"] is False and state["services"] == []
+    again = await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})
+    assert again.status_code == 409
+
+
+async def test_people_see_only_fire_temples_taking_requests_by_town_and_a_distance_only_for_a_pin(client, db, seeded):
+    await switch_on(client, db)
+    mine = await person(client)
+    pune = await agyari(db, "Pune Atash Behram (test)", (18.52, 73.86), city="Pune")
+    pune.kind, pune.takes_asks, pune.location_source = "atash_behram", True, "pin"
+    thane = await agyari(db, "Thane Adaran (test)", (19.2, 72.97), city="Thane")
+    thane.takes_asks, thane.location_source = True, "town"
+    quiet = await agyari(db, "Not Taking (test)", None, city="Mumbai")        # a panthaky, but switched off
+    nobody = await agyari(db, "No Panthaky (test)", None, city="Mumbai")
+    nobody.takes_asks = True
+    await member(db, pune, "+919822200201", "panthaky")
+    await member(db, thane, "+919822200202", "panthaky")
+    await member(db, quiet, "+919822200203", "panthaky")
+    await member(db, nobody, "+919822200204", "mobed")
+    await db.commit()
+
+    rows = (await client.post("/api/behdin/agyaries/find", headers=mine, json={})).json()["agyaries"]
+    names = [r["name"] for r in rows]
+    assert names == ["Goti Adarian", "Pune Atash Behram (test)", "Thane Adaran (test)"]    # by town, then name; nothing else
+    assert all(r["answers_in_app"] is True and r["distance_km"] is None for r in rows)
+    assert set(rows[0]) == {"id", "name", "city", "kind", "distance_km", "answers_in_app"}
+    # The person's town first.
+    rows = (await client.post("/api/behdin/agyaries/find", headers=mine, json={"town": "thane"})).json()["agyaries"]
+    assert [r["city"] for r in rows] == ["Thane", "Mumbai", "Pune"]
+    # A distance only for an exact pin, and only when the position was sent; it is not given back.
+    body = {"town": "Pune", "lat": 18.53, "lng": 73.85}
+    raw = await client.post("/api/behdin/agyaries/find", headers=mine, json=body)
+    by = {r["name"]: r for r in raw.json()["agyaries"]}
+    assert by["Pune Atash Behram (test)"]["distance_km"] < 5
+    assert by["Thane Adaran (test)"]["distance_km"] is None and by["Goti Adarian"]["distance_km"] is None
+    assert "18.53" not in raw.text and "73.85" not in raw.text
+    found = (await client.post("/api/behdin/agyaries/find", headers=mine, json={"q": "pun"})).json()["agyaries"]
+    assert [r["name"] for r in found] == ["Pune Atash Behram (test)"]
+    assert (await client.post("/api/behdin/agyaries/find", headers=mine, json={"lat": 18.9})).status_code == 400
+    assert (await client.post("/api/behdin/agyaries/find", headers=mine, json={"lat": 99, "lng": 1})).status_code == 400
+    assert (await client.get("/api/behdin/agyaries/towns", headers=mine)).json() == {"towns": ["Mumbai", "Pune", "Thane"]}
+    assert (await client.post("/api/behdin/agyaries/find", json={})).status_code == 401
+    assert (await client.get("/api/behdin/agyaries/towns")).status_code == 401
+    # The old list by position is gone.
+    assert (await client.post("/api/behdin/agyaries/nearby", headers=mine, json={})).status_code in (404, 405)

@@ -18,7 +18,7 @@ from sqlalchemy import select, text
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
 from agyary.models import User
 from agyary.services import erasure, memorials
-from tests.funeral_helpers import agyari, member
+from tests.funeral_helpers import agyari
 from tests.test_behdin_identity import auth, behdin_sign_in
 
 ME, OTHER = "+919911100081", "+919911100082"
@@ -46,65 +46,19 @@ MEMORIAL = {
 
 # --- the list of agyaries, and my agyari -----------------------------------------------------
 async def test_the_list_needs_a_sign_in_and_takes_the_position_in_the_body(client, db):
-    assert (await client.post("/api/behdin/agyaries/nearby", json={})).status_code == 401
+    # The list of fire temples taking requests is tested in tests/test_service_asks.py (R4.2 redesign).
+    assert (await client.post("/api/behdin/agyaries/find", json={})).status_code == 401
     mine = auth(await behdin_sign_in(client, ME))
     # A position in the address is not a way in: only the body counts.
-    assert (await client.post("/api/behdin/agyaries/nearby?lat=18.9&lng=72.8", headers=mine)).status_code == 422
-    r = await client.post("/api/behdin/agyaries/nearby", headers=mine, json={"lat": 18.9, "lng": 72.8})
-    assert r.status_code == 200
-
-
-async def test_the_list_puts_atash_behrams_first_then_nearest_and_says_who_answers_in_the_app(client, db, seeded):
-    mine = auth(await behdin_sign_in(client, ME))
-    behram = await agyari(db, "Far Atash Behram (test)", DELHI, city="Delhi")
-    behram.kind = "atash_behram"
-    near = await agyari(db, "Near Agyari (test)", MUMBAI)
-    near.kind = "adaran"
-    mid = await agyari(db, "Mid Dadgah (test)", (19.5, 72.9), city="Thane")
-    mid.kind = "dadgah"
-    await agyari(db, "Unmapped Agyari (test)", None)
-    closed = await agyari(db, "Closed Agyari (test)", MUMBAI)
-    closed.is_active = False
-    await member(db, near, "+919822200101", "panthaky")
-    await member(db, mid, "+919822200102", "mobed")
-    await db.commit()
-
-    body = {"lat": 18.95, "lng": 72.82}
-    rows = (await client.post("/api/behdin/agyaries/nearby", headers=mine, json=body)).json()["agyaries"]
-    names = [r["name"] for r in rows]
-    assert names[0] == "Far Atash Behram (test)"
-    assert names.index("Near Agyari (test)") < names.index("Mid Dadgah (test)") < names.index("Unmapped Agyari (test)")
-    assert "Closed Agyari (test)" not in names
-    by = {r["name"]: r for r in rows}
-    assert by["Near Agyari (test)"]["answers_in_app"] is True
-    assert by["Mid Dadgah (test)"]["answers_in_app"] is False   # only a mobed: not "a confirmed panthaky"
-    assert by["Unmapped Agyari (test)"]["answers_in_app"] is False
-    assert by["Near Agyari (test)"]["distance_km"] < 3 and by["Unmapped Agyari (test)"]["distance_km"] is None
-    assert by["Far Atash Behram (test)"]["distance_km"] > 1000
-    assert by["Near Agyari (test)"]["kind"] == "adaran" and by["Near Agyari (test)"]["city"] == "Mumbai"
-    # Nothing private, and the position is not given back.
-    assert set(rows[0]) == {"id", "name", "city", "kind", "distance_km", "answers_in_app"}
-    raw = (await client.post("/api/behdin/agyaries/nearby", headers=mine, json=body)).text
-    assert "18.95" not in raw and "72.82" not in raw and "919822200101" not in raw and "Er. " not in raw
-
-    # No position: by name, Atash Behrams still first, no distance.
-    rows = (await client.post("/api/behdin/agyaries/nearby", headers=mine, json={})).json()["agyaries"]
-    assert rows[0]["name"] == "Far Atash Behram (test)" and all(r["distance_km"] is None for r in rows)
-    rest = [r["name"].lower() for r in rows[1:]]
-    assert rest == sorted(rest)
-    # A search by name or town.
-    found = (await client.post("/api/behdin/agyaries/nearby", headers=mine, json={"q": "thane"})).json()["agyaries"]
-    assert [r["name"] for r in found] == ["Mid Dadgah (test)"]
-    # Half a position, or one off the map, is turned back in plain words.
-    assert (await client.post("/api/behdin/agyaries/nearby", headers=mine, json={"lat": 18.9})).status_code == 400
-    assert (await client.post("/api/behdin/agyaries/nearby", headers=mine,
-                              json={"lat": 91, "lng": 0})).status_code == 400
+    assert (await client.post("/api/behdin/agyaries/find?lat=18.9&lng=72.8", headers=mine)).status_code == 422
+    r = await client.post("/api/behdin/agyaries/find", headers=mine, json={"lat": 18.9, "lng": 72.8})
+    assert r.status_code == 200 and r.json() == {"agyaries": []}      # nobody is taking requests yet
 
 
 async def test_the_position_is_never_stored_or_logged(client, db, caplog):
     mine = auth(await behdin_sign_in(client, ME))
     with caplog.at_level(logging.DEBUG):
-        await client.post("/api/behdin/agyaries/nearby", headers=mine, json={"lat": 18.123457, "lng": 72.654321})
+        await client.post("/api/behdin/agyaries/find", headers=mine, json={"lat": 18.123457, "lng": 72.654321})
     assert "18.123457" not in caplog.text and "72.654321" not in caplog.text
     columns = (await db.execute(text(
         "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'"
