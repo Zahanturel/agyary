@@ -1158,11 +1158,16 @@ async def edit_machi(
             names = await _names_as_dicts(db, machi_id=machi.id)
         else:
             names = await _saved_names_for(db, machi.customer_id, living_only=purpose == "tandarosti")
+    was = (machi.gregorian_date, machi.geh)
     result = await booking_service.rebook_machi_slot(
         db, agyary, machi, roj=roj, mah=mah, year=year, geh=geh,
         gregorian=gregorian, purpose=purpose, names=names,
     )
     if result.machi is not None:
+        if (result.machi.gregorian_date, result.machi.geh) != was:
+            from agyary.services import service_asks   # the person who asked for it is told
+
+            await service_asks.fire_temple_changed(db, machi_id=machi.id)
         await _remember(db, machi.customer_id, names if explicit_names else None, remember_names)
     return result
 
@@ -1200,12 +1205,17 @@ async def edit_booking(
         else:
             customer = await db.get(Customer, booking.customer_id)
             names = await _auto_names(db, customer.id, service.name) if customer else []
+    was = booking.ceremony_datetime
     await booking_service.update_booking(
         db, agyary, booking, service,
         ceremony_dt_local=ceremony_dt_local, purpose=purpose, names=names,
         location=location, is_offsite=is_offsite,
     )
     await _remember(db, booking.customer_id, names if explicit_names else None, remember_names)
+    if booking.ceremony_datetime != was:
+        from agyary.services import service_asks   # the person who asked for it is told
+
+        await service_asks.fire_temple_changed(db, booking_id=booking.id)
     # Non-blocking flag, same as create; exclude this booking so it doesn't
     # find itself.
     conflict = await has_calendar_conflict(
@@ -1263,8 +1273,11 @@ async def delete_booking(
     if not await may_touch_booking(db, booking, actor_user_id):
         return False
 
+    from agyary.services import service_asks   # confirmed requests follow what is deleted here
+
     rule_id = booking.recurrence_rule_id
     if rule_id is None:
+        await service_asks.fire_temple_removed(db, booking_ids=[booking.id])
         await _clear_dependents(db, booking_ids=[booking.id])
         await db.delete(booking)
         await db.flush()
@@ -1281,6 +1294,9 @@ async def delete_booking(
         victims = [booking]
         survivors = [x for x in siblings if x.id != booking.id]
 
+    # A repeat that is stopped ends the requests that made it, even the occurrences that stay.
+    await service_asks.fire_temple_removed(
+        db, booking_ids=[x.id for x in (siblings if delete_future else victims)])
     await _clear_dependents(db, booking_ids=[v.id for v in victims])
 
     rule_gone = False
@@ -1362,6 +1378,9 @@ async def delete_behdin_scoped(
         for memorial in (await db.execute(
             select(Memorial).where(Memorial.customer_id == customer.id)
         )).scalars().all():
+            from agyary.services import service_asks
+
+            await service_asks.fire_temple_removed(db, memorial_ids=[memorial.id])
             await db.delete(memorial)
             out["memorials_deleted"] += 1
         await db.flush()
@@ -1452,8 +1471,11 @@ async def delete_machi(
     if not await may_modify_machi(db, machi, actor_user_id):
         return False
 
+    from agyary.services import service_asks   # confirmed requests follow what is deleted here
+
     rule_id = machi.recurrence_rule_id
     if rule_id is None:
+        await service_asks.fire_temple_removed(db, machi_ids=[machi.id])
         await _clear_dependents(db, machi_ids=[machi.id])
         await db.delete(machi)
         await db.flush()
@@ -1471,6 +1493,8 @@ async def delete_machi(
         victims = [machi]
         survivors = [m for m in siblings if m.id != machi.id]
 
+    await service_asks.fire_temple_removed(
+        db, machi_ids=[x.id for x in (siblings if delete_future else victims)])
     await _clear_dependents(db, machi_ids=[v.id for v in victims])
 
     rule_gone = False

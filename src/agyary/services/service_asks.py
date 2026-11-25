@@ -21,7 +21,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agyary.calendar import CalendarSystem, gregorian_to_parsi
@@ -35,6 +35,7 @@ from agyary.models import (
     AppNotification,
     Booking,
     Machi,
+    MemorialObservance,
     RecurrenceRule,
     Service,
     ServiceAsk,
@@ -43,6 +44,7 @@ from agyary.models import (
 from agyary.models.enums import (
     ASK_ACCEPTED,
     ASK_CANCELLED,
+    ASK_CANCELLED_BY_TEMPLE,
     ASK_REJECTED,
     ASK_WAITING,
     BOOKING_PURPOSES,
@@ -89,14 +91,17 @@ PANTHAKY_NOTICE_TTL = timedelta(days=2)
 PERSON_KIND = "person_ask_"
 KIND_ACCEPTED, KIND_REJECTED, KIND_NO_ANSWER = "person_ask_accepted", "person_ask_rejected", "person_ask_no_answer"
 KIND_NEW, KIND_CANCELLED = "ask_new", "ask_cancelled"
+KIND_TEMPLE_CANCELLED, KIND_TEMPLE_CHANGED = "person_ask_cancelled_by_temple", "person_ask_changed"
 REQUESTS_LINK = "#/requests"
 PERSON_ASKS_LINK = "#/asks"
 
-NOT_TAKING = "Not taking asks in the app yet"
+NOT_TAKING = "Not taking requests yet"
 NO_SUCH_AGYARI = "That fire temple could not be found."
-NO_SUCH_ASK = "That ask could not be found."
+NO_SUCH_ASK = "That request could not be found."
 
-LABELS = {"waiting": "Waiting", "accepted": "Accepted", "rejected": "Can't take it", "cancelled": "Cancelled"}
+LABELS = {"waiting": "Pending", "accepted": "Confirmed", "rejected": "Declined", "cancelled": "Cancelled",
+          ASK_CANCELLED_BY_TEMPLE: "Cancelled by the fire temple"}
+CHANGED_LABEL = "Changed"
 NO_ANSWER_LABEL = "No answer yet"
 
 
@@ -147,6 +152,8 @@ async def asking_view(db: AsyncSession, settings: Settings, agyary: Agyary) -> d
     }
     if takes:
         for s in await booking_service.list_services(db, agyary.id, exclude_machi=False):
+            if s.default_price is None:
+                continue          # a service without a price is not offered to people
             out["services"].append({
                 "id": s.id, "name": s.name, "usual_price": _price(s.default_price),
                 "offsite_capable": s.offsite_capable, "by_geh": is_slot_service(s),
@@ -246,15 +253,14 @@ async def _check_limits(db: AsyncSession, user_id: int, agyary_id: int) -> None:
         select(func.count()).select_from(ServiceAsk).where(ServiceAsk.user_id == user_id, ServiceAsk.created_at > since)
     )).scalar_one()
     if today_count >= MAX_ASKS_A_DAY:
-        raise AskError(f"You can send up to {MAX_ASKS_A_DAY} asks a day. Please try again tomorrow.", 429)
+        raise AskError(f"Up to {MAX_ASKS_A_DAY} requests a day. Try again tomorrow.", 429)
     waiting = (await db.execute(
         select(func.count()).select_from(ServiceAsk).where(
             ServiceAsk.user_id == user_id, ServiceAsk.agyary_id == agyary_id, ServiceAsk.status == ASK_WAITING)
     )).scalar_one()
     if waiting >= MAX_WAITING_PER_AGYARI:
         raise AskError(
-            f"You already have {MAX_WAITING_PER_AGYARI} asks waiting at this fire temple. "
-            "Please wait for an answer, or cancel one.", 429)
+            f"{MAX_WAITING_PER_AGYARI} requests are already pending here. Wait for an answer or cancel one.", 429)
 
 
 async def create(
@@ -269,13 +275,13 @@ async def create(
     if agyary is None or not agyary.is_active:
         raise AskError(NO_SUCH_AGYARI, 404)
     if not await can_take(db, settings, agyary):
-        raise AskError(f"{NOT_TAKING}. Please ask another fire temple.")
+        raise AskError(f"{NOT_TAKING}.")
     service = (
         await booking_service.get_service_by_id(db, agyary.id, body["service_id"])
         if type(body.get("service_id")) is int else None
     )
     if service is None:
-        raise AskError("That service is not offered here. Please choose another.")
+        raise AskError("That service is not offered here.")
     await _check_limits(db, user.id, agyary.id)
 
     slot = is_slot_service(service)
@@ -309,7 +315,7 @@ async def create(
                 raise AskError(str(exc), 404 if "could not be found" in str(exc) else 400) from exc
         codes = [d["code"] for d in made["dates"]]
         if service.name.strip().lower() == "jashan" and not all(memorials.is_anniversary(c) for c in codes):
-            raise AskError("Jashan can only be asked for the monthly and yearly days. Please choose another prayer, "
+            raise AskError("Jashan is for the monthly and yearly days only. Choose another prayer, "
                            "or only those days.")
         day = date.fromisoformat(made["dates"][0]["date"])
         purpose = "gujrela_nu"
@@ -408,6 +414,8 @@ def _what(ask: ServiceAsk, service_name: str, system: CalendarSystem) -> dict:
 
 
 def label_of(ask: ServiceAsk) -> str:
+    if ask.status == ASK_ACCEPTED and ask.changed_at is not None:
+        return CHANGED_LABEL
     if ask.status == ASK_WAITING and ask.no_answer_alert_at is not None:
         return NO_ANSWER_LABEL
     return LABELS[ask.status]
@@ -424,16 +432,21 @@ async def _names_of(db: AsyncSession, asks: list[ServiceAsk]) -> tuple[dict[int,
     return services, agyaries
 
 
-def serialize_for_person(ask: ServiceAsk, service_name: str, agyary: Agyary | None, system: CalendarSystem) -> dict:
+def serialize_for_person(ask: ServiceAsk, service_name: str, agyary: Agyary | None, system: CalendarSystem,
+                         live: dict | None = None) -> dict:
     out = _what(ask, service_name, system)
     can_cancel = ask.status == ASK_WAITING or (ask.status == ASK_ACCEPTED and ask.ceremony_date > today_ist())
     out.update(
         label=label_of(ask),
         agyari={"id": ask.agyary_id, "name": agyary.name if agyary else None, "city": agyary.city if agyary else None},
         can_cancel=can_cancel,
-        can_ask_another=out["status"] in (ASK_REJECTED, ASK_CANCELLED) or out["no_answer"],
+        can_ask_another=out["status"] in (ASK_REJECTED, ASK_CANCELLED, ASK_CANCELLED_BY_TEMPLE) or out["no_answer"],
         copied_from_id=ask.copied_from_id,
+        changed=ask.changed_at is not None and ask.status == ASK_ACCEPTED,
+        changed_at=ask.changed_at.isoformat() if ask.changed_at else None,
     )
+    if live:
+        _apply_live(out, live, system)
     return out
 
 
@@ -443,7 +456,8 @@ async def list_for_person(db: AsyncSession, user_id: int, system: CalendarSystem
         .order_by(ServiceAsk.created_at.desc(), ServiceAsk.id.desc()).limit(limit)
     )).scalars())
     services, agyaries = await _names_of(db, asks)
-    return [serialize_for_person(a, services.get(a.service_id, ""), agyaries.get(a.agyary_id), system) for a in asks]
+    return [serialize_for_person(a, services.get(a.service_id, ""), agyaries.get(a.agyary_id), system, await live_of(db, a))
+            for a in asks]
 
 
 async def get_for_person(db: AsyncSession, user_id: int, ask_id: int, *, lock: bool = False) -> ServiceAsk | None:
@@ -457,7 +471,8 @@ async def get_for_person(db: AsyncSession, user_id: int, ask_id: int, *, lock: b
 
 async def person_view(db: AsyncSession, ask: ServiceAsk, system: CalendarSystem) -> dict:
     services, agyaries = await _names_of(db, [ask])
-    return serialize_for_person(ask, services.get(ask.service_id, ""), agyaries.get(ask.agyary_id), system)
+    return serialize_for_person(ask, services.get(ask.service_id, ""), agyaries.get(ask.agyary_id), system,
+                                await live_of(db, ask))
 
 
 def serialize_for_panthaky(ask: ServiceAsk, service_name: str, first: str, system: CalendarSystem) -> dict:
@@ -501,6 +516,168 @@ async def waiting_count(db: AsyncSession, agyary_id: int) -> int:
 
 
 # ---------------------------------------------------------------------------
+# What the fire temple's diary says now (a request follows its result)
+# ---------------------------------------------------------------------------
+async def live_of(db: AsyncSession, ask: ServiceAsk) -> dict | None:
+    """When a confirmed request happens, read from what it made in the fire temple's diary (not from the
+    copy kept at asking), so a change there shows at once. None when it is not confirmed or what it
+    made cannot be read (then the stored copy stands)."""
+    if ask.status != ASK_ACCEPTED:
+        return None
+    if ask.result_booking_id:
+        b = await db.get(Booking, ask.result_booking_id, populate_existing=True)
+        if b is not None:
+            local = b.ceremony_datetime.astimezone(IST)
+            return {"date": local.date(), "time": local.time().replace(second=0, microsecond=0), "geh": None}
+    if ask.result_machi_id:
+        m = await db.get(Machi, ask.result_machi_id, populate_existing=True)
+        if m is not None:
+            return {"date": m.gregorian_date, "time": None, "geh": m.geh}
+    if ask.result_memorial_id:
+        rows = (await db.execute(
+            select(MemorialObservance.code, MemorialObservance.label, MemorialObservance.gregorian_date)
+            .where(MemorialObservance.memorial_id == ask.result_memorial_id)
+            .order_by(MemorialObservance.gregorian_date, MemorialObservance.day_number))).all()
+        if rows:
+            return {"date": rows[0][2], "time": None, "geh": None,
+                    "dates": [{"code": c, "label": lab, "date": d.isoformat()} for c, lab, d in rows]}
+    return None
+
+
+def _apply_live(out: dict, live: dict, system: CalendarSystem) -> None:
+    out["date"], out["date_text"] = live["date"].isoformat(), numeric_date(live["date"])
+    out["parsi"] = _parsi(live["date"], system)
+    out["time"], out["geh"] = _hhmm(live["time"]), live["geh"]
+    out["geh_name"] = GEH_NAMES.get(live["geh"]) if live["geh"] else None
+    if live.get("dates") and out.get("memorial"):
+        out["memorial"]["dates"] = [
+            {**d, "date_text": numeric_date(date.fromisoformat(d["date"])),
+             "parsi": _parsi(date.fromisoformat(d["date"]), system)} for d in live["dates"]]
+
+
+def _live_words(ask: ServiceAsk, live: dict | None) -> str:
+    if live is None:
+        return numeric_date(ask.ceremony_date)
+    out = numeric_date(live["date"])
+    if live.get("time"):
+        out += " " + live["time"].strftime("%H:%M")
+    if live.get("geh"):
+        out += f", {GEH_NAMES[live['geh']]}"
+    return out
+
+
+async def _asks_pointing_at(db: AsyncSession, *, booking_ids=(), machi_ids=(), memorial_ids=()) -> list[ServiceAsk]:
+    conds = []
+    if booking_ids:
+        conds.append(ServiceAsk.result_booking_id.in_(list(booking_ids)))
+    if machi_ids:
+        conds.append(ServiceAsk.result_machi_id.in_(list(machi_ids)))
+    if memorial_ids:
+        conds.append(ServiceAsk.result_memorial_id.in_(list(memorial_ids)))
+    if not conds:
+        return []
+    return list((await db.execute(
+        select(ServiceAsk).where(ServiceAsk.status == ASK_ACCEPTED, or_(*conds)).with_for_update()
+    )).scalars())
+
+
+async def _tell_person_in_txn(db: AsyncSession, ask: ServiceAsk, kind: str, title: str, body: str) -> None:
+    """The in-app notice goes in the same transaction as the change; the phone push is sent at once
+    (it never raises)."""
+    from agyary.core.config import get_settings
+
+    await reminders.notify(db, ask.user_id, kind, title, body, link=f"{PERSON_ASKS_LINK}/{ask.id}",
+                           ttl=PERSON_NOTICE_TTL)
+    await web_push.send_to_users(db, get_settings(), [ask.user_id], title=title, body=body,
+                                 url=f"/behdin{PERSON_ASKS_LINK}/{ask.id}", tag=f"ask-{ask.id}")
+
+
+async def fire_temple_removed(db: AsyncSession, *, booking_ids=(), machi_ids=(), memorial_ids=()) -> int:
+    """The fire temple deleted or stopped what confirmed requests made (a booking, a machi, a repeating
+    series, a memorial): each such request becomes "Cancelled by the fire temple" and its person is told.
+    Called BEFORE the diary row goes, from every place that deletes or stops one. Returns how many."""
+    asks = await _asks_pointing_at(db, booking_ids=booking_ids, machi_ids=machi_ids, memorial_ids=memorial_ids)
+    for ask in asks:
+        live = await live_of(db, ask)
+        ask.status, ask.cancelled_at = ASK_CANCELLED_BY_TEMPLE, _now()
+        agyary = await db.get(Agyary, ask.agyary_id)
+        service = await db.get(Service, ask.service_id)
+        await db.flush()
+        await _tell_person_in_txn(
+            db, ask, KIND_TEMPLE_CANCELLED, "Request cancelled",
+            f"Cancelled by {agyary.name}: {service.name} on {_live_words(ask, live)}")
+    return len(asks)
+
+
+async def fire_temple_changed(db: AsyncSession, *, booking_id=None, machi_id=None, memorial_id=None) -> int:
+    """The fire temple changed the date, time or geh of what a confirmed request made: the request
+    records it (``changed_at``) and its person is told what it is now. Called AFTER the change is flushed."""
+    asks = await _asks_pointing_at(
+        db, booking_ids=[booking_id] if booking_id else (), machi_ids=[machi_id] if machi_id else (),
+        memorial_ids=[memorial_id] if memorial_id else ())
+    for ask in asks:
+        live = await live_of(db, ask)
+        ask.changed_at = _now()
+        agyary = await db.get(Agyary, ask.agyary_id)
+        service = await db.get(Service, ask.service_id)
+        await db.flush()
+        await _tell_person_in_txn(
+            db, ask, KIND_TEMPLE_CHANGED, "Request changed",
+            f"Changed by {agyary.name}: {service.name}, now {_live_words(ask, live)}")
+    return len(asks)
+
+
+async def calendar_items(db: AsyncSession, user_id: int, start: date, end: date, system: CalendarSystem) -> list[dict]:
+    """The person's confirmed requests that fall between two days, read from what the fire temple's diary
+    holds now. A request the fire temple cancelled is not here; nor is one the person cancelled."""
+    asks = list((await db.execute(
+        select(ServiceAsk).where(ServiceAsk.user_id == user_id, ServiceAsk.status == ASK_ACCEPTED)
+        .order_by(ServiceAsk.id))).scalars())
+    if not asks:
+        return []
+    services, agyaries = await _names_of(db, asks)
+    items = []
+
+    def add(ask, when, at=None, geh=None, label=None):
+        if not start <= when <= end:
+            return
+        parsi = behdin_me.parsi_of(when, system)
+        roj, mah = behdin_me._roj_mah(parsi)
+        name = agyaries[ask.agyary_id].name if ask.agyary_id in agyaries else ""
+        items.append({
+            "kind": "request", "source": "request", "id": ask.id,
+            "title": f"{services.get(ask.service_id, '')} - {name}" + (f" ({label})" if label else ""),
+            "date": when.isoformat(), "time": _hhmm(at), "geh": geh,
+            "parsi_roj": roj, "parsi_mah": mah, "parsi": parsi,
+        })
+
+    for ask in asks:
+        if ask.result_booking_id:
+            first = await db.get(Booking, ask.result_booking_id, populate_existing=True)
+            rows = [first] if first is not None else []
+            if first is not None and first.recurrence_rule_id:
+                rows = list((await db.execute(select(Booking).where(
+                    Booking.recurrence_rule_id == first.recurrence_rule_id, Booking.status != "cancelled"))).scalars())
+            for b in rows:
+                local = b.ceremony_datetime.astimezone(IST)
+                add(ask, local.date(), local.time().replace(second=0, microsecond=0))
+        elif ask.result_machi_id:
+            first = await db.get(Machi, ask.result_machi_id, populate_existing=True)
+            rows = [first] if first is not None else []
+            if first is not None and first.recurrence_rule_id:
+                rows = list((await db.execute(select(Machi).where(
+                    Machi.recurrence_rule_id == first.recurrence_rule_id, Machi.status != "cancelled"))).scalars())
+            for m in rows:
+                add(ask, m.gregorian_date, geh=m.geh)
+        elif ask.result_memorial_id:
+            for code, lab, when in (await db.execute(
+                    select(MemorialObservance.code, MemorialObservance.label, MemorialObservance.gregorian_date)
+                    .where(MemorialObservance.memorial_id == ask.result_memorial_id))).all():
+                add(ask, when, label=lab)
+    return items
+
+
+# ---------------------------------------------------------------------------
 # Telling people
 # ---------------------------------------------------------------------------
 def _when_words(ask: ServiceAsk) -> str:
@@ -538,8 +715,8 @@ async def told_new(db: AsyncSession, settings: Settings, ask: ServiceAsk) -> Non
     service = await db.get(Service, ask.service_id)
     first = first_name(person.name) or "Someone"
     await _tell_panthakys(
-        db, settings, ask, KIND_NEW, "A new ask",
-        f"{first} asks for {service.name} {_when_words(ask)}. Open Requests to answer.")
+        db, settings, ask, KIND_NEW, "New request",
+        f"{first}: {service.name} {_when_words(ask)}.")
 
 
 # ---------------------------------------------------------------------------
@@ -551,9 +728,9 @@ async def cancel(db: AsyncSession, settings: Settings, ask: ServiceAsk) -> None:
     that was made from an ask stays in the panthaky's book as it is (its dates carry no cancelled state);
     the panthaky is told and can take it out."""
     if ask.status not in (ASK_WAITING, ASK_ACCEPTED):
-        raise AskError("This ask has already been answered or cancelled.", 409)
+        raise AskError("This request has already been answered or cancelled.", 409)
     if ask.status == ASK_ACCEPTED and ask.ceremony_date <= today_ist():
-        raise AskError("It is too late to cancel this one in the app. Please speak to the fire temple.")
+        raise AskError("Too late to cancel here. Speak to the fire temple.")
     was_accepted = ask.status == ASK_ACCEPTED
     if was_accepted:
         await _cancel_in_diary(db, ask)
@@ -563,10 +740,10 @@ async def cancel(db: AsyncSession, settings: Settings, ask: ServiceAsk) -> None:
     person = await db.get(User, ask.user_id)
     service = await db.get(Service, ask.service_id)
     await _tell_panthakys(
-        db, settings, ask, KIND_CANCELLED, "An ask was cancelled",
-        f"{first_name(person.name) or 'Someone'} cancelled the ask for {service.name} {_when_words(ask)}."
-        + (" It is marked Cancelled by the person in your diary." if was_accepted and ask.kind != "memorial" else "")
-        + (" Their memorial stays in your book until you remove it." if was_accepted and ask.kind == "memorial" else ""))
+        db, settings, ask, KIND_CANCELLED, "Request cancelled",
+        f"{first_name(person.name) or 'Someone'}: {service.name} {_when_words(ask)}."
+        + (" Marked Cancelled by the person." if was_accepted and ask.kind != "memorial" else "")
+        + (" Remove their memorial if not needed." if was_accepted and ask.kind == "memorial" else ""))
 
 
 CANCEL_NOTE = "Cancelled by the person."
@@ -616,7 +793,7 @@ async def ask_another(db: AsyncSession, settings: Settings, user: User, ask: Ser
     nobody answered is withdrawn from the first one (and its panthaky told), so two cannot both say yes."""
     open_no_answer = ask.status == ASK_WAITING and ask.no_answer_alert_at is not None
     if ask.status not in (ASK_REJECTED, ASK_CANCELLED) and not open_no_answer:
-        raise AskError("You can ask another fire temple once this one has said no, or has not answered.", 409)
+        raise AskError("Only a declined, cancelled or unanswered request can go to another fire temple.", 409)
     if type(agyary_id) is not int:
         raise AskError("Please choose a fire temple.")
     if agyary_id == ask.agyary_id and ask.status != ASK_CANCELLED:
@@ -629,7 +806,7 @@ async def ask_another(db: AsyncSession, settings: Settings, user: User, ask: Ser
         Service.agyary_id == agyary_id, func.lower(Service.name) == old_service.name.strip().lower(),
         Service.is_active.is_(True)))).scalars().first()
     if match is None:
-        raise AskError("That fire temple does not offer this service. Please choose another.")
+        raise AskError("That fire temple does not offer this service.")
     body: dict[str, Any] = {
         "agyary_id": agyary_id, "service_id": match.id, "where": ask.venue, "area": ask.area,
         "names": list(ask.names or []), "note": ask.note,
@@ -661,7 +838,7 @@ async def may_answer(db: AsyncSession, user: User, agyary_id: int) -> bool:
 
 async def reject(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: User, reason: Any) -> None:
     if ask.status != ASK_WAITING:
-        raise AskError("This ask has already been answered or cancelled.", 409)
+        raise AskError("This request has already been answered or cancelled.", 409)
     if reason is not None and not isinstance(reason, str):
         raise AskError("Please check the reason.")
     why = _clean_text(reason, "the reason", REASON_MAX)
@@ -672,9 +849,8 @@ async def reject(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: Us
     agyary = await db.get(Agyary, ask.agyary_id)
     service = await db.get(Service, ask.service_id)
     await _tell_person(
-        db, settings, ask, KIND_REJECTED, "Can't take it",
-        f"{agyary.name} can't take your ask for {service.name} {_when_words(ask)}."
-        + (f" They said: {why.rstrip('.!? ')}." if why else "") + " You can ask another fire temple.")
+        db, settings, ask, KIND_REJECTED, "Request declined",
+        f"{agyary.name}: {service.name} {_when_words(ask)}." + (f" Reason: {why}" if why else ""))
 
 
 async def accept(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: User) -> dict:
@@ -684,16 +860,16 @@ async def accept(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: Us
     accepted with what it made. Anything the diary refuses (a geh already held, a day gone by) leaves
     everything as it was and says so in plain words."""
     if ask.status != ASK_WAITING:
-        raise AskError("This ask has already been answered or cancelled.", 409)
+        raise AskError("This request has already been answered or cancelled.", 409)
     agyary = await db.get(Agyary, ask.agyary_id)
     person = await db.get(User, ask.user_id)
     service = await booking_service.get_service_by_id(db, ask.agyary_id, ask.service_id)
     if person is None or not person.is_active:
-        raise AskError("This person is no longer in the app. Please reject the ask.", 409)
+        raise AskError("This person is no longer in the app. Decline the request.", 409)
     if service is None:
-        raise AskError("This service is no longer offered. Please reject the ask.", 409)
+        raise AskError("This service is no longer offered. Decline the request.", 409)
     if ask.ceremony_date < today_ist():
-        raise AskError("That day has already passed. Please reject the ask.", 409)
+        raise AskError("That day has passed. Decline the request.", 409)
     names = list(ask.names or []) or None
     made: dict[str, Any] = {}
     skipped: list[date] = []
@@ -710,7 +886,7 @@ async def accept(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: Us
             )
             if result.machi is None:
                 raise AskError(
-                    f"You already hold that geh on {numeric_date(ask.ceremony_date)}. Please reject the ask, "
+                    f"You already hold that geh on {numeric_date(ask.ceremony_date)}. Decline the request, "
                     "or ask the person to choose another day.", 409)
             made["machi"], customer_id, skipped = result.machi, result.machi.customer_id, list(result.skipped)
             _note(made["machi"], ask)
@@ -723,7 +899,7 @@ async def accept(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: Us
                 recurring=ask.repeat_pattern, recurring_count=ask.repeat_count,
             )
             if result is None:
-                raise AskError("This service is no longer offered. Please reject the ask.", 409)
+                raise AskError("This service is no longer offered. Decline the request.", 409)
             made["booking"], customer_id = result.booking, result.booking.customer_id
             _note(made["booking"], ask)
     except (mobed_dashboard.BookingInputError, memorials.MemorialError) as exc:
@@ -736,9 +912,8 @@ async def accept(db: AsyncSession, settings: Settings, ask: ServiceAsk, user: Us
     await db.flush()
     await db.commit()
     await _tell_person(
-        db, settings, ask, KIND_ACCEPTED, "Your ask was accepted",
-        f"{agyary.name} accepted your ask for {service.name} {_when_words(ask)}."
-        " Your name and number have been shared with them.")
+        db, settings, ask, KIND_ACCEPTED, "Request confirmed",
+        f"{agyary.name}: {service.name} {_when_words(ask)}.")
     return {"ask_id": ask.id, "customer_id": customer_id, "booking_id": ask.result_booking_id,
             "machi_id": ask.result_machi_id, "memorial_id": ask.result_memorial_id,
             "skipped": [d.isoformat() for d in skipped]}
@@ -758,7 +933,7 @@ async def _accept_memorial(db, agyary: Agyary, user: User, person: User, service
     schedule, _death, _date = memorials.plan(system, choice, memorials.today_ist())
     codes = list(ask.memorial_codes or [])
     if not codes or not set(codes) <= {o.code for o in schedule}:
-        raise AskError("This memorial's dates could not be worked out. Please reject the ask.", 409)
+        raise AskError("This memorial's dates could not be worked out. Decline the request.", 409)
     leave_out = tuple(o.code for o in schedule if o.code not in set(codes))
     memorial = await memorials.create_memorial(db, agyary, user.id, customer, choice, [service.id], leave_out)
     return memorial
@@ -802,8 +977,7 @@ async def no_answer(db: AsyncSession, now: datetime, settings: Settings) -> int:
             service = await db.get(Service, ask.service_id)
             await _tell_person(
                 db, settings, ask, KIND_NO_ANSWER, NO_ANSWER_LABEL,
-                f"{agyary.name} has not answered your ask for {service.name} {_when_words(ask)} yet. "
-                "You can ask another fire temple.")
+                f"{agyary.name}: {service.name} {_when_words(ask)}.")
         except Exception:   # noqa: BLE001 - it is claimed (at most once); the next ask still goes
             logger.exception("Telling that nobody answered ask %s failed after it was claimed", ask_id)
             await db.rollback()
@@ -821,15 +995,39 @@ def person_notices_clause():
 # ---------------------------------------------------------------------------
 # The panthaky's switch, and the services and their usual prices
 # ---------------------------------------------------------------------------
-def read_switch(agyary: Agyary) -> dict:
-    return {"takes_asks": bool(agyary.takes_asks)}
+NEEDS_PRICES = "Enter a price for every service first."
 
 
-def change_switch(agyary: Agyary, value: Any) -> dict:
+async def _offered(db: AsyncSession, agyary_id: int) -> list[Service]:
+    """The services the fire temple will offer: the active ones of its diary's catalog."""
+    return list((await db.execute(
+        select(Service).where(Service.agyary_id == agyary_id, Service.is_active.is_(True))
+        .order_by(Service.display_order, Service.id))).scalars())
+
+
+def _ready(offered: list[Service]) -> bool:
+    """At least one service, and every one has a price (0 is a price; nothing entered is not)."""
+    return bool(offered) and all(s.default_price is not None for s in offered)
+
+
+async def read_switch(db: AsyncSession, agyary: Agyary) -> dict:
+    """The switch, the services that will be offered with their prices, and whether it can be switched
+    on (``ready``: every offered service has a price)."""
+    offered = await _offered(db, agyary.id)
+    return {
+        "takes_asks": bool(agyary.takes_asks), "ready": _ready(offered),
+        "services": [{"id": s.id, "name": s.name, "price": _price(s.default_price)} for s in offered],
+    }
+
+
+async def change_switch(db: AsyncSession, agyary: Agyary, value: Any) -> dict:
+    """On only when set up (a price for every offered service); off is always allowed."""
     if type(value) is not bool:
-        raise AskError("Please choose on or off.")
+        raise AskError("Choose on or off.")
+    if value and not _ready(await _offered(db, agyary.id)):
+        raise AskError(NEEDS_PRICES, 409)
     agyary.takes_asks = value
-    return read_switch(agyary)
+    return await read_switch(db, agyary)
 
 
 def _service_price_row(s: Service) -> dict:
@@ -860,11 +1058,19 @@ def checked_price(value: Any) -> Decimal | None:
     return price.quantize(Decimal("0.01"))
 
 
-def change_service(service: Service, *, fields: set[str], price: Any, active: Any) -> dict:
-    if "default_price" in fields:
-        service.default_price = checked_price(price)
-    if "is_active" in fields:
-        if type(active) is not bool:
-            raise AskError("Please choose on or off.")
-        service.is_active = active
+async def change_service(
+    db: AsyncSession, agyary: Agyary, service: Service, *, fields: set[str], price: Any, active: Any,
+) -> dict:
+    """While the fire temple takes requests every offered service keeps its price and the last
+    one stays on: those changes are refused (409) until requests are switched off."""
+    new_price = checked_price(price) if "default_price" in fields else service.default_price
+    if "is_active" in fields and type(active) is not bool:
+        raise AskError("Choose on or off.")
+    now_active = active if "is_active" in fields else service.is_active
+    if agyary.takes_asks:
+        if now_active and new_price is None:
+            raise AskError("A price is needed while taking requests.", 409)
+        if service.is_active and not now_active and len(await _offered(db, agyary.id)) <= 1:
+            raise AskError("Keep at least one service on while taking requests.", 409)
+    service.default_price, service.is_active = new_price, now_active
     return _service_price_row(service)

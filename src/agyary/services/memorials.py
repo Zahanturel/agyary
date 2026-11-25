@@ -600,6 +600,7 @@ async def update_observance(
     ``new_date`` moves it to another day (marked as moved by hand, so a re-work
     of the whole memorial leaves it there); ``back_to_usual`` puts it back on
     the day its schedule gives it."""
+    was = (observance.gregorian_date, observance.time_of_day)
     if back_to_usual:
         usual = usual_observance(memorial, observance.code)
         if usual is None:
@@ -624,6 +625,10 @@ async def update_observance(
     elif notes is not None:
         observance.notes = notes.strip() or None
     await db.flush()
+    if (observance.gregorian_date, observance.time_of_day) != was:
+        from agyary.services import service_asks   # the person who asked for it is told
+
+        await service_asks.fire_temple_changed(db, memorial_id=memorial.id)
 
 
 async def set_paid(
@@ -645,6 +650,9 @@ async def set_paid(
 
 
 async def delete_memorial(db: AsyncSession, memorial: Memorial) -> None:
+    from agyary.services import service_asks   # a confirmed request that made it follows
+
+    await service_asks.fire_temple_removed(db, memorial_ids=[memorial.id])
     await db.delete(memorial)
     await db.flush()
 
@@ -841,6 +849,9 @@ async def remove_observance(db: AsyncSession, memorial: Memorial, observance: Me
     memorial.removed_codes = sorted(basis.removed | {observance.code})
     memorial.observances.remove(observance)
     await db.flush()
+    from agyary.services import service_asks   # the person who asked for it is told
+
+    await service_asks.fire_temple_changed(db, memorial_id=memorial.id)
 
 
 @dataclass
@@ -1035,6 +1046,10 @@ async def edit_memorial(
     memorial.start_from = rp.start_from
     memorial.removed_codes = sorted(removed)
     await db.flush()
+    if moved or rp.dropped or any(row is None for _o, row in rp.kept):
+        from agyary.services import service_asks   # the person who asked for it is told
+
+        await service_asks.fire_temple_changed(db, memorial_id=memorial.id)
 
 
 # ---------------------------------------------------------------------------

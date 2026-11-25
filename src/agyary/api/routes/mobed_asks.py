@@ -45,7 +45,7 @@ def _error(exc: service_asks.AskError) -> HTTPException:
 @router.get("/agyaries/{agyary_id}/asks-setting")
 async def get_asks_setting(agyary_id: int, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_user)) -> dict:
-    return service_asks.read_switch(await _managed(db, user, agyary_id))
+    return await service_asks.read_switch(db, await _managed(db, user, agyary_id))
 
 
 class AsksSettingIn(BaseModel):
@@ -57,7 +57,7 @@ async def put_asks_setting(agyary_id: int, payload: AsksSettingIn, db: AsyncSess
                            user: User = Depends(get_current_user)) -> dict:
     agyary = await _managed(db, user, agyary_id)
     try:
-        saved = service_asks.change_switch(agyary, payload.takes_asks)
+        saved = await service_asks.change_switch(db, agyary, payload.takes_asks)
     except service_asks.AskError as exc:
         raise _error(exc) from exc
     await db.commit()
@@ -83,14 +83,14 @@ async def put_service(agyary_id: int, service_id: int, payload: ServiceChangeIn,
                       user: User = Depends(get_current_user)) -> dict:
     """Set the usual price (a number from 0, or null to clear it) and/or switch the service off or on.
     Only what is sent is changed. Switching off keeps the service for the events that used it."""
-    await _managed(db, user, agyary_id)
+    agyary = await _managed(db, user, agyary_id)
     service = (await db.execute(select(Service).where(
         Service.id == service_id, Service.agyary_id == agyary_id))).scalar_one_or_none()
     if service is None:
         raise HTTPException(status_code=404, detail="That service could not be found.")
     try:
-        saved = service_asks.change_service(
-            service, fields=payload.model_fields_set, price=payload.default_price, active=payload.is_active)
+        saved = await service_asks.change_service(
+            db, agyary, service, fields=payload.model_fields_set, price=payload.default_price, active=payload.is_active)
     except service_asks.AskError as exc:
         raise _error(exc) from exc
     await db.commit()
