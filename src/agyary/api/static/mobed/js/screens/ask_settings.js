@@ -115,8 +115,8 @@ export async function paintAskSettings(box, agyary, alive) {
     price.onchange = () => {
       const v = price.value.trim().replace(/^(rs\.?|₹)\s*/i, "").replace(/,/g, "");
       if (v === kept) return;
-      // A refused price (a bad number, or clearing one while requests are on) goes back to what is saved.
-      save({ default_price: v === "" ? null : v }, price, () => {});
+      // A refused price that is a valid number (clearing one while requests are on) goes back to what is saved.
+      save({ default_price: v === "" ? null : v }, price, () => { if (v === "") price.value = kept; });
     };
   });
 }
