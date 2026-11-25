@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * "Asks from people", a section at the top of the Requests tab (R4.2; docs/behdin-r4-2-design.md).
+ * "Requests from people", a section at the top of the Requests tab (R4.2; docs/behdin-r4-2-design.md).
  *
- * A confirmed panthaky sees it when asks exist or their fire temple takes asks. Each ask is a card:
+ * A confirmed panthaky sees it when requests exist or their fire temple takes them. Each request is a card:
  * the service, the day (with Roj and Mah), the geh or time, where, the names to pray, the note, the
  * person's first name and how long ago. The person's number is not here: Accept (a sheet first) puts
  * their name and number in the panthaky's behdins and the booking in their diary. Can't take it
@@ -45,7 +45,7 @@ function dayText(date, parsi) {
 function whenText(a) {
   if (a.geh_name) return `${a.geh_name} geh`;
   if (a.time) return clock(a.time);
-  return "";
+  return "Time open";
 }
 
 function repeatText(r) {
@@ -66,8 +66,8 @@ function fact(label, value) {
 }
 
 function statusLine(a) {
-  if (a.status === "waiting") return a.no_answer ? "Waiting, no answer yet" : "Waiting for you";
-  return a.label || a.status;
+  const label = a.label || a.status;
+  return a.changed ? `${label}, changed` : label;
 }
 
 function memorialFacts(a) {
@@ -80,7 +80,7 @@ function memorialFacts(a) {
 function singleFacts(a) {
   const when = whenText(a);
   return `${fact("Day", esc(dayText(a.date, a.parsi)))}
-    ${when ? fact("Geh or time", esc(when)) : ""}
+    ${fact("Time", esc(when))}
     ${a.repeat ? fact("Repeats", esc(repeatText(a.repeat).replace(/^Repeats /, ""))) : ""}`;
 }
 
@@ -100,16 +100,16 @@ function cardHtml(a) {
   return `<div class="card ask-card" data-ask="${a.id}">
     <p style="margin:0 0 4px"><b>${esc(statusLine(a))}</b></p>
     <h2 style="margin:0">${esc(a.service.name)}${a.purpose_label ? ` <span class="meta" style="font-weight:400">${esc(a.purpose_label)}</span>` : ""}</h2>
-    <p class="meta" style="margin:2px 0 8px">${esc(a.person.first_name || "A person")} asked ${esc(ago(a.created_at))}</p>
+    <p class="meta" style="margin:2px 0 8px">${esc(a.person.first_name || "A person")}, ${esc(ago(a.created_at))}</p>
     ${a.kind === "memorial" && a.memorial ? memorialFacts(a) : singleFacts(a)}
     ${fact("Where", a.where === "home" ? `At home${a.area ? `, ${esc(a.area)}` : ""}` : "At the fire temple")}
     ${a.names.length ? fact("Names to pray", a.names.map(nameText).join("<br>")) : ""}
     ${a.note ? fact("Note", esc(a.note)) : ""}
-    ${a.status === "rejected" && a.reject_reason ? fact("Your reason", esc(a.reject_reason)) : ""}
+    ${a.status === "rejected" && a.reject_reason ? fact("Reason", esc(a.reject_reason)) : ""}
     <p class="meta" role="alert" data-msg style="margin:6px 0 0"></p>
     ${waiting ? `<div class="stack" style="margin-top:10px">
-        <button type="button" data-accept>Accept</button>
-        <button type="button" class="secondary" data-reject>Can't take it</button>
+        <button type="button" data-accept>Confirm</button>
+        <button type="button" class="secondary" data-reject>Decline</button>
       </div>` : a.status === "accepted" ? linksHtml(a) : ""}
   </div>`;
 }
@@ -117,11 +117,10 @@ function cardHtml(a) {
 function sectionHtml(asks, takes) {
   const waiting = asks.filter(a => a.status === "waiting");
   const answered = asks.filter(a => a.status !== "waiting");
-  return `<h2 style="margin:0 0 4px">Asks from people</h2>
-    <p class="meta" style="margin:0 0 12px">People ask you for a prayer here. Their number is shared with you only when you accept.</p>
+  return `<h2 style="margin:0 0 8px">Requests from people</h2>
     ${waiting.length ? waiting.map(cardHtml).join("")
-      : `<div class="card"><p style="margin:0">${takes ? "No asks are waiting for you." : "No asks yet. You are not taking asks from people: switch it on in Settings."}</p></div>`}
-    ${answered.length ? `<h2 style="margin:16px 0 8px">Answered asks</h2>${answered.slice(0, SHOWN_ANSWERED).map(cardHtml).join("")}` : ""}
+      : `<div class="card"><p style="margin:0">${takes ? "No requests pending." : "Not taking requests. Set up in Settings."}</p></div>`}
+    ${answered.length ? `<h2 style="margin:16px 0 8px">Answered</h2>${answered.slice(0, SHOWN_ANSWERED).map(cardHtml).join("")}` : ""}
     <div style="margin-bottom:24px"></div>`;
 }
 
@@ -139,7 +138,7 @@ export async function paintAsks(box, alive) {
   } catch (e) {
     // Not the panthaky of a fire temple the server knows: nothing to show. Any other failure is said.
     if (!alive() || e.status === 403 || e.status === 404) return;
-    box.innerHTML = `<div class="card"><h2>Asks from people</h2><p class="meta">Couldn't load this: ${esc(e.message)}</p></div>`;
+    box.innerHTML = `<div class="card"><h2>Requests from people</h2><p class="meta">Couldn't load this: ${esc(e.message)}</p></div>`;
     return;
   }
   if (!alive()) return;
@@ -170,13 +169,13 @@ export async function paintAsks(box, alive) {
 
 function confirmAccept(a, agyary, msg, update, alive) {
   const sheet = openSheet({
-    title: `Accept ${a.service.name}?`,
+    title: `Confirm ${a.service.name}?`,
     html: `<p style="margin-top:0">${esc(a.person.first_name || "The person")}'s name and number will be added to your
         behdins and this goes into your diary.</p>
       <p class="meta" role="alert" data-err style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">
-        <button type="button" data-yes>Accept</button>
-        <button type="button" class="ghost" data-no>Not yet</button>
+        <button type="button" data-yes>Confirm</button>
+        <button type="button" class="ghost" data-no>Cancel</button>
       </div>`,
   });
   const body = sheet.body;
@@ -199,20 +198,19 @@ function confirmAccept(a, agyary, msg, update, alive) {
     made.set(a.id, { ...res, agyary_id: agyary.id });
     update(res.ask);
     refreshAfterAction();
-    showInfo(`Accepted. ${a.person.first_name || "They"} is in your behdins and it is in your diary.`);
+    showInfo("Confirmed.");
   };
 }
 
 function confirmReject(a, agyary, update, alive) {
   const sheet = openSheet({
-    title: "Can't take it?",
-    html: `<p class="meta" style="margin-top:0">${esc(a.person.first_name || "The person")} is told, and can ask another fire temple.</p>
-      <label for="askReason">Reason <span class="meta">(optional, 100 letters at most)</span></label>
-      <textarea id="askReason" rows="2" maxlength="100" placeholder="e.g. No mobed free that day"></textarea>
+    title: "Decline this request?",
+    html: `<label for="askReason" style="margin-top:0">Reason (optional)</label>
+      <textarea id="askReason" rows="2" maxlength="100"></textarea>
       <p class="meta" role="alert" data-err style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">
-        <button type="button" class="danger" data-yes>Can't take it</button>
-        <button type="button" class="ghost" data-no>Keep it</button>
+        <button type="button" class="danger" data-yes>Decline</button>
+        <button type="button" class="ghost" data-no>Cancel</button>
       </div>`,
   });
   const body = sheet.body;
@@ -233,6 +231,6 @@ function confirmReject(a, agyary, update, alive) {
     sheet.close();
     update(res);
     refreshAfterAction();
-    showInfo(`Done. ${a.person.first_name || "The person"} is told.`);
+    showInfo("Declined.");
   };
 }

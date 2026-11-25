@@ -15,7 +15,7 @@ def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
     assert "/mobed-app/js/screens/ask_settings.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v105"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v106"' in worker
 
 
 def test_screens_use_the_finished_routes():
@@ -33,10 +33,21 @@ def test_the_two_apps_never_name_each_other():
     for path in NEW_FILES:
         text = path.read_text(encoding="utf-8")
         # "parsi" in lower case is only the server's field name for the Roj and Mah of a day.
-        assert "Parsi" not in text and not re.search(r"behdin app", text, re.I), path.name
+        assert "Parsi" not in text and not re.search(r"behdin app|agyari|namaste", text, re.I), path.name
 
 
 def test_accept_says_what_it_does_and_the_reason_is_short():
     section = (JS / "asks_section.js").read_text(encoding="utf-8")
     assert "name and number will be added to your" in section
     assert 'maxlength="100"' in section
+
+
+def test_the_words_are_request_and_fire_temple_not_ask_and_agyari():
+    """What a mobed reads: "Requests from people", Confirm and Decline, prices before the switch."""
+    section = (JS / "asks_section.js").read_text(encoding="utf-8")
+    settings = (JS / "screens" / "ask_settings.js").read_text(encoding="utf-8")
+    assert "Requests from people" in section and "Requests from people" in settings
+    assert ">Confirm</button>" in section and ">Decline</button>" in section and "Time open" in section
+    assert "Asks from people" not in section + settings and "Take asks" not in settings
+    assert settings.index("Services and prices") < settings.index("Take requests")
+    assert "Enter a price for every service." in settings
