@@ -587,3 +587,12 @@ The first R4.2 (built 25 Nov) is being redesigned; nothing more is built until t
   panthaky may add a short message but need not. (The first build left "Accepted" standing after a memorial was deleted.)
 - A person and the panthaky **chat in the app** (the panthaky can write if the person is on the app); the free "note"
   field of the first build was wrong and goes. The wording of both apps is to be terse and professional, no explanation.
+
+R4.2 redesign, second round (owner, 25 Nov 2026):
+- **Memorial requests** carry the departed's name and the date of passing, plus a **recurring option exactly as in the
+  mobed side's "+ Add" flow** (that flow is the model for it); no observance list.
+- **One fire temple by default, any other allowed** for a single request (as decided on 25 Nov).
+- **Date and time:** the person proposes a date (Roj and Mah shown) and may leave the time open; the panthaky confirms the time.
+- **Chat:** the panthaky can chat with all their behdins at any time in the app, like WhatsApp, as much as they want,
+  with no moderation; the person chats with the panthaky (later maybe mobeds too). The goal is connecting the
+  community. (This replaces the per-request thread idea; the Behdins tab on the mobed side is the panthaky's way into it.)
