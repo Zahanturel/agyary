@@ -137,7 +137,7 @@ ASK_PURPOSES = BOOKING_PURPOSES + MACHI_PURPOSES
 
 # A person's ask to an agyari (R4.2): what it is, where it stands, where it happens.
 # The purpose is a booking's (Gujrela nu, Khushali nu, Hama Anjuman) or a machi's (Patet, Tandarosti).
-ASK_KINDS = ("single", "repeating", "memorial")
+ASK_ITEM_KINDS = ("single", "repeating", "memorial")
 ASK_WAITING, ASK_ACCEPTED, ASK_REJECTED, ASK_CANCELLED = "waiting", "accepted", "rejected", "cancelled"
 # The fire temple deleted or stopped what an accepted request made: the request follows it.
 ASK_CANCELLED_BY_TEMPLE = "cancelled_by_fire_temple"
