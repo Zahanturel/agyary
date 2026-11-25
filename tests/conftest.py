@@ -49,7 +49,9 @@ async def db():
             existing = (await conn.execute(text(
                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
             ))).scalars().all()
-            for stale in sorted(set(existing) - set(Base.metadata.tables) - {"alembic_version"}):
+            # (A table the models still have but with columns a migration took away
+            # can hold such keys too, so every table goes, not only the unknown ones.)
+            for stale in sorted(set(existing) - {"alembic_version"}):
                 await conn.execute(text(f'DROP TABLE IF EXISTS "{stale}" CASCADE'))
             await conn.run_sync(Base.metadata.drop_all)
             await conn.run_sync(Base.metadata.create_all)

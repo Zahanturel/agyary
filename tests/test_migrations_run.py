@@ -1150,7 +1150,7 @@ async def test_the_service_asks_migration_holds_its_rules_and_comes_off_cleanly(
     try:
         _ok(_alembic("upgrade", "d4e5f6a0b1c2"))
         await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Asked (test)', 'Mumbai')")
-        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("upgrade", "e5f6a0b1c2d3"))
         assert await _scratch_execute("SELECT takes_asks FROM agyaries") == [(False,)]
         await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', "
                                "'+919000000041', 'behdin')")
@@ -1205,7 +1205,7 @@ async def test_the_requests_follow_the_fire_temple_migration_widens_the_status_a
     changed_at; the status stays one of the five; going back refuses while such a request exists."""
     await _recreate()
     try:
-        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("upgrade", "f6a0b1c2d3e4"))
         await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Asked (test)', 'Mumbai')")
         await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', "
                                "'+919000000051', 'behdin')")
@@ -1229,6 +1229,77 @@ async def test_the_requests_follow_the_fire_temple_migration_widens_the_status_a
         _ok(_alembic("downgrade", "e5f6a0b1c2d3"))
         cols = await _scratch_execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'service_asks'")
         assert "changed_at" not in {c for (c,) in cols}
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)
+
+
+async def test_the_request_items_migration_turns_each_request_into_one_item_and_comes_off_cleanly():
+    """a7c8d9e0f1b2 (R4.2 redesign): every request already there becomes a request of one item with what
+    it had (a memorial keeps its old choices), its names become plain text, the note goes; the items hold
+    their rules; going back refuses while a request exists (D8) and works once there is none."""
+    from datetime import time as _time
+
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "f6a0b1c2d3e4"))
+        await _scratch_execute("INSERT INTO agyaries (name, city) VALUES ('Asked (test)', 'Mumbai')")
+        await _scratch_execute("INSERT INTO users (name, phone, account_kind) VALUES ('Person (test)', "
+                               "'+919000000061', 'behdin')")
+        (user,), = await _scratch_execute("SELECT id FROM users")
+        (agyary,), = await _scratch_execute("SELECT id FROM agyaries")
+        await _scratch_execute("INSERT INTO services (agyary_id, name, default_price) VALUES (:a, 'Jashan (test)', 1500)",
+                               {"a": agyary})
+        (service,), = await _scratch_execute("SELECT id FROM services")
+        base = ("INSERT INTO service_asks (user_id, agyary_id, service_id, kind, purpose, ceremony_date, geh,"
+                " ceremony_time, names, note, repeat_pattern, repeat_count, memorial_choice, memorial_codes, status,"
+                " cancelled_at) VALUES (:u, :a, :s, :k, 'gujrela_nu', '2026-12-01', NULL, :t, CAST(:n AS jsonb), 'x',"
+                " :rp, :rc, CAST(:mc AS jsonb), CAST(:codes AS jsonb), :st, :ca)")
+        common = {"u": user, "a": agyary, "s": service, "t": _time(10, 0), "rp": None, "rc": None, "mc": None,
+                  "codes": None, "ca": None}
+        names = ('[{"section": "pair", "title": "osta", "name": "Dara (test)", "status": "departed", "pair_group": 1},'
+                 ' {"section": "pair", "title": "osti", "name": "Dina (test)", "status": "departed", "pair_group": 1}]')
+        await _scratch_execute(base, {**common, "k": "single", "n": names, "st": "waiting"})
+        await _scratch_execute(base, {**common, "k": "repeating", "n": "[]", "rp": "monthly", "rc": 6, "st": "accepted"})
+        legacy = ('{"choice": {"departed_name": "Dinshaw (test)", "death_date": "2026-11-01", "death_known": "2026-11-01"},'
+                  ' "dates": [{"code": "day_30", "label": "Masiso", "date": "2026-12-01"}]}')
+        await _scratch_execute(base, {**common, "k": "memorial", "n": "[]", "t": None, "mc": legacy,
+                                      "codes": '["day_30"]', "st": "cancelled_by_fire_temple",
+                                      "ca": datetime(2026, 11, 25, tzinfo=timezone.utc)})
+        _ok(_alembic("upgrade", "head"))
+        items = await _scratch_execute(
+            "SELECT i.kind, i.service_id, i.purpose, i.ceremony_time, i.repeat_count, i.unit_price,"
+            " i.memorial_choice, i.gone_at IS NOT NULL FROM service_ask_items i ORDER BY i.id")
+        assert [(i[0], i[1], i[2], i[4], float(i[5]), i[7]) for i in items] == [
+            ("single", service, "gujrela_nu", None, 1500.0, False),
+            ("repeating", service, "gujrela_nu", 6, 1500.0, False),
+            ("memorial", service, None, None, 1500.0, True)]
+        memorial = items[2][6]
+        assert memorial["departed_name"] == "Dinshaw (test)" and memorial["death_date"] == "2026-11-01"
+        assert memorial["legacy"]["codes"] == ["day_30"]
+        assert (await _scratch_execute("SELECT names FROM service_asks ORDER BY id"))[0][0] == ["Dara (test)", "Dina (test)"]
+        cols = {c for (c,) in await _scratch_execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'service_asks'")}
+        assert not {"note", "service_id", "kind", "purpose", "geh", "venue", "area", "memorial_codes"} & cols
+
+        insert = ("INSERT INTO service_ask_items (ask_id, kind, service_id, ceremony_date, geh, ceremony_time,"
+                  " repeat_pattern) VALUES (:a, :k, :s, '2026-12-01', :g, :t, :rp)")
+        (ask_id,) = (await _scratch_execute("SELECT id FROM service_asks LIMIT 1"))[0]
+        ok = {"a": ask_id, "k": "single", "s": service, "g": None, "t": None, "rp": None}
+        await _scratch_execute(insert, ok)                                         # a time may be left open
+        await _refused(insert, {**ok, "k": "weekly"}, "an unknown kind")
+        await _refused(insert, {**ok, "g": 9}, "a geh that does not exist")
+        await _refused(insert, {**ok, "g": 2, "t": _time(9, 0)}, "both a geh and a time")
+        await _refused(insert, {**ok, "s": None}, "a prayer without a service")
+        await _refused(insert, {**ok, "rp": "monthly"}, "a repeat on an item that does not repeat")
+        await _scratch_execute(insert, {**ok, "k": "memorial", "s": None})         # a memorial has no service
+
+        down = _alembic("downgrade", "f6a0b1c2d3e4")
+        assert down.returncode != 0 and "requests" in (down.stdout + down.stderr)
+        await _scratch_execute("DELETE FROM service_asks")
+        assert await _scratch_execute("SELECT 1 FROM service_ask_items") == []        # the items go with the request
+        _ok(_alembic("downgrade", "f6a0b1c2d3e4"))
         _ok(_alembic("upgrade", "head"))
         _ok(_alembic("check"))
     finally:
