@@ -557,3 +557,12 @@ The Parsi app follows every rule of the mobed app; nothing is invented for it:
   any event and opens like one; adding anything is the one "+" (New event) as in the mobed app.
 - **Install** sits outside Settings, where the mobed app has it (the sign-in screen), not in the menu.
 - **Little explanation**: no consent sheet, no hints under fields, no explanatory cards; plain labels like the mobed app.
+
+## Amendment, 25 Nov 2026 (later still): the Parsi app's design is its own (owner)
+
+The two apps share the system and the rules, not the look. **Parsi's visual design is deliberately different from
+Mobed Diary's**: a normal modern consumer app (clean, smooth, animated scrolling, blur, ordinary type sizes, not the
+large-text mobed layout), with its own theology-aware, behdin-focused feel. It is designed in a separate design
+session; until then the shared styles stay as a stopgap and no more screens are added to Parsi. The functional rules
+(D11 words, one calendar logic with year navigation, everything an event, install outside settings, little
+explanation) still hold.
