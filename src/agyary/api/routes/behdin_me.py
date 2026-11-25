@@ -26,7 +26,7 @@ from agyary.api.routes.mobed import get_current_person
 from agyary.core.config import get_settings
 from agyary.core.database import get_db
 from agyary.models import User
-from agyary.services import behdin_me, mobed_dashboard
+from agyary.services import behdin_me, mobed_dashboard, service_asks
 
 router = APIRouter(prefix="/api/behdin", tags=["behdin"])
 
@@ -58,18 +58,19 @@ def _bad(exc: Exception) -> HTTPException:
 # ---------------------------------------------------------------------------
 # Agyaries to choose from
 # ---------------------------------------------------------------------------
-class NearbyIn(BaseModel):
+class FindIn(BaseModel):
+    town: str | None = None
+    q: str | None = None
     lat: float | None = None
     lng: float | None = None
-    q: str | None = None
 
 
-@router.post("/agyaries/nearby")
-async def agyaries_nearby(
-    payload: NearbyIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)
+@router.post("/agyaries/find")
+async def agyaries_find(
+    payload: FindIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)
 ) -> dict:
-    """Fire temples to choose from: Atash Behrams first, then nearest first (by name
-    when no position is given). The position is in the body, used for this answer only."""
+    """The fire temples that take requests, the person's town first. The position (optional) is in
+    the BODY: used for this answer only to measure a distance to an exact pin, never stored or logged."""
     _limit(user, "nearby", per_minute=30)
     lat, lng = payload.lat, payload.lng
     if (lat is None) != (lng is None):
@@ -78,9 +79,15 @@ async def agyaries_nearby(
         math.isfinite(lat) and math.isfinite(lng) and -90 <= lat <= 90 and -180 <= lng <= 180
     ):
         raise HTTPException(status_code=400, detail="That position is not on the map.")
-    q = (payload.q or "").strip()[:100]
-    found = await behdin_me.nearby(db, get_settings(), lat=lat, lng=lng, q=q)
+    found = await behdin_me.find(
+        db, get_settings(), town=(payload.town or "").strip()[:100], q=(payload.q or "").strip()[:100], lat=lat, lng=lng)
     return {"agyaries": found}
+
+
+@router.get("/agyaries/towns")
+async def agyaries_towns(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_person)) -> dict:
+    _read(user)
+    return {"towns": await behdin_me.towns(db, get_settings())}
 
 
 class MyAgyariIn(BaseModel):
@@ -289,4 +296,7 @@ async def my_calendar(
         items = await behdin_me.calendar(db, user.id, from_, to)
     except behdin_me.PersonError as exc:
         raise _bad(exc) from exc
+    # Confirmed requests, read from the fire temple's diary as it is now.
+    items += await service_asks.calendar_items(db, user.id, from_, to, await mobed_dashboard.reading_system(db, user.id))
+    items.sort(key=lambda i: (i["date"], i["source"] != "memorial", i["title"].lower(), i["id"]))
     return {"from": from_.isoformat(), "to": to.isoformat(), "items": items}

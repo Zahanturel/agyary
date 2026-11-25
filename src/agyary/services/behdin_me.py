@@ -15,7 +15,7 @@ from dataclasses import replace
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,43 +45,44 @@ class PersonError(Exception):
 # ---------------------------------------------------------------------------
 # Agyaries to choose from
 # ---------------------------------------------------------------------------
-async def nearby(
-    db: AsyncSession, settings: Settings, *, lat: float | None, lng: float | None, q: str | None
-) -> list[dict]:
-    """Active agyaries, Atash Behrams first and then nearest first (by name when
-    the person gave no position). ``lat`` and ``lng`` are used here, to sort and
-    to measure, and never stored or logged. Nothing private is returned: no
-    phone, no names of mobeds."""
+async def _listed(db: AsyncSession, settings: Settings, q: str | None = None) -> list[Agyary]:
+    """The fire temples a person is shown: only those taking requests (the panthaky set them up and
+    switched them on) that have a confirmed panthaky who can answer. No others, not even greyed out."""
+    stmt = select(Agyary).where(Agyary.is_active.is_(True), Agyary.takes_asks.is_(True))
     q = (q or "").strip()
     if q:
-        rows = await mobed_dashboard.search_agyaries(db, q, limit=500)
-    else:
-        rows = list((await db.execute(select(Agyary).where(Agyary.is_active.is_(True)))).scalars())
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        stmt = stmt.where(or_(Agyary.name.ilike(like, escape="\\"), Agyary.city.ilike(like, escape="\\")))
+    rows = list((await db.execute(stmt)).scalars())
+    reach = await panthaky.reach_of(db, settings, [a.id for a in rows])
+    return [a for a in rows if reach.get(a.id) == panthaky.REACH_PANTHAKY]
+
+
+async def find(
+    db: AsyncSession, settings: Settings, *, town: str | None, q: str | None, lat: float | None, lng: float | None
+) -> list[dict]:
+    """Fire temples to choose from: the person's town first, then by town name, then by name. A distance
+    is given only for a fire temple whose position is an exact pin, and only when the person sent theirs
+    (used here to measure, never stored or logged)."""
+    mine = (town or "").strip().lower()
     located = lat is not None and lng is not None
-
-    def distance(a: Agyary) -> float | None:
-        if not located or a.latitude is None or a.longitude is None:
-            return None
-        return funeral_requests.km(lat, lng, a.latitude, a.longitude)
-
-    measured = [(a, distance(a)) for a in rows]
-    measured.sort(key=lambda pair: (
-        pair[0].kind != "atash_behram",
-        pair[1] is None,
-        pair[1] if pair[1] is not None else 0.0,
-        pair[0].name.lower(),
-        pair[0].id,
-    ))
-    chosen = measured[:NEARBY_LIMIT]
-    reach = await panthaky.reach_of(db, settings, [a.id for a, _d in chosen])
-    return [
-        {
+    rows = await _listed(db, settings, q)
+    rows.sort(key=lambda a: (bool(mine) and a.city.strip().lower() != mine, a.city.strip().lower(),
+                             a.name.lower(), a.id))
+    out = []
+    for a in rows[:NEARBY_LIMIT]:
+        exact = located and a.location_source == "pin" and a.latitude is not None and a.longitude is not None
+        d = funeral_requests.km(lat, lng, a.latitude, a.longitude) if exact else None
+        out.append({
             "id": a.id, "name": a.name, "city": a.city, "kind": a.kind,
-            "distance_km": None if d is None else round(d, 1),
-            "answers_in_app": reach.get(a.id) == panthaky.REACH_PANTHAKY,
-        }
-        for a, d in chosen
-    ]
+            "distance_km": None if d is None else round(d, 1), "answers_in_app": True,
+        })
+    return out
+
+
+async def towns(db: AsyncSession, settings: Settings) -> list[str]:
+    """The towns of the fire temples that are listed (to pick one's own from)."""
+    return sorted({a.city.strip() for a in await _listed(db, settings) if a.city.strip()}, key=str.lower)
 
 
 async def my_agyari(db: AsyncSession, settings: Settings, user_id: int) -> dict | None:
