@@ -566,3 +566,24 @@ large-text mobed layout), with its own theology-aware, behdin-focused feel. It i
 session; until then the shared styles stay as a stopgap and no more screens are added to Parsi. The functional rules
 (D11 words, one calendar logic with year navigation, everything an event, install outside settings, little
 explanation) still hold.
+
+## Amendment, 25 Nov 2026 (R4.2 redesign, owner's words and answers)
+
+The first R4.2 (built 25 Nov) is being redesigned; nothing more is built until the discussion is done. Owner:
+- A request is a request for **prayers**, whatever the kind: that is what a fire temple offers. The first question is
+  **what to book** (multiple choice from what that fire temple offers), never "for the living or the departed".
+- The person's flow carries **no Varsi, Chhamsi, Deci or other observance choices**: nobody in grief will do that step.
+  That detailed flow stays on the mobed and Doongerwadi side only.
+- A fire temple may **not start requests until it has set them up**: the list is taken from the services already in
+  its diary, a price is entered for each, and only then can "Take requests" be switched on (answer: prices first, then
+  switch on). Only fire temples that are set up and taking requests are listed to people; others are not shown at all.
+- Locations: most pins are the town centre, so "nearest" means nothing. People find their fire temple **by town**
+  (same town first); a distance shows only for an exact pin. Doongerwadi prices (estimated total cost) are for later.
+- **Notifications:** no ask produced one: in-app notices were written but no phone has ever turned on phone
+  notifications (0 subscriptions) and nothing asks. Phones (people and panthakys) are **asked once at first sign-in** in both
+  apps, with a switch left in settings.
+- **A change or deletion by the panthaky** of something confirmed: the request's status changes automatically
+  ("Cancelled by the fire temple" / "Changed"), the person's calendar follows at once, and they are notified; the
+  panthaky may add a short message but need not. (The first build left "Accepted" standing after a memorial was deleted.)
+- A person and the panthaky **chat in the app** (the panthaky can write if the person is on the app); the free "note"
+  field of the first build was wrong and goes. The wording of both apps is to be terse and professional, no explanation.
