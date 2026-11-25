@@ -295,7 +295,9 @@ export const putRequestSettings = (aid, mode, escalateMinutes) =>
 export const getAsksSetting = (aid) => get(`/agyaries/${aid}/asks-setting`);
 export const putAsksSetting = (aid, takesAsks) => put(`/agyaries/${aid}/asks-setting`, { takes_asks: takesAsks });
 export const listAsks = (aid) => get(`/agyaries/${aid}/asks`);
-export const acceptAsk = (aid, askId) => post(`/agyaries/${aid}/asks/${askId}/accept`, {});
+/** Confirms the whole request. `times` is {itemId: "HH:MM"} for items whose time was left open. */
+export const acceptAsk = (aid, askId, times) =>
+  post(`/agyaries/${aid}/asks/${askId}/accept`, times && Object.keys(times).length ? { times } : {});
 export const rejectAsk = (aid, askId, reason) => post(`/agyaries/${aid}/asks/${askId}/reject`, { reason: reason || null });
 export const getServicePrices = (aid) => get(`/agyaries/${aid}/service-prices`);
 /** `body` holds only what changes: default_price (a number, or null for none) and/or is_active. */

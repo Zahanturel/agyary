@@ -51,6 +51,7 @@ import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
 import { renderMobeds } from "./screens/our_mobeds.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
+import { askNotificationsOnce } from "./notify_prompt.js";
 import { paintActBanner } from "./acting.js";
 
 // --- Routes -----------------------------------------------------------------
@@ -308,6 +309,7 @@ async function boot() {
   // What a mobed must not miss goes in front of them as the app opens.
   if (signedIn() && !state.offline && hasAccess() && !isBehdin()) refreshNotifications({ popup: true });
   refreshRequestCount();
+  if (signedIn() && !state.offline && hasAccess() && !isBehdin()) setTimeout(askNotificationsOnce, 1500);
 }
 
 // Signal came back after an offline boot. Take the session live and

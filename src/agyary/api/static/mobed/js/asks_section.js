@@ -3,17 +3,19 @@
 /**
  * "Requests from people", a section at the top of the Requests tab (R4.2; docs/behdin-r4-2-design.md).
  *
- * A confirmed panthaky sees it when requests exist or their fire temple takes them. Each request is a card:
- * the service, the day (with Roj and Mah), the geh or time, where, the names to pray, the note, the
- * person's first name and how long ago. The person's number is not here: Accept (a sheet first) puts
- * their name and number in the panthaky's behdins and the booking in their diary. Can't take it
- * opens a sheet with an optional reason. Anyone who is not the panthaky sees nothing.
+ * A confirmed panthaky sees it when requests exist or their fire temple takes them. Each request is a card
+ * of its items (service or memorial, day with Roj and Mah, time or geh, repeat), the names to pray, the
+ * estimated total, the person's first name and how long ago. The number is not here. Confirm applies to the
+ * whole request (a sheet first; an item with an open time asks for its time there) and puts the person in
+ * the panthaky's behdins and each item in the diary. Decline has an optional reason.
+ * Anyone who is not the panthaky sees nothing.
  */
 
 import { getAsksSetting, listAsks, acceptAsk, rejectAsk } from "./api.js";
-import { currentAgyary, TITLE_DISPLAY } from "./state.js";
+import { currentAgyary } from "./state.js";
 import { openSheet, showInfo } from "./ui.js";
 import { esc, gregLabel } from "./util.js";
+import { flagProblems, clearProblems } from "./fielderrors.js";
 import { navigate } from "./router.js";
 import { refreshAfterAction } from "./notifications.js";
 
@@ -42,23 +44,21 @@ function dayText(date, parsi) {
   return parsi ? `${gregLabel(date)}, ${parsi}` : gregLabel(date);
 }
 
-function whenText(a) {
-  if (a.geh_name) return `${a.geh_name} geh`;
-  if (a.time) return clock(a.time);
+function whenText(it) {
+  if (it.geh_name) return `${it.geh_name} geh`;
+  if (it.time) return clock(it.time);
   return "Time open";
 }
 
-function repeatText(r) {
-  if (!r) return "";
-  const unit = r.pattern === "yearly" || r.pattern === "same_roj_mah_every_year" ? "year" : "month";
-  const word = unit === "year" ? "every year" : "every month";
-  return r.count ? `Repeats ${word}, ${r.count} ${unit}s in all` : `Repeats ${word}`;
+/** "Every month, 12 in all" / "Every year". */
+function repeatText(recurring, count) {
+  if (!recurring) return "";
+  const word = recurring === "yearly" ? "Every year" : "Every month";
+  return count ? `${word}, ${count} in all` : word;
 }
 
-/** One name to pray, as the diary reads it: "Osta Rustom Test (departed)". */
 function nameText(n) {
-  const title = TITLE_DISPLAY[n.title] || "";
-  return esc(`${title} ${n.name}${n.status === "departed" ? " (departed)" : ""}`.trim());
+  return esc(typeof n === "string" ? n : n.name);
 }
 
 function fact(label, value) {
@@ -70,26 +70,42 @@ function statusLine(a) {
   return a.changed ? `${label}, changed` : label;
 }
 
-function memorialFacts(a) {
-  const m = a.memorial;
-  return `${fact("For", `Memorial prayers for ${esc(m.departed_name)}`)}
-    ${fact("Dates", m.dates.map(d => `${esc(dayText(d.date, d.parsi))}${d.label ? ` <span class="meta">(${esc(d.label)})</span>` : ""}`)
-      .join("<br>"))}`;
+const GONE = "cancelled_by_fire_temple";
+
+function itemHtml(it) {
+  const gone = it.state === GONE;
+  const m = it.memorial;
+  const title = it.type === "memorial" ? "Memorial" : (it.service && it.service.name) || it.name;
+  const facts = m
+    ? `${fact("Departed", m.name_known ? esc(m.departed_name) : "Name not known")}
+       ${fact("Passed away", esc(m.death_date_text || ""))}
+       ${m.recurring ? fact("Repeats", esc(repeatText(m.recurring, m.recurring_count))) : ""}`
+    : `${fact("Day", esc(dayText(it.date, it.parsi)))}
+       ${fact("Time", esc(whenText(it)))}
+       ${it.repeat ? fact("Repeats", esc(repeatText(it.repeat.recurring, it.repeat.recurring_count))) : ""}`;
+  return `<div class="ask-item" data-item="${it.id}" style="padding:8px 0;border-top:1px solid var(--border)${gone ? ";opacity:.7" : ""}">
+    <div style="font-weight:600">${esc(title)}${gone ? ` <span class="meta" style="font-weight:400">Cancelled by the fire temple</span>`
+      : it.changed ? ` <span class="meta" style="font-weight:400">Changed</span>` : ""}</div>
+    ${facts}
+  </div>`;
 }
 
-function singleFacts(a) {
-  const when = whenText(a);
-  return `${fact("Day", esc(dayText(a.date, a.parsi)))}
-    ${fact("Time", esc(when))}
-    ${a.repeat ? fact("Repeats", esc(repeatText(a.repeat).replace(/^Repeats /, ""))) : ""}`;
+function totalText(a) {
+  if (a.total == null) return "";
+  const n = Number(a.total).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  return `${a.total_is_estimate ? "Estimate" : "Total"} \u20b9${n}`;
 }
 
 function linksHtml(a) {
   const m = made.get(a.id) || {};
   const btns = [];
-  if (m.booking_id) btns.push(`<button type="button" class="secondary small" data-go="#/booking/${m.agyary_id}/${m.booking_id}">Open the booking</button>`);
-  if (m.machi_id) btns.push(`<button type="button" class="secondary small" data-go="#/machi/${m.agyary_id}/${m.machi_id}">Open the machi</button>`);
-  if (m.memorial_id) btns.push(`<button type="button" class="secondary small" data-go="#/memorial/${m.memorial_id}">Open the memorial</button>`);
+  for (const r of m.items || []) {
+    const it = a.items.find(x => x.id === r.id);
+    const name = it && it.type === "memorial" ? "memorial" : (it && it.service && it.service.name) || "booking";
+    if (r.booking_id) btns.push(`<button type="button" class="secondary small" data-go="#/booking/${m.agyary_id}/${r.booking_id}">Open ${esc(name)}</button>`);
+    if (r.machi_id) btns.push(`<button type="button" class="secondary small" data-go="#/machi/${m.agyary_id}/${r.machi_id}">Open ${esc(name)}</button>`);
+    if (r.memorial_id) btns.push(`<button type="button" class="secondary small" data-go="#/memorial/${r.memorial_id}">Open ${esc(name)}</button>`);
+  }
   const cust = m.customer_id || a.customer_id;
   if (cust) btns.push(`<button type="button" class="ghost small" data-go="#/behdins/${cust}">Open ${esc(a.person.first_name || "them")} in Behdins</button>`);
   return btns.length ? `<div class="stack" style="margin-top:10px">${btns.join("")}</div>` : "";
@@ -97,14 +113,13 @@ function linksHtml(a) {
 
 function cardHtml(a) {
   const waiting = a.status === "waiting";
+  const total = totalText(a);
   return `<div class="card ask-card" data-ask="${a.id}">
-    <p style="margin:0 0 4px"><b>${esc(statusLine(a))}</b></p>
-    <h2 style="margin:0">${esc(a.service.name)}${a.purpose_label ? ` <span class="meta" style="font-weight:400">${esc(a.purpose_label)}</span>` : ""}</h2>
-    <p class="meta" style="margin:2px 0 8px">${esc(a.person.first_name || "A person")}, ${esc(ago(a.created_at))}</p>
-    ${a.kind === "memorial" && a.memorial ? memorialFacts(a) : singleFacts(a)}
-    ${fact("Where", a.where === "home" ? `At home${a.area ? `, ${esc(a.area)}` : ""}` : "At the fire temple")}
-    ${a.names.length ? fact("Names to pray", a.names.map(nameText).join("<br>")) : ""}
-    ${a.note ? fact("Note", esc(a.note)) : ""}
+    <p style="margin:0 0 2px"><b>${esc(statusLine(a))}</b></p>
+    <p class="meta" style="margin:0 0 6px">${esc(a.person.first_name || "A person")}, ${esc(ago(a.created_at))}</p>
+    ${a.items.map(itemHtml).join("")}
+    ${a.names && a.names.length ? fact("Names to pray", a.names.map(nameText).join("<br>")) : ""}
+    ${total ? fact("Total", esc(total)) : ""}
     ${a.status === "rejected" && a.reject_reason ? fact("Reason", esc(a.reject_reason)) : ""}
     <p class="meta" role="alert" data-msg style="margin:6px 0 0"></p>
     ${waiting ? `<div class="stack" style="margin-top:10px">
@@ -167,11 +182,20 @@ export async function paintAsks(box, alive) {
   draw();
 }
 
+function openTimeFields(a) {
+  return a.items.filter(it => it.time_open && it.state !== GONE).map(it => {
+    const what = it.type === "memorial" ? "Memorial" : (it.service && it.service.name) || "Prayer";
+    return `<label for="askTime${it.id}">Time for ${esc(what)}, ${esc(it.date_text || "")}</label>
+      <input type="time" id="askTime${it.id}" data-time="${it.id}">`;
+  }).join("");
+}
+
 function confirmAccept(a, agyary, msg, update, alive) {
   const sheet = openSheet({
-    title: `Confirm ${a.service.name}?`,
+    title: "Confirm this request?",
     html: `<p style="margin-top:0">${esc(a.person.first_name || "The person")}'s name and number will be added to your
         behdins and this goes into your diary.</p>
+      ${openTimeFields(a)}
       <p class="meta" role="alert" data-err style="margin:6px 0 0"></p>
       <div class="stack" style="margin-top:12px">
         <button type="button" data-yes>Confirm</button>
@@ -184,14 +208,19 @@ function confirmAccept(a, agyary, msg, update, alive) {
     const btn = ev.currentTarget;
     if (btn.disabled) return;
     btn.disabled = true;
+    clearProblems(body);
+    body.querySelector("[data-err]").textContent = "";
+    const times = {};
+    body.querySelectorAll("[data-time]").forEach(i => { if (i.value) times[i.dataset.time] = i.value; });
     let res;
     try {
-      res = await acceptAsk(agyary.id, a.id);
+      res = await acceptAsk(agyary.id, a.id, times);
     } catch (e) {
-      sheet.close();
-      // The server says why in plain words ("that geh is already yours"); the card stays as it was.
-      if (alive() && msg && msg.isConnected) msg.textContent = e.message;
-      else showInfo(e.message);
+      btn.disabled = false;
+      // The server says why in plain words; the request stays as it was.
+      const empty = [...body.querySelectorAll("[data-time]")].find(i => !i.value);
+      if (/^Enter a time/i.test(e.message) && empty) return flagProblems(body, [{ target: empty, message: e.message }]);
+      body.querySelector("[data-err]").textContent = e.message;
       return;
     }
     sheet.close();

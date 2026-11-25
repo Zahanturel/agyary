@@ -13,6 +13,7 @@ import { navigate } from "./router.js";
 import { clearAllDrafts } from "./drafts.js";
 import { refreshRequestCount } from "./requests_count.js";
 import * as push from "./push.js";
+import { askNotificationsOnce } from "./notify_prompt.js";
 
 /** Sign this phone out, from Settings or the waiting screen. `btn` is the
  *  button pressed: off while it runs, back on if it could not be done.
@@ -117,6 +118,7 @@ export async function afterSignIn() {
   navigate(isFuneralManager() ? homeFor() : state.user.agyaries.length ? "#/calendar" : "#/onboarding",
     { replace: true });
   refreshRequestCount();
+  setTimeout(askNotificationsOnce, 1500);
 }
 
 /** Signed in, which is not the same as "holding a live access token".

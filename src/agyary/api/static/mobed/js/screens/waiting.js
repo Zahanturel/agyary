@@ -14,6 +14,7 @@ import { esc } from "../util.js";
 import { navigate } from "../router.js";
 import { signOut, loadSessionExtras, isFuneralManager, homeFor } from "../session.js";
 import { refreshNotifications } from "../notifications.js";
+import { askNotificationsOnce } from "../notify_prompt.js";
 import { refreshRequestCount } from "../requests_count.js";
 
 const onScreen = () => location.hash.startsWith("#/waiting");
@@ -43,6 +44,7 @@ async function checkAgain({ quiet = false, btn = null } = {}) {
     navigate(homeFor(), { replace: true });
     refreshNotifications({ popup: true });
     refreshRequestCount();
+    setTimeout(askNotificationsOnce, 1500);
     return;
   }
   if (me.access !== before) return renderWaiting();

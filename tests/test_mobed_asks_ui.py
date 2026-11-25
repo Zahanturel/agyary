@@ -8,14 +8,14 @@ from pathlib import Path
 
 STATIC = Path(__file__).parent.parent / "src" / "agyary" / "api" / "static"
 JS = STATIC / "mobed" / "js"
-NEW_FILES = [JS / "asks_section.js", JS / "screens" / "ask_settings.js"]
+NEW_FILES = [JS / "asks_section.js", JS / "screens" / "ask_settings.js", JS / "notify_prompt.js"]
 
 
 def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
     assert "/mobed-app/js/screens/ask_settings.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v106"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v107"' in worker
 
 
 def test_screens_use_the_finished_routes():
@@ -51,3 +51,13 @@ def test_the_words_are_request_and_fire_temple_not_ask_and_agyari():
     assert "Asks from people" not in section + settings and "Take asks" not in settings
     assert settings.index("Services and prices") < settings.index("Take requests")
     assert "Enter a price for every service." in settings
+
+def test_confirm_sends_times_and_the_notification_sheet_is_once_per_device():
+    section = (JS / "asks_section.js").read_text(encoding="utf-8")
+    assert "time_open" in section and "Name not known" in section and "Estimate" in section
+    assert "cancelled_by_fire_temple" in section and "data-time" in section
+    assert "times" in (JS / "api.js").read_text(encoding="utf-8")
+    prompt = (JS / "notify_prompt.js").read_text(encoding="utf-8")
+    assert "Allow notifications?" in prompt and "You will be told of new requests." in prompt
+    assert "Not now" in prompt and "localStorage" in prompt
+    assert "/mobed-app/js/notify_prompt.js" in (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
