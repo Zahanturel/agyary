@@ -28,18 +28,12 @@ export function renderMenu() {
     </div>
 
     <div class="card">
-      <h2>My asks</h2>
       <button type="button" class="secondary" id="mAsks" style="width:100%">My asks</button>
-    </div>
-
-    <div class="card">
-      <h2>My fire temple</h2>
-      <button type="button" class="secondary" id="mAgyari" style="width:100%">My fire temple</button>
+      <button type="button" class="secondary" id="mAgyari" style="width:100%;margin-top:10px">My fire temple</button>
     </div>
 
     <div class="card">
       <h2>Text size</h2>
-      <p class="meta">Makes the words in the app bigger on this phone.</p>
       <div id="mTextSize">
         <label class="choice"><input type="radio" name="mText" value="regular" ${getTextSize() === "regular" ? "checked" : ""}><span>Regular</span></label>
         <label class="choice"><input type="radio" name="mText" value="large" ${getTextSize() === "large" ? "checked" : ""}><span>Large</span></label>
@@ -90,8 +84,7 @@ export function renderMenu() {
     const box = document.getElementById("mDeleteConfirm");
     box.innerHTML = `
       <p style="margin:12px 0 8px"><b>Delete your account?</b></p>
-      <p class="meta" style="margin:0 0 12px">This removes your account and everything in it. It cannot be
-        undone. You can always sign up again later.</p>
+      <p class="meta" style="margin:0 0 12px">This cannot be undone.</p>
       <div class="row tight">
         <button class="danger small" id="mDeleteYes">Delete everything</button>
         <button class="ghost small" id="mDeleteNo">Keep my account</button>

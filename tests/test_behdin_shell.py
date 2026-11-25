@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v8"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v9"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
