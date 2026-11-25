@@ -596,3 +596,11 @@ R4.2 redesign, second round (owner, 25 Nov 2026):
 - **Chat:** the panthaky can chat with all their behdins at any time in the app, like WhatsApp, as much as they want,
   with no moderation; the person chats with the panthaky (later maybe mobeds too). The goal is connecting the
   community. (This replaces the per-request thread idea; the Behdins tab on the mobed side is the panthaky's way into it.)
+
+R4.2 redesign, third round (owner, 25 Nov 2026):
+- **Request flow: What, When, Send** (three steps). Names to pray are typed **or sent as a photo** (a paper with the
+  names, taken with the camera or chosen from the gallery); photos can also be sent in the chat. No free "note" field.
+- **Chat limits:** only **Block and Report**; the community is small, so no rate limits, no first-message gate, no link filter.
+- **Home:** keep the present Home for now; a better one comes when more modules exist.
+- **Words:** **Request / Requests** (as the mobed side's Requests tab); states Pending, Confirmed, Declined, Cancelled
+  (plus "Cancelled by the fire temple" and "Changed" when the panthaky acts on a confirmed one).
