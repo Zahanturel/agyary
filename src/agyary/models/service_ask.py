@@ -69,13 +69,15 @@ class ServiceAsk(Base):
     memorial_choice: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
     memorial_codes: Mapped[list | None] = mapped_column(JSONB(none_as_null=True))
 
-    status: Mapped[str] = mapped_column(String(10), server_default="waiting")
+    status: Mapped[str] = mapped_column(String(30), server_default="waiting")
     reject_reason: Mapped[str | None] = mapped_column(String(100))
     # Told "No answer yet" once, after 24 hours. The ask stays waiting.
     no_answer_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     decided_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The fire temple changed the date, time or geh of what this made (the person is told).
+    changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # What accepting made, in the panthaky's own book.
     result_booking_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("bookings.id", ondelete="SET NULL"))
