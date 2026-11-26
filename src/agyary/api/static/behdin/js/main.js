@@ -24,8 +24,8 @@ import { renderEvent } from "./screens/event.js";
 import { renderDeparted } from "./screens/departed.js";
 import { renderDepartedForm } from "./screens/departed_form.js";
 import { renderAgyari } from "./screens/agyari.js";
-import { renderAsk } from "./screens/ask.js";
-import { renderAsks, renderAskView, renderAskAnother } from "./screens/asks.js";
+import { renderRequest } from "./screens/request.js";
+import { renderAsks, renderAskView, renderAskAnother } from "./screens/requests.js";
 import { syncBell } from "./notices.js";
 
 // --- Routes -----------------------------------------------------------------
@@ -38,7 +38,7 @@ route("#/calendar", renderCalendarScreen, { tab: "calendar" });
 route("#/calendar/:mode/:date", renderCalendarScreen, { tab: "calendar" });
 route("#/menu", renderMenu, { parent: "#/home" });
 route("#/agyari", renderAgyari, { parent: "#/home" });
-route("#/ask", renderAsk, { parent: "#/home" });
+route("#/request", renderRequest, { parent: "#/home" });
 route("#/asks", renderAsks, { parent: "#/home" });
 // "another" comes before the bare number, which would otherwise take it.
 route("#/asks/:id/another", renderAskAnother, { parent: (p) => `#/asks/${p.id}` });
@@ -146,7 +146,7 @@ if ("serviceWorker" in navigator) {
 }
 // Pick up a deployed update without waiting for someone to reload by hand.
 // A half-made ask is not worth losing to an update; everything else can wait for the next screen.
-const applyUpdate = watchForUpdates({ busy: () => !!state.ask && location.hash === "#/ask" });
+const applyUpdate = watchForUpdates({ busy: () => !!state.request && location.hash === "#/request" });
 onNavigated((...args) => {
   syncBell();
   // The add button belongs to the calendar alone.

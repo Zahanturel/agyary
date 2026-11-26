@@ -5,7 +5,6 @@
 import { getMemorial, deleteMemorial } from "../api.js";
 import { chrome, mainEl, setHeader, loading, wireRetry, loadFailedHtml, showError, openSheet, closeSheet } from "/mobed-app/js/ui.js";
 import { navGuard, navigate, returnTo } from "/mobed-app/js/router.js";
-import { startAsk } from "./ask.js";
 import { esc, todayIst, gregShort, weekdayOf, parsiWords, MAH_NAMES, ROJ_NAMES, GATHAS } from "../util.js";
 
 const SHOW_AT_FIRST = 60;
@@ -71,7 +70,6 @@ export async function renderDeparted(params) {
       </div>
       <div class="card">
         <h2>Dates still to come</h2>
-        ${ahead.length ? `<button type="button" class="secondary small" id="dAsk" style="margin:var(--space-2) 0">Ask a fire temple to pray these days</button>` : ""}
         ${ahead.length ? ahead.slice(0, shown).map((o, i) => dateRow(o, today, i === 0)).join("")
           : ""}
         ${ahead.length > shown ? `<button type="button" class="ghost small" id="dMore" style="margin-top:var(--space-2)">Show ${Math.min(ahead.length - shown, SHOW_AT_FIRST)} more</button>` : ""}
@@ -80,8 +78,6 @@ export async function renderDeparted(params) {
         ${done.map((o) => dateRow(o, today, false)).join("")}</details>` : ""}`;
     document.getElementById("dEdit").onclick = () => navigate(`#/departed/${id}/edit`);
     document.getElementById("dDelete").onclick = askDelete;
-    const ask = document.getElementById("dAsk");
-    if (ask) ask.onclick = () => startAsk({ memorial: { id, name, observances: all }, back: `#/departed/${id}` });
     const more = document.getElementById("dMore");
     if (more) more.onclick = () => { shown += SHOW_AT_FIRST; draw(); };
   };

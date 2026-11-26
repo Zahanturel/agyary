@@ -1,12 +1,12 @@
 "use strict";
 
 import { logout } from "./api.js";
+import { thisPhone, forget } from "./push.js";
 import { state, saveSession, clearSession, forgetLastPhone } from "./state.js";
 import { chrome, showError } from "/mobed-app/js/ui.js";
 import { navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "./brand.js";
 
-// Phone notifications will be forgotten here when they arrive (R4.4).
 
 /** Signed in, which is not the same as "holding a live access token": an offline launch has a known
  *  person and no token, and sending them to sign-in would be wrong, because the network is down,
@@ -29,8 +29,9 @@ export function forgetEverything() {
 /** Sign this phone out. `btn` is the button pressed: off while it runs, back on if it could not be done. */
 export async function signOut(btn) {
   btn.disabled = true;   // one sign-out per tap; the page reloads when it is done
+  const sub = await thisPhone();
   try {
-    await logout();
+    await logout(sub ? sub.endpoint : null);
   } catch (e) {
     // Only the server can clear the httpOnly cookie, so with no answer the next launch would sign
     // this phone straight back in. Say so.
@@ -39,6 +40,7 @@ export async function signOut(btn) {
       return showError(`Could not sign out, because ${APP_NAME} can't be reached. Please try again when you have signal.`);
     }
   }
+  await forget(sub);
   forgetEverything();
 }
 

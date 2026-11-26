@@ -7,7 +7,7 @@
  * event opens the event, and "+" starts a new one.
  */
 
-import { getMyCalendar, getToday, getMyAsks, parsiMonth, convertDay, fromParsi } from "../api.js";
+import { getMyCalendar, getToday, parsiMonth, convertDay, fromParsi } from "../api.js";
 import { state } from "../state.js";
 import { chrome, mainEl, setHeader, showFab, showError } from "/mobed-app/js/ui.js";
 import { navigate } from "/mobed-app/js/router.js";
@@ -28,25 +28,9 @@ let systemKnown = false;
 // Which departed's page an event on the calendar belongs to, rebuilt on every load.
 const memorialOf = new Map();
 
-function askItems(asks) {
-  const out = [];
-  for (const a of asks) {
-    if (a.status !== "accepted") continue;
-    const days = a.kind === "memorial" && a.memorial ? a.memorial.dates : [{ date: a.date }];
-    for (const d of days) {
-      out.push({
-        kind: "ask", id: a.id, day: d.date, time: a.time || null, geh: null,
-        label: `Prayer at ${a.agyari.name || "a fire temple"}`, short: "Prayer",
-        sublabel: a.geh_name ? `${a.service.name} · ${a.geh_name} Geh` : a.service.name,
-      });
-    }
-  }
-  return out;
-}
-
 async function loadItems({ from, to }) {
-  const got = await Promise.allSettled([getMyCalendar(from, to), getMyAsks()]);
-  const [own, asks] = got.map((r) => (r.status === "fulfilled" ? r.value : null));
+  const got = await Promise.allSettled([getMyCalendar(from, to)]);
+  const [own] = got.map((r) => (r.status === "fulfilled" ? r.value : null));
   memorialOf.clear();
   const items = [];
   for (const it of (own ? own.items : [])) {
@@ -56,6 +40,11 @@ async function loadItems({ from, to }) {
         kind: "departed", id: it.id, day: it.date, time: null, geh: null,
         label: `${it.label} · ${departedName(it)}`, short: it.label, sublabel: "",
       });
+    } else if (it.source === "request") {
+      items.push({
+        kind: "request", id: it.id, day: it.date, time: it.time || null, geh: it.geh || null,
+        label: it.title, short: it.title, sublabel: "",
+      });
     } else {
       items.push({
         kind: "event", id: it.id, day: it.date, time: null, geh: null,
@@ -63,7 +52,6 @@ async function loadItems({ from, to }) {
       });
     }
   }
-  if (asks) items.push(...askItems(asks.asks).filter((i) => i.day >= from && i.day <= to));
   items.incomplete = got.some((r) => r.status === "rejected");
   return items;
 }
@@ -93,7 +81,7 @@ async function draw() {
       viewHash: calendarHash,
       onItem: (kind, id) => {
         if (kind === "departed") return navigate(`#/departed/${memorialOf.get(id)}`);
-        if (kind === "ask") return navigate(`#/asks/${id}`);
+        if (kind === "request") return navigate(`#/asks/${id}`);
         navigate(`#/event/${id}`);
       },
     });

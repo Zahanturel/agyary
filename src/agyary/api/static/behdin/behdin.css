@@ -17,3 +17,6 @@
 .tag.status-accepted { background: var(--success-tint); color: var(--success); }
 .tag.status-rejected, .tag.status-cancelled { background: var(--ink-100); color: var(--muted); }
 #askAgy .card { box-shadow: none; border-width: 1px; }
+.rq-temple { margin-bottom: var(--space-3); }
+.tag.status-changed { background: var(--accent-tint); color: var(--accent-text); }
+.tag.status-cancelled_by_fire_temple { background: var(--ink-100); color: var(--muted); }

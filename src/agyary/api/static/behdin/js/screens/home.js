@@ -11,8 +11,8 @@ import { navGuard, navigate } from "/mobed-app/js/router.js";
 import { APP_NAME } from "../brand.js";
 import { esc, gregShort, todayIst, weekdayOf, addDays, parsiWords, eventKindLabel, departedName } from "../util.js";
 import { kindLabel } from "./agyari.js";
-import { startAsk } from "./ask.js";
-import { chipHtml, askLine } from "./asks.js";
+import { startRequest } from "./request.js";
+import { chipHtml, summary } from "./requests.js";
 
 /** The next prayer or event in the next 60 days. `undefined` means it could not be read. */
 function nextCard(it) {
@@ -31,24 +31,24 @@ function nextCard(it) {
 }
 
 function agyariCard(a) {
-  if (a === undefined) return `<div class="card"><h2>My fire temple</h2>${loadFailedHtml("your fire temple", { whole: false })}</div>`;
+  if (a === undefined) return `<div class="card"><h2>Fire temple</h2>${loadFailedHtml("your fire temple", { whole: false })}</div>`;
   const body = a
     ? `<p style="margin:0"><b>${esc(a.name)}</b></p>
        <p class="meta" style="margin:2px 0 0">${esc([a.city, kindLabel(a.kind)].filter(Boolean).join(" · "))}</p>`
     : "";
-  return `<div class="card"><h2>My fire temple</h2>${body}
-    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAgyari">${a ? "Change" : "Choose your fire temple"}</button></div></div>`;
+  return `<div class="card"><h2>Fire temple</h2>${body}
+    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAgyari">${a ? "Change" : "Choose"}</button></div></div>`;
 }
 
-/** The latest answers to the person's asks (accepted, turned down, or not answered). */
-function answersCard(asks) {
-  if (asks === undefined) return `<div class="card"><h2>Answers to your asks</h2>${loadFailedHtml("your asks", { whole: false })}</div>`;
-  const answered = asks.filter((a) => a.status === "accepted" || a.status === "rejected" || a.no_answer)
-    .sort((a, b) => String(b.decided_at || b.created_at).localeCompare(String(a.decided_at || a.created_at))).slice(0, 3);
-  if (!asks.length) return "";
-  return `<div class="card"><h2>Answers to your asks</h2>
-    ${answered.map((a) => `<a class="home-ask" href="#/asks/${a.id}"><span>${esc(askLine(a))}</span>${chipHtml(a)}</a>`).join("")}
-    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAsks">My asks</button></div></div>`;
+/** The latest changes of status among the person's requests. */
+function requestsCard(list) {
+  if (list === undefined) return `<div class="card"><h2>Requests</h2>${loadFailedHtml("your requests", { whole: false })}</div>`;
+  if (!list.length) return "";
+  const latest = list.slice().sort((a, b) => String(b.changed_at || b.decided_at || b.created_at)
+    .localeCompare(String(a.changed_at || a.decided_at || a.created_at))).slice(0, 3);
+  return `<div class="card"><h2>Requests</h2>
+    ${latest.map((r) => `<a class="home-ask" href="#/asks/${r.id}"><span>${esc(summary(r))}</span>${chipHtml(r)}</a>`).join("")}
+    <div style="margin-top:var(--space-3)"><button type="button" class="small secondary" id="homeAsks">All requests</button></div></div>`;
 }
 
 export async function renderHome() {
@@ -78,14 +78,14 @@ export async function renderHome() {
       ${today ? `<p class="today-parsi">${esc(parsiWords(today))} · Y.Z. ${esc(today.year)}</p>` : ""}
       ${failed ? loadFailedHtml("today's Parsi date", { whole: false }) : ""}
     </div>
-    <button type="button" class="ask-big" id="homeAsk">Ask for a prayer</button>
+    <button type="button" class="ask-big" id="homeAsk">New request</button>
     ${nextCard(next)}
-    ${answersCard(asks)}
+    ${requestsCard(asks)}
     ${agyariCard(mine)}`;
   wireRetry(mainEl, () => renderHome());
   const go = (id, hash) => { const b = document.getElementById(id); if (b) b.onclick = () => navigate(hash); };
   go("homeNext", "#/calendar");
   go("homeAgyari", "#/agyari");
   go("homeAsks", "#/asks");
-  document.getElementById("homeAsk").onclick = () => startAsk({ back: "#/home" });
+  document.getElementById("homeAsk").onclick = () => startRequest({ back: "#/home" });
 }

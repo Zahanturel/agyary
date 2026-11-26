@@ -11,6 +11,7 @@ import { state } from "./state.js";
 import { signedIn } from "./session.js";
 import { navigate } from "/mobed-app/js/router.js";
 import { esc } from "./util.js";
+import { offerPush } from "./push.js";
 
 const EVERY_MS = 60000;
 let timer = null;
@@ -92,6 +93,7 @@ function tick() {
 
 /** Called after every screen: keeps the bell up to date for a signed-in person. */
 export function syncBell() {
+  offerPush();
   const bell = document.getElementById("bellBtn");
   if (!bell) return;
   bell.onclick = async () => { await refreshNotices(); show(); };

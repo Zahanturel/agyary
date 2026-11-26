@@ -211,7 +211,7 @@ def test_mobed_diary_has_a_page_for_a_behdins_account_and_its_worker_keeps_the_o
     assert '"/auth/become-mobed"' in (mobed / "api.js").read_text(encoding="utf-8")
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert 'k.startsWith("mobed-shell-") && k !== CACHE_NAME' in worker
-    assert 'CACHE_NAME = "mobed-shell-v106"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v107"' in worker
     assert "/mobed-app/js/screens/become_mobed.js" in worker
 
 
@@ -254,14 +254,13 @@ def test_mobed_diarys_page_for_an_account_that_is_not_a_mobeds_never_names_the_p
 
 # --- R4.1: what a person keeps for themselves ------------------------------------------------------
 
-def test_the_agyari_screen_never_stores_logs_or_addresses_the_position():
-    code = _COMMENTS.sub("", (STATIC / "behdin" / "js" / "screens" / "agyari.js").read_text(encoding="utf-8"))
-    assert "navigator.geolocation.getCurrentPosition" in code
-    assert not re.search(r"localStorage|sessionStorage|indexedDB|console\.|document\.cookie", code)
+def test_the_fire_temple_screens_pick_by_town_and_never_use_a_position():
+    code = _COMMENTS.sub("", (STATIC / "behdin" / "js" / "screens" / "picker.js").read_text(encoding="utf-8"))
+    assert "getTowns" in code and "findAgyaries" in code
+    assert not re.search(r"geolocation|localStorage|sessionStorage|indexedDB|console\.|document\.cookie", code)
     api = (STATIC / "behdin" / "js" / "api.js").read_text(encoding="utf-8")
-    # The position is a body field of one POST, never part of an address.
-    assert 'post("/agyaries/nearby"' in api
-    assert not re.search(r"`/agyaries[^`]*(lat|lng)", api)
+    assert 'post("/agyaries/find"' in api and 'get("/agyaries/towns")' in api
+    assert "/agyaries/nearby" not in api and "/asking" not in api
 
 
 def test_every_screen_of_the_calendar_work_has_its_route_and_the_new_one_comes_first():
@@ -276,24 +275,35 @@ def test_every_screen_of_the_calendar_work_has_its_route_and_the_new_one_comes_f
 
 def test_the_ask_screens_have_their_routes_and_the_longer_one_comes_first():
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
-    for pattern in ("#/ask", "#/asks", "#/asks/:id/another", "#/asks/:id"):
+    for pattern in ("#/request", "#/asks", "#/asks/:id/another", "#/asks/:id"):
         assert f'route("{pattern}"' in main, pattern
     assert main.index('route("#/asks/:id/another"') < main.index('route("#/asks/:id"')
     assert "syncBell" in main
     shell = set(_shell_files())
-    for name in ("screens/ask.js", "screens/asks.js", "screens/picker.js", "notices.js"):
+    for name in ("screens/request.js", "screens/requests.js", "screens/picker.js", "notices.js", "push.js"):
         assert f"/behdin-app/js/{name}" in shell, name
 
 
-def test_the_ask_flow_sends_what_the_server_checks_and_says_what_it_promises():
-    flow = (STATIC / "behdin" / "js" / "screens" / "ask.js").read_text(encoding="utf-8")
+def test_the_request_flow_is_what_when_send_and_calls_the_new_api():
+    flow = (STATIC / "behdin" / "js" / "screens" / "request.js").read_text(encoding="utf-8")
+    assert 'const STEPS = ["what", "when", "send"]' in flow
     assert "Your name and number go to the panthaky only if they accept." in flow
-    assert "Ask the fire temple for the price" in flow and "confirm with the fire temple" in flow
-    assert "Not taking asks in the app yet" in (STATIC / "behdin" / "js" / "screens" / "picker.js").read_text(encoding="utf-8")
+    assert "(estimate)" in flow and "Don't repeat" in flow and "Every month, on the same Roj" in flow
+    assert "/mobed-app/js/repeat.js" in flow
     api = (STATIC / "behdin" / "js" / "api.js").read_text(encoding="utf-8")
     for call in ('post("/me/asks"', "/me/asks/${id}/cancel", "/me/asks/${id}/ask-another", 'get("/notifications")',
-                 'post("/notifications/seen"', "/agyaries/${agyaryId}/asking"):
+                 'post("/notifications/seen"', "/agyaries/${agyaryId}/offering", 'get("/me/push")',
+                 'post("/me/push/subscribe"'):
         assert call in api, call
+
+
+def test_phone_notifications_are_asked_once_and_the_worker_shows_and_opens_them():
+    code = (STATIC / "behdin" / "js" / "push.js").read_text(encoding="utf-8")
+    assert "Allow notifications?" in code and "You will be told when a fire temple answers." in code
+    assert "Not now" in code and "localStorage" in code
+    worker = (STATIC / "behdin-sw.js").read_text(encoding="utf-8")
+    assert 'addEventListener("push"' in worker and 'addEventListener("notificationclick"' in worker
+    assert "behdin-icon-192.png" in worker
 
 
 def test_the_bell_is_asked_on_focus_and_every_minute_and_the_page_has_one():

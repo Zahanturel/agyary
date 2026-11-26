@@ -12,6 +12,7 @@ import { navigate } from "/mobed-app/js/router.js";
 import { flagProblems } from "/mobed-app/js/fielderrors.js";
 import { APP_NAME } from "../brand.js";
 import { esc } from "../util.js";
+import { blocker, current, turnOn, turnOff, remember } from "../push.js";
 import { signOut, forgetEverything } from "../session.js";
 import { shellVersion } from "../install.js";
 
@@ -28,9 +29,11 @@ export function renderMenu() {
     </div>
 
     <div class="card">
-      <button type="button" class="secondary" id="mAsks" style="width:100%">My asks</button>
-      <button type="button" class="secondary" id="mAgyari" style="width:100%;margin-top:10px">My fire temple</button>
+      <button type="button" class="secondary" id="mAsks" style="width:100%">Requests</button>
+      <button type="button" class="secondary" id="mAgyari" style="width:100%;margin-top:10px">Fire temple</button>
     </div>
+
+    <div class="card" id="mPush"></div>
 
     <div class="card">
       <h2>Text size</h2>
@@ -52,6 +55,7 @@ export function renderMenu() {
     </div>`;
 
   document.getElementById("mAgyari").onclick = () => navigate("#/agyari");
+  paintPush(document.getElementById("mPush"));
   document.getElementById("mAsks").onclick = () => navigate("#/asks");
   shellVersion().then((v) => {
     const el = document.getElementById("mVersion");
@@ -100,5 +104,29 @@ export function renderMenu() {
       }
       forgetEverything();
     };
+  };
+}
+
+
+/** The switch for notifications on this phone. */
+async function paintPush(card) {
+  const on = !!(await current());
+  if (!card.isConnected) return;
+  card.innerHTML = `<div class="check-row"><input type="checkbox" id="mPushOn" ${on ? "checked" : ""}>
+    <label for="mPushOn"><b>Notifications</b></label></div><div id="mPushMsg" class="field-msg" role="alert"></div>`;
+  const box = card.querySelector("#mPushOn");
+  const msg = card.querySelector("#mPushMsg");
+  box.onchange = async () => {
+    msg.textContent = "";
+    box.disabled = true;
+    try {
+      if (box.checked) await turnOn(); else await turnOff();
+      remember(box.checked ? "yes" : "no");
+    } catch (e) {
+      box.checked = !box.checked;
+      msg.textContent = e.message || blocker() || "Could not change this.";
+    } finally {
+      box.disabled = false;
+    }
   };
 }

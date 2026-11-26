@@ -118,15 +118,14 @@ export const waLoginStart = () => post("/auth/wa/start", {});
 export const waLoginPoll = () => get("/auth/wa/poll");
 export const waLoginConfirm = (number) => post("/auth/wa/confirm", { number });
 export const waLoginComplete = (name) => post("/auth/wa/complete", { name });
-export const logout = () => post("/auth/logout", {});
+export const logout = (endpoint) => post("/auth/logout", endpoint ? { endpoint } : {});
 
 export const getMe = () => get("/me");
 export const updateMyName = (name) => patch("/me", { name });
 export const deleteMyAccount = () => del("/account", { confirm: true });
 export const getToday = () => get("/today");
 
-// R4.1: what a person keeps for themselves. The position for "Near me" goes in the body, never in a URL.
-export const agyariesNearby = (q, pos) => post("/agyaries/nearby", pos ? { q, lat: pos.lat, lng: pos.lng } : { q });
+// What a person keeps for themselves.
 export const getMyAgyari = () => get("/me/agyari");
 export const chooseAgyari = (id) => api("/me/agyari", { method: "PUT", body: JSON.stringify({ agyary_id: id }) });
 export const forgetAgyari = () => del("/me/agyari");
@@ -148,7 +147,12 @@ export const fromParsi = (roj, mah, system) => get(`/../calendar/from-parsi?roj=
 export const convertDay = (ymd, system) => get(`/../calendar/convert?date=${ymd}&system=${system}`);
 
 // R4.2: asking an agyari for a prayer, the person's asks and their notices.
-export const getAsking = (agyaryId) => get(`/agyaries/${agyaryId}/asking`);
+export const getOffering = (agyaryId) => get(`/agyaries/${agyaryId}/offering`);
+export const findAgyaries = (town, q) => post("/agyaries/find", { town: town || null, q: q || null });
+export const getTowns = () => get("/agyaries/towns");
+export const myPush = () => get("/me/push");
+export const myPushSubscribe = (sub) => post("/me/push/subscribe", sub);
+export const myPushUnsubscribe = (endpoint) => post("/me/push/unsubscribe", { endpoint });
 export const createAsk = (body) => post("/me/asks", body);
 export const getMyAsks = () => get("/me/asks");
 export const getAsk = (id) => get(`/me/asks/${id}`);
