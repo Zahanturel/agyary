@@ -16,6 +16,13 @@ file refers to them by role.
 
 ---
 
+## 0d. R4.2 redesigned, LIVE 26 Nov 2026 (9ce6b38; mobed shell v107, behdin shell v9, alembic head a7c8d9e0f1b2)
+
+Per the owner's words (DECISIONS, R4.2 redesign rounds 1-4): prices first then "Take requests"; only fire temples taking requests are
+listed, found by town; a request = several prayers each with its own date (time may be open, memorials with name + date of passing +
+repeat as in "+ Add"), confirmed or declined whole; it follows what the panthaky changes or deletes; phone notifications asked once at
+first sign-in in both apps. Not built: photos and the chat (R4.3), WhatsApp switches (R4.4). Parsi's visual design is a separate session.
+
 ## 0c. The Parsi app, R4.1 (25 Nov 2026, LIVE at e4bb616, mobed shell v103, behdin shell v5)
 
 My agyari (kind column on agyaries, `person_agyari`), a person's own memorials and events (`person_memorials`,
