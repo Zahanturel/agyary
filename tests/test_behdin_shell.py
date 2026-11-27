@@ -211,7 +211,7 @@ def test_mobed_diary_has_a_page_for_a_behdins_account_and_its_worker_keeps_the_o
     assert '"/auth/become-mobed"' in (mobed / "api.js").read_text(encoding="utf-8")
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert 'k.startsWith("mobed-shell-") && k !== CACHE_NAME' in worker
-    assert 'CACHE_NAME = "mobed-shell-v111"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v112"' in worker
     assert "/mobed-app/js/screens/become_mobed.js" in worker
 
 

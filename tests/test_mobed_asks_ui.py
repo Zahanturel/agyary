@@ -15,7 +15,7 @@ def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
     assert "/mobed-app/js/screens/request_setup.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v111"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v112"' in worker
 
 
 def test_screens_use_the_finished_routes():
@@ -51,8 +51,8 @@ def test_the_words_are_request_and_fire_temple_not_ask_and_agyari():
     assert "Asks from people" not in section + settings and "Take asks" not in settings
     # Settings has a Requests row that opens its own page (owner, 27 Nov 2026). On it the switch is first,
     # the list starts empty, the panthaky picks suggestions or writes their own, and a price is optional.
-    assert settings.index("Take requests</b>") < settings.index("<h2>What people can ask you for</h2>")
-    assert "Tap one to list it." in settings and "Write your own" in settings and "addRequestService" in settings
+    assert settings.index("Take requests</b>") < settings.index("<h2>Requests you take</h2>")
+    assert "Tap one to add it." in settings and "Write your own" in settings and "addRequestService" in settings
     assert all(w in settings for w in ("Jashan", "Tandarosti", "Satum"))
     assert "Enter a price" not in settings and "optional" in settings
     main = (JS / "main.js").read_text(encoding="utf-8")

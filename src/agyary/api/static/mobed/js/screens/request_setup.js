@@ -4,7 +4,7 @@
  * Settings -> Requests (R4.2 redesign, 27 Nov 2026): the panthaky's page for requests from people.
  *
  *  - "Take requests" is the one switch. While it is off nothing else is shown.
- *  - "What people can ask you for" is empty until the panthaky lists something: pick from the suggestions
+ *  - "Requests you take" is empty until the panthaky lists something: pick from the suggestions
  *    (one tap each) or write their own. A price is optional, and can be set or cleared at any time.
  *  - Listing is only for people: the mobed's own diary list is not touched (the server keeps them apart).
  * Only the confirmed panthaky (and the admin) reach this; the server checks.
@@ -43,7 +43,7 @@ function listedRow(s) {
     <label for="rsPrice${s.id}" style="margin-top:4px">Price (₹, optional)</label>
     <input type="text" inputmode="decimal" id="rsPrice${s.id}" data-price value="${esc(priceText(s.default_price))}"
       autocomplete="off">
-    <button class="ghost small" data-remove style="margin-top:8px">Remove from my list</button>
+    <button class="ghost small" data-remove style="margin-top:8px">Cancel</button>
   </div>`;
 }
 
@@ -82,21 +82,20 @@ export async function renderRequestSetup() {
     </div>
     ${setting.takes_asks ? `
     <div class="card" id="rsListed">
-      <h2>What people can ask you for</h2>
+      <h2>Requests you take</h2>
       ${listed.length ? listed.map(listedRow).join("")
-        : `<p class="meta">Nothing yet. Pick from the suggestions below, or write your own. People can send a
-            request only for what is listed here.</p>`}
+        : `<p class="meta">None yet. Add from the suggestions below, or write your own.</p>`}
     </div>
     <div class="card">
-      <h2>Suggestions</h2>
-      <p class="meta" style="margin:0 0 8px">Tap one to list it.</p>
+      <h2>Add a request</h2>
+      <p class="meta" style="margin:0 0 8px">Tap one to add it.</p>
       <div class="chip-row" id="rsSuggest">${suggestions.map((n) =>
         `<button class="chip" data-suggest="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>
       <label for="rsNew" style="margin-top:16px">Write your own</label>
-      <input type="text" id="rsNew" maxlength="40" autocomplete="off" placeholder="Name of the prayer">
-      <button class="small" id="rsNewAdd" style="margin-top:8px">Add to my list</button>
+      <input type="text" id="rsNew" maxlength="40" autocomplete="off" placeholder="Name of the request">
+      <button class="small" id="rsNewAdd" style="margin-top:8px">Add</button>
       <p class="meta" id="rsNewMsg" style="margin:4px 0 0"></p>
-    </div>` : `<p class="meta" style="padding:0 var(--space-3)">Turn this on to choose what people can ask you for.</p>`}`;
+    </div>` : `<p class="meta" style="padding:0 var(--space-3)">Turn this on to choose the requests you take.</p>`}`;
 
   /** Draw again from the server, in the same place on the page. */
   const redraw = async () => {
@@ -133,7 +132,7 @@ export async function renderRequestSetup() {
     }
     if (!alive()) return;
     await redraw();
-    if (alive()) showInfo(`${name} is on your list.`);
+    if (alive()) showInfo(`${name} added.`);
   };
 
   mainEl.querySelectorAll("[data-suggest]").forEach((b) => {
@@ -144,7 +143,7 @@ export async function renderRequestSetup() {
   const newBtn = document.getElementById("rsNewAdd");
   newBtn.onclick = () => {
     const name = newName.value.trim();
-    if (!name) { newMsg.textContent = "Please enter the prayer's name."; return; }
+    if (!name) { newMsg.textContent = "Please enter the name of the request."; return; }
     newMsg.textContent = "";
     add(name, newMsg, newBtn);
   };
@@ -176,11 +175,11 @@ export async function renderRequestSetup() {
         await putServiceAsk(agyary.id, id, { offered: false });
       } catch (e) {
         remove.disabled = false;
-        return showError("Not removed: " + e.message);
+        return showError("Not cancelled: " + e.message);
       }
       if (!alive()) return;
       await redraw();
-      if (alive()) showInfo(`${name} is off your list.`);
+      if (alive()) showInfo(`${name} cancelled.`);
     };
   });
 }
