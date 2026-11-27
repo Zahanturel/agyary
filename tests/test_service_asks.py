@@ -142,13 +142,14 @@ async def test_a_person_sees_what_a_fire_temple_offers_only_when_it_takes_reques
     assert seen["repeats"] == {"monthly": {"max": 120}, "yearly": {"max": 60}}
     raw = json.dumps(seen)
     assert "+9198" not in raw and "phone" not in raw
-    # A service with no price is not offered.
+    # A service the panthaky switched off is not offered; one with no price still is, shown without a price.
     await client.put(f"/api/mobed/agyaries/1/services/{await service_id(db, 'Lagan')}",
                      headers=await panthaky_headers(client), json={"is_active": False})
     await db.execute(update(Service).where(Service.name == "Satum").values(default_price=None))
     await db.commit()
     again = (await client.get("/api/behdin/agyaries/1/offering", headers=mine)).json()
-    assert {"Satum", "Lagan"}.isdisjoint(s["name"] for s in again["services"])
+    by = {s["name"]: s for s in again["services"]}
+    assert "Lagan" not in by and by["Satum"]["price"] is None
     assert (await client.get("/api/behdin/agyaries/99999/offering", headers=mine)).status_code == 404
     assert (await client.get("/api/behdin/agyaries/1/offering")).status_code == 401
     assert (await client.get("/api/behdin/agyaries/1/asking", headers=mine)).status_code in (404, 405)   # replaced
@@ -766,38 +767,24 @@ async def test_deleting_the_machi_or_stopping_the_series_cancels_the_request(cli
     assert (await client.get(f"/api/behdin/me/calendar?from={day(0)}&to={day(300)}", headers=mine)).json()["items"] == []
 
 
-# --- setting up: prices first, then switch on -------------------------------------------------
-async def test_requests_cannot_be_switched_on_until_every_offered_service_has_a_price(client, db, seeded):
+# --- setting up: the switch needs nothing, a price is optional (owner, 27 Nov 2026) --------------------
+async def test_requests_can_be_switched_on_with_no_prices_and_no_services(client, db, seeded):
     pan = await panthaky_headers(client)
     satum = await service_id(db, "Satum")
     await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": None})
     state = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()
-    assert state["ready"] is False and {s["name"]: s["price"] for s in state["services"]}["Satum"] is None
-    refused = await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})
-    assert refused.status_code == 409 and refused.json()["detail"] == "Enter a price for every service first."
-    # A service switched off is not offered, so it needs no price; zero is a price.
-    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"is_active": False})
-    assert (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()["ready"] is True
-    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": 0, "is_active": True})
+    assert state["ready"] is True and {s["name"]: s["price"] for s in state["services"]}["Satum"] is None
     assert (await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})).status_code == 200
-
-    # While it is on: no price cleared, no unpriced service switched on, the last service stays on.
-    r = await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": None})
-    assert r.status_code == 409
+    # While it is on, prices may be cleared and every service switched off.
+    assert (await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan,
+                             json={"default_price": None})).status_code == 200
     listed = (await client.get("/api/mobed/agyaries/1/service-prices", headers=pan)).json()["services"]
     assert len(listed) == 10 and {s["name"] for s in listed} >= {"Machi", "Jashan", "Yazeshni"}   # the diary's catalog
-    ids = [s["id"] for s in listed]
-    for sid in ids[:-1]:
-        assert (await client.put(f"/api/mobed/agyaries/1/services/{sid}", headers=pan, json={"is_active": False})).status_code == 200
-    last = await client.put(f"/api/mobed/agyaries/1/services/{ids[-1]}", headers=pan, json={"is_active": False})
-    assert last.status_code == 409 and "at least one" in last.json()["detail"]
-    # Switching off is always allowed, and then the last one can go.
-    assert (await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": False})).status_code == 200
-    assert (await client.put(f"/api/mobed/agyaries/1/services/{ids[-1]}", headers=pan, json={"is_active": False})).status_code == 200
+    for s in listed:
+        assert (await client.put(f"/api/mobed/agyaries/1/services/{s['id']}", headers=pan,
+                                 json={"is_active": False})).status_code == 200
     state = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()
-    assert state["ready"] is False and state["services"] == []
-    again = await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})
-    assert again.status_code == 409
+    assert state["takes_asks"] is True and state["services"] == []
 
 
 async def test_people_see_only_fire_temples_taking_requests_by_town_and_a_distance_only_for_a_pin(client, db, seeded):

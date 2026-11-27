@@ -5,8 +5,9 @@
  *
  *  - "Services and prices" comes first: every service in the diary's catalog with its price in rupees
  *    and whether it is offered. Saved per row, as soon as the price is left or the box is ticked.
- *  - "Take requests" comes after it and stays off-limits ("Enter a price for every service.") until every
- *    offered service has a price. Saved at once; the server's reason is shown on the control.
+ *  - "Take requests" is the switch at the top; the services and prices are shown only while it is on.
+ *    The panthaky lists the services they want (Offered) and adds their own. A price is optional: a person
+ *    can always talk to them in conversation. Saved at once; the server's reason is shown on the control.
  * Only the confirmed panthaky (and the admin) reach this; the server checks.
  */
 
@@ -15,8 +16,6 @@ import { showError } from "../ui.js";
 import { esc } from "../util.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
 
-const NEEDS_PRICES = "Enter a price for every service.";
-
 function priceText(p) {
   return p == null ? "" : String(Number(p));
 }
@@ -24,7 +23,7 @@ function priceText(p) {
 function rowHtml(s) {
   return `<div class="svc-price-row" data-svc="${s.id}" style="padding:10px 0;border-top:1px solid var(--border)">
     <div style="font-weight:600;overflow-wrap:anywhere">${esc(s.name)}</div>
-    <label for="spPrice${s.id}" style="margin-top:4px">Price (₹)</label>
+    <label for="spPrice${s.id}" style="margin-top:4px">Price (₹, optional)</label>
     <input type="text" inputmode="decimal" id="spPrice${s.id}" data-price value="${esc(priceText(s.default_price))}"
       autocomplete="off">
     <div class="check-row" style="padding:2px 0">
@@ -54,7 +53,8 @@ export async function paintAskSettings(box, agyary, alive) {
       <label for="askTake"><b>Take requests</b></label>
     </div>
     <p class="meta" id="askTakeMsg" style="margin:0"></p>
-    <h3 style="margin:12px 0 0">Services and prices</h3>
+    <div id="askServices" hidden>
+    <h3 style="margin:12px 0 0">Services you list</h3>
     <div id="askSvcs">${prices.services.length ? prices.services.map(rowHtml).join("")
       : `<p class="meta">No services yet.</p>`}</div>
     <div style="border-top:1px solid var(--border);padding-top:10px">
@@ -64,6 +64,7 @@ export async function paintAskSettings(box, agyary, alive) {
         <button class="small" id="askNewSvcAdd">Add</button>
       </div>
       <p class="meta" id="askNewSvcMsg" style="margin:4px 0 0"></p>
+    </div>
     </div>`;
 
   const newName = box.querySelector("#askNewSvc");
@@ -76,8 +77,6 @@ export async function paintAskSettings(box, agyary, alive) {
     newMsg.textContent = "";
     try {
       const made = await createService(agyary.id, name, false);
-      // While requests are on, a service with no price cannot be offered: it starts off.
-      if (setting.takes_asks) await putServiceAsk(agyary.id, made.id, { is_active: false });
     } catch (e) {
       if (alive()) { newMsg.textContent = e.message; newBtn.disabled = false; }
       return;
@@ -87,21 +86,14 @@ export async function paintAskSettings(box, agyary, alive) {
 
   const take = box.querySelector("#askTake");
   const takeMsg = box.querySelector("#askTakeMsg");
+  const servicesBox = box.querySelector("#askServices");
   const paintSwitch = (st) => {
     take.checked = !!st.takes_asks;
-    // Off is always allowed; on only when every offered service has a price.
-    take.disabled = !st.takes_asks && !st.ready;
-    takeMsg.textContent = take.disabled ? NEEDS_PRICES : "";
+    take.disabled = false;
+    takeMsg.textContent = "";
+    servicesBox.hidden = !st.takes_asks;   // nothing to set up while it is off
   };
   paintSwitch(setting);
-  /** The switch follows the prices: read it again after a row is saved. */
-  const reread = async () => {
-    try {
-      const st = await getAsksSetting(agyary.id);
-      if (alive()) paintSwitch(st);
-    } catch (e) { /* the switch keeps what it shows; the server checks it anyway */ }
-  };
-
   take.onchange = async () => {
     const want = take.checked;
     take.disabled = true;
@@ -125,7 +117,6 @@ export async function paintAskSettings(box, agyary, alive) {
         const saved = await putServiceAsk(agyary.id, id, body);
         if (!alive()) return;
         if ("default_price" in body) { price.value = priceText(saved.default_price); kept = price.value; }
-        reread();
       } catch (e) {
         undo();
         if (!alive()) return;

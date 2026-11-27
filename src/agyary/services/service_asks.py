@@ -150,9 +150,9 @@ async def can_take(db: AsyncSession, settings: Settings, agyary: Agyary) -> bool
 
 
 async def _offered_services(db: AsyncSession, agyary_id: int) -> list[Service]:
-    """The services a person can pick: the active ones of the diary's catalog that have a price."""
-    return [s for s in await booking_service.list_services(db, agyary_id, exclude_machi=False)
-            if s.default_price is not None]
+    """The services a person can pick: the active ones of the diary's catalog. A price is optional (owner,
+    27 Nov 2026): one without is shown with no price and settled with the panthaky in conversation."""
+    return list(await booking_service.list_services(db, agyary_id, exclude_machi=False))
 
 
 def _memorial_prayers(offered: list[Service]) -> list[Service]:
@@ -1132,9 +1132,6 @@ def person_notices_clause():
 # ---------------------------------------------------------------------------
 # The panthaky's switch, and the services and their usual prices
 # ---------------------------------------------------------------------------
-NEEDS_PRICES = "Enter a price for every service first."
-
-
 async def _offered(db: AsyncSession, agyary_id: int) -> list[Service]:
     """The services the fire temple will offer: the active ones of its diary's catalog."""
     return list((await db.execute(
@@ -1142,27 +1139,20 @@ async def _offered(db: AsyncSession, agyary_id: int) -> list[Service]:
         .order_by(Service.display_order, Service.id))).scalars())
 
 
-def _ready(offered: list[Service]) -> bool:
-    """At least one service, and every one has a price (0 is a price; nothing entered is not)."""
-    return bool(offered) and all(s.default_price is not None for s in offered)
-
-
 async def read_switch(db: AsyncSession, agyary: Agyary) -> dict:
     """The switch, the services that will be offered with their prices, and whether it can be switched
     on (``ready``: every offered service has a price)."""
     offered = await _offered(db, agyary.id)
     return {
-        "takes_asks": bool(agyary.takes_asks), "ready": _ready(offered),
+        "takes_asks": bool(agyary.takes_asks), "ready": True,
         "services": [{"id": s.id, "name": s.name, "price": _price(s.default_price)} for s in offered],
     }
 
 
 async def change_switch(db: AsyncSession, agyary: Agyary, value: Any) -> dict:
-    """On only when set up (a price for every offered service); off is always allowed."""
+    """On or off at any time: listing services, with or without prices, is the panthaky's choice."""
     if type(value) is not bool:
         raise AskError("Choose on or off.")
-    if value and not _ready(await _offered(db, agyary.id)):
-        raise AskError(NEEDS_PRICES, 409)
     agyary.takes_asks = value
     return await read_switch(db, agyary)
 
@@ -1198,16 +1188,10 @@ def checked_price(value: Any) -> Decimal | None:
 async def change_service(
     db: AsyncSession, agyary: Agyary, service: Service, *, fields: set[str], price: Any, active: Any,
 ) -> dict:
-    """While the fire temple takes requests every offered service keeps its price and the last
-    one stays on: those changes are refused (409) until requests are switched off."""
+    """The price (optional) and whether the service is listed; either may change at any time."""
     new_price = checked_price(price) if "default_price" in fields else service.default_price
     if "is_active" in fields and type(active) is not bool:
         raise AskError("Choose on or off.")
     now_active = active if "is_active" in fields else service.is_active
-    if agyary.takes_asks:
-        if now_active and new_price is None:
-            raise AskError("A price is needed while taking requests.", 409)
-        if service.is_active and not now_active and len(await _offered(db, agyary.id)) <= 1:
-            raise AskError("Keep at least one service on while taking requests.", 409)
     service.default_price, service.is_active = new_price, now_active
     return _service_price_row(service)
