@@ -50,6 +50,7 @@ import { renderReview, formFor } from "./screens/review.js";
 import { refreshNotifications, setupNotifications } from "./notifications.js";
 import { renderRequests, renderRequest } from "./screens/requests.js";
 import { renderMobeds } from "./screens/our_mobeds.js";
+import { renderRequestSetup } from "./screens/request_setup.js";
 import { refreshRequestCount, setupRequestCount } from "./requests_count.js";
 import { askNotificationsOnce } from "./notify_prompt.js";
 import { paintActBanner } from "./acting.js";
@@ -89,6 +90,7 @@ route("#/menu", renderMenu, { parent: homeHash });
 route("#/fire-temple/location", renderAgyariLocation, { parent: "#/menu" });
 // For the numbers in ADMIN_PHONES only (the server enforces it; the menu entry just hides).
 route("#/admin", renderAdmin, { parent: "#/menu" });
+route("#/requests-setup", renderRequestSetup, { parent: "#/menu" });
 route("#/admin/mobeds", renderAdminMobeds, { parent: "#/admin" });
 // The Doongerwadis, prayer halls and aramgahs (D10). "new" before :id.
 route("#/admin/funeral-places", renderAdminFuneralPlaces, { parent: "#/admin" });

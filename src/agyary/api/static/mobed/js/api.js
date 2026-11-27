@@ -301,6 +301,7 @@ export const acceptAsk = (aid, askId, times) =>
 export const rejectAsk = (aid, askId, reason) => post(`/agyaries/${aid}/asks/${askId}/reject`, { reason: reason || null });
 export const getServicePrices = (aid) => get(`/agyaries/${aid}/service-prices`);
 /** `body` holds only what changes: default_price (a number, or null for none) and/or is_active. */
+export const addRequestService = (aid, name) => post(`/agyaries/${aid}/request-services`, { name });
 export const putServiceAsk = (aid, serviceId, body) => put(`/agyaries/${aid}/services/${serviceId}`, body);
 
 export const searchAgyaries = (q) => get(`/agyaries/search?q=${encodeURIComponent(q)}`);

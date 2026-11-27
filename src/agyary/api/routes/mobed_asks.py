@@ -74,14 +74,31 @@ async def get_service_prices(agyary_id: int, db: AsyncSession = Depends(get_db),
 
 class ServiceChangeIn(BaseModel):
     default_price: Any = None
-    is_active: Any = None
+    offered: Any = None
+
+
+class NewServiceIn(BaseModel):
+    name: Any = None
+
+
+@router.post("/agyaries/{agyary_id}/request-services")
+async def add_service(agyary_id: int, payload: NewServiceIn, db: AsyncSession = Depends(get_db),
+                      user: User = Depends(get_current_user)) -> dict:
+    """The panthaky's own service, listed for people at once."""
+    agyary = await _managed(db, user, agyary_id)
+    try:
+        saved = await service_asks.add_service(db, agyary, payload.name)
+    except service_asks.AskError as exc:
+        raise _error(exc) from exc
+    await db.commit()
+    return saved
 
 
 @router.put("/agyaries/{agyary_id}/services/{service_id}")
 async def put_service(agyary_id: int, service_id: int, payload: ServiceChangeIn, db: AsyncSession = Depends(get_db),
                       user: User = Depends(get_current_user)) -> dict:
-    """Set the usual price (a number from 0, or null to clear it) and/or switch the service off or on.
-    Only what is sent is changed. Switching off keeps the service for the events that used it."""
+    """Set the usual price (a number from 0, or null to clear it) and/or list the service for people or not.
+    Only what is sent is changed. The diary's own catalog is not touched."""
     agyary = await _managed(db, user, agyary_id)
     service = (await db.execute(select(Service).where(
         Service.id == service_id, Service.agyary_id == agyary_id))).scalar_one_or_none()
@@ -89,7 +106,7 @@ async def put_service(agyary_id: int, service_id: int, payload: ServiceChangeIn,
         raise HTTPException(status_code=404, detail="That service could not be found.")
     try:
         saved = await service_asks.change_service(
-            db, agyary, service, fields=payload.model_fields_set, price=payload.default_price, active=payload.is_active)
+            db, agyary, service, fields=payload.model_fields_set, price=payload.default_price, offered=payload.offered)
     except service_asks.AskError as exc:
         raise _error(exc) from exc
     await db.commit()

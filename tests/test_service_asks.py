@@ -45,6 +45,9 @@ async def switch_on(client, db, agyary_id: int = 1, headers: dict | None = None)
     headers = headers or await panthaky_headers(client)
     r = await client.put(f"/api/mobed/agyaries/{agyary_id}/asks-setting", headers=headers, json={"takes_asks": True})
     assert r.status_code == 200 and r.json()["takes_asks"] is True, r.text
+    # Nothing is listed for people until the panthaky lists it: these tests list the catalog, as ticking would.
+    await db.execute(update(Service).where(Service.agyary_id == agyary_id).values(offered_to_people=True))
+    await db.commit()
     return headers
 
 
@@ -80,8 +83,10 @@ def panthaky_asks(client, headers, aid: int = 1):
 async def test_the_panthaky_switches_asks_on_and_a_plain_mobed_is_refused(client, db, seeded):
     headers = await panthaky_headers(client)
     first = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=headers)).json()
-    assert first["takes_asks"] is False and first["ready"] is True       # the seeded services all have prices
-    assert {s["name"] for s in first["services"]} >= {"Jashan", "Machi"} and all(s["price"] is not None for s in first["services"])
+    # Everything is off until the panthaky lists it: the switch, and every service.
+    assert first["takes_asks"] is False and first["services"] == []
+    listed = (await client.get("/api/mobed/agyaries/1/service-prices", headers=headers)).json()["services"]
+    assert len(listed) == 10 and not any(s["offered"] for s in listed)
     for bad in ("yes", 1, None):
         r = await client.put("/api/mobed/agyaries/1/asks-setting", headers=headers, json={"takes_asks": bad})
         assert r.status_code == 400
@@ -97,24 +102,26 @@ async def test_the_panthaky_switches_asks_on_and_a_plain_mobed_is_refused(client
     assert (await client.get("/api/mobed/agyaries/1/asks-setting", headers=headers)).json()["takes_asks"] is True
 
 
-async def test_the_panthaky_sets_usual_prices_and_switches_a_service_off(client, db, seeded):
+async def test_the_panthaky_sets_usual_prices_and_lists_a_service_for_people(client, db, seeded):
     headers = await panthaky_headers(client)
     jashan = await service_id(db, "Jashan")
     listed = (await client.get("/api/mobed/agyaries/1/service-prices", headers=headers)).json()["services"]
     assert {s["name"]: s["default_price"] for s in listed}["Jashan"] == 1500.0
     r = await client.put(f"/api/mobed/agyaries/1/services/{jashan}", headers=headers, json={"default_price": "1800.50"})
-    assert r.status_code == 200 and r.json()["default_price"] == 1800.5 and r.json()["is_active"] is True
+    assert r.status_code == 200 and r.json()["default_price"] == 1800.5 and r.json()["offered"] is False
     # Only what is sent changes; null clears the price.
-    r = await client.put(f"/api/mobed/agyaries/1/services/{jashan}", headers=headers, json={"is_active": False})
-    assert r.json()["default_price"] == 1800.5 and r.json()["is_active"] is False
+    r = await client.put(f"/api/mobed/agyaries/1/services/{jashan}", headers=headers, json={"offered": True})
+    assert r.json()["default_price"] == 1800.5 and r.json()["offered"] is True
     r = await client.put(f"/api/mobed/agyaries/1/services/{jashan}", headers=headers,
-                         json={"default_price": None, "is_active": True})
-    assert r.json()["default_price"] is None and r.json()["is_active"] is True
+                         json={"default_price": None, "offered": False})
+    assert r.json()["default_price"] is None and r.json()["offered"] is False
+    # Listing is for people only: the mobed's own diary catalog is untouched.
+    assert (await db.execute(select(Service.is_active).where(Service.id == jashan))).scalar_one() is True
     for bad in (-1, "abc", 1000001, True, "nan", [5]):
         r = await client.put(f"/api/mobed/agyaries/1/services/{jashan}", headers=headers, json={"default_price": bad})
         assert r.status_code == 400, (bad, r.text)
     assert (await client.put(f"/api/mobed/agyaries/1/services/{jashan}", headers=headers,
-                             json={"is_active": "no"})).status_code == 400
+                             json={"offered": "no"})).status_code == 400
     # A service of another fire temple is not found through this one.
     other = await agyari(db, "Other Agyari (test)", None)
     other_service = Service(agyary_id=other.id, name="Elsewhere")
@@ -144,7 +151,7 @@ async def test_a_person_sees_what_a_fire_temple_offers_only_when_it_takes_reques
     assert "+9198" not in raw and "phone" not in raw
     # A service the panthaky switched off is not offered; one with no price still is, shown without a price.
     await client.put(f"/api/mobed/agyaries/1/services/{await service_id(db, 'Lagan')}",
-                     headers=await panthaky_headers(client), json={"is_active": False})
+                     headers=await panthaky_headers(client), json={"offered": False})
     await db.execute(update(Service).where(Service.name == "Satum").values(default_price=None))
     await db.commit()
     again = (await client.get("/api/behdin/agyaries/1/offering", headers=mine)).json()
@@ -340,7 +347,7 @@ async def second_agyari(client, db):
     from agyary.messaging import booking_service
 
     await booking_service.ensure_default_services(db, other.id)
-    await db.execute(update(Service).where(Service.agyary_id == other.id).values(default_price=100))
+    await db.execute(update(Service).where(Service.agyary_id == other.id).values(default_price=100, offered_to_people=True))
     await db.commit()
     # Only its id: a route that refuses something rolls the session back, which expires loaded rows.
     return SimpleNamespace(id=other.id), await panthaky_headers(client, SECOND_PANTHAKY)
@@ -771,7 +778,7 @@ async def test_deleting_the_machi_or_stopping_the_series_cancels_the_request(cli
 async def test_requests_can_be_switched_on_with_no_prices_and_no_services(client, db, seeded):
     pan = await panthaky_headers(client)
     satum = await service_id(db, "Satum")
-    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": None})
+    await client.put(f"/api/mobed/agyaries/1/services/{satum}", headers=pan, json={"default_price": None, "offered": True})
     state = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()
     assert state["ready"] is True and {s["name"]: s["price"] for s in state["services"]}["Satum"] is None
     assert (await client.put("/api/mobed/agyaries/1/asks-setting", headers=pan, json={"takes_asks": True})).status_code == 200
@@ -782,9 +789,34 @@ async def test_requests_can_be_switched_on_with_no_prices_and_no_services(client
     assert len(listed) == 10 and {s["name"] for s in listed} >= {"Machi", "Jashan", "Yazeshni"}   # the diary's catalog
     for s in listed:
         assert (await client.put(f"/api/mobed/agyaries/1/services/{s['id']}", headers=pan,
-                                 json={"is_active": False})).status_code == 200
+                                 json={"offered": False})).status_code == 200
     state = (await client.get("/api/mobed/agyaries/1/asks-setting", headers=pan)).json()
     assert state["takes_asks"] is True and state["services"] == []
+
+
+async def test_the_panthaky_adds_a_service_of_their_own(client, db, seeded):
+    pan = await panthaky_headers(client)
+    r = await client.post("/api/mobed/agyaries/1/request-services", headers=pan, json={"name": "  Sarosh   Baj "})
+    assert r.status_code == 200 and r.json()["name"] == "Sarosh Baj" and r.json()["offered"] is True
+    assert r.json()["default_price"] is None
+    # It is in the diary's catalog too, and listed for people once requests are on.
+    row = (await db.execute(select(Service).where(Service.name == "Sarosh Baj"))).scalar_one()
+    assert row.is_active is True and row.agyary_id == 1
+    await switch_on(client, db, headers=pan)
+    offering = (await client.get("/api/behdin/agyaries/1/offering", headers=await person(client))).json()
+    assert "Sarosh Baj" in [x["name"] for x in offering["services"]]
+    # The same name again (any case) is refused; a catalog name that was not listed is listed, not doubled.
+    again = await client.post("/api/mobed/agyaries/1/request-services", headers=pan, json={"name": "sarosh baj"})
+    assert again.status_code == 409 and "already in your list" in again.json()["detail"]
+    await client.put(f"/api/mobed/agyaries/1/services/{await service_id(db, 'Satum')}", headers=pan, json={"offered": False})
+    r = await client.post("/api/mobed/agyaries/1/request-services", headers=pan, json={"name": "satum"})
+    assert r.status_code == 200 and r.json()["name"] == "Satum" and r.json()["offered"] is True
+    for bad in ("", "   ", None, 5, "x" * 41, "call 9822012345"):
+        assert (await client.post("/api/mobed/agyaries/1/request-services", headers=pan,
+                                  json={"name": bad})).status_code == 400, bad
+    mobed = auth(await sign_in(client, MOBED))
+    assert (await client.post("/api/mobed/agyaries/1/request-services", headers=mobed,
+                              json={"name": "Nope"})).status_code == 403
 
 
 async def test_people_see_only_fire_temples_taking_requests_by_town_and_a_distance_only_for_a_pin(client, db, seeded):

@@ -150,9 +150,11 @@ async def can_take(db: AsyncSession, settings: Settings, agyary: Agyary) -> bool
 
 
 async def _offered_services(db: AsyncSession, agyary_id: int) -> list[Service]:
-    """The services a person can pick: the active ones of the diary's catalog. A price is optional (owner,
-    27 Nov 2026): one without is shown with no price and settled with the panthaky in conversation."""
-    return list(await booking_service.list_services(db, agyary_id, exclude_machi=False))
+    """The services a person can pick: those the panthaky listed (``offered_to_people``, off until they do)
+    that are still in the diary's catalog. A price is optional (owner, 27 Nov 2026): one without is shown
+    with no price and settled with the panthaky in conversation."""
+    return [s for s in await booking_service.list_services(db, agyary_id, exclude_machi=False)
+            if s.offered_to_people]
 
 
 def _memorial_prayers(offered: list[Service]) -> list[Service]:
@@ -1133,9 +1135,10 @@ def person_notices_clause():
 # The panthaky's switch, and the services and their usual prices
 # ---------------------------------------------------------------------------
 async def _offered(db: AsyncSession, agyary_id: int) -> list[Service]:
-    """The services the fire temple will offer: the active ones of its diary's catalog."""
+    """The services the fire temple has listed for people."""
     return list((await db.execute(
-        select(Service).where(Service.agyary_id == agyary_id, Service.is_active.is_(True))
+        select(Service).where(Service.agyary_id == agyary_id, Service.is_active.is_(True),
+                              Service.offered_to_people.is_(True))
         .order_by(Service.display_order, Service.id))).scalars())
 
 
@@ -1158,13 +1161,14 @@ async def change_switch(db: AsyncSession, agyary: Agyary, value: Any) -> dict:
 
 
 def _service_price_row(s: Service) -> dict:
-    return {"id": s.id, "name": s.name, "is_active": s.is_active, "offsite_capable": s.offsite_capable,
+    return {"id": s.id, "name": s.name, "offered": s.offered_to_people, "offsite_capable": s.offsite_capable,
             "default_price": _price(s.default_price)}
 
 
 async def list_prices(db: AsyncSession, agyary_id: int) -> list[dict]:
     rows = (await db.execute(
-        select(Service).where(Service.agyary_id == agyary_id).order_by(Service.display_order, Service.id))).scalars()
+        select(Service).where(Service.agyary_id == agyary_id, Service.is_active.is_(True))
+        .order_by(Service.display_order, Service.id))).scalars()
     return [_service_price_row(s) for s in rows]
 
 
@@ -1186,12 +1190,38 @@ def checked_price(value: Any) -> Decimal | None:
 
 
 async def change_service(
-    db: AsyncSession, agyary: Agyary, service: Service, *, fields: set[str], price: Any, active: Any,
+    db: AsyncSession, agyary: Agyary, service: Service, *, fields: set[str], price: Any, offered: Any,
 ) -> dict:
-    """The price (optional) and whether the service is listed; either may change at any time."""
+    """The price (optional) and whether the service is listed for people; either may change at any time.
+    Listing never touches the diary's own catalog (``is_active``)."""
     new_price = checked_price(price) if "default_price" in fields else service.default_price
-    if "is_active" in fields and type(active) is not bool:
+    if "offered" in fields and type(offered) is not bool:
         raise AskError("Choose on or off.")
-    now_active = active if "is_active" in fields else service.is_active
-    service.default_price, service.is_active = new_price, now_active
+    service.default_price = new_price
+    if "offered" in fields:
+        service.offered_to_people = offered
+    return _service_price_row(service)
+
+
+async def add_service(db: AsyncSession, agyary: Agyary, name: Any) -> dict:
+    """A service of the panthaky's own, listed for people at once. It is also in the diary's catalog
+    (that is one list), where a name already there is reused, not doubled."""
+    text = " ".join(name.split()) if isinstance(name, str) else ""
+    if not text:
+        raise AskError("Please enter the service's name.")
+    try:
+        template_text.check(text, "service name", max_len=template_text.SERVICE_MAX)
+    except ValueError as exc:
+        raise AskError(str(exc)) from exc
+    existing = (await db.execute(select(Service).where(
+        Service.agyary_id == agyary.id, func.lower(Service.name) == text.lower()))).scalar_one_or_none()
+    if existing is not None:
+        if existing.is_active and existing.offered_to_people:
+            raise AskError(f"{existing.name} is already in your list.", 409)
+        existing.is_active = existing.offered_to_people = True
+        return _service_price_row(existing)
+    service = Service(agyary_id=agyary.id, name=text, offsite_capable=False, display_order=999,
+                      is_active=True, offered_to_people=True)
+    db.add(service)
+    await db.flush()
     return _service_price_row(service)

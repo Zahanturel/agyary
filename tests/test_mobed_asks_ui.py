@@ -8,14 +8,14 @@ from pathlib import Path
 
 STATIC = Path(__file__).parent.parent / "src" / "agyary" / "api" / "static"
 JS = STATIC / "mobed" / "js"
-NEW_FILES = [JS / "asks_section.js", JS / "screens" / "ask_settings.js", JS / "notify_prompt.js"]
+NEW_FILES = [JS / "asks_section.js", JS / "screens" / "request_setup.js", JS / "notify_prompt.js"]
 
 
 def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
-    assert "/mobed-app/js/screens/ask_settings.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v109"' in worker
+    assert "/mobed-app/js/screens/request_setup.js" in worker
+    assert 'CACHE_NAME = "mobed-shell-v111"' in worker
 
 
 def test_screens_use_the_finished_routes():
@@ -25,7 +25,7 @@ def test_screens_use_the_finished_routes():
         assert path in api
     assert 'import { paintAsks } from "../asks_section.js"' in (JS / "screens" / "requests.js").read_text(encoding="utf-8")
     menu = (JS / "screens" / "menu.js").read_text(encoding="utf-8")
-    assert "paintAskSettings" in menu and 'id="mAsks"' in menu
+    assert 'id="mRequestsBar"' in menu and "#/requests-setup" in menu
     assert "listAsks" in (JS / "requests_count.js").read_text(encoding="utf-8")
 
 
@@ -45,14 +45,19 @@ def test_accept_says_what_it_does_and_the_reason_is_short():
 def test_the_words_are_request_and_fire_temple_not_ask_and_agyari():
     """What a mobed reads: "Requests from people", Confirm and Decline, prices before the switch."""
     section = (JS / "asks_section.js").read_text(encoding="utf-8")
-    settings = (JS / "screens" / "ask_settings.js").read_text(encoding="utf-8")
-    assert "Requests from people" in section and "Requests from people" in settings
+    settings = (JS / "screens" / "request_setup.js").read_text(encoding="utf-8")
+    assert "Requests from people" in section
     assert ">Confirm</button>" in section and ">Decline</button>" in section and "Time open" in section
     assert "Asks from people" not in section + settings and "Take asks" not in settings
-    # The switch is at the top (owner, 27 Nov 2026), and the panthaky can add their own service.
-    assert settings.index("Take requests</b>") < settings.index("Services you list</h3>")
-    assert "createService" in settings and "Add your own service" in settings
+    # Settings has a Requests row that opens its own page (owner, 27 Nov 2026). On it the switch is first,
+    # the list starts empty, the panthaky picks suggestions or writes their own, and a price is optional.
+    assert settings.index("Take requests</b>") < settings.index("<h2>What people can ask you for</h2>")
+    assert "Tap one to list it." in settings and "Write your own" in settings and "addRequestService" in settings
+    assert all(w in settings for w in ("Jashan", "Tandarosti", "Satum"))
     assert "Enter a price" not in settings and "optional" in settings
+    main = (JS / "main.js").read_text(encoding="utf-8")
+    assert 'route("#/requests-setup", renderRequestSetup' in main
+
 
 def test_confirm_sends_times_and_the_notification_sheet_is_once_per_device():
     section = (JS / "asks_section.js").read_text(encoding="utf-8")

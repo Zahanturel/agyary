@@ -1304,3 +1304,34 @@ async def test_the_request_items_migration_turns_each_request_into_one_item_and_
         _ok(_alembic("check"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_services_offered_to_people_keeps_what_live_fire_temples_show_and_comes_off_cleanly():
+    """b8d9e0f1a2c4: a service is not listed for people by default. A fire temple already taking requests
+    keeps its active, priced services listed (what people could pick until now); one that is not taking
+    requests lists nothing; and going back drops the column."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "a7c8d9e0f1b2"))
+        await _scratch_execute("INSERT INTO agyaries (name, city, takes_asks) VALUES ('Live (test)', 'Mumbai', true)")
+        await _scratch_execute("INSERT INTO agyaries (name, city, takes_asks) VALUES ('Quiet (test)', 'Pune', false)")
+        (live,), = await _scratch_execute("SELECT id FROM agyaries WHERE name = 'Live (test)'")
+        (quiet,), = await _scratch_execute("SELECT id FROM agyaries WHERE name = 'Quiet (test)'")
+        rows = (("Priced", 100, True, live), ("Unpriced", None, True, live), ("Off in diary", 100, False, live),
+                ("Quiet priced", 100, True, quiet))
+        for name, price, active, a in rows:
+            await _scratch_execute("INSERT INTO services (agyary_id, name, default_price, is_active) "
+                                   "VALUES (:a, :n, :p, :i)", {"a": a, "n": name, "p": price, "i": active})
+        _ok(_alembic("upgrade", "b8d9e0f1a2c4"))
+        got = dict(await _scratch_execute("SELECT name, offered_to_people FROM services"))
+        assert got == {"Priced": True, "Unpriced": False, "Off in diary": False, "Quiet priced": False}
+        # A new service is not listed.
+        await _scratch_execute("INSERT INTO services (agyary_id, name) VALUES (:a, 'New')", {"a": live})
+        assert await _scratch_execute("SELECT offered_to_people FROM services WHERE name = 'New'") == [(False,)]
+        _ok(_alembic("downgrade", "a7c8d9e0f1b2"))
+        cols = await _scratch_execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'services'")
+        assert "offered_to_people" not in {c for (c,) in cols}
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)

@@ -31,6 +31,9 @@ class Service(Base):
     typical_duration_minutes: Mapped[int | None] = mapped_column(Integer)
     offsite_capable: Mapped[bool] = mapped_column(Boolean, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # Whether people can pick it when they ask this fire temple (Parsi app). Off until the panthaky lists it;
+    # separate from is_active, which is the diary's own catalog.
+    offered_to_people: Mapped[bool] = mapped_column(Boolean, server_default="false")
     display_order: Mapped[int] = mapped_column(SmallInteger, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

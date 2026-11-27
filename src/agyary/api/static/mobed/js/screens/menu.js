@@ -28,7 +28,6 @@ import { navigate, navGuard } from "../router.js";
 import { flagProblems } from "../fielderrors.js";
 import { paintPushCard } from "../push_card.js";
 import { paintPrayerRequests } from "./request_settings.js";
-import { paintAskSettings } from "./ask_settings.js";
 import * as push from "../push.js";
 
 const PARSI_SYSTEMS = [
@@ -107,7 +106,13 @@ export async function renderMenu() {
     </div>
 
     ${agyary && agyary.role === "panthaky" ? `<div class="card" id="mPrayer"><h2>Prayer requests</h2><p class="meta">Checking...</p></div>
-      <div class="card" id="mAsks"><h2>Asks from people</h2><p class="meta">Checking...</p></div>` : ""}
+      <div class="card">
+        <div class="section-bar" id="mRequestsBar">
+          <div class="sb-text"><b>Requests</b>
+            <span>Let people ask you for prayers, and choose which</span></div>
+          <div class="sb-actions"><span class="chev">&rsaquo;</span></div>
+        </div>
+      </div>` : ""}
 
     <div class="card">
       <h2>Text size</h2>
@@ -307,8 +312,8 @@ export async function renderMenu() {
   if (editLocation) editLocation.onclick = () => navigate("#/fire-temple/location");
   const prayerBox = document.getElementById("mPrayer");
   if (prayerBox) paintPrayerRequests(prayerBox, agyary, alive);
-  const asksBox = document.getElementById("mAsks");
-  if (asksBox) paintAskSettings(asksBox, agyary, alive);
+  const requestsBar = document.getElementById("mRequestsBar");
+  if (requestsBar) requestsBar.onclick = () => navigate("#/requests-setup");
   document.getElementById("mRemindersBar").onclick = () => navigate("#/reminders");
   const adminBar = document.getElementById("mAdminBar");
   if (adminBar) adminBar.onclick = () => navigate("#/admin");
