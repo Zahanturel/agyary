@@ -15,7 +15,7 @@ def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
     assert "/mobed-app/js/screens/ask_settings.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v107"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v108"' in worker
 
 
 def test_screens_use_the_finished_routes():
@@ -49,7 +49,9 @@ def test_the_words_are_request_and_fire_temple_not_ask_and_agyari():
     assert "Requests from people" in section and "Requests from people" in settings
     assert ">Confirm</button>" in section and ">Decline</button>" in section and "Time open" in section
     assert "Asks from people" not in section + settings and "Take asks" not in settings
-    assert settings.index("Services and prices") < settings.index("Take requests")
+    # The switch is at the top (owner, 27 Nov 2026), and the panthaky can add their own service.
+    assert settings.index("Take requests</b>") < settings.index("Services and prices</h3>")
+    assert "createService" in settings and "Add your own service" in settings
     assert "Enter a price for every service." in settings
 
 def test_confirm_sends_times_and_the_notification_sheet_is_once_per_device():

@@ -10,7 +10,7 @@
  * Only the confirmed panthaky (and the admin) reach this; the server checks.
  */
 
-import { getAsksSetting, putAsksSetting, getServicePrices, putServiceAsk } from "../api.js";
+import { getAsksSetting, putAsksSetting, getServicePrices, putServiceAsk, createService } from "../api.js";
 import { showError } from "../ui.js";
 import { esc } from "../util.js";
 import { flagProblems, clearProblems } from "../fielderrors.js";
@@ -49,16 +49,41 @@ export async function paintAskSettings(box, agyary, alive) {
   if (!alive()) return;
   box.innerHTML = `
     <h2>Requests from people</h2>
-    <h3 style="margin:8px 0 0">Services and prices</h3>
+    <div class="check-row">
+      <input type="checkbox" id="askTake">
+      <label for="askTake"><b>Take requests</b></label>
+    </div>
+    <p class="meta" id="askTakeMsg" style="margin:0"></p>
+    <h3 style="margin:12px 0 0">Services and prices</h3>
     <div id="askSvcs">${prices.services.length ? prices.services.map(rowHtml).join("")
       : `<p class="meta">No services yet.</p>`}</div>
     <div style="border-top:1px solid var(--border);padding-top:10px">
-      <div class="check-row">
-        <input type="checkbox" id="askTake">
-        <label for="askTake"><b>Take requests</b></label>
+      <label for="askNewSvc">Add your own service</label>
+      <div class="row tight">
+        <input type="text" id="askNewSvc" maxlength="60" autocomplete="off" placeholder="Name of the service">
+        <button class="small" id="askNewSvcAdd">Add</button>
       </div>
-      <p class="meta" id="askTakeMsg" style="margin:0"></p>
+      <p class="meta" id="askNewSvcMsg" style="margin:4px 0 0"></p>
     </div>`;
+
+  const newName = box.querySelector("#askNewSvc");
+  const newBtn = box.querySelector("#askNewSvcAdd");
+  const newMsg = box.querySelector("#askNewSvcMsg");
+  newBtn.onclick = async () => {
+    const name = newName.value.trim();
+    if (!name) { newMsg.textContent = "Please enter the service's name."; return; }
+    newBtn.disabled = true;
+    newMsg.textContent = "";
+    try {
+      const made = await createService(agyary.id, name, false);
+      // While requests are on, a service with no price cannot be offered: it starts off.
+      if (setting.takes_asks) await putServiceAsk(agyary.id, made.id, { is_active: false });
+    } catch (e) {
+      if (alive()) { newMsg.textContent = e.message; newBtn.disabled = false; }
+      return;
+    }
+    if (alive()) paintAskSettings(box, agyary, alive);
+  };
 
   const take = box.querySelector("#askTake");
   const takeMsg = box.querySelector("#askTakeMsg");
