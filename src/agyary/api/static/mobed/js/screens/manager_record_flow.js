@@ -41,7 +41,7 @@ import { flagProblems, clearProblems } from "../fielderrors.js";
 import { managerHash, managerPlaces } from "../acting.js";
 import { loadDraft, saveDraft, clearDraft, offerDraft } from "../drafts.js";
 
-const TITLES = [["behdin", "Behdin"], ["ervad", "Ervad"], ["osta", "Osta"], ["osti", "Osti"], ["khud", "Khud"]];
+const TITLES = [["behdin", "Behdin"], ["ervad", "Ervad"], ["osta", "Osta"], ["osti", "Osti"], ["khud", "Khurd"]];
 const GATHAS = ["Ahunavad", "Ushtavad", "Spentamad", "Vohukhshathra", "Vahishtoisht"];
 // The Geh-saarnu is prayed in daylight only.
 const DAY_GEHS = [[1, "Havan"], [2, "Rapithwan"], [3, "Uzirin"]];

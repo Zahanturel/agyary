@@ -62,7 +62,7 @@ from agyary.services.phone import _validate_phone
 
 logger = logging.getLogger(__name__)
 
-TITLE_LABELS = {"ervad": "Ervad", "osta": "Osta", "osti": "Osti", "behdin": "Behdin", "khud": "Khud"}
+TITLE_LABELS = {"ervad": "Ervad", "osta": "Osta", "osti": "Osti", "behdin": "Behdin", "khud": "Khurd"}
 assert set(TITLE_LABELS) == set(DEPARTED_TITLES)
 OBSEQUIES_LABELS = {"four_days": "Four days", "one_day": "One day"}
 assert set(OBSEQUIES_LABELS) == set(OBSEQUIES)
@@ -200,7 +200,7 @@ async def checked(db: AsyncSession, data: dict, *, today: date | None = None) ->
     the first field that will not do. ``data`` has the API's field names."""
     title = data.get("departed_title")
     if title not in DEPARTED_TITLES:
-        raise RecordError("departed_title", "Please choose the title: Behdin, Ervad, Osta, Osti or Khud.")
+        raise RecordError("departed_title", "Please choose the title: Behdin, Ervad, Osta, Osti or Khurd.")
     # Both names may be left empty when not known (D12); an unknown name is kept as "".
     name = _text(data.get("departed_name"), "departed_name", "departed's name", PRAYED_NAME_MAX) or ""
     parent = _text(data.get("departed_parent_name"), "departed_parent_name", "father's or husband's name",

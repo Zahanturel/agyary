@@ -72,7 +72,7 @@ async def test_the_departed_may_be_khud(client, db, seeded):
     headers, _ = await manager(client, db)
     r = await client.post(RECORDS, json=form(departed_title="khud"), headers=headers)
     assert r.status_code == 200, r.text
-    assert r.json()["record"]["prayed_name"] == "Khud Rustom Jamshed"
+    assert r.json()["record"]["prayed_name"] == "Khurd Rustom Jamshed"
 
 
 async def test_a_gatha_day_is_a_death_day_too(client, db, seeded):
@@ -130,8 +130,8 @@ async def test_the_departeds_names_are_optional_and_never_read_empty(client, db,
     assert r.json()["record"]["prayed_name"] == "Osta (name not known)"
     # Only the name empty, or only the father's or husband's name empty.
     assert funeral_records.prayed_name("behdin", "Rustom", None) == "Behdin Rustom"
-    assert funeral_records.prayed_name("khud", "", None) == "Khud (name not known)"
-    assert funeral_records.prayed_name("khud", None, "Jamshed").startswith("Khud (name not known)")
+    assert funeral_records.prayed_name("khud", "", None) == "Khurd (name not known)"
+    assert funeral_records.prayed_name("khud", None, "Jamshed").startswith("Khurd (name not known)")
 
 
 async def test_the_family_contact_stays_required(client, db, seeded):

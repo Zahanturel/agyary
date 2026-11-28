@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v9"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v10"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -211,7 +211,7 @@ def test_mobed_diary_has_a_page_for_a_behdins_account_and_its_worker_keeps_the_o
     assert '"/auth/become-mobed"' in (mobed / "api.js").read_text(encoding="utf-8")
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert 'k.startsWith("mobed-shell-") && k !== CACHE_NAME' in worker
-    assert 'CACHE_NAME = "mobed-shell-v112"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v113"' in worker
     assert "/mobed-app/js/screens/become_mobed.js" in worker
 
 

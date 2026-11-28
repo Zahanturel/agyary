@@ -10,7 +10,7 @@ export function esc(s) {
 
 // A title typed before a name ("Er. Hormuz ...") is not the first name.
 const NAME_PREFIXES = new Set(["er", "ervad", "mobed", "mobedji", "dasturji", "dr", "behdin",
-  "osta", "osti", "khud", "mr", "mrs", "ms"]);
+  "osta", "osti", "khud", "khurd", "mr", "mrs", "ms"]);
 
 /** The first name, for greeting a person: a title before it is skipped. */
 export function firstName(full) {

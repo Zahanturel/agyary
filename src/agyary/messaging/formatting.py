@@ -13,7 +13,7 @@ TITLE_DISPLAY = {
     "behdin": "Behdin",
     "osta": "Osta",
     "osti": "Osti",
-    "khud": "Khud",
+    "khud": "Khurd",   # the stored code stays "khud"; Khurd is the word (owner, 29 Nov 2026)
 }
 
 PURPOSE_DISPLAY = {

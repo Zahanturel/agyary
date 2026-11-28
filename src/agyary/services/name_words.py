@@ -9,7 +9,7 @@ from __future__ import annotations
 # (owner's word review, 23 Nov 2026), so no Shri or Smt, and "Dastur" is a surname
 # ("Dasturji" is the title).
 NAME_PREFIXES = frozenset({"er", "ervad", "mobed", "mobedji", "dasturji", "dr", "behdin",
-                           "osta", "osti", "khud", "mr", "mrs", "ms"})
+                           "osta", "osti", "khud", "khurd", "mr", "mrs", "ms"})
 
 
 def first_name(full: str | None) -> str:

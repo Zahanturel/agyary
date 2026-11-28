@@ -404,9 +404,9 @@ def test_the_family_message_leaves_out_what_is_not_known():
                 geh_saarnu_date=None, geh_saarnu_geh=None, uthamna_date=None, uthamna_time=None)
     words = family_message(record, NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test"))
     assert words == ("Sahebji Test,\n\nI am Er. Test of Goti Adarian.\n\n"
-                     "Doongerwadi (test) has asked me to perform the prayers for Khud Rustom.\n\n"
+                     "Doongerwadi (test) has asked me to perform the prayers for Khurd Rustom.\n\n"
                      "Please call or message me here for anything you need.\n\n"
-                     "May the ruvan of the late Khud Rustom attain Garothman Behesht.")
+                     "May the ruvan of the late Khurd Rustom attain Garothman Behesht.")
     assert_laid_out(words)
     assert "Our prayers" not in words and "Geh-saarnu" not in words
 
@@ -423,10 +423,10 @@ def test_the_family_message_of_a_panthaky_not_praying_says_the_agyari_was_asked(
     place, agyary, panthaky = NS(name="Doongerwadi (test)"), NS(name="Goti Adarian"), NS(name="Er. Test")
     words = family_message(record, place, agyary, panthaky, going=["Er. A"])
     assert words == ("Sahebji Test,\n\nI am Er. Test of Goti Adarian.\n\n"
-                     "Doongerwadi (test) has asked Goti Adarian to perform the prayers for Khud Rustom.\n"
+                     "Doongerwadi (test) has asked Goti Adarian to perform the prayers for Khurd Rustom.\n"
                      "Er. A will pray.\n\n"
                      "Please call or message me here for anything you need.\n\n"
-                     "May the ruvan of the late Khud Rustom attain Garothman Behesht.")
+                     "May the ruvan of the late Khurd Rustom attain Garothman Behesht.")
     assert_laid_out(words)
     assert "Er. A, Er. B and Er. C will pray." in family_message(record, place, agyary, panthaky,
                                                                  going=["Er. A", "Er. B", "Er. C"])
