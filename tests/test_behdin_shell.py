@@ -122,7 +122,7 @@ def test_the_page_and_the_worker_name_the_right_files():
     # The app is registered under its own scope, with the name coming from one place.
     main = (STATIC / "behdin" / "js" / "main.js").read_text(encoding="utf-8")
     assert 'register("/behdin-sw.js", { scope })' in main and 'location.pathname === "/" ? "/" : "/behdin"' in main
-    assert 'CACHE_NAME = "behdin-shell-v10"' in worker and '"/",' in worker
+    assert 'CACHE_NAME = "behdin-shell-v11"' in worker and '"/",' in worker
 
 
 async def test_every_cached_file_is_served_and_the_shell_is_never_cached_by_the_edge(client):
@@ -284,9 +284,10 @@ def test_the_ask_screens_have_their_routes_and_the_longer_one_comes_first():
         assert f"/behdin-app/js/{name}" in shell, name
 
 
-def test_the_request_flow_is_what_when_send_and_calls_the_new_api():
+def test_the_request_is_one_screen_and_calls_the_new_api():
     flow = (STATIC / "behdin" / "js" / "screens" / "request.js").read_text(encoding="utf-8")
-    assert 'const STEPS = ["what", "when", "send"]' in flow
+    assert "STEPS" not in flow and "1 of" not in flow and "rqBack" not in flow
+    assert "Any time" in flow and "Repeat (optional)" in flow and "Names to pray (optional" in flow
     assert "Your name and number go to the panthaky only if they accept." in flow
     assert "(estimate)" in flow and "Don't repeat" in flow and "Every month, on the same Roj" in flow
     assert "/mobed-app/js/repeat.js" in flow

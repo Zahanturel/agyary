@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * New request, in three steps with Back: What (the prayers the fire temple offers), When (a date, and a time or
- * geh, for each), Send (summary, names, Send). Nothing is sent before Send; the server checks everything again
- * and what it says is shown on the field it is about.
+ * New request, on one screen: What (the prayers the fire temple offers), When (a date, and a time or geh, for
+ * each one ticked), optional names, Send. Repeating is tucked under "Repeat (optional)". Nothing is sent before
+ * Send; the server checks everything again and what it says is shown on the field it is about.
  */
 
 import { getOffering, getMyAgyari, convertDay, createAsk } from "../api.js";
@@ -16,7 +16,6 @@ import { setRepeat, repeatCountHtml, wireRepeatCount, repeatCountProblem, repeat
 import { esc, todayIst, addDays, longDay, gregShort, weekdayOf, parsiWords } from "../util.js";
 import { mountPicker } from "./picker.js";
 
-const STEPS = ["what", "when", "send"];
 const MAX_NAMES = 20;
 const DAYS_AHEAD = 400;
 
@@ -30,7 +29,7 @@ export function repeatWords(r) {
 
 /** Begin a new request and open it. `back` is where the person was. */
 export function startRequest({ back = "#/home" } = {}) {
-  state.request = { temple: null, offering: null, picked: [], items: {}, names: "", back, step: "what", pick: false, triedMine: false };
+  state.request = { temple: null, offering: null, picked: [], items: {}, names: "", back, pick: false, triedMine: false };
   navigate("#/request");
 }
 
@@ -44,7 +43,7 @@ export async function renderRequest() {
   chrome(true);
   setHeader("New request");
   const alive = navGuard();
-  if (!state.request) state.request = { temple: null, offering: null, picked: [], items: {}, names: "", back: "#/home", step: "what", pick: false, triedMine: false };
+  if (!state.request) state.request = { temple: null, offering: null, picked: [], items: {}, names: "", back: "#/home", pick: false, triedMine: false };
   const d = state.request;
 
   if (!d.temple && !d.triedMine) {
@@ -76,10 +75,7 @@ export async function renderRequest() {
   const goBack = () => {
     if (current) current.save();
     if (d.pick && d.temple) { d.pick = false; return draw(); }
-    const i = STEPS.indexOf(d.step);
-    if (i <= 0 || d.pick) return leave();
-    d.step = STEPS[i - 1];
-    draw(); toTop();
+    return leave();
   };
 
   function draw() {
@@ -97,32 +93,24 @@ export async function renderRequest() {
       });
       return;
     }
-    const i = STEPS.indexOf(d.step);
-    const last = d.step === "send";
-    current = STEP[d.step](d, { alive, redraw: draw });
+    current = STEP.all(d, { alive });
     mainEl.innerHTML = `
       <div class="card" id="rqCard">
-        <p class="meta" style="margin:0 0 var(--space-2)">${i + 1} of ${STEPS.length}</p>
         <div id="rqTemple" class="rq-temple"><b>${esc(d.temple.name)}</b>${d.temple.city ? `, ${esc(d.temple.city)}` : ""}
           <button type="button" class="ghost small" id="rqChange">Change</button></div>
         ${current.html}
       </div>
-      <div class="row" style="margin-top:var(--space-3)">
-        <button type="button" class="secondary" id="rqBack">Back</button>
-        <button type="button" id="rqNext">${last ? "Send" : "Next"}</button>
-      </div>`;
+      ${d.offering.takes_requests ? `<div class="row" style="margin-top:var(--space-3)"><button type="button" id="rqNext">Send</button></div>` : ""}`;
     showBack(goBack);
-    document.getElementById("rqBack").onclick = goBack;
     document.getElementById("rqChange").onclick = () => { current.save(); d.pick = true; draw(); };
-    document.getElementById("rqNext").onclick = async (e) => {
+    const sendBtn = document.getElementById("rqNext");
+    if (sendBtn) sendBtn.onclick = async (e) => {
       current.save();
-      const problems = current.check ? current.check() : null;
+      const problems = current.check();
       if (problems && problems.length) return flagProblems(document.getElementById("rqCard"), problems);
-      if (last) return send(e.currentTarget);
-      d.step = STEPS[i + 1];
-      draw(); toTop();
+      return send(e.currentTarget);
     };
-    if (current.after) current.after(document.getElementById("rqCard"));
+    current.after(document.getElementById("rqCard"));
   }
 
   async function send(btn) {
@@ -142,9 +130,8 @@ export async function renderRequest() {
   /** Put a server message on the field it is about. */
   function fieldFor(msg) {
     const text = msg.toLowerCase();
-    if (/\bname/.test(text)) { d.step = "send"; draw(); return flagProblems(document.getElementById("rqCard"), [{ target: "#rqNames", message: msg }]); }
+    if (/\bname/.test(text)) return flagProblems(document.getElementById("rqCard"), [{ target: "#rqNames", message: msg }]);
     if (/date|day|time|geh|repeat|times|passed|death|gatha|service/.test(text)) {
-      d.step = "when"; draw();
       const first = document.querySelector("#rqCard input, #rqCard .choice-group");
       return flagProblems(document.getElementById("rqCard"), [{ target: first, message: msg }]);
     }
@@ -174,8 +161,8 @@ const row = (name, id, checked, title, price) =>
   `<div class="check-row"><input type="checkbox" id="${id}" value="${esc(name)}" ${checked ? "checked" : ""}>
     <label for="${id}">${esc(title)}${price != null ? ` <span class="ptag">${rupees(price)}</span>` : ""}</label></div>`;
 
-// --- The steps ----------------------------------------------------------------
-const STEP = {
+// --- The parts of the screen ----------------------------------------------------
+const PARTS = {
   what(d) {
     const o = d.offering;
     const list = [...o.services, ...(o.memorial ? [o.memorial] : [])];
@@ -200,10 +187,11 @@ const STEP = {
     const blocks = d.picked.map((k) => {
       const v = d.items[k];
       const it = v._it;
-      const repeat = `<label>Does it repeat?</label><div class="choice-group" id="rqRep_${k}">
+      const repeat = `<details class="rq-repeat"${v.recurring ? " open" : ""}><summary>Repeat (optional)</summary>
+        <div class="choice-group" id="rqRep_${k}">
           ${["", "monthly", "yearly"].map((r) => `<div class="check-row"><input type="radio" name="rep_${k}" id="rep_${k}_${r || "no"}" value="${r}" ${(v.recurring || "") === r ? "checked" : ""}>
             <label for="rep_${k}_${r || "no"}">${r === "" ? "Don't repeat" : r === "monthly" ? "Every month, on the same Roj" : "Every year, on the same Roj and Mah (a birthday or anniversary)"}</label></div>`).join("")}
-        </div><div id="rqCount_${k}">${repeatCountHtml(v, `rqN_${k}`)}</div>`;
+        </div><div id="rqCount_${k}">${repeatCountHtml(v, `rqN_${k}`)}</div></details>`;
       if (it.type === "memorial") {
         return `<div class="rq-block" data-k="${k}"><h2>${esc(it.name)}</h2>
           <label for="rqName_${k}">Name of the departed (optional)</label>
@@ -221,11 +209,11 @@ const STEP = {
             <label for="geh_${k}_${g.geh}">${esc(g.name)}</label></div>`).join("")}</div>`
         : `<label for="rqTime_${k}">Time</label>
           <div class="row"><input type="time" id="rqTime_${k}" value="${esc(v.time)}" ${v.open ? "disabled" : ""}>
-          <div class="check-row"><input type="checkbox" id="rqOpen_${k}" ${v.open ? "checked" : ""}><label for="rqOpen_${k}">Open</label></div></div>`}
+          <div class="check-row"><input type="checkbox" id="rqOpen_${k}" ${v.open ? "checked" : ""}><label for="rqOpen_${k}">Any time</label></div></div>`}
         ${repeat}</div>`;
     });
     return {
-      html: `<h2>When</h2>${blocks.join("")}`,
+      html: blocks.join(""),
       after(root) {
         d.picked.forEach((k) => {
           const v = d.items[k];
@@ -281,7 +269,7 @@ const STEP = {
             if (!v.date) problems.push({ target: `#rqDate_${k}`, message: "Choose a date." });
             else if (v.date < todayIst()) problems.push({ target: `#rqDate_${k}`, message: "That date has passed." });
             if (it.by_geh && !v.geh) problems.push({ target: `#rqGeh_${k}`, message: "Choose a geh." });
-            if (!it.by_geh && !v.open && !v.time) problems.push({ target: `#rqTime_${k}`, message: "Enter a time, or choose Open." });
+            if (!it.by_geh && !v.open && !v.time) problems.push({ target: `#rqTime_${k}`, message: "Enter a time, or choose Any time." });
           }
           const bad = repeatCountProblem(v);
           if (bad) problems.push({ target: `#rqN_${k}`, message: bad });
@@ -291,32 +279,72 @@ const STEP = {
     };
   },
 
-  send(d) {
+  /** The cost of what is ticked, and the optional names. */
+  extras(d) {
     let total = 0;
     let estimate = false;
-    const rows = d.picked.map((k) => {
+    for (const k of d.picked) {
       const v = d.items[k];
       const it = v._it;
       const count = v.recurring ? v.recurringCount || 1 : 1;
       if (it.type === "memorial") estimate = true;
       else if (it.price != null) total += it.price * count;
       if (v.recurring) estimate = true;
-      const when = it.type === "memorial"
-        ? `${v.name.trim() ? esc(v.name.trim()) + ", " : ""}passed away ${esc(gregShort(v.death))}`
-        : `${esc(longDay(v.date))}, ${it.by_geh ? esc((d.offering.gehs.find((g) => g.geh === v.geh) || {}).name || "") + " geh" : v.open || !v.time ? "time open" : esc(v.time)}`;
-      return `<div class="rv-row"><div><b>${esc(it.name)}</b><br>${when}${v.recurring ? `<br>${esc(repeatWords({ recurring: v.recurring, recurring_count: v.recurringCount }))}` : ""}</div>
-        <span>${it.price != null ? rupees(it.price * count) : ""}</span></div>`;
-    });
+    }
     return {
-      html: `<h2>Send</h2>${rows.join("")}
-        <p style="margin:var(--space-3) 0 0"><b>Total ${rupees(total)}${estimate ? " (estimate)" : ""}</b></p>
-        <label for="rqNames">Names to pray (one per line, up to ${MAX_NAMES})</label>
-        <textarea id="rqNames" rows="4">${esc(d.names)}</textarea>
+      html: `${total || estimate ? `<p id="rqTotal" style="margin:var(--space-3) 0 0"><b>Total ${rupees(total)}${estimate ? " (estimate)" : ""}</b></p>` : ""}
+        <label for="rqNames">Names to pray (optional, one per line, up to ${MAX_NAMES})</label>
+        <textarea id="rqNames" rows="3">${esc(d.names)}</textarea>
         <p class="meta" style="margin:var(--space-3) 0 0">Your name and number go to the panthaky only if they accept.</p>`,
       save() { const t = document.getElementById("rqNames"); if (t) d.names = t.value; },
       check() {
         const n = d.names.split("\n").map((x) => x.trim()).filter(Boolean).length;
         return n > MAX_NAMES ? [{ target: "#rqNames", message: `Up to ${MAX_NAMES} names.` }] : null;
+      },
+    };
+  },
+};
+
+// --- The one screen ------------------------------------------------------------
+// What is drawn once; ticking a prayer redraws only the When part below it, so what was typed stays.
+const STEP = {
+  all(d, ctx) {
+    const what = PARTS.what(d);
+    let when = PARTS.when(d, ctx);
+    let extras = PARTS.extras(d);
+    return {
+      html: `${what.html}${d.offering.takes_requests ? `<div id="rqWhenBox">${when.html}</div><div id="rqExtras">${extras.html}</div>` : ""}`,
+      after(root) {
+        if (!d.offering.takes_requests) return;
+        when.after(root);
+        const box = root.querySelector("#rqWhenBox");
+        const tail = root.querySelector("#rqExtras");
+        const refresh = () => {
+          const names = root.querySelector("#rqNames").value;
+          extras = PARTS.extras(d);
+          tail.innerHTML = extras.html;
+          root.querySelector("#rqNames").value = names;
+        };
+        root.querySelectorAll("#rqWhat input").forEach((c) => {
+          c.onchange = () => {
+            when.save(); what.save();
+            when = PARTS.when(d, ctx);
+            box.innerHTML = when.html;
+            when.after(root);
+            refresh();
+          };
+        });
+        // The total follows a repeat choice made under a prayer.
+        root.addEventListener("change", (e) => {
+          if (!e.target.name || !e.target.name.startsWith("rep_")) return;
+          when.save(); refresh();
+        });
+      },
+      save() { what.save(); when.save(); extras.save(); },
+      check() {
+        const first = what.check();
+        if (first) return first;
+        return [...when.check(), ...(extras.check() || [])];
       },
     };
   },
