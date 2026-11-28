@@ -32,6 +32,7 @@ import {
 import { openBehdinSheet, familyLineHtml } from "./manager_behdins.js";
 import { agyariRowHtml, confirmSend } from "./manager_record.js";
 import { state } from "../state.js";
+import { titleInfoButton, openTitleInfo } from "../title_info.js";
 import {
   chrome, mainEl, showFab, showError, showInfo, refreshHeader, loading, screenFailed, toTop, flashInfo,
 } from "../ui.js";
@@ -200,7 +201,7 @@ function stepTwoHtml(d) {
   const parsi = d.deathBy === "parsi";
   return `
     <div class="card" id="frCard">
-      <label for="frTitle">Title</label>
+      <div class="row tight" style="justify-content:space-between"><label for="frTitle">Title</label>${titleInfoButton()}</div>
       <select id="frTitle">${TITLES.map(([v, t]) => `<option value="${v}" ${d.title === v ? "selected" : ""}>${t}</option>`).join("")}</select>
       <label for="frName">Name of the departed <span class="meta">(leave empty if not known)</span></label>
       <input type="text" id="frName" autocomplete="off" maxlength="80" value="${esc(d.name)}">
@@ -491,6 +492,7 @@ function wireDeparted($, d, keep) {
       () => { d[key] = el.value; if (touched) d.deathTouched = true; keep(); if (after) after(); });
   };
   bind("#frTitle", "title", prayed);
+  mainEl.querySelector("[data-title-info]").onclick = openTitleInfo;
   bind("#frName", "name", prayed);
   bind("#frParent", "parent", prayed);
   bind("#frCalendar", "calendar", showDay);

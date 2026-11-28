@@ -292,6 +292,11 @@ button:disabled { opacity: .5; cursor: default; }
 .pair-card.dragging { box-shadow: var(--shadow-md); background: var(--primary-tint); }
 .names-group-label { display: flex; align-items: baseline; justify-content: space-between; margin: var(--space-4) 0 var(--space-1); }
 .names-group-label b { font-size: var(--text-sm); font-weight: 600; }
+.info-btn { width: 28px; height: 28px; min-height: 0; padding: 0; margin-left: var(--space-2); border-radius: 50%;
+  background: #fff; color: var(--primary); border: 2px solid var(--primary); font-size: var(--text-sm); font-weight: 700;
+  font-style: italic; line-height: 1; vertical-align: middle; }
+.title-meanings dt { font-weight: 700; margin-top: var(--space-3); }
+.title-meanings dd { margin: 2px 0 0; }
 .names-group-label span { font-size: var(--text-xs); color: var(--muted); }
 
 .fab { position: fixed; right: var(--space-4); bottom: calc(20px + var(--safe-bottom)); height: 64px; padding: 0 var(--space-6);

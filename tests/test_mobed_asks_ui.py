@@ -15,7 +15,7 @@ def test_new_files_are_in_the_shell_and_the_cache_was_bumped():
     worker = (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
     assert "/mobed-app/js/asks_section.js" in worker
     assert "/mobed-app/js/screens/request_setup.js" in worker
-    assert 'CACHE_NAME = "mobed-shell-v113"' in worker
+    assert 'CACHE_NAME = "mobed-shell-v114"' in worker
 
 
 def test_screens_use_the_finished_routes():
@@ -68,3 +68,18 @@ def test_confirm_sends_times_and_the_notification_sheet_is_once_per_device():
     assert "Allow notifications?" in prompt and "You will be told of new requests." in prompt
     assert "Not now" in prompt and "localStorage" in prompt
     assert "/mobed-app/js/notify_prompt.js" in (STATIC / "mobed-sw.js").read_text(encoding="utf-8")
+
+
+def test_the_title_meanings_sheet_is_wired_beside_every_title_picker():
+    """An "i" button (owner, 29 Nov 2026) opens what each title means, in the names editor and the
+    Doongerwadi record; the child rule says Khurd, spelt as the owner asked."""
+    info = (JS / "title_info.js").read_text(encoding="utf-8")
+    for word in ("Dastur", "Ervad", "Osta", "Osti", "Behdin", "Khurd", "Wahmaan", "sudreh-kusti"):
+        assert word in info
+    assert "Khud," in info and "Khud\"" not in info.replace("said wrongly as Khud", "")
+    assert info.count("data-title-info") >= 2
+    names = (JS / "names.js").read_text(encoding="utf-8")
+    assert names.count("titleInfoButton()") == 4 and "openTitleInfo" in names
+    flow = (JS / "screens" / "manager_record_flow.js").read_text(encoding="utf-8")
+    assert "titleInfoButton()" in flow and "openTitleInfo" in flow
+    assert "/mobed-app/js/title_info.js" in (STATIC / "mobed-sw.js").read_text(encoding="utf-8")

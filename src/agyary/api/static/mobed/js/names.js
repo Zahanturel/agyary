@@ -21,6 +21,7 @@
 
 import { esc } from "./util.js";
 import { NAME_TITLES, TITLE_DISPLAY } from "./state.js";
+import { titleInfoButton, openTitleInfo } from "./title_info.js";
 
 // A new row is a Behdin unless someone says otherwise; saved rows keep theirs.
 const DEFAULT_TITLE = "behdin";
@@ -145,7 +146,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
     // are the living family the machi is for, which is what that section
     // means, and is how the saved-name pool has always held them.
     const singles = names.filter(n => n.section === "farmayeshne" || n.pair_group == null);
-    region.innerHTML = `<div class="names-group-label"><b>Living names</b><span>one name per line</span></div>
+    region.innerHTML = `<div class="names-group-label"><b>Living names ${titleInfoButton()}</b><span>one name per line</span></div>
       <div id="fSingles"></div>
       <button class="secondary small" id="addSingle" type="button">+ Add name</button>`;
     const box = region.querySelector("#fSingles");
@@ -155,7 +156,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
   } else if (isMachi) {
     // Patet: exactly one departed pair, fixed. No add, no remove.
     const pair = groupPairs(names)[0] || [];
-    region.innerHTML = `<div class="names-group-label"><b>Departed pair</b><span>two names</span></div>
+    region.innerHTML = `<div class="names-group-label"><b>Departed pair ${titleInfoButton()}</b><span>two names</span></div>
       <div id="fPairs">${pairCard("departed", pair[0], pair[1], false)}</div>`;
 
   } else {
@@ -164,10 +165,10 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
     const farm = names.filter(n => n.section === "farmayeshne");
     const defStatus = purpose === "gujrela_nu" ? "departed" : "living";
     region.innerHTML = `
-      <div class="names-group-label"><b>Departed names</b><span>two names per pair</span></div>
+      <div class="names-group-label"><b>Departed names ${titleInfoButton()}</b><span>two names per pair</span></div>
       <div id="fPairs"></div>
       <button class="secondary small" id="addPair" type="button">+ Add pair</button>
-      <div class="names-group-label"><b>Farmayeshne</b><span>one name per line</span></div>
+      <div class="names-group-label"><b>Farmayeshne ${titleInfoButton()}</b><span>one name per line</span></div>
       <div id="fFarm"></div>
       <button class="secondary small" id="addFarm" type="button">+ Add name</button>`;
     const pairsBox = region.querySelector("#fPairs");
@@ -187,6 +188,7 @@ export function renderNamesEditor(region, isMachi, purpose, existing) {
   // Delegated remove for singles and (service) pair cards, and the move
   // buttons on pair cards.
   region.onclick = (e) => {
+    if (e.target.closest("[data-title-info]")) return openTitleInfo();
     const mv = e.target.closest("button.mv");
     if (mv) {
       const card = mv.closest(".pair-card");
