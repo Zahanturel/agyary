@@ -1335,3 +1335,32 @@ async def test_services_offered_to_people_keeps_what_live_fire_temples_show_and_
         _ok(_alembic("check"))
     finally:
         await _recreate(drop_only=True)
+
+
+async def test_the_dastur_title_migration_lets_dastur_in_everywhere_and_comes_off_cleanly():
+    """c9e0f1a2b3d5 (29 Nov 2026): all four lists of titles accept 'dastur' and still refuse an unknown one;
+    the downgrade calls a Dastur Ervad and keeps the record."""
+    await _recreate()
+    try:
+        _ok(_alembic("upgrade", "head"))
+        for table in ("customer_saved_names", "ceremony_names", "person_names", "funeral_records"):
+            (definition,), = await _scratch_execute(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) "
+                "AND conname LIKE 'ck_%title'", {"t": table})
+            assert "dastur" in definition, table
+        await _scratch_execute("INSERT INTO funeral_places (name, kind, city) VALUES ('Doongerwadi (test)', 'doongerwadi', 'Mumbai')")
+        insert = (
+            "INSERT INTO funeral_records (funeral_place_id, departed_title, departed_name, death_date, death_given_by,"
+            " death_roj, death_mah, death_year, calendar_system, obsequies, family_contact_name, family_contact_phone)"
+            " VALUES (1, :t, 'Rustom', '2026-11-17', 'date', 3, 4, 1396, 'shenshai', 'four_days', 'Family',"
+            " '+919000000009')"
+        )
+        await _scratch_execute(insert, {"t": "dastur"})
+        await _refused(insert, {"t": "mister"}, "an unknown title")
+        _ok(_alembic("downgrade", "b8d9e0f1a2c4"))
+        assert await _scratch_execute("SELECT departed_title, departed_name FROM funeral_records") == [("ervad", "Rustom")]
+        await _refused(insert, {"t": "dastur"}, "Dastur before this migration")
+        _ok(_alembic("upgrade", "head"))
+        _ok(_alembic("check"))
+    finally:
+        await _recreate(drop_only=True)

@@ -67,6 +67,14 @@ async def test_a_death_by_roj_and_mah_is_the_most_recent_such_day(client, db, se
     assert rec["death"]["calendar"] == "kadmi" and rec["death"]["given_by"] == "roj_mah"
 
 
+async def test_the_departed_may_be_dastur(client, db, seeded):
+    """29 Nov 2026: Dastur, the high priest, is a title too."""
+    headers, _ = await manager(client, db)
+    r = await client.post(RECORDS, json=form(departed_title="dastur"), headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["record"]["prayed_name"] == "Dastur Rustom Jamshed"
+
+
 async def test_the_departed_may_be_khud(client, db, seeded):
     """Changed 19 Nov 2026: Khud is offered too, like the rest of the app."""
     headers, _ = await manager(client, db)

@@ -42,7 +42,7 @@ class CeremonyName(Base):
     )
 
     section: Mapped[str] = mapped_column(String(20))  # 'pair' | 'farmayeshne'
-    title: Mapped[str] = mapped_column(String(20))  # khud/osta/osti/ervad/behdin
+    title: Mapped[str] = mapped_column(String(20))  # dastur/khud/osta/osti/ervad/behdin
     name: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(10))  # 'living' | 'departed'
 

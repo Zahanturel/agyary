@@ -67,8 +67,8 @@ export const SERVICE_PURPOSE_DISPLAY = {
   hama_anjuman: "Hama Anjuman (for the community)",
 };
 
-export const NAME_TITLES = ["ervad", "behdin", "osta", "osti", "khud"];
-export const TITLE_DISPLAY = { ervad: "Ervad", behdin: "Behdin", osta: "Osta", osti: "Osti", khud: "Khurd" };
+export const NAME_TITLES = ["dastur", "ervad", "behdin", "osta", "osti", "khud"];
+export const TITLE_DISPLAY = { dastur: "Dastur", ervad: "Ervad", behdin: "Behdin", osta: "Osta", osti: "Osti", khud: "Khurd" };
 
 // Roles that get the management surface. Mirrors ADMIN_ROLES in
 // models/enums.py - the backend is the one that enforces this, but the

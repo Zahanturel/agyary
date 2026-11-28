@@ -9,6 +9,7 @@ from agyary.calendar import GATHA_NAMES, MAH_NAMES, ROJ_NAMES
 from agyary.models.enums import GEH_NAMES
 
 TITLE_DISPLAY = {
+    "dastur": "Dastur",
     "ervad": "Ervad",
     "behdin": "Behdin",
     "osta": "Osta",

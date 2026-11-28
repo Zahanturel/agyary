@@ -83,7 +83,7 @@ PLACE_CHANGE_STATUSES = (CHANGE_PENDING, CHANGE_APPROVED, CHANGE_DECLINED, CHANG
 # departed is prayed with: the name titles of the rest of the app, Khud too
 # (owner, 19 Nov 2026). Four days or one day of obsequies. How the death was
 # given (D5): by its Gregorian date, or by Roj and Mah.
-DEPARTED_TITLES = ("ervad", "osta", "osti", "behdin", "khud")
+DEPARTED_TITLES = ("dastur", "ervad", "osta", "osti", "behdin", "khud")
 OBSEQUIES = ("four_days", "one_day")
 DEATH_BY_DATE, DEATH_BY_ROJ_MAH = "date", "roj_mah"
 DEATH_GIVEN_BY = (DEATH_BY_DATE, DEATH_BY_ROJ_MAH)
@@ -145,7 +145,7 @@ ASK_STATUSES = (ASK_WAITING, ASK_ACCEPTED, ASK_REJECTED, ASK_CANCELLED, ASK_CANC
 ASK_VENUES = ("agyari", "home")
 
 NAME_SECTIONS = ("pair", "farmayeshne")
-NAME_TITLES = ("khud", "osta", "osti", "ervad", "behdin")
+NAME_TITLES = ("dastur", "khud", "osta", "osti", "ervad", "behdin")
 NAME_STATUSES = ("living", "departed")
 
 BOOKING_MOBED_STATUSES = ("assigned", "accepted", "declined")
